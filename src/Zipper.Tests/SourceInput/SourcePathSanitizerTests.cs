@@ -68,6 +68,7 @@ public class SourcePathSanitizerTests
     [InlineData("C:/docs/file.pdf")]
     [InlineData(@"C:\docs\file.pdf")]
     [InlineData("c:file.pdf")]
+    [InlineData(":foo/bar.pdf")]
     public void TryNormalize_DriveLetter_Rejected(string raw)
     {
         var ok = SourcePathSanitizer.TryNormalize(raw, out _, out var error);

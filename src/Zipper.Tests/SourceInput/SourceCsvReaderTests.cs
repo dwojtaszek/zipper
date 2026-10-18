@@ -452,4 +452,46 @@ public class SourceCsvReaderTests : IDisposable
         Assert.Contains("unexpected character after a closing quote", error, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void TryRead_WhitespaceAfterClosingQuote_Allowed()
+    {
+        var path = this.WriteCsv("FilePath,FileType\n\"a.pdf\" \t ,pdf\n");
+
+        var ok = SourceCsvReader.TryRead(path, out var records, out var error);
+
+        Assert.True(ok, error);
+        Assert.Null(error);
+        var record = Assert.Single(records);
+        Assert.Equal("a.pdf", record.RelativePath);
+    }
+
+    [Fact]
+    public void TryRead_RowCapWithoutTrailingNewline_EnforcesExactBoundary()
+    {
+        var exactPath = this.WriteCsv("FilePath,FileType\na.pdf,pdf\nb.eml,eml");
+        Assert.True(SourceCsvReader.TryRead(exactPath, out var exactRecords, out var exactError, maxRecords: 2));
+        Assert.Null(exactError);
+        Assert.Equal(2, exactRecords.Count);
+
+        var exceededPath = this.WriteCsv("FilePath,FileType\na.pdf,pdf\nb.eml,eml\nc.tiff,tiff");
+        Assert.False(SourceCsvReader.TryRead(exceededPath, out _, out var exceededError, maxRecords: 2));
+        Assert.Contains("exceeds the maximum of 2 data rows", exceededError, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryRead_LargeMetadataFieldAt64KiBBoundary_PreservesContent()
+    {
+        var exact64KiB = new string('x', 65536);
+        var over64KiB = new string('y', 65537);
+        var path = this.WriteCsv($"FilePath,FileType,Notes\na.pdf,pdf,\"{exact64KiB}\"\nb.pdf,pdf,\"{over64KiB}\"\n");
+
+        var ok = SourceCsvReader.TryRead(path, out var records, out var error);
+
+        Assert.True(ok, error);
+        Assert.Null(error);
+        Assert.Equal(2, records.Count);
+        Assert.Equal(65536, records[0].Metadata!["Notes"].Length);
+        Assert.Equal(65537, records[1].Metadata!["Notes"].Length);
+    }
+
 }

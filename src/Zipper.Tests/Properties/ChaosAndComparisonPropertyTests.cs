@@ -130,13 +130,14 @@ public sealed class ChaosAndComparisonPropertyTests
         }
 
         // Exercise single-column / empty-delimiter / multi-char delimiter edge paths
+        string singleToken = $"{recordId}_{input.Values[0].Replace(colDelim, string.Empty, StringComparison.Ordinal).Replace(quoteDelim, string.Empty, StringComparison.Ordinal).Replace("\r", string.Empty, StringComparison.Ordinal).Replace("\n", string.Empty, StringComparison.Ordinal)}";
         var edgeAnomalies = new List<ChaosAnomaly>();
         var edgeApplier = new DatAnomalyApplier(new Random(seed), string.Empty, "''", "\n");
-        _ = edgeApplier.Apply(1, "PlainSingleValue", recordId, "mixed-delimiters", edgeAnomalies);
-        _ = edgeApplier.Apply(2, "PlainSingleValue", recordId, "quotes", edgeAnomalies);
-        _ = edgeApplier.Apply(3, "PlainSingleValue", recordId, "eol", edgeAnomalies);
+        _ = edgeApplier.Apply(1, singleToken, recordId, "mixed-delimiters", edgeAnomalies);
+        _ = edgeApplier.Apply(2, singleToken, recordId, "quotes", edgeAnomalies);
+        _ = edgeApplier.Apply(3, singleToken, recordId, "eol", edgeAnomalies);
         var emptyQuoteApplier = new DatAnomalyApplier(new Random(seed), ",", string.Empty, "\n");
-        _ = emptyQuoteApplier.Apply(4, "PlainSingleValue", recordId, "quotes", edgeAnomalies);
+        _ = emptyQuoteApplier.Apply(4, singleToken, recordId, "quotes", edgeAnomalies);
         Assert.Equal(4, edgeAnomalies.Count);
         Assert.Contains("string:''''", edgeAnomalies[1].Description, StringComparison.Ordinal);
         Assert.Contains("none", edgeAnomalies[3].Description, StringComparison.Ordinal);
@@ -197,10 +198,11 @@ public sealed class ChaosAndComparisonPropertyTests
         }
 
         // Exercise degenerate single-token line without commas
+        string commaFreeToken = $"RAW_{bates.Replace(",", string.Empty, StringComparison.Ordinal)}_{pageCount.ToString(CultureInfo.InvariantCulture)}";
         var degenerateAnomalies = new List<ChaosAnomaly>();
         foreach (string t in optTypes)
         {
-            _ = applier.Apply(1, "NO_COMMAS_LINE", bates, t, degenerateAnomalies);
+            _ = applier.Apply(1, commaFreeToken, bates, t, degenerateAnomalies);
         }
 
         Assert.Equal(optTypes.Length, degenerateAnomalies.Count);
@@ -251,8 +253,7 @@ public sealed class ChaosAndComparisonPropertyTests
         long totalBytes = ProductionMetadataBudget.PairBytes(key, repeatedValue);
         bool withinBudget = totalBytes <= ProductionMetadataBudget.MaxBytes;
 
-        Assert.Equal(8192, ProductionMetadataBudget.MaxBytes);
-        Assert.Equal((key.Length + repeatedValue.Length) <= 8192, withinBudget);
+        Assert.Equal((key.Length + repeatedValue.Length) <= ProductionMetadataBudget.MaxBytes, withinBudget);
 
         if (repeatedValue.Length > ProductionMetadataBudget.MaxBytes)
         {
@@ -505,8 +506,16 @@ public sealed class ChaosAndComparisonPropertyTests
         VolumeResult volAdded = Assert.Single(volumeResults, v => string.Equals(v.VolumeName, "VOL_ADDED", StringComparison.Ordinal));
 
         Assert.Equal(mutateVolume ? "changed" : "unchanged", vol1.Status);
+        Assert.NotEmpty(vol1.PriorBatesRange);
+        Assert.Equal(vol1.PriorBatesRange, vol1.NewBatesRange);
+
         Assert.Equal("removed", volRemoved.Status);
+        Assert.NotEmpty(volRemoved.PriorBatesRange);
+        Assert.Equal(string.Empty, volRemoved.NewBatesRange);
+
         Assert.Equal("added", volAdded.Status);
+        Assert.Equal(string.Empty, volAdded.PriorBatesRange);
+        Assert.NotEmpty(volAdded.NewBatesRange);
     }
 
     [Property]
@@ -573,18 +582,26 @@ public sealed class ChaosAndComparisonPropertyTests
 
         var numGen = new NumberGenerator(numCol);
         var rng = new Random(seed);
+        long absSeed = Math.Abs((long)seed);
+        int dataLength = (int)((absSeed % 100_000L) + 128L);
+        int pageCount = (int)((absSeed % 50L) + 1L);
+        int folderNumber = (rawDistIndex % 20) + 1;
+        string[] extensions = ["pdf", "docx", "xlsx", "eml", "tiff"];
+        string expectedExt = extensions[rawGeneratorIndex % extensions.Length];
+        string fileName = $"DOC{((absSeed % 99_999L) + 1L).ToString("D8", CultureInfo.InvariantCulture)}.{expectedExt}";
+        string filePathInZip = $"VOL001/NATIVES/{folderNumber.ToString("D3", CultureInfo.InvariantCulture)}/{fileName}";
         var workItem = new FileWorkItem
         {
             Index = 1,
-            FolderNumber = 1,
-            FileName = "DOC00000001.pdf",
-            FilePathInZip = "VOL001/NATIVES/001/DOC00000001.pdf",
+            FolderNumber = folderNumber,
+            FileName = fileName,
+            FilePathInZip = filePathInZip,
         };
         var fileData = new FileData
         {
             WorkItem = workItem,
-            DataLength = 4096,
-            PageCount = 7,
+            DataLength = dataLength,
+            PageCount = pageCount,
         };
 
         for (int docIdx = 1; docIdx <= 10; docIdx++)
@@ -592,7 +609,7 @@ public sealed class ChaosAndComparisonPropertyTests
             var ctx = new ColumnGenerationContext
             {
                 NativeFileIndex = docIdx,
-                FolderNumber = 1,
+                FolderNumber = folderNumber,
                 DocumentIndex = docIdx,
                 Seeded = rng,
                 Now = new DateTime(2025, 1, 15, 0, 0, 0, DateTimeKind.Utc),
@@ -615,7 +632,7 @@ public sealed class ChaosAndComparisonPropertyTests
         var baseCtx = new ColumnGenerationContext
         {
             NativeFileIndex = 1,
-            FolderNumber = 1,
+            FolderNumber = folderNumber,
             DocumentIndex = 1,
             Seeded = rng,
             Now = new DateTime(2025, 1, 15, 0, 0, 0, DateTimeKind.Utc),
@@ -624,8 +641,8 @@ public sealed class ChaosAndComparisonPropertyTests
         Assert.Equal((min + 10).ToString(CultureInfo.InvariantCulture), invertedGen.Generate(baseCtx));
 
         // Verify special FILESIZE and PAGECOUNT columns
-        Assert.Equal("4096", new NumberGenerator(new ColumnDefinition { Name = "FILESIZE", Type = "number" }).Generate(baseCtx));
-        Assert.Equal("7", new NumberGenerator(new ColumnDefinition { Name = "PAGECOUNT", Type = "number" }).Generate(baseCtx));
+        Assert.Equal(dataLength.ToString(CultureInfo.InvariantCulture), new NumberGenerator(new ColumnDefinition { Name = "FILESIZE", Type = "number" }).Generate(baseCtx));
+        Assert.Equal(pageCount.ToString(CultureInfo.InvariantCulture), new NumberGenerator(new ColumnDefinition { Name = "PAGECOUNT", Type = "number" }).Generate(baseCtx));
 
         // Exercise TextGenerator named generators and special file columns
         string[] namedGenerators = ["emailsubject", "md5hash", "sha1hash", "sha256hash", "reviewnote", "encoding", "timezone", "customgen"];
@@ -654,8 +671,8 @@ public sealed class ChaosAndComparisonPropertyTests
         }
 
         Assert.Equal(workItem.FilePathInZip, new TextGenerator(new ColumnDefinition { Name = "FILEPATH" }, null, null).Generate(baseCtx));
-        Assert.Equal("DOC00000001.pdf", new TextGenerator(new ColumnDefinition { Name = "FILENAME" }, null, null).Generate(baseCtx));
-        Assert.Equal("pdf", new TextGenerator(new ColumnDefinition { Name = "FILEEXT" }, null, null).Generate(baseCtx));
+        Assert.Equal(fileName, new TextGenerator(new ColumnDefinition { Name = "FILENAME" }, null, null).Generate(baseCtx));
+        Assert.Equal(expectedExt, new TextGenerator(new ColumnDefinition { Name = "FILEEXT" }, null, null).Generate(baseCtx));
     }
 
     [Property]

@@ -411,9 +411,11 @@ public class PathValidatorTests
     [Fact]
     public void IsPathSafe_PathWithEmbeddedNull_ReturnsFalse()
     {
-        var result = PathValidator.IsPathSafe("folder\0name", Directory.GetCurrentDirectory());
+        var baseDir = Directory.GetCurrentDirectory();
 
-        Assert.False(result);
+        Assert.False(PathValidator.IsPathSafe("folder\0name", baseDir));
+        Assert.False(PathValidator.IsPathSafe("\0invalid_start", baseDir));
+        Assert.Null(PathValidator.ResolveSecurePath("\0invalid_start", baseDir));
     }
 
     [Fact]

@@ -52,8 +52,10 @@ public static class SupplementalValidator
 
         var priorRanges = await LoadPriorRangesAsync(priorManifestPaths, currentPrefix, currentDigits).ConfigureAwait(false);
 
-        if (!TryParseBatesNumber(actualStartBates, currentPrefix, currentDigits, out long planStart) ||
-            !TryParseBatesNumber(actualEndBates, currentPrefix, currentDigits, out long planEnd))
+        long planStart = 0;
+        long planEnd = 0;
+        if (!TryParseBatesNumber(actualStartBates, currentPrefix, currentDigits, out planStart) ||
+            !TryParseBatesNumber(actualEndBates, currentPrefix, currentDigits, out planEnd))
         {
             throw new ValidationFailedException($"Planned range contains unparseable start/end Bates numbers: '{actualStartBates}' - '{actualEndBates}'");
         }
@@ -81,7 +83,7 @@ public static class SupplementalValidator
                 throw new ValidationFailedException($"Prior Production Manifest file does not exist: {resolvedPath}");
             }
 
-            PriorProductionManifest? manifest;
+            PriorProductionManifest? manifest = null;
             try
             {
                 var content = await File.ReadAllTextAsync(resolvedPath).ConfigureAwait(false);
@@ -94,8 +96,10 @@ public static class SupplementalValidator
 
             ValidateManifestFields(manifest, resolvedPath, currentPrefix, currentDigits);
 
-            if (!TryParseBatesNumber(manifest!.BatesRange!.Start!, currentPrefix, currentDigits, out long priorStart) ||
-                !TryParseBatesNumber(manifest.BatesRange.End!, currentPrefix, currentDigits, out long priorEnd))
+            long priorStart = 0;
+            long priorEnd = 0;
+            if (!TryParseBatesNumber(manifest!.BatesRange!.Start!, currentPrefix, currentDigits, out priorStart) ||
+                !TryParseBatesNumber(manifest.BatesRange.End!, currentPrefix, currentDigits, out priorEnd))
             {
                 throw new ValidationFailedException($"Prior Production Manifest contains unparseable start/end Bates numbers: {resolvedPath}. Start: '{manifest.BatesRange.Start}', End: '{manifest.BatesRange.End}'");
             }

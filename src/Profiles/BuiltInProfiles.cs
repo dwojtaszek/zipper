@@ -119,7 +119,7 @@ public static class BuiltInProfiles
             var resourceName = $"Zipper.Profiles.BuiltIns.{name}.json";
             using var stream = assembly.GetManifestResourceStream(resourceName)
                 ?? throw new InvalidOperationException($"Embedded column profile resource '{resourceName}' is missing.");
-            ColumnProfile? profile;
+            ColumnProfile? profile = null;
             try
             {
                 profile = JsonSerializer.Deserialize<ColumnProfile>(stream, ColumnProfileLoader.ProfileSerializerOptions);

@@ -116,8 +116,10 @@ public sealed class BatesAndDistributionPropertyTests
         BatesRangeAnalyzer.AnalyzeBatesRanges(recordsA, shiftedRecords, "supplemental", disjointAnalysis, new ResultDetails());
         Assert.Empty(disjointAnalysis.Overlaps);
         var boundaryGap = Assert.Single(disjointAnalysis.Gaps);
-        Assert.Equal(sequence.Format(input.Count).ToString(), boundaryGap.Start);
-        Assert.Equal(sequence.Format((input.Count + gapSize) - 1).ToString(), boundaryGap.End);
+        var shiftedStartValue = input.Start + input.Count + gapSize;
+        var effectiveDigits = Math.Max(input.Digits, shiftedStartValue.ToString(CultureInfo.InvariantCulture).Length);
+        Assert.Equal(BatesRangeAnalyzer.FormatBates(input.Start + input.Count, input.Prefix, effectiveDigits), boundaryGap.Start);
+        Assert.Equal(BatesRangeAnalyzer.FormatBates((input.Start + input.Count + gapSize) - 1, input.Prefix, effectiveDigits), boundaryGap.End);
         Assert.Equal(gapSize, disjointAnalysis.TotalSkippedBates);
     }
 
@@ -167,17 +169,17 @@ public sealed class BatesAndDistributionPropertyTests
         Assert.True(BatesSequence.TryCreate(validConfig, out _, out var validError));
         Assert.Equal(string.Empty, validError);
 
-        Assert.False(BatesSequence.TryCreate(validConfig with { Start = -input.Start }, out _, out var negStartErr));
+        Assert.False(BatesSequence.TryCreate(validConfig with { Start = -input.Start - 1 }, out _, out var negStartErr));
         Assert.NotEmpty(negStartErr);
 
-        Assert.False(BatesSequence.TryCreate(validConfig with { Digits = 0 }, out _, out var zeroDigitsErr));
-        Assert.NotEmpty(zeroDigitsErr);
+        Assert.False(BatesSequence.TryCreate(validConfig with { Digits = 1 - input.Digits }, out _, out var nonPositiveDigitsErr));
+        Assert.NotEmpty(nonPositiveDigitsErr);
 
-        Assert.False(BatesSequence.TryCreate(validConfig with { Digits = 21 }, out _, out var highDigitsErr));
+        Assert.False(BatesSequence.TryCreate(validConfig with { Digits = 20 + input.Digits }, out _, out var highDigitsErr));
         Assert.NotEmpty(highDigitsErr);
 
-        Assert.False(BatesSequence.TryCreate(validConfig with { Increment = 0 }, out _, out var zeroIncErr));
-        Assert.NotEmpty(zeroIncErr);
+        Assert.False(BatesSequence.TryCreate(validConfig with { Increment = 1L - input.Count }, out _, out var nonPositiveIncErr));
+        Assert.NotEmpty(nonPositiveIncErr);
 
         Assert.False(BatesSequence.TryCreate(validConfig with { Prefix = $"{input.Prefix}/bad" }, out _, out var slashErr));
         Assert.NotEmpty(slashErr);
@@ -186,6 +188,9 @@ public sealed class BatesAndDistributionPropertyTests
     [Property]
     public void Distributions_Proportional_ShouldStayWithinFolderBoundsAndConserveCount(DistributionPropertyInput input)
     {
+        Assert.Equal(1, Distributions.Proportional(1, 1));
+        Assert.Equal(1, Distributions.Proportional(input.TotalFiles, 1));
+
         var folderCounts = new int[input.FolderCount];
 
         for (int fileIndex = 1; fileIndex <= input.TotalFiles; fileIndex++)
@@ -211,6 +216,11 @@ public sealed class BatesAndDistributionPropertyTests
     [Property]
     public void Distributions_GaussianAndExponential_ShouldBeDeterministicAndWithinBounds(DistributionPropertyInput input)
     {
+        Assert.InRange(Distributions.Gaussian(1, 1, input.FolderCount), 1, input.FolderCount);
+        Assert.Equal(1, Distributions.Gaussian(1, input.TotalFiles, 1));
+        Assert.Equal(1, Distributions.Exponential(1, 1, input.FolderCount));
+        Assert.Equal(1, Distributions.Exponential(1, input.TotalFiles, 1));
+
         int previousGaussian = 1;
         int previousExponential = 1;
 
@@ -300,6 +310,14 @@ public sealed class BatesAndDistributionPropertyTests
             observedCounts.TryGetValue(ratio.Type, out var observed);
             Assert.Equal(plan.GetTypeCount(ratio.Type), observed);
         }
+
+        // Single-type plan allocates 100% of files to that type and enforces index bounds.
+        var singleTypePlan = new FileTypePlan([new FileTypeRatio { Type = "pdf", Weight = rawWeight1 + 1L }], input.TotalFiles);
+        Assert.Equal(input.TotalFiles, singleTypePlan.GetTypeCount("pdf"));
+        Assert.Equal("pdf", singleTypePlan.GetFileType(1));
+        Assert.Equal("pdf", singleTypePlan.GetFileType(input.TotalFiles));
+        Assert.Throws<ArgumentOutOfRangeException>(() => singleTypePlan.GetFileType(0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => singleTypePlan.GetFileType(input.TotalFiles + 1L));
     }
 
     [Property]
@@ -358,9 +376,21 @@ public sealed class BatesAndDistributionPropertyTests
         var negativeSpec = string.Create(CultureInfo.InvariantCulture, $"pdf:-{validWeight}");
         Assert.False(FileTypeRatioParser.TryParse(negativeSpec, out _, out var negError));
         Assert.NotNull(negError);
+    }
 
-        Assert.False(FileTypeRatioParser.TryParse("pdf:0", out _, out var zeroError));
-        Assert.NotNull(zeroError);
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("pdf")]
+    [InlineData("pdf:0")]
+    [InlineData("pdf:abc")]
+    [InlineData("unknown:10")]
+    [InlineData("pdf:10,")]
+    public void FileTypeRatioParser_TryParse_ShouldRejectConstantInvalidSpecs(string invalidSpec)
+    {
+        Assert.False(FileTypeRatioParser.TryParse(invalidSpec, out var ratios, out var error));
+        Assert.Empty(ratios);
+        Assert.NotNull(error);
     }
 
     [Property]

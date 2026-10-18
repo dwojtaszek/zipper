@@ -173,6 +173,40 @@ public class FieldNamingTests : IDisposable
         Assert.Equal(input, result);
     }
 
+    [Theory]
+    [InlineData("MD5Hash", "PascalCase", "Md5Hash")]
+    [InlineData("SHA1Hash", "PascalCase", "Sha1Hash")]
+    [InlineData("SHA256Hash", "PascalCase", "Sha256Hash")]
+    [InlineData("OCRPath", "PascalCase", "OcrPath")]
+    [InlineData("TimeZone", "PascalCase", "TimeZone")]
+    [InlineData("RecordType", "PascalCase", "RecordType")]
+    [InlineData("FileExt", "PascalCase", "FileExt")]
+    [InlineData("FileName", "PascalCase", "FileName")]
+    [InlineData("MD5Hash", "snake_case", "md5_hash")]
+    [InlineData("SHA1Hash", "snake_case", "sha1_hash")]
+    [InlineData("SHA256Hash", "snake_case", "sha256_hash")]
+    [InlineData("OCRPath", "snake_case", "ocr_path")]
+    [InlineData("TimeZone", "snake_case", "time_zone")]
+    [InlineData("RecordType", "snake_case", "record_type")]
+    [InlineData("FileExt", "snake_case", "file_ext")]
+    [InlineData("FileName", "snake_case", "file_name")]
+    [InlineData("MD5HASH", "UPPERCASE", "MD5HASH")]
+    [InlineData("SHA1HASH", "UPPERCASE", "SHA1HASH")]
+    [InlineData("SHA256HASH", "UPPERCASE", "SHA256HASH")]
+    [InlineData("OCRPATH", " lowercase ", "ocrpath")]
+    [InlineData("TIMEZONE", "lowercase", "timezone")]
+    [InlineData("RECORDTYPE", "lowercase", "recordtype")]
+    [InlineData("FILEEXT", "lowercase", "fileext")]
+    [InlineData("FILENAME", "lowercase", "filename")]
+    public void ApplyConvention_StandardLoadFileFieldNames_ShouldTransformAllConventions(
+        string input,
+        string convention,
+        string expected)
+    {
+        var result = NamingConventionHelper.ApplyConvention(input, convention);
+        Assert.Equal(expected, result);
+    }
+
     [Fact]
     public void ColumnProfileLoader_ShouldThrowOnInvalidConvention()
     {

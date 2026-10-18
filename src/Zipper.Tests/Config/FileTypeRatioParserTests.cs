@@ -78,6 +78,9 @@ public class FileTypeRatioParserTests
     [InlineData("pdf:-1")]
     [InlineData("pdf:+5")]
     [InlineData("pdf:1,eml:0")]
+    [InlineData("pdf:NaN")]
+    [InlineData("pdf:Infinity")]
+    [InlineData("pdf:-Infinity")]
     public void TryParse_NonDigitOrNonPositiveWeight_ReturnsFalse(string input)
     {
         var ok = FileTypeRatioParser.TryParse(input, out _, out var error);
@@ -92,6 +95,9 @@ public class FileTypeRatioParserTests
     [InlineData(":50")]
     [InlineData("pdf:1,,eml:1")]
     [InlineData("pdf:abc")]
+    [InlineData(",,,")]
+    [InlineData(", ,")]
+    [InlineData("pdf:1:2")]
     public void TryParse_MalformedEntries_ReturnsFalse(string input)
     {
         var ok = FileTypeRatioParser.TryParse(input, out _, out var error);
@@ -116,5 +122,17 @@ public class FileTypeRatioParserTests
 
         Assert.False(ok);
         Assert.NotNull(error);
+    }
+
+    [Fact]
+    public void TryParse_MaxWeightBoundary_ReturnsTrue()
+    {
+        var ok = FileTypeRatioParser.TryParse("pdf:1000000", out var ratios, out var error);
+
+        Assert.True(ok);
+        Assert.Null(error);
+        var single = Assert.Single(ratios);
+        Assert.Equal("pdf", single.Type);
+        Assert.Equal(FileTypeRatioParser.MaxWeight, single.Weight);
     }
 }

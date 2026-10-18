@@ -545,6 +545,19 @@ public class PostGenerationValidatorTests : TempDirectoryTestBase
         Assert.Empty(fields[0]);
     }
 
+    [Fact]
+    public void DatLineParser_Parse_WithEmbeddedDoubledQuote_UnescapesQuoteCharacter()
+    {
+        var csvFields = DatLineParser.Parse("\"val\"\"1\",val2", ',', '"');
+        Assert.Equal(new[] { "val\"1", "val2" }, csvFields);
+
+        var datFields = DatLineParser.Parse("\u00FEa\u00FE\u00FEb\u00FE", '\u0014', '\u00FE');
+        Assert.Equal(new[] { "a\u00FEb" }, datFields);
+
+        var middleFields = DatLineParser.Parse("a,\"b\"\"c\",d", ',', '"');
+        Assert.Equal(new[] { "a", "b\"c", "d" }, middleFields);
+    }
+
     // ---- ValidationOrchestrator tests ----
 
     [Fact]

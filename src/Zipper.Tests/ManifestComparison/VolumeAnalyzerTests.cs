@@ -12,6 +12,10 @@ public class VolumeAnalyzerTests
 
         var result = Assert.Single(results);
         Assert.Equal("added", result.Status);
+        Assert.Equal("VOL001", result.VolumeName);
+        Assert.Equal("PROD001", result.ProductionId);
+        Assert.Equal(string.Empty, result.PriorBatesRange);
+        Assert.Equal("ABC00000001 - ABC00000001", result.NewBatesRange);
     }
 
     [Fact]
@@ -21,6 +25,10 @@ public class VolumeAnalyzerTests
 
         var result = Assert.Single(results);
         Assert.Equal("removed", result.Status);
+        Assert.Equal("VOL001", result.VolumeName);
+        Assert.Equal("PROD001", result.ProductionId);
+        Assert.Equal("ABC00000001 - ABC00000001", result.PriorBatesRange);
+        Assert.Equal(string.Empty, result.NewBatesRange);
     }
 
     [Fact]
@@ -41,6 +49,57 @@ public class VolumeAnalyzerTests
 
         var result = Assert.Single(results);
         Assert.Equal("unchanged", result.Status);
+        Assert.Equal("VOL001", result.VolumeName);
+        Assert.Equal("PROD001", result.ProductionId);
+        Assert.Equal("ABC00000001 - ABC00000002", result.PriorBatesRange);
+        Assert.Equal("abc00000001 - abc00000002", result.NewBatesRange);
+    }
+
+    [Fact]
+    public void AnalyzeVolumes_WithMultipleVolumes_PopulatesCommonLeftOnlyAndRightOnlyResults()
+    {
+        var prior = new List<ComparisonRecord>
+        {
+            Record("ABC00000001", volume: "VOL001", path: "NATIVES/VOL001/ABC00000001.pdf", hash: "H1"),
+            Record("ABC00000002", volume: "VOL001", path: "NATIVES/VOL001/ABC00000002.pdf", hash: "H2"),
+            Record("ABC00000003", volume: "VOL002", path: "NATIVES/VOL002/ABC00000003.pdf", hash: "H3"),
+            Record("ABC00000004", volume: "VOL003", path: "NATIVES/VOL003/ABC00000004.pdf", hash: "H4"),
+        };
+        var newRecords = new List<ComparisonRecord>
+        {
+            Record("ABC00000001", volume: "VOL001", path: "NATIVES/VOL001/ABC00000001.pdf", hash: "H1"),
+            Record("ABC00000002", volume: "VOL001", path: "NATIVES/VOL001/ABC00000002.pdf", hash: "H2"),
+            Record("ABC00000003", volume: "VOL002", path: "NATIVES/VOL002/ABC00000003.pdf", hash: "MODIFIED"),
+            Record("ABC00000005", volume: "VOL004", path: "NATIVES/VOL004/ABC00000005.pdf", hash: "H5"),
+        };
+
+        var results = Analyze(prior, newRecords);
+
+        Assert.Equal(4, results.Count);
+
+        Assert.Equal("VOL001", results[0].VolumeName);
+        Assert.Equal("PROD001", results[0].ProductionId);
+        Assert.Equal("ABC00000001 - ABC00000002", results[0].PriorBatesRange);
+        Assert.Equal("ABC00000001 - ABC00000002", results[0].NewBatesRange);
+        Assert.Equal("unchanged", results[0].Status);
+
+        Assert.Equal("VOL002", results[1].VolumeName);
+        Assert.Equal("PROD001", results[1].ProductionId);
+        Assert.Equal("ABC00000003 - ABC00000003", results[1].PriorBatesRange);
+        Assert.Equal("ABC00000003 - ABC00000003", results[1].NewBatesRange);
+        Assert.Equal("changed", results[1].Status);
+
+        Assert.Equal("VOL003", results[2].VolumeName);
+        Assert.Equal("PROD001", results[2].ProductionId);
+        Assert.Equal("ABC00000004 - ABC00000004", results[2].PriorBatesRange);
+        Assert.Equal(string.Empty, results[2].NewBatesRange);
+        Assert.Equal("removed", results[2].Status);
+
+        Assert.Equal("VOL004", results[3].VolumeName);
+        Assert.Equal("PROD001", results[3].ProductionId);
+        Assert.Equal(string.Empty, results[3].PriorBatesRange);
+        Assert.Equal("ABC00000005 - ABC00000005", results[3].NewBatesRange);
+        Assert.Equal("added", results[3].Status);
     }
 
     [Fact]

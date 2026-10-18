@@ -79,7 +79,9 @@ public class BatesSequenceTests
     public void Format_WithNegativeIndex_ShouldThrowArgumentOutOfRangeException()
     {
         var seq = BatesSequence.FromConfig(new BatesNumberConfig());
-        Assert.Throws<ArgumentOutOfRangeException>(() => seq.Format(-1));
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => seq.Format(-1));
+        Assert.Equal("index", ex.ParamName);
+        Assert.Contains("Index must be non-negative.", ex.Message, StringComparison.Ordinal);
     }
 
     [Theory]
