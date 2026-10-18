@@ -191,7 +191,7 @@ class MergeAuthorizationTests(unittest.TestCase):
 
 class WorktreeReconciliationTests(unittest.TestCase):
     @contextmanager
-    def _setup_fixture(self, coderabbit_findings=0):
+    def _setup_fixture(self, coderabbit_findings=0, coderabbit_exit=0):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             repo = root / "repo"
@@ -230,10 +230,17 @@ class WorktreeReconciliationTests(unittest.TestCase):
             gh.chmod(0o755)
 
             cr = root / "coderabbit"
-            cr.write_text(
-                f"#!/bin/sh\necho '{{\"type\":\"complete\",\"status\":\"review_completed\",\"findings\":{coderabbit_findings}}}'\n"
-                + ("exit 1\n" if coderabbit_findings > 0 else "exit 0\n")
-            )
+            if coderabbit_exit:
+                cr.write_text(f"#!/bin/sh\necho 'review failed' >&2\nexit {coderabbit_exit}\n")
+            else:
+                cr.write_text(
+                    f"#!/bin/sh\necho '{{\"type\":\"complete\",\"status\":\"review_completed\",\"findings\":{coderabbit_findings}}}'\n"
+                    + "".join(
+                        f"echo '{{\"type\":\"finding\",\"severity\":\"major\",\"body\":\"finding {i}\"}}'\n"
+                        for i in range(coderabbit_findings)
+                    )
+                    + "exit 0\n"
+                )
             cr.chmod(0o755)
 
             msmtp = root / "msmtp"
@@ -294,6 +301,31 @@ class WorktreeReconciliationTests(unittest.TestCase):
             }))
         return wt_path, head
 
+    @contextmanager
+    def _fixture_env(self, directory):
+        with patch.dict(os.environ, {"PATH": directory + os.pathsep + os.environ["PATH"], "FIXTURE": directory}):
+            yield
+
+    def _create_diverged_conflict_worktree(self, root, repo):
+        """Build a worktree whose local commit conflicts with the tracked PR head."""
+        (repo / "conflict.txt").write_text("initial")
+        subprocess.run(["git", "-C", str(repo), "add", "."], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(repo), "commit", "-m", "test: base"], check=True, capture_output=True)
+        initial = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+        wt_path, head = self._create_tracked_pr_worktree(
+            root, repo, wt_commit=initial, remote_files={"conflict.txt": "remote version"}
+        )
+        (wt_path / "conflict.txt").write_text("local conflicting version")
+        subprocess.run(["git", "-C", str(wt_path), "commit", "-am", "local diverge"], check=True, capture_output=True)
+        local_diverged_sha = subprocess.check_output(["git", "-C", str(wt_path), "rev-parse", "HEAD"], text=True).strip()
+        return wt_path, head, local_diverged_sha
+
+    def _read_backup_sha(self, repo):
+        backup_branches = [b.strip() for b in subprocess.check_output(
+            ["git", "-C", str(repo), "branch", "--list", "runner-backup-*"], text=True).strip().split()]
+        self.assertTrue(len(backup_branches) >= 1)
+        return subprocess.check_output(["git", "-C", str(repo), "rev-parse", backup_branches[0]], text=True).strip()
+
     def test_babysit_activeWorktree_behindAuthorizedHead_fastForwardsAndMerges(self):
         with self._setup_fixture() as (root, repo, runner, directory):
             initial = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
@@ -308,28 +340,37 @@ class WorktreeReconciliationTests(unittest.TestCase):
 
     def test_babysit_activeWorktree_divergedConflict_backsUpAndBlocksMerge(self):
         with self._setup_fixture() as (root, repo, runner, directory):
-            (repo / "conflict.txt").write_text("initial")
-            subprocess.run(["git", "-C", str(repo), "add", "."], check=True, capture_output=True)
-            subprocess.run(["git", "-C", str(repo), "commit", "-m", "test: base"], check=True, capture_output=True)
-            initial = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+            wt_path, head, local_diverged_sha = self._create_diverged_conflict_worktree(root, repo)
 
-            wt_path, head = self._create_tracked_pr_worktree(
-                root, repo, wt_commit=initial, remote_files={"conflict.txt": "remote version"}
-            )
-            (wt_path / "conflict.txt").write_text("local conflicting version")
-            subprocess.run(["git", "-C", str(wt_path), "commit", "-am", "local diverge"], check=True, capture_output=True)
-            local_diverged_sha = subprocess.check_output(["git", "-C", str(wt_path), "rev-parse", "HEAD"], text=True).strip()
-
-            with patch.dict(os.environ, {"PATH": directory + os.pathsep + os.environ["PATH"], "FIXTURE": directory}):
+            with self._fixture_env(directory):
                 runner.babysit_active_worktrees()
 
             # Merge must be blocked because rebase conflicted!
             self.assertFalse((root / "merged").exists())
             # Verify backup branch was created and points to the diverged commit
-            backup_branches = [b.strip() for b in subprocess.check_output(["git", "-C", str(repo), "branch", "--list", "runner-backup-*"], text=True).strip().split()]
-            self.assertTrue(len(backup_branches) >= 1)
-            backup_sha = subprocess.check_output(["git", "-C", str(repo), "rev-parse", backup_branches[0]], text=True).strip()
+            backup_sha = self._read_backup_sha(repo)
             self.assertEqual(backup_sha, local_diverged_sha)
+
+    def test_babysit_activeWorktree_failedAbort_pinsPreRebaseTipAndRestoresWorktree(self):
+        with self._setup_fixture() as (root, repo, runner, directory):
+            wt_path, head, local_diverged_sha = self._create_diverged_conflict_worktree(root, repo)
+
+            real_run_cmd = runner.run_cmd
+
+            def abort_fails(args, cwd=None, timeout=None):
+                if args[:3] == ["git", "rebase", "--abort"]:
+                    return 1, "", "simulated abort failure"
+                return real_run_cmd(args, cwd=cwd, timeout=timeout)
+
+            runner.run_cmd = abort_fails
+            with self._fixture_env(directory):
+                runner.babysit_active_worktrees()
+            runner.run_cmd = real_run_cmd
+
+            self.assertFalse((root / "merged").exists())
+            self.assertEqual(self._read_backup_sha(repo), local_diverged_sha)
+            restored_head = subprocess.check_output(["git", "-C", str(wt_path), "rev-parse", "HEAD"], text=True).strip()
+            self.assertEqual(restored_head, local_diverged_sha)
 
     def test_babysit_activeWorktree_divergedClean_rebasesAndPublishes(self):
         with self._setup_fixture() as (root, repo, runner, directory):
@@ -396,6 +437,46 @@ class WorktreeReconciliationTests(unittest.TestCase):
             self.assertFalse((root / "merged").exists())
             runner._babysit_with_fallback.assert_called_once()
             self.assertIn("local CodeRabbit review gate failed for PR #99", runner._babysit_with_fallback.call_args[0][0])
+            # The parse-path failure detail reaches the agent prompt.
+            self.assertIn("unresolved finding(s)", runner._babysit_with_fallback.call_args[0][0])
+
+    def test_babysit_activeWorktree_coderabbitCliError_blocksMerge(self):
+        with self._setup_fixture(coderabbit_exit=1) as (root, repo, runner, directory):
+            wt_path, head = self._create_tracked_pr_worktree(
+                root, repo, remote_files={"proof.txt": "proof"}, gate_error="prior failure"
+            )
+
+            with self._fixture_env(directory):
+                runner.babysit_active_worktrees()
+
+            self.assertTrue((root / "state" / "pr-99-coderabbit-gate.json").exists())
+            self.assertFalse((root / "merged").exists())
+            runner._babysit_with_fallback.assert_called_once()
+            self.assertIn("coderabbit review failed (exit 1)", runner._babysit_with_fallback.call_args[0][0])
+
+    def test_babysit_activeWorktree_unresolvableAuthorizedHead_blocksWithoutBackup(self):
+        with self._setup_fixture() as (root, repo, runner, directory):
+            wt_path, head = self._create_tracked_pr_worktree(
+                root, repo, remote_files={"proof.txt": "proof"}
+            )
+            missing_sha = "0" * 40
+            pr = json.loads((root / "pr.json").read_text())
+            pr["head"]["sha"] = missing_sha
+            (root / "pr.json").write_text(json.dumps(pr))
+            state = json.loads((root / "state" / "issue-42.json").read_text())
+            state["authorized_head"] = missing_sha
+            (root / "state" / "issue-42.json").write_text(json.dumps(state))
+
+            with self._fixture_env(directory):
+                runner.babysit_active_worktrees()
+
+            self.assertFalse((root / "merged").exists())
+            backups = subprocess.check_output(
+                ["git", "-C", str(repo), "branch", "--list", "runner-backup-*"], text=True
+            ).strip()
+            self.assertEqual(backups, "")
+            local_head = subprocess.check_output(["git", "-C", str(wt_path), "rev-parse", "HEAD"], text=True).strip()
+            self.assertEqual(local_head, head)
 
 
 if __name__ == "__main__":
