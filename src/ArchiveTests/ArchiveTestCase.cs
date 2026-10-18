@@ -314,13 +314,13 @@ internal static class ArchiveTestCaseSemantics
                 continue;
             }
 
-            if (!Operations.Contains(expectation.Operation ?? string.Empty, StringComparer.Ordinal))
+            if (expectation.Operation is null || !Operations.Contains(expectation.Operation, StringComparer.Ordinal))
             {
                 errors.Add($"unknown operation '{expectation.Operation}'");
             }
             else
             {
-                declaredOperations.Add(expectation.Operation!);
+                declaredOperations.Add(expectation.Operation);
             }
 
             if (string.IsNullOrEmpty(expectation.Profile))
@@ -334,12 +334,9 @@ internal static class ArchiveTestCaseSemantics
             }
         }
 
-        foreach (var operation in Operations)
+        foreach (var operation in Operations.Where(op => !declaredOperations.Contains(op)))
         {
-            if (!declaredOperations.Contains(operation))
-            {
-                errors.Add($"expectations must declare operation '{operation}'");
-            }
+            errors.Add($"expectations must declare operation '{operation}'");
         }
 
         if (testCase.AdapterChecks is not null)
