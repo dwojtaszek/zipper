@@ -320,6 +320,41 @@ public class ArchiveTestSuiteGeneratorTests : WorkingDirectoryTestBase
         var suiteBytes = Directory.GetFiles(result.PublishedDirectory).Sum(path => new FileInfo(path).Length);
         Assert.True(suiteBytes < ArchiveTestRequest.MaxSuiteBytes);
         Assert.Equal(allCases.Count * 2, Directory.GetFiles(result.PublishedDirectory).Length);
+
+        var expectedOperations = new[] { "extract", "integrity-check", "list", "read-entry" };
+        foreach (var jsonPath in Directory.GetFiles(result.PublishedDirectory, "*.json"))
+        {
+            var testCase = ArchiveTestJson.Parse(await File.ReadAllBytesAsync(jsonPath));
+            var declaredOperations = testCase.Expectations
+                .Select(e => e.Operation)
+                .Distinct()
+                .Order(StringComparer.Ordinal);
+            Assert.Equal(expectedOperations, declaredOperations);
+        }
+    }
+
+    [Theory]
+    [InlineData("smoke")]
+    [InlineData("compatibility")]
+    [InlineData("malformed")]
+    [InlineData("security")]
+    [InlineData("encoding")]
+    public async Task GenerateAsync_Suites_HaveCompleteDeclaredOperationMembership(string suite)
+    {
+        var suiteCases = ArchiveTestCatalog.ListSuite(suite).Select(c => c.CaseKey).ToList();
+        var result = await GenerateAsync(ArchiveTestRequest.Create(suiteCases, 42, Path.Combine(TempDir, suite)));
+
+        var expectedOperations = new[] { "extract", "integrity-check", "list", "read-entry" };
+        foreach (var fixtureId in result.FixtureIds)
+        {
+            var jsonPath = Path.Combine(result.PublishedDirectory, fixtureId + ".json");
+            var testCase = ArchiveTestJson.Parse(await File.ReadAllBytesAsync(jsonPath));
+            var declaredOperations = testCase.Expectations
+                .Select(e => e.Operation)
+                .Distinct()
+                .Order(StringComparer.Ordinal);
+            Assert.Equal(expectedOperations, declaredOperations);
+        }
     }
 
     [Fact]
