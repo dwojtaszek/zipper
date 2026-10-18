@@ -1539,8 +1539,33 @@ def _sync_main_after_merge() -> bool:
 _WIP_CONTINUATIONS: set[str] = set()
 
 
+def _rebase_in_progress(wt_path: str) -> bool:
+    """True when a failed rebase left conflict state behind."""
+    for marker in ("rebase-merge", "rebase-apply"):
+        code, out, _ = run_cmd(["git", "rev-parse", "--git-path", marker], cwd=wt_path)
+        if code == 0 and os.path.isdir(os.path.join(wt_path, out.strip())):
+            return True
+    return False
+
+
+def _pin_backup_branch(wt_path: str, branch: str, tip: str) -> tuple[str | None, bool]:
+    """Return a runner-backup-* branch pinning tip, reusing an existing one."""
+    code, out, _ = run_cmd(["git", "branch", "--list", "runner-backup-*", "--points-at", tip], cwd=wt_path)
+    if code == 0:
+        existing = [line.strip().lstrip("*+ ").strip() for line in out.splitlines() if line.strip()]
+        if existing:
+            return existing[0], False
+    ts = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
+    name = f"runner-backup-{branch}-{ts}"
+    code, _, err = run_cmd(["git", "branch", name, tip], cwd=wt_path)
+    if code != 0:
+        print(f"[babysit] Could not create backup branch {name}: {err.strip()}")
+        return None, False
+    return name, True
+
+
 def _reconcile_active_worktree(wt_path: str, branch: str, pr_number: int,
-                                reviewed_head: str) -> tuple[int, str, int]:
+                                reviewed_head: str, previous_head: str | None = None) -> tuple[int, str, int]:
     """Reconcile active worktree with authorized remote PR head.
 
     Returns (local_code, local_head, ancestor_code).
@@ -1569,6 +1594,52 @@ def _reconcile_active_worktree(wt_path: str, branch: str, pr_number: int,
         # Local HEAD is ahead of reviewed_head (recorded runner completion)
         return local_code, local_head, 0
 
+    # A recorded head that is not an ancestor of the new authorized head means the PR
+    # branch was rewritten (force-push). Preserve local-only commits instead of
+    # rebasing them onto history that dropped their base.
+    if previous_head and previous_head != reviewed_head:
+        prev_code, _, _ = run_cmd(["git", "cat-file", "-e", f"{previous_head}^{{commit}}"], cwd=wt_path)
+        if prev_code != 0:
+            print(f"[babysit] Recorded head {previous_head[:8]} for PR #{pr_number} is not present locally; "
+                  f"cannot verify ancestry. Blocking.")
+            if not DRY_RUN:
+                _pin_backup_branch(wt_path, branch, local_head)
+            return 1, local_head, 1
+        lineage_code, _, _ = run_cmd(
+            ["git", "merge-base", "--is-ancestor", previous_head, reviewed_head], cwd=wt_path
+        )
+        if lineage_code != 0:
+            # Exclude commits already reachable from the new head: only true local-only
+            # commits justify preservation (the saved head can lag an adopted rewrite).
+            stray_code, stray_out, _ = run_cmd(
+                ["git", "rev-list", "HEAD", "--not", previous_head, reviewed_head], cwd=wt_path
+            )
+            if stray_code != 0:
+                print(f"[babysit] Cannot inspect local commits for PR #{pr_number} after head rewrite. Blocking.")
+                return 1, local_head, 1
+            stray = [line for line in stray_out.splitlines() if line.strip()]
+            if stray:
+                print(f"[babysit] PR #{pr_number} head {short_head} was rewritten from {previous_head[:8]}; "
+                      f"preserving {len(stray)} local commit(s).")
+                if not DRY_RUN:
+                    backup_branch, _ = _pin_backup_branch(wt_path, branch, local_head)
+                    if backup_branch:
+                        print(f"[babysit] Local commits pinned on {backup_branch}.")
+                return 1, local_head, 1
+            # No local-only work: adopt the rewritten head instead of replaying the
+            # commits the force-push deliberately dropped.
+            if DRY_RUN or not _worktree_is_clean(wt_path):
+                return 1, local_head, 1
+            backup_branch, _ = _pin_backup_branch(wt_path, branch, local_head)
+            if backup_branch:
+                print(f"[babysit] Pre-rewrite tip pinned on {backup_branch}.")
+            reset_code, _, reset_err = run_cmd(["git", "reset", "--hard", reviewed_head], cwd=wt_path)
+            if reset_code == 0:
+                print(f"[babysit] PR #{pr_number} head was rewritten to {short_head}; no local commits, adopting it.")
+                return 0, reviewed_head, 0
+            print(f"[babysit] Could not adopt rewritten head for PR #{pr_number}: {reset_err.strip()}")
+            return 1, local_head, 1
+
     if not _worktree_is_clean(wt_path):
         # Dirty worktree: never mutate or rebase over uncommitted changes
         return local_code, local_head, ancestor_code
@@ -1588,7 +1659,7 @@ def _reconcile_active_worktree(wt_path: str, branch: str, pr_number: int,
 
     # Local has diverged commits: attempt clean rebase onto authorized head
     pre_code, pre_head, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
-    rb_code, _, _ = run_cmd(["git", "rebase", reviewed_head], cwd=wt_path)
+    rb_code, rb_out, rb_err = run_cmd(["git", "rebase", reviewed_head], cwd=wt_path)
     if rb_code == 0:
         local_code, new_head, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
         if local_code == 0:
@@ -1596,24 +1667,32 @@ def _reconcile_active_worktree(wt_path: str, branch: str, pr_number: int,
             _record_coderabbit_gate_failure(pr_number, branch, "Rebased local completion awaiting review", completion_ready=True)
             return 0, new_head.strip(), 0
 
-    # Rebase conflicted: abort rebase, protect local commits, and keep blocked from merging
-    abort_code, _, abort_err = run_cmd(["git", "rebase", "--abort"], cwd=wt_path)
-    if abort_code != 0:
-        print(f"[babysit] rebase --abort failed: {abort_err.strip()}")
-    ts = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
-    backup_branch = f"runner-backup-{branch}-{ts}"
+    # Rebase failed: separate a real conflict from other rebase errors (dirty index,
+    # hook rejection, invalid upstream). Only conflicts justify a backup branch.
+    rebase_active = _rebase_in_progress(wt_path)
+    abort_code = 0
+    if rebase_active:
+        abort_code, _, abort_err = run_cmd(["git", "rebase", "--abort"], cwd=wt_path)
+        if abort_code != 0:
+            print(f"[babysit] rebase --abort failed: {abort_err.strip()}")
+    if "CONFLICT" not in f"{rb_out}\n{rb_err}" and not rebase_active:
+        print(f"[babysit] Rebase of worktree {wt_path} failed without conflicts "
+              f"(exit {rb_code}): {rb_err.strip() or rb_out.strip()}")
+        return 1, local_head, 1
+
+    # Rebase conflicted: abort rebase, protect local commits, and keep blocked from merging.
     # A failed abort leaves HEAD detached at the upstream commit: pin the pre-rebase tip instead.
     backup_ref = pre_head.strip() if pre_code == 0 and pre_head.strip() else "HEAD"
-    b_code, _, _ = run_cmd(["git", "branch", backup_branch, backup_ref], cwd=wt_path)
-    if abort_code != 0 and b_code == 0:
+    backup_branch, created = _pin_backup_branch(wt_path, branch, backup_ref)
+    if abort_code != 0 and backup_branch:
         # Left mid-rebase, HEAD detached at the authorized head, the next tick would
         # misread the worktree as in sync. The commits are pinned on the backup branch.
         reset_code, _, reset_err = run_cmd(["git", "reset", "--hard", backup_ref], cwd=wt_path)
         if reset_code != 0:
             print(f"[babysit] Could not restore worktree after failed abort: {reset_err.strip()}")
-    if b_code == 0:
+    if backup_branch:
         print(f"[babysit] Rebase conflicted. Protected local commits on {backup_branch}.")
-        if _should_send_rate_limited(f"[Runner] Safety: Backed up diverged commits for PR #{pr_number}"):
+        if created and _should_send_rate_limited(f"[Runner] Safety: Backed up diverged commits for PR #{pr_number}"):
             send_email(
                 f"[Runner] Safety: Backed up diverged commits for PR #{pr_number}",
                 f"<h3>Local worktree for PR <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">#{pr_number}</a> has rebase conflicts with remote head {short_head}.</h3>"
@@ -1967,8 +2046,9 @@ def babysit_active_worktrees():
         if not authorized:
             continue
         reviewed_head = authorized["head"]["sha"]
+        recorded_head = (_load_pr_state(str(issue_number)) or {}).get("authorized_head")
         local_code, local_head, ancestor_code = _reconcile_active_worktree(
-            wt_path, branch, pr_number, reviewed_head
+            wt_path, branch, pr_number, reviewed_head, recorded_head
         )
         pending = _load_coderabbit_gate_state(pr_number)
         resume_local_progress = (
