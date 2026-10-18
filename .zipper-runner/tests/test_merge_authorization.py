@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import time
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -215,13 +216,18 @@ class WorktreeReconciliationTests(unittest.TestCase):
                 "    print('merged')\n"
                 "elif args[0] == 'api':\n"
                 "    if args[1].endswith('/reviews'):\n"
-                "        print(json.dumps([]))\n"
+                "        reviews = root/'reviews.json'\n"
+                "        print(json.dumps([json.loads(reviews.read_text())] if reviews.exists() else []))\n"
                 "    elif args[1].endswith('/commits'): print(json.dumps([]))\n"
                 "    else: print((root/'pr.json').read_text())\n"
                 "elif args[:2] == ['pr','view']:\n"
                 "    pr=json.loads((root/'pr.json').read_text())\n"
                 "    if args[args.index('--json')+1] == 'commits': print('fix: proof')\n"
-                "    else: print(json.dumps({'number':99,'state':'OPEN','headRefOid':pr.get('head',{}).get('sha'), 'statusCheckRollup':[{'__typename':'CheckRun','name':'ci-gate','status':'COMPLETED','conclusion':'SUCCESS'}]}))\n"
+                "    else:\n"
+                "        rollup = {'__typename':'CheckRun','name':'ci-gate','status':'COMPLETED','conclusion':'SUCCESS'}\n"
+                "        override = root/'rollup.json'\n"
+                "        if override.exists(): rollup = json.loads(override.read_text())\n"
+                "        print(json.dumps({'number':99,'state':'OPEN','headRefOid':pr.get('head',{}).get('sha'), 'statusCheckRollup':[rollup]}))\n"
                 "elif args[:2] == ['pr','list']:\n"
                 "    pr=json.loads((root/'pr.json').read_text())\n"
                 "    print(json.dumps([{'number':99,'title':'Fix #42','body':'Closes #42','author':{'login':pr['user']['login']},'headRefName':pr.get('head',{}).get('ref','fix/ISSUE-42-proof'),'statusCheckRollup':[{'__typename':'CheckRun','name':'ci-gate','status':'COMPLETED','conclusion':'SUCCESS'}]}]))\n"
@@ -325,6 +331,26 @@ class WorktreeReconciliationTests(unittest.TestCase):
             ["git", "-C", str(repo), "branch", "--list", "runner-backup-*"], text=True).strip().split()]
         self.assertTrue(len(backup_branches) >= 1)
         return subprocess.check_output(["git", "-C", str(repo), "rev-parse", backup_branches[0]], text=True).strip()
+
+    def _rewrite_and_authorize_remote_head(self, root, repo, parent=None):
+        """Point origin's PR branch at a new commit (child of parent when given) and authorize it."""
+        tree = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "main^{tree}"], text=True).strip()
+        args = ["git", "-C", str(repo), "commit-tree", tree]
+        if parent:
+            args += ["-p", parent]
+        args += ["-m", "runner test head"]
+        new_sha = subprocess.check_output(args, text=True).strip()
+        subprocess.run(
+            ["git", "-C", str(repo), "push", "--force", "origin", f"{new_sha}:refs/heads/fix/ISSUE-42-proof"],
+            check=True, capture_output=True,
+        )
+        pr = json.loads((root / "pr.json").read_text())
+        pr["head"]["sha"] = new_sha
+        (root / "pr.json").write_text(json.dumps(pr))
+        (root / "reviews.json").write_text(json.dumps([
+            {"user": {"login": "dwojtaszek"}, "state": "APPROVED", "commit_id": new_sha}
+        ]))
+        return new_sha
 
     def test_babysit_activeWorktree_behindAuthorizedHead_fastForwardsAndMerges(self):
         with self._setup_fixture() as (root, repo, runner, directory):
@@ -453,6 +479,134 @@ class WorktreeReconciliationTests(unittest.TestCase):
             self.assertFalse((root / "merged").exists())
             runner._babysit_with_fallback.assert_called_once()
             self.assertIn("coderabbit review failed (exit 1)", runner._babysit_with_fallback.call_args[0][0])
+
+    def test_babysit_activeWorktree_nonConflictRebaseFailure_skipsBackup(self):
+        with self._setup_fixture() as (root, repo, runner, directory):
+            wt_path, head, local_diverged_sha = self._create_diverged_conflict_worktree(root, repo)
+            real_run_cmd = runner.run_cmd
+
+            def rebase_fails(args, cwd=None, timeout=None):
+                if args[:2] == ["git", "rebase"] and args[2:] != ["--abort"]:
+                    return 1, "", "fatal: cannot rebase: You have unstaged changes."
+                return real_run_cmd(args, cwd=cwd, timeout=timeout)
+
+            runner.run_cmd = rebase_fails
+            with self._fixture_env(directory):
+                runner.babysit_active_worktrees()
+            runner.run_cmd = real_run_cmd
+
+            self.assertFalse((root / "merged").exists())
+            backups = subprocess.check_output(
+                ["git", "-C", str(repo), "branch", "--list", "runner-backup-*"], text=True
+            ).strip()
+            self.assertEqual(backups, "")
+            local_head = subprocess.check_output(["git", "-C", str(wt_path), "rev-parse", "HEAD"], text=True).strip()
+            self.assertEqual(local_head, local_diverged_sha)
+
+    def test_babysit_activeWorktree_repeatedConflict_reusesBackupBranch(self):
+        with self._setup_fixture() as (root, repo, runner, directory):
+            wt_path, head, local_diverged_sha = self._create_diverged_conflict_worktree(root, repo)
+
+            with self._fixture_env(directory):
+                runner.babysit_active_worktrees()
+                time.sleep(1.1)  # backup branch names carry second resolution
+                runner.babysit_active_worktrees()
+
+            backups = subprocess.check_output(
+                ["git", "-C", str(repo), "branch", "--list", "runner-backup-*"], text=True
+            ).split()
+            self.assertEqual(len(backups), 1)
+            self.assertEqual(self._read_backup_sha(repo), local_diverged_sha)
+
+    def test_babysit_activeWorktree_forcePushedAuthorizedHead_preservesLocalCommits(self):
+        with self._setup_fixture() as (root, repo, runner, directory):
+            wt_path, _previous_head = self._create_tracked_pr_worktree(root, repo)
+            (wt_path / "local_work.txt").write_text("local completion")
+            subprocess.run(["git", "-C", str(wt_path), "add", "."], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(wt_path), "commit", "-m", "local completion"], check=True, capture_output=True)
+            local_sha = subprocess.check_output(["git", "-C", str(wt_path), "rev-parse", "HEAD"], text=True).strip()
+
+            # Rewrite the remote PR branch to an unrelated root commit, then authorize that head.
+            self._rewrite_and_authorize_remote_head(root, repo)
+
+            with self._fixture_env(directory):
+                runner.babysit_active_worktrees()
+
+            self.assertFalse((root / "merged").exists())
+            local_head = subprocess.check_output(["git", "-C", str(wt_path), "rev-parse", "HEAD"], text=True).strip()
+            self.assertEqual(local_head, local_sha)
+            self.assertEqual(self._read_backup_sha(repo), local_sha)
+
+    def test_babysit_activeWorktree_rewrittenHeadWithoutLocalCommits_adoptsNewHead(self):
+        with self._setup_fixture() as (root, repo, runner, directory):
+            # Worktree sits exactly at the recorded head: the rewrite drops its only commit.
+            _wt_path, _previous_head = self._create_tracked_pr_worktree(
+                root, repo, remote_files={"old.txt": "dropped by rewrite"}
+            )
+            rewritten_sha = self._rewrite_and_authorize_remote_head(root, repo)
+
+            with self._fixture_env(directory):
+                runner.babysit_active_worktrees()
+
+            # Adoption lets the merge proceed on the rewritten head. Replaying the dropped
+            # history would have republished a rebased tip instead and blocked this merge.
+            self.assertTrue((root / "merged").exists())
+            origin_main = subprocess.check_output(
+                ["git", "--git-dir", str(root / "origin"), "rev-parse", "refs/heads/main"], text=True
+            ).strip()
+            self.assertEqual(origin_main, rewritten_sha)
+
+    def test_babysit_activeWorktree_advancedAuthorizedHead_rebasesLocalCommitsWithoutBackup(self):
+        with self._setup_fixture() as (root, repo, runner, directory):
+            wt_path, previous_head = self._create_tracked_pr_worktree(root, repo)
+            (wt_path / "local_work.txt").write_text("local completion")
+            subprocess.run(["git", "-C", str(wt_path), "add", "."], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(wt_path), "commit", "-m", "local completion"], check=True, capture_output=True)
+            advanced_sha = self._rewrite_and_authorize_remote_head(root, repo, parent=previous_head)
+
+            with self._fixture_env(directory):
+                runner.babysit_active_worktrees()
+
+            # A normal head advance keeps the rebase path: no backup, local commit replayed.
+            backups = subprocess.check_output(
+                ["git", "-C", str(repo), "branch", "--list", "runner-backup-*"], text=True
+            ).strip()
+            self.assertEqual(backups, "")
+            rebased_head = subprocess.check_output(["git", "-C", str(wt_path), "rev-parse", "HEAD"], text=True).strip()
+            ancestor = subprocess.run(
+                ["git", "-C", str(wt_path), "merge-base", "--is-ancestor", advanced_sha, "HEAD"], capture_output=True
+            )
+            self.assertEqual(ancestor.returncode, 0)
+            self.assertTrue((wt_path / "local_work.txt").exists())
+
+    def test_babysit_activeWorktree_advanceAfterAdoptedRewrite_isNotBlocked(self):
+        with self._setup_fixture() as (root, repo, runner, directory):
+            wt_path, _previous_head = self._create_tracked_pr_worktree(
+                root, repo, remote_files={"old.txt": "dropped by rewrite"}
+            )
+            rewritten_sha = self._rewrite_and_authorize_remote_head(root, repo)
+            (root / "rollup.json").write_text(json.dumps({
+                "__typename": "CheckRun", "name": "ci-gate", "status": "IN_PROGRESS", "conclusion": None,
+            }))
+
+            with self._fixture_env(directory):
+                runner.babysit_active_worktrees()
+
+                # The runner adopts the rewritten head while CI is still pending.
+                adopted_head = subprocess.check_output(["git", "-C", str(wt_path), "rev-parse", "HEAD"], text=True).strip()
+                self.assertEqual(adopted_head, rewritten_sha)
+
+                # The remote then advances normally. The stale recorded head must not make
+                # upstream commits look like local-only work.
+                advanced_sha = self._rewrite_and_authorize_remote_head(root, repo, parent=rewritten_sha)
+                (root / "rollup.json").unlink()
+                runner.babysit_active_worktrees()
+
+            self.assertTrue((root / "merged").exists())
+            origin_main = subprocess.check_output(
+                ["git", "--git-dir", str(root / "origin"), "rev-parse", "refs/heads/main"], text=True
+            ).strip()
+            self.assertEqual(origin_main, advanced_sha)
 
     def test_babysit_activeWorktree_unresolvableAuthorizedHead_blocksWithoutBackup(self):
         with self._setup_fixture() as (root, repo, runner, directory):
