@@ -20,15 +20,6 @@ if [[ -z "$STAGED" ]]; then
     exit 0
 fi
 
-# Docs-only = every staged file matches one of the doc patterns.
-# Use a positive filter (count matches) to avoid || true masking genuine failures.
-TOTAL=$(printf '%s\n' "$STAGED" | grep -c .)
-DOCS=$(printf '%s\n' "$STAGED" | grep -c -E '(^|/)(docs/|CHANGELOG(\.md)?$|.*\.(md|markdown)$)' || true)
-if [[ "$TOTAL" -gt 0 && "$DOCS" -eq "$TOTAL" ]]; then
-    echo "✓ Pre-commit: docs-only change, skipping build/test."
-    exit 0
-fi
-
 if ! command -v dotnet >/dev/null 2>&1; then
     echo "⚠ dotnet not found; skipping pre-commit checks."
     exit 0
@@ -39,7 +30,14 @@ fi
 # ──────────────────────────────────────────────────
 STASH_REF=""
 UNSTAGED_EXISTS=false
-if ! git diff --quiet || [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
+STASH_FLAGS=(--keep-index --quiet)
+# Scope untracked file check to src/ so untracked notes/docs outside src/ do not
+# trigger an unnecessary git stash push/pop cycle.
+UNTRACKED_SRC=$(git ls-files --others --exclude-standard -- src/)
+if [[ -n "$UNTRACKED_SRC" ]]; then
+    UNSTAGED_EXISTS=true
+    STASH_FLAGS+=(--include-untracked)
+elif ! git diff --quiet; then
     UNSTAGED_EXISTS=true
 fi
 
@@ -48,7 +46,7 @@ if [[ "$UNSTAGED_EXISTS" == "true" ]]; then
     # Capture stash output so we can surface the real reason if it fails —
     # silently continuing would test a dirty working tree, violating the
     # "format/test the staged snapshot" contract.
-    STASH_ERR=$(git stash push --keep-index --include-untracked --quiet -m "$STASH_MSG" 2>&1)
+    STASH_ERR=$(git stash push "${STASH_FLAGS[@]}" -m "$STASH_MSG" 2>&1)
     STASH_RC=$?
     if [[ "$STASH_RC" -ne 0 ]]; then
         echo "❌ git stash push failed (exit $STASH_RC). Aborting commit to avoid" >&2
@@ -79,6 +77,28 @@ trap cleanup EXIT
 # INT/TERM: just mark; EXIT will then run cleanup once.
 trap 'exit 130' INT
 trap 'exit 143' TERM
+
+# Docs-only = every staged file matches one of the doc patterns.
+# Runs after staging isolation so DocsDriftTests evaluates the exact staged markdown snapshot.
+TOTAL=$(printf '%s\n' "$STAGED" | grep -c .)
+DOCS=$(printf '%s\n' "$STAGED" | grep -c -E '(^|/)(docs/|CHANGELOG(\.md)?$|.*\.(md|markdown)$)' || true)
+if [[ "$TOTAL" -gt 0 && "$DOCS" -eq "$TOTAL" ]]; then
+    if [[ -f "src/Zipper.Tests/Zipper.Tests.csproj" ]]; then
+        echo "▶ Pre-commit (docs-only): running DocsDriftTests..."
+        DRIFT_ARGS=(dotnet test src/Zipper.Tests/Zipper.Tests.csproj --filter "FullyQualifiedName~DocsDriftTests" --logger "console;verbosity=quiet")
+        if [[ -f "src/Zipper.Tests/obj/project.assets.json" ]]; then
+            DRIFT_ARGS+=(--no-restore)
+        fi
+        if ! "${DRIFT_ARGS[@]}"; then
+            echo "❌ DocsDriftTests failed. Commit aborted." >&2
+            echo "   Run 'dotnet test src/Zipper.Tests/Zipper.Tests.csproj --filter FullyQualifiedName~DocsDriftTests' for full output." >&2
+            echo "   To bypass: git commit --no-verify" >&2
+            exit 1
+        fi
+    fi
+    echo "✓ Pre-commit: docs-only change verified (DocsDriftTests passed, skipping full suite)."
+    exit 0
+fi
 
 
 # ──────────────────────────────────────────────────
@@ -115,7 +135,12 @@ fi
 # 3. Unit tests
 # ──────────────────────────────────────────────────
 echo "▶ Running unit tests..."
-if ! dotnet test src/Zipper.Tests/Zipper.Tests.csproj --logger "console;verbosity=quiet"; then
+RESTORE_TRIGGER=$(printf '%s\n' "$STAGED" | grep -c -E '(\.csproj$|\.sln$|Directory\.Build\.props$|Directory\.Packages\.props$|global\.json$|packages\.lock\.json$)' || true)
+UNIT_ARGS=(dotnet test src/Zipper.Tests/Zipper.Tests.csproj --logger "console;verbosity=quiet")
+if [[ "$RESTORE_TRIGGER" -eq 0 && -f "src/Zipper.Tests/obj/project.assets.json" ]]; then
+    UNIT_ARGS+=(--no-restore)
+fi
+if ! "${UNIT_ARGS[@]}"; then
     echo "❌ Unit tests failed. Commit aborted." >&2
     echo "   Run 'dotnet test' for full output." >&2
     echo "   To bypass: git commit --no-verify" >&2
@@ -125,7 +150,11 @@ fi
 ANALYZER_TRIGGER=$(printf '%s\n' "$STAGED" | grep -c -E '(^|/)(src/Zipper\.Analyzers/|src/Zipper\.Analyzers\.Tests/|Directory\.Build\.props$|Directory\.Packages\.props$|\.editorconfig$|zipper\.sln$|global\.json$)' || true)
 if [[ "$ANALYZER_TRIGGER" -gt 0 ]]; then
     echo "▶ Running analyzer tests..."
-    if ! dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj --logger "console;verbosity=quiet"; then
+    ANALYZER_ARGS=(dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj --logger "console;verbosity=quiet")
+    if [[ "$RESTORE_TRIGGER" -eq 0 && -f "src/Zipper.Analyzers.Tests/obj/project.assets.json" ]]; then
+        ANALYZER_ARGS+=(--no-restore)
+    fi
+    if ! "${ANALYZER_ARGS[@]}"; then
         echo "❌ Analyzer unit tests failed. Commit aborted." >&2
         echo "   Run 'dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj' for full output." >&2
         echo "   To bypass: git commit --no-verify" >&2
@@ -136,14 +165,15 @@ fi
 echo "✓ Pre-commit: format + unit tests passed"
 
 # Success handshake with post-commit:
-#   - pre-commit (here, on success) writes a `pre-commit.pending` sentinel
-#   - post-commit only promotes it to `pre-commit.ok` if the sentinel exists
-#   - `git commit --no-verify` skips pre-commit ⇒ no sentinel ⇒ no ok marker
+#   - pre-commit (here, on success) writes a `pre-commit.pending` sentinel bound to the staged tree hash
+#   - post-commit only promotes it to `pre-commit.ok` if the sentinel exists and matches HEAD^{tree}
+#   - `git commit --no-verify` skips pre-commit ⇒ no matching sentinel ⇒ no ok marker
 #     ⇒ pre-push never wrongly skips unit tests for a bypassed commit.
 PENDING_DIR=$(git rev-parse --git-path zipper-hooks 2>/dev/null || echo "")
 if [[ -n "$PENDING_DIR" ]]; then
     mkdir -p "$PENDING_DIR" 2>/dev/null || true
-    printf 'timestamp=%s\npid=%s\n' "$(date +%s)" "$$" \
+    STAGED_TREE=$(git write-tree 2>/dev/null || echo "")
+    printf 'timestamp=%s\npid=%s\ntree=%s\n' "$(date +%s)" "$$" "$STAGED_TREE" \
         > "$PENDING_DIR/pre-commit.pending" 2>/dev/null || true
 fi
 

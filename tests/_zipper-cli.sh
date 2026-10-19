@@ -27,7 +27,10 @@ _zipper_resolve_bin() {
     fi
 
     # Build once (Release). Keep output quiet so it does not spam test logs.
-    if ! dotnet build "$_zipper_project" -c Release --nologo -v quiet >/dev/null; then
+    # Prefer --no-restore when NuGet assets are already present to avoid a redundant restore graph walk.
+    if [[ -f "src/obj/project.assets.json" ]] && dotnet build "$_zipper_project" -c Release --no-restore --nologo -v quiet >/dev/null 2>&1; then
+        :
+    elif ! dotnet build "$_zipper_project" -c Release --nologo -v quiet >/dev/null; then
         echo "[_zipper-cli] dotnet build failed; falling back to 'dotnet run' per call" >&2
         return 0
     fi
