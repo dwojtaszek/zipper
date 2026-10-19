@@ -97,10 +97,142 @@ with tempfile.TemporaryDirectory(prefix="zipper-qa-report-gate-") as workspace:
     )
     (evidence / "case-1.snapshot.txt").write_text(tuistory_wrapped)
     check(report, True)
+
+    launch_quoted = 'env -u CI FACTORY_DISABLE_KEYRING=true "./qa-results/$RUN_ID/publish/Zipper"'
+    launch_single_quoted = "env -u CI FACTORY_DISABLE_KEYRING=true './qa-results/$RUN_ID/publish/Zipper'"
+    launch_quoted_run_id = 'env -u CI FACTORY_DISABLE_KEYRING=true "./qa-results/1771-1/publish/Zipper"'
+    launch_partial_quoted = 'env -u CI FACTORY_DISABLE_KEYRING=true ./qa-results/$RUN_ID/publish/"Zipper"'
+    launch_quoted_var = 'env -u CI FACTORY_DISABLE_KEYRING="true" ./qa-results/$RUN_ID/publish/Zipper'
+    launch_single_quoted_var = "env -u CI FACTORY_DISABLE_KEYRING='true' ./qa-results/$RUN_ID/publish/Zipper"
+
+    launch_single_quoted_run_id = "env -u CI FACTORY_DISABLE_KEYRING=true './qa-results/1771-1/publish/Zipper'"
+
+    (evidence / "case-1.snapshot.txt").write_text(
+        "$ " + launch_quoted + " --version\n"
+        "Zipper vqa-test\nAPP_EXIT:0\n"
+    )
+    check(report, True)
+    (evidence / "case-1.snapshot.txt").write_text(
+        "$ " + launch_quoted_run_id + " --version\n"
+        "Zipper vqa-test\nAPP_EXIT:0\n"
+    )
+    check(report, True)
+    (evidence / "case-1.snapshot.txt").write_text(
+        "$ " + launch_single_quoted_run_id + " --version\n"
+        "Zipper vqa-test\nAPP_EXIT:0\n"
+    )
+    check(report, True)
+    (evidence / "case-1.snapshot.txt").write_text(
+        "$ " + launch_single_quoted + " --version\n"
+        "Zipper vqa-test\nAPP_EXIT:0\n"
+    )
+    check(report, False)
+    (evidence / "case-1.snapshot.txt").write_text(
+        "$ " + launch_partial_quoted + " --version\n"
+        "Zipper vqa-test\nAPP_EXIT:0\n"
+    )
+    check(report, True)
+    (evidence / "case-1.snapshot.txt").write_text(
+        "$ " + launch_quoted_var + " --version\n"
+        "Zipper vqa-test\nAPP_EXIT:0\n"
+    )
+    check(report, True)
+    (evidence / "case-1.snapshot.txt").write_text(
+        "$ " + launch_single_quoted_var + " --version\n"
+        "Zipper vqa-test\nAPP_EXIT:0\n"
+    )
+    check(report, True)
+    (evidence / "case-1.snapshot.txt").write_text(
+        "$ echo '# note'; " + launch_quoted + " --version\n"
+        "Zipper vqa-test\nAPP_EXIT:0\n"
+    )
+    check(report, True)
+
+    wrapped_quoted = (
+        "$ echo " + "x" * (110 - len("$ echo ; " + launch_quoted[:-7]))
+        + "; " + launch_quoted[:-7] + "\n"
+        + launch_quoted[-7:] + " --version; code=$?; echo APP_EXIT:$code\n"
+        "Zipper vqa-test\nAPP_EXIT:0\n"
+    )
+    (evidence / "case-1.snapshot.txt").write_text(wrapped_quoted)
+    check(report, True)
+
+    negative.write_text(
+        "$ " + launch_quoted + " --type invalid; code=$?; echo APP_EXIT:$code\n"
+        "Error: invalid File Type\nAPP_EXIT:1\n"
+    )
+    check(report, True)
+
     (evidence / "case-1.snapshot.txt").write_text(
         "$ echo note; # " + launch + " --version\nAPP_EXIT:0\n"
     )
     check(report, False)
+    (evidence / "case-1.snapshot.txt").write_text(
+        "$ echo note; # " + launch_quoted + " --version\nAPP_EXIT:0\n"
+    )
+    check(report, False)
+    (evidence / "case-1.snapshot.txt").write_text(
+        '$ echo "; ' + launch_quoted + ' --version"; code=$?; echo APP_EXIT:$code\n'
+        "APP_EXIT:0\n"
+    )
+    check(report, False)
+    (evidence / "case-1.snapshot.txt").write_text(
+        "$ echo " + launch_quoted + "; code=$?; echo APP_EXIT:$code\n"
+        "APP_EXIT:0\n"
+    )
+    check(report, False)
+    (evidence / "case-1.snapshot.txt").write_text(
+        '$ echo "' + launch_quoted + '"; code=$?; echo APP_EXIT:$code\n'
+        "APP_EXIT:0\n"
+    )
+    check(report, False)
+    (evidence / "case-1.snapshot.txt").write_text(
+        '$ "' + launch + '" --version\nAPP_EXIT:0\n'
+    )
+    check(report, False)
+    (evidence / "case-1.snapshot.txt").write_text(
+        '$ "fake; ' + launch + '" --version\nAPP_EXIT:0\n'
+    )
+    check(report, False)
+    (evidence / "case-1.snapshot.txt").write_text(
+        '$ echo "foo" "./qa-results/$RUN_ID/publish/Zipper"\nAPP_EXIT:0\n'
+    )
+    check(report, False)
+    (evidence / "case-1.snapshot.txt").write_text(
+        '$ env -u CI FACTORY_DISABLE_KEYRING=true echo "./qa-results/$RUN_ID/publish/Zipper"\nAPP_EXIT:0\n'
+    )
+    check(report, False)
+    (evidence / "case-1.snapshot.txt").write_text(
+        '$ X="; ' + launch + '"; echo APP_EXIT:0\nAPP_EXIT:0\n'
+    )
+    check(report, False)
+    (evidence / "case-1.snapshot.txt").write_text(
+        "$ echo \\; " + launch + "\nAPP_EXIT:0\n"
+    )
+    check(report, False)
+    (evidence / "case-1.snapshot.txt").write_text(
+        '$ env -u CI "FACTORY_DISABLE_KEYRING=true ./qa-results/$RUN_ID/publish/Zipper"\nAPP_EXIT:0\n'
+    )
+    check(report, False)
+    (evidence / "case-1.snapshot.txt").write_text(
+        "$ env -u CI FACTORY_DISABLE_KEYRING=true\\\\./qa-results/$RUN_ID/publish/Zipper\\nAPP_EXIT:0\\n"
+    )
+    check(report, False)
+
+    # Reset case-1 to a valid snapshot before asserting case-2 rejection
+    (evidence / "case-1.snapshot.txt").write_text(
+        "$ " + launch_quoted + " --version\n"
+        "Zipper vqa-test\nAPP_EXIT:0\n"
+    )
+    negative.write_text(
+        "$ echo " + launch_quoted + " --type invalid\n"
+        "Error: invalid File Type\nAPP_EXIT:1\n"
+    )
+    check(report, False)
+    negative.write_text(
+        "$ " + launch + " --type invalid; code=$?; echo APP_EXIT:$code\n"
+        "Error: invalid File Type\nAPP_EXIT:1\n"
+    )
     (evidence / "case-1.snapshot.txt").write_text(
         '$ echo "; ' + launch + ' --version"; code=$?; echo APP_EXIT:$code\n'
         "APP_EXIT:0\n"
