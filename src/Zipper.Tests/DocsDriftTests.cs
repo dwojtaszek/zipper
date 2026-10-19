@@ -167,5 +167,86 @@ public class DocsDriftTests
         Assert.Contains("all twelve", content);
         Assert.Contains("ValidationOrchestrator", content);
     }
+
+    [Fact]
+    public void TestsReadme_E2eScriptIndex_IsInSyncWithRunTestsSh()
+    {
+        var runTestsShPath = Path.Combine(RepoRoot, "tests", "run-tests.sh");
+        var runTestsLines = File.ReadAllLines(runTestsShPath);
+
+        var invokedWithBatParity = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var rawLine in runTestsLines)
+        {
+            var line = rawLine.TrimStart();
+            if (line.Length == 0 || line.StartsWith('#'))
+            {
+                continue;
+            }
+
+            var match = System.Text.RegularExpressions.Regex.Match(
+                line,
+                @"bash \./tests/(test-[a-zA-Z0-9._-]+)\.sh",
+                System.Text.RegularExpressions.RegexOptions.None,
+                TimeSpan.FromSeconds(1));
+
+            if (match.Success)
+            {
+                var scriptName = match.Groups[1].Value;
+                var batPath = Path.Combine(RepoRoot, "tests", $"{scriptName}.bat");
+                if (File.Exists(batPath))
+                {
+                    invokedWithBatParity.Add(scriptName);
+                }
+            }
+        }
+
+        Assert.NotEmpty(invokedWithBatParity);
+
+        var readmePath = Path.Combine(RepoRoot, "tests", "README.md");
+        var readmeLines = File.ReadAllLines(readmePath);
+
+        var indexedScripts = new SortedSet<string>(StringComparer.Ordinal);
+        var inIndexSection = false;
+        foreach (var rawLine in readmeLines)
+        {
+            var line = rawLine.TrimStart();
+            if (line.StartsWith("## E2E Script Index", StringComparison.Ordinal))
+            {
+                inIndexSection = true;
+                continue;
+            }
+
+            if (inIndexSection && line.StartsWith("## ", StringComparison.Ordinal))
+            {
+                break;
+            }
+
+            if (inIndexSection && line.StartsWith('|'))
+            {
+                if (line.StartsWith("| Script", StringComparison.OrdinalIgnoreCase) || line.StartsWith("|---", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var match = System.Text.RegularExpressions.Regex.Match(
+                    line,
+                    @"^\|\s*`([^`]+)`\s*\|",
+                    System.Text.RegularExpressions.RegexOptions.None,
+                    TimeSpan.FromSeconds(1));
+                if (match.Success)
+                {
+                    indexedScripts.Add(match.Groups[1].Value);
+                }
+            }
+        }
+
+        Assert.NotEmpty(indexedScripts);
+
+        var missingInReadme = invokedWithBatParity.Except(indexedScripts).ToList();
+        var extraInReadme = indexedScripts.Except(invokedWithBatParity).ToList();
+
+        Assert.True(missingInReadme.Count == 0, $"Scripts called by run-tests.sh with .bat parity missing from tests/README.md: {string.Join(", ", missingInReadme)}");
+        Assert.True(extraInReadme.Count == 0, $"Scripts listed in tests/README.md not called by run-tests.sh with .bat parity: {string.Join(", ", extraInReadme)}");
+    }
 }
 
