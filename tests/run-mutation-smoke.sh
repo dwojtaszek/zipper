@@ -23,13 +23,17 @@ OVERALL_TIMEOUT="${MUTATION_SMOKE_TIMEOUT:-120}"
 
 # ── Guards ────────────────────────────────────────────────────
 BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
-if [[ "$BRANCH" == "main" || "$BRANCH" == "HEAD" ]]; then
-    echo "  ✓ On main / detached HEAD; mutation smoke skipped."
-    exit 0
-fi
-
 MERGE_BASE=$(git merge-base HEAD main 2>/dev/null || git merge-base HEAD origin/main 2>/dev/null || echo "")
-if [[ -z "$MERGE_BASE" ]]; then
+
+if [[ "$BRANCH" == "main" || "$BRANCH" == "HEAD" ]]; then
+    # Allow running mutation smoke against uncommitted working-tree changes on main
+    UNCOMMITTED_CS=$(git diff --name-only HEAD -- 'src/*.cs' 2>/dev/null || echo "")
+    if [[ -z "$UNCOMMITTED_CS" ]]; then
+        echo "  ✓ On main / detached HEAD with no uncommitted C# edits; mutation smoke skipped."
+        exit 0
+    fi
+    MERGE_BASE="HEAD"
+elif [[ -z "$MERGE_BASE" ]]; then
     echo "  ⚠ Cannot find merge-base with main or origin/main; mutation smoke skipped."
     exit 0
 fi
@@ -171,18 +175,48 @@ fi
 TEST_PROJ="src/Zipper.Tests/Zipper.Tests.csproj"
 T0=$(date +%s)
 
-# Verify baseline build and tests before mutating (enforce baseline timeout)
-BUILD=(dotnet build "$TEST_PROJ" --nologo -v quiet)
+BUILD_FLAGS=(--nologo -v quiet)
+if [[ -f "src/Zipper.Tests/obj/project.assets.json" ]]; then
+    BUILD_FLAGS+=(--no-restore)
+fi
+
+# Verify baseline build before mutating (enforce baseline timeout)
+BUILD=(dotnet build "$TEST_PROJ" "${BUILD_FLAGS[@]}")
 [[ -n "$TCMD" ]] && BUILD=("$TCMD" 60 "${BUILD[@]}")
 if ! "${BUILD[@]}" >/dev/null 2>&1; then
-    echo "  ❌ Baseline build failed before mutation smoke; check compilation errors." >&2
-    exit 1
+    # Fallback once with full restore in case packages changed
+    BUILD_FALLBACK=(dotnet build "$TEST_PROJ" --nologo -v quiet)
+    [[ -n "$TCMD" ]] && BUILD_FALLBACK=("$TCMD" 60 "${BUILD_FALLBACK[@]}")
+    if ! "${BUILD_FALLBACK[@]}" >/dev/null 2>&1; then
+        echo "  ❌ Baseline build failed before mutation smoke; check compilation errors." >&2
+        exit 1
+    fi
 fi
-TEST=(dotnet test "$TEST_PROJ" --nologo --no-build)
-[[ -n "$TCMD" ]] && TEST=("$TCMD" 60 "${TEST[@]}")
-if ! "${TEST[@]}" >/dev/null 2>&1; then
-    echo "  ❌ Baseline tests failed before mutation smoke; unit tests must pass before mutation smoke." >&2
-    exit 1
+
+# Skip redundant 20s baseline test run when caller (pre-push) or fresh pre-commit.ok already verified HEAD
+SKIP_BASELINE="${MUTATION_SMOKE_SKIP_BASELINE:-0}"
+if [[ "$SKIP_BASELINE" != "1" ]]; then
+    MARKER_FILE="$(git rev-parse --git-path zipper-hooks 2>/dev/null || echo "")/pre-commit.ok"
+    if [[ -f "$MARKER_FILE" ]] && git diff --quiet 2>/dev/null && git diff --cached --quiet 2>/dev/null; then
+        MARKER_TS=$(grep '^timestamp=' "$MARKER_FILE" 2>/dev/null | cut -d= -f2)
+        MARKER_HEAD=$(grep '^head=' "$MARKER_FILE" 2>/dev/null | cut -d= -f2)
+        CURRENT_HEAD=$(git rev-parse HEAD 2>/dev/null || echo "")
+        NOW_TS=$(date +%s)
+        if [[ -n "$MARKER_TS" && -n "$MARKER_HEAD" && "$MARKER_HEAD" == "$CURRENT_HEAD" ]] && (( NOW_TS - MARKER_TS < 600 )); then
+            SKIP_BASELINE=1
+        fi
+    fi
+fi
+
+if [[ "$SKIP_BASELINE" == "1" ]]; then
+    echo "  ✓ Baseline unit tests already verified — skipping duplicate baseline test run."
+else
+    TEST=(dotnet test "$TEST_PROJ" --nologo --no-build)
+    [[ -n "$TCMD" ]] && TEST=("$TCMD" 60 "${TEST[@]}")
+    if ! "${TEST[@]}" >/dev/null 2>&1; then
+        echo "  ❌ Baseline tests failed before mutation smoke; unit tests must pass before mutation smoke." >&2
+        exit 1
+    fi
 fi
 
 # ── Run mutations ─────────────────────────────────────────────
@@ -214,7 +248,7 @@ for candidate in "${CANDIDATES[@]}"; do
     sed -E "${ln}${PATTERNS[$idx]}" "$file" > "$tmp" && mv "$tmp" "$file"
 
     # Phase 1: build — compile error = invalid mutant, skip
-    BUILD=(dotnet build "$TEST_PROJ" --nologo -v quiet)
+    BUILD=(dotnet build "$TEST_PROJ" "${BUILD_FLAGS[@]}")
     [[ -n "$TCMD" ]] && BUILD=("$TCMD" 30 "${BUILD[@]}")
     set +e
     "${BUILD[@]}" >/dev/null 2>&1
@@ -232,7 +266,29 @@ for candidate in "${CANDIDATES[@]}"; do
         continue
     fi
 
-    # Phase 2: test — failure = killed (~16 s)
+    # Phase 2a: fast-path targeted test class (<FileStem>Tests) when present (~1.5 s)
+    stem=$(basename "$file" .cs)
+    targeted_killed=0
+    if [[ -n "$(find src/Zipper.Tests -name "${stem}Tests.cs" -print -quit 2>/dev/null)" ]]; then
+        FAST_TEST=(dotnet test "$TEST_PROJ" --nologo --no-build --filter "FullyQualifiedName~${stem}Tests")
+        [[ -n "$TCMD" ]] && FAST_TEST=("$TCMD" 15 "${FAST_TEST[@]}")
+        set +e
+        "${FAST_TEST[@]}" >/dev/null 2>&1
+        fast_exit=$?
+        set -e
+        if [[ $fast_exit -ne 0 && $fast_exit -ne 124 ]]; then
+            echo "killed ✓"
+            KILLED=$((KILLED + 1))
+            targeted_killed=1
+        fi
+    fi
+
+    if [[ $targeted_killed -eq 1 ]]; then
+        restore
+        continue
+    fi
+
+    # Phase 2b: fallback to full unit test suite (~16 s)
     TEST=(dotnet test "$TEST_PROJ" --nologo --no-build)
     [[ -n "$TCMD" ]] && TEST=("$TCMD" 30 "${TEST[@]}")
     set +e

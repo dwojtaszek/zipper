@@ -48,6 +48,13 @@ if [[ -z "$HEAD_HASH" ]]; then
     exit 0
 fi
 
+PENDING_TREE=$(grep '^tree=' "$PENDING" 2>/dev/null | cut -d= -f2 || echo "")
+HEAD_TREE=$(git rev-parse 'HEAD^{tree}' 2>/dev/null || echo "")
+if [[ -n "$PENDING_TREE" && -n "$HEAD_TREE" && "$PENDING_TREE" != "$HEAD_TREE" ]]; then
+    rm -f "$PENDING" 2>/dev/null || true
+    exit 0
+fi
+
 mkdir -p "$MARKER_DIR" 2>/dev/null || exit 0
 printf 'timestamp=%s\nhead=%s\n' "$NOW" "$HEAD_HASH" > "$OK" 2>/dev/null || true
 rm -f "$PENDING" 2>/dev/null || true

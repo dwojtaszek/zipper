@@ -6,18 +6,19 @@ Version-controlled git hooks for local code quality enforcement.
 
 ### pre-commit
 Runs on `git commit` against the **staged snapshot** (unstaged changes are stashed first):
-1. Short-circuits if **every** changed file matches a docs pattern (`*.md`, `*.txt`, `docs/`, `CHANGELOG.md`).
-2. Stashes unstaged changes so the checks see exactly what's about to land.
+1. Short-circuits full build/test if **every** changed file matches a docs pattern (`*.md`, `docs/`, `CHANGELOG.md`), running only `DocsDriftTests`.
+2. Stashes unstaged changes (and untracked files under `src/`) so the checks see exactly what's about to land without disturbing untracked notes outside `src/`.
 3. `dotnet format` — runs only on staged `*.cs` files (via `--include`). Fails the commit if those staged files need reformatting.
-4. Unit tests — all ~450 tests (~1 s on a modern machine).
+4. Unit tests — runs with `--no-restore` when NuGet assets are present.
 
 ### post-commit
-Runs on `git commit` **after** the new commit object is created. Writes a success marker at `$(git rev-parse --git-path zipper-hooks)/pre-commit.ok` containing the timestamp and the new commit's HEAD hash. The pre-push hook uses this marker to skip unit tests if they just ran.
+Runs on `git commit` **after** the new commit object is created. Verifies that `HEAD^{tree}` matches the staged tree hash recorded in `pre-commit.pending`, then writes a success marker at `$(git rev-parse --git-path zipper-hooks)/pre-commit.ok` containing the timestamp and the new commit's HEAD hash. The pre-push hook uses this marker to skip unit tests if they just ran.
 
 ### pre-push
 Runs on `git push`:
 1. Unit tests — **skipped** if the post-commit marker was recorded within the last 10 minutes on the current HEAD.
-2. Basic E2E smoke suite (5 representative cases, ~6 s) via `tests/run-e2e-basic.sh` / `.bat`.
+2. Mutation smoke (`tests/run-mutation-smoke.sh`) — passes `MUTATION_SMOKE_SKIP_BASELINE=1` (since step 1 already verified unit tests) and runs targeted `*Tests` classes first before falling back to the full test suite.
+3. Basic E2E smoke suite (6 representative cases) via `tests/run-e2e-basic.sh` / `.bat` — **skipped** when no CLI source or basic E2E script files changed since `merge-base`.
 
 All three hooks support git worktrees (they use `git rev-parse --git-common-dir` / `--git-path` rather than hard-coded `.git/…` paths).
 

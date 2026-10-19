@@ -19,7 +19,7 @@ env:
 jobs:
   docs-only:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 5
     outputs:
       only_docs: ${{ steps.check.outputs.only_docs }}
     steps:
@@ -52,7 +52,7 @@ jobs:
               | grep -c -E '(^|/)(docs/|CHANGELOG(\.md)?$|.*\.(md|markdown)$)' || true)
 
           if [[ "$total" -gt 0 && "$docs" -eq "$total" ]]; then
-            echo "Docs-only PR detected ($total files, all docs); skipping build and tests."
+            echo "Docs-only PR detected ($total files, all docs); skipping full build and test matrix."
             echo "only_docs=true" >> "$GITHUB_OUTPUT"
           else
             echo "Non-docs change detected ($docs of $total files are docs); running full PR pipeline."
@@ -62,6 +62,17 @@ jobs:
         if: steps.check.outputs.only_docs == 'true'
         shell: bash
         run: bash tests/validate-req-traceability.sh --strict
+      - name: Setup .NET for DocsDriftTests
+        if: steps.check.outputs.only_docs == 'true'
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+      - name: Run DocsDriftTests
+        if: steps.check.outputs.only_docs == 'true'
+        shell: bash
+        run: dotnet test src/Zipper.Tests/Zipper.Tests.csproj --filter "FullyQualifiedName~DocsDriftTests" --logger "console;verbosity=normal"
 
   # Single source of truth for the shared gates (lint, runner-tests, the
   # three-OS build-and-test matrix, goldens CLI publish). See ci.yml.

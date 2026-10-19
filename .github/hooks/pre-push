@@ -26,11 +26,21 @@ if [[ -z "${DOTNET_ROOT:-}" ]]; then
 fi
 
 # ──────────────────────────────────────────────────
-# 1. Unit tests — skip if post-commit wrote a recent marker on the same HEAD
+# 1. Unit tests — skip if post-commit wrote a recent marker on the same HEAD,
+#    or run only DocsDriftTests if the entire branch diff since merge-base is docs-only.
 # ──────────────────────────────────────────────────
+MERGE_BASE=$(git merge-base HEAD main 2>/dev/null || git merge-base HEAD origin/main 2>/dev/null || echo "")
+CHANGED_SINCE_BASE=""
+BRANCH_DIFF_OK=false
+if [[ -n "$MERGE_BASE" ]]; then
+    if CHANGED_SINCE_BASE=$(git diff --name-only "$MERGE_BASE" HEAD 2>/dev/null); then
+        BRANCH_DIFF_OK=true
+    fi
+fi
+
 RUN_UNIT_TESTS=true
 MARKER=$(git rev-parse --git-path zipper-hooks/pre-commit.ok 2>/dev/null || echo "")
-if [[ -n "$MARKER" && -f "$MARKER" ]]; then
+if [[ -n "$MARKER" && -f "$MARKER" ]] && git diff --quiet 2>/dev/null && git diff --cached --quiet 2>/dev/null; then
     MARKER_TS=$(grep '^timestamp=' "$MARKER" | cut -d= -f2)
     MARKER_HEAD=$(grep '^head=' "$MARKER" | cut -d= -f2)
     CURRENT_HEAD=$(git rev-parse HEAD 2>/dev/null || echo "")
@@ -44,19 +54,51 @@ if [[ -n "$MARKER" && -f "$MARKER" ]]; then
     fi
 fi
 
+if [[ "$RUN_UNIT_TESTS" == "true" && "$BRANCH_DIFF_OK" == "true" ]]; then
+    ALL_BRANCH_CHANGES=$(
+        {
+            printf '%s\n' "$CHANGED_SINCE_BASE"
+            git diff --name-only HEAD 2>/dev/null || true
+        } | sed '/^$/d' | sort -u
+    )
+    TOTAL_CHANGED=$(printf '%s\n' "$ALL_BRANCH_CHANGES" | grep -c . || true)
+    DOCS_CHANGED=$(printf '%s\n' "$ALL_BRANCH_CHANGES" | grep -c -E '(^|/)(docs/|CHANGELOG(\.md)?$|.*\.(md|markdown)$)' || true)
+    if [[ "$TOTAL_CHANGED" -gt 0 && "$DOCS_CHANGED" -eq "$TOTAL_CHANGED" ]]; then
+        echo ""
+        echo "▶ Docs-only branch diff detected; running DocsDriftTests..."
+        DRIFT_ARGS=(dotnet test src/Zipper.Tests/Zipper.Tests.csproj --filter "FullyQualifiedName~DocsDriftTests" --logger "console;verbosity=quiet" --nologo)
+        if [[ -f "src/Zipper.Tests/obj/project.assets.json" ]]; then
+            DRIFT_ARGS+=(--no-restore)
+        fi
+        if ! "${DRIFT_ARGS[@]}"; then
+            echo ""
+            echo "❌ DocsDriftTests failed. Push aborted."
+            exit 1
+        fi
+        echo "✓ DocsDriftTests passed (skipping full unit suite for docs-only branch)"
+        RUN_UNIT_TESTS=false
+    fi
+fi
+
 if [[ "$RUN_UNIT_TESTS" == "true" ]]; then
     echo ""
     echo "▶ Running unit tests..."
-    if ! dotnet test src/Zipper.Tests/Zipper.Tests.csproj \
-            --logger "console;verbosity=quiet" --nologo; then
+    UNIT_ARGS=(dotnet test src/Zipper.Tests/Zipper.Tests.csproj --logger "console;verbosity=quiet" --nologo)
+    if [[ -f "src/Zipper.Tests/obj/project.assets.json" ]]; then
+        UNIT_ARGS+=(--no-restore)
+    fi
+    if ! "${UNIT_ARGS[@]}"; then
         echo ""
         echo "❌ Unit tests failed. Push aborted."
         echo "   Run 'dotnet test' for details."
         echo "   To bypass: git push --no-verify"
         exit 1
     fi
-    if ! dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj \
-            --logger "console;verbosity=quiet" --nologo; then
+    ANALYZER_ARGS=(dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj --logger "console;verbosity=quiet" --nologo)
+    if [[ -f "src/Zipper.Analyzers.Tests/obj/project.assets.json" ]]; then
+        ANALYZER_ARGS+=(--no-restore)
+    fi
+    if ! "${ANALYZER_ARGS[@]}"; then
         echo ""
         echo "❌ Analyzer unit tests failed. Push aborted."
         echo "   Run 'dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj' for details."
@@ -72,7 +114,10 @@ fi
 echo ""
 echo "▶ Running mutation smoke on changed files..."
 if [[ -f "./tests/run-mutation-smoke.sh" ]]; then
-    if ! bash ./tests/run-mutation-smoke.sh; then
+    # Unit tests were already verified in step 1 (either via fresh pre-commit.ok
+    # marker on HEAD or by running dotnet test above), so skip the redundant
+    # 20s baseline test run inside run-mutation-smoke.sh.
+    if ! MUTATION_SMOKE_SKIP_BASELINE=1 bash ./tests/run-mutation-smoke.sh; then
         echo ""
         echo "❌ Mutation smoke found surviving mutants. Push aborted."
         echo "   Run 'bash tests/run-mutation-smoke.sh' for details."
@@ -88,9 +133,31 @@ else
 fi
 
 # ──────────────────────────────────────────────────
-# 3. Basic E2E smoke suite
+# 3. Basic E2E smoke suite (skip when no CLI/E2E files changed)
 # ──────────────────────────────────────────────────
 echo ""
+RUN_E2E=true
+if [[ "$BRANCH_DIFF_OK" == "true" ]]; then
+    CLI_OR_E2E_CHANGES=$(
+        {
+            printf '%s\n' "$CHANGED_SINCE_BASE"
+            git diff --name-only HEAD 2>/dev/null || true
+        } |
+        grep -E '(^|/)(src/|Directory\.Build\.props$|Directory\.Packages\.props$|global\.json$|zipper\.sln$|tests/run-e2e-basic\.(sh|bat)$|tests/_zipper-cli\.(sh|bat)$)' |
+        grep -v -E '^src/Zipper\.Tests/|^src/Zipper\.Analyzers(\.Tests)?/' || true
+    )
+    if [[ -z "$CLI_OR_E2E_CHANGES" ]]; then
+        echo "✓ No CLI source or basic E2E script changes since merge-base; skipping basic E2E smoke."
+        RUN_E2E=false
+    fi
+fi
+
+if [[ "$RUN_E2E" == "false" ]]; then
+    echo ""
+    echo "✓ All pre-push checks passed"
+    exit 0
+fi
+
 echo "▶ Running basic E2E smoke tests..."
 
 E2E_RAN=false

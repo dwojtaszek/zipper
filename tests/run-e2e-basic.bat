@@ -15,28 +15,9 @@ set BUILD_DIR=src\bin\Release\net10.0
 
 REM --- Build Once ---
 
-if defined ZIPPER_EXECUTABLE (
-    call "%~dp0_zipper-cli.bat"
-    if errorlevel 1 exit /b 1
-    set "BINARY=!ZIPPER_CMD!"
-    goto :binary_ready
-)
-
-echo [ INFO ] Building project (one-time)...
-dotnet build %PROJECT% -c Release --nologo -v quiet 2>nul
-if errorlevel 1 (
-    echo [ ERROR ] Build failed. Run 'dotnet build %PROJECT% -c Release' for details.
-    exit /b 1
-)
-
-REM Resolve binary path
-if exist "%BUILD_DIR%\Zipper.exe" (
-    set BINARY=%BUILD_DIR%\Zipper.exe
-) else (
-    REM Fallback: use dotnet run (slower)
-    set BINARY=dotnet run --project %PROJECT% --no-build -c Release --
-)
-:binary_ready
+call "%~dp0_zipper-cli.bat"
+if errorlevel 1 exit /b 1
+set "BINARY=!ZIPPER_CMD!"
 echo [ INFO ] Using binary: %BINARY%
 
 REM --- Setup ---
@@ -266,56 +247,6 @@ if errorlevel 1 (
 echo [ SUCCESS ] Test 5: Bates numbering — PASSED
 set /a TESTS_PASSED+=1
 
-
-REM ─────────────────────────────────────────────
-REM Test 6: High-volume smoke test
-REM ─────────────────────────────────────────────
-echo [ INFO ] Test 6: High-volume smoke test
-%BINARY% --type pdf --count 5000 --output-path "%TEST_OUTPUT_DIR%\pdf_high_volume"
-if errorlevel 1 (
-    echo [ ERROR ] Test 6 failed: High-volume smoke test
-    goto :cleanup
-)
-
-set "zip_file="
-set "dat_file="
-for %%F in ("%TEST_OUTPUT_DIR%\pdf_high_volume\*.zip") do set "zip_file=%%F"
-for %%F in ("%TEST_OUTPUT_DIR%\pdf_high_volume\*.dat") do set "dat_file=%%F"
-if not defined zip_file (
-    echo [ ERROR ] Test 6: No .zip file found
-    goto :cleanup
-)
-if not defined dat_file (
-    echo [ ERROR ] Test 6: No .dat file found
-    goto :cleanup
-)
-
-REM Verify line count
-powershell -Command "(Get-Content -Path '%dat_file%').Count" > "%temp%\line_count.txt"
-set /p line_count=<"%temp%\line_count.txt"
-if "!line_count!" neq "5001" (
-    echo [ ERROR ] Test 6: Expected 5001 lines, got !line_count!
-    goto :cleanup
-)
-
-REM Verify header
-powershell -Command "(Get-Content -Path '%dat_file%' -TotalCount 1)" > "%temp%\header.txt"
-set /p header=<"%temp%\header.txt"
-echo "%header%" | findstr /c:"Control Number" >nul
-if errorlevel 1 (
-    echo [ ERROR ] Test 6: Header missing 'Control Number'
-    goto :cleanup
-)
-
-powershell -Command "Add-Type -Assembly System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::OpenRead('%zip_file%').Entries.Where({$_.Name -like '*.pdf'}).Count" > "%temp%\zip_count.txt"
-set /p zip_count=<"%temp%\zip_count.txt"
-if "!zip_count!" neq "5000" (
-    echo [ ERROR ] Test 6: Expected 5000 PDFs in zip, got !zip_count!
-    goto :cleanup
-)
-
-echo [ SUCCESS ] Test 6: High-volume smoke test — PASSED
-set /a TESTS_PASSED+=1
 
 REM ─────────────────────────────────────────────
 REM Test 6: High-volume smoke test

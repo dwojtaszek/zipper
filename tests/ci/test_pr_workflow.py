@@ -48,6 +48,36 @@ class PrWorkflowTraceabilityTests(unittest.TestCase):
             self.assertIn("validate-req-traceability.sh --strict", self.workflow_text)
             self.assertIn("steps.check.outputs.only_docs == 'true'", self.workflow_text)
 
+    def test_docs_only_job_runs_docs_drift_tests(self):
+        """Docs-only PRs must run DocsDriftTests so terminology/README/flag drift is caught before merge."""
+        try:
+            import yaml
+            parsed = yaml.safe_load(self.workflow_text)
+        except ImportError:
+            parsed = None
+
+        if parsed:
+            docs_only_job = parsed.get("jobs", {}).get("docs-only", {})
+            steps = docs_only_job.get("steps", [])
+            drift_steps = [
+                s for s in steps
+                if "DocsDriftTests" in s.get("run", "")
+            ]
+            self.assertEqual(
+                len(drift_steps),
+                1,
+                "docs-only job must have a step running DocsDriftTests",
+            )
+            step = drift_steps[0]
+            condition = step.get("if", "")
+            self.assertIn(
+                "steps.check.outputs.only_docs == 'true'",
+                condition,
+                "DocsDriftTests step in docs-only job must be conditioned on only_docs == 'true'",
+            )
+        else:
+            self.assertIn("DocsDriftTests", self.workflow_text)
+
     def test_ci_gate_depends_on_docs_only_job(self):
         """ci-gate must depend on docs-only job so a failure in docs-only blocks merge."""
         try:

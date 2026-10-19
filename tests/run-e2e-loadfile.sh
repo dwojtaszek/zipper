@@ -34,24 +34,15 @@ function print_error() {
 
 # --- Build Once ---
 
+# Reuse shared CLI resolver so parent runners (like run-tests.sh) do not rebuild Release a second time.
+# shellcheck source=./_zipper-cli.sh
+source "$(dirname "$0")/_zipper-cli.sh"
 if [[ -n "${ZIPPER_EXECUTABLE+x}" ]]; then
-    source "$(dirname "$0")/_zipper-cli.sh"
     BINARY=("$ZIPPER_EXECUTABLE")
+elif [[ -n "${_ZIPPER_BIN:-}" && -x "${_ZIPPER_BIN}" ]]; then
+    BINARY=("$_ZIPPER_BIN")
 else
-print_info "Building project (one-time)..."
-dotnet build "$PROJECT" -c Release --nologo -v quiet 2>/dev/null || {
-    echo "Build failed. Run 'dotnet build $PROJECT -c Release' for details."
-    exit 1
-}
-
-# Resolve binary path
-if [[ -f "$BUILD_DIR/Zipper" ]]; then
-    BINARY=("$BUILD_DIR/Zipper")
-elif [[ -f "$BUILD_DIR/Zipper.exe" ]]; then
-    BINARY=("$BUILD_DIR/Zipper.exe")
-else
-    BINARY=("dotnet" "run" "--project" "$PROJECT" "--no-build" "-c" "Release" "--")
-fi
+    BINARY=("dotnet" "run" "--project" "$PROJECT" "-c" "Release" "--")
 fi
 print_info "Using binary: ${BINARY[*]}"
 

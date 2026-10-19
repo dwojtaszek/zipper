@@ -118,9 +118,11 @@ function verify_output() {
 
   # Read and process .dat file content once
   local dat_content=$($dat_content_cmd < "$dat_file")
+  LAST_ZIP_LISTING="$zip_listing"
+  LAST_DAT_CONTENT="$dat_content"
 
-  # Verify line count in .dat file (+1 for header)
-  local line_count=$($dat_content_cmd < "$dat_file" | wc -l)
+  # Verify line count in .dat file (+1 for header) using cached content
+  local line_count=$(printf '%s\n' "$dat_content" | wc -l)
   line_count=$(echo "$line_count" | tr -d ' ') # Trim whitespace
   local expected_line_count=$((expected_count + 1))
   if [[ "$line_count" -ne "$expected_line_count" ]]; then
@@ -185,22 +187,9 @@ function verify_eml_output() {
 
   verify_output "$@"
 
-  local dat_file=$(find "$test_dir" -name "*.dat" -print -quit)
-  local zip_file=$(find "$test_dir" -name "*.zip" -print -quit)
-
-  # Get zip listing once (already cached in verify_output, but we need it here too)
-  local zip_listing
-  get_zip_listing "$zip_file" zip_listing
-
-  local dat_content_cmd="cat"
-  if [[ "$encoding" = "UTF-16" ]]; then
-    dat_content_cmd="iconv -f UTF-16LE -t UTF-8"
-  elif [[ "$encoding" = "ANSI" ]]; then
-    dat_content_cmd="iconv -f WINDOWS-1252 -t UTF-8"
-  fi
-
-  # Read dat content once for attachment checks
-  local dat_content=$($dat_content_cmd < "$dat_file")
+  # Reuse listing and .dat content already extracted in verify_output
+  local zip_listing="${LAST_ZIP_LISTING:-}"
+  local dat_content="${LAST_DAT_CONTENT:-}"
 
   # Verify that attachment files are present (using cached zip listing)
   local attachment_files=$(echo "$zip_listing" | grep "attachment.*\.\(pdf\|jpg\|tiff\)$" | wc -l)
@@ -348,8 +337,8 @@ function verify_load_file_included() {
     # Read content once for verification
     local dat_content=$($dat_content_cmd < "$extracted_dat")
 
-    # Verify line count in extracted .dat file (+1 for header)
-    local line_count=$($dat_content_cmd < "$extracted_dat" | wc -l)
+    # Verify line count in extracted .dat file (+1 for header) using cached content
+    local line_count=$(printf '%s\n' "$dat_content" | wc -l)
     line_count=$(echo "$line_count" | tr -d ' ') # Trim whitespace
     local expected_line_count=$((expected_count + 1))
     if [[ "$line_count" -ne "$expected_line_count" ]]; then

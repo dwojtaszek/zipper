@@ -4,9 +4,9 @@
 # correct hooks directory for the current checkout (supports worktrees).
 #
 # Hooks:
-#   pre-commit   - dotnet format + unit tests (staged snapshot, skips docs-only)
-#   post-commit  - records success marker for pre-push skip-if-recent
-#   pre-push     - unit tests + basic E2E smoke (skips unit tests if pre-commit just ran)
+#   pre-commit   - dotnet format + unit tests (staged snapshot, DocsDriftTests fast-path for docs-only)
+#   post-commit  - records tree-verified success marker for pre-push skip-if-recent
+#   pre-push     - unit tests + mutation smoke + conditional basic E2E smoke
 #
 # Usage: bash setup-hook.sh
 
@@ -48,8 +48,8 @@ install_hook "pre-push"
 
 echo ""
 echo "Done. Hooks installed from $TEMPLATE_DIR/ into $HOOK_DIR/"
-echo "  pre-commit  -> format + unit tests (stashed staged snapshot)"
-echo "  post-commit -> writes success marker for pre-push skip optimization"
-echo "  pre-push    -> unit tests (skippable) + mutation smoke + basic E2E (5 cases)"
+echo "  pre-commit  -> format + unit tests (DocsDriftTests fast-path for docs-only)"
+echo "  post-commit -> writes tree-verified marker for pre-push skip optimization"
+echo "  pre-push    -> unit tests (skippable) + mutation smoke + conditional E2E (6 cases)"
 echo ""
 echo "Bypass with: git commit --no-verify / git push --no-verify"

@@ -90,12 +90,15 @@ bash tests/run-mutation-smoke.sh                                             # M
 # Lint
 dotnet format --verify-no-changes src/   # Required final format gate
 
-# Required final gates; use focused tests during iteration
-dotnet build zipper.sln && dotnet format --verify-no-changes src/ && dotnet test src/Zipper.Tests/Zipper.Tests.csproj && dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj && bash tests/run-mutation-smoke.sh
+# Local iteration vs. Git hook gates:
+# - While iterating, run focused tests (--filter "FullyQualifiedName~ClassName") and bash tests/run-mutation-smoke.sh.
+# - Do NOT manually run the full unit test suite right before `git commit` or `git push`:
+#   * `pre-commit` automatically runs `dotnet format --verify-no-changes src/` + unit tests (or `DocsDriftTests` on docs-only commits) and writes `.git/hooks/pre-commit.ok`.
+#   * `pre-push` reuses a fresh `pre-commit.ok` to skip re-running unit tests, skips the redundant baseline test run in `run-mutation-smoke.sh`, and skips `run-e2e-basic.sh` when no CLI/E2E files changed.
+# - Run the full manual gate below only when hooks are not installed or when validating without committing:
+dotnet build zipper.sln && dotnet format --verify-no-changes src/ && dotnet test src/Zipper.Tests/Zipper.Tests.csproj --no-build && dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj --no-build && MUTATION_SMOKE_SKIP_BASELINE=1 bash tests/run-mutation-smoke.sh
 
-# E2E (must pass before push)
-# The pre-push hook runs the basic E2E smoke against src/bin/Release — build Release first.
-dotnet build -c Release
+# Full E2E suite (`_zipper-cli` builds Release automatically once per suite)
 ./tests/run-tests.sh   # Linux/macOS
 tests/run-tests.bat    # Windows
 ```
@@ -242,7 +245,7 @@ If the user names an issue number or says "skip roadmap," follow the user. Still
    - If the newest substantive comment contradicts the body, follow the comment and say so in the PR.
    - If the issue itself is stale (the code it describes no longer exists, or another change already resolved it), do not implement it as written — comment on the issue with evidence and a recommendation (close or retarget), then stop.
 6. Write a failing test first (TDD), then implement the fix
-7. Run focused tests after each behavior change. Before the final commit, run `dotnet build zipper.sln`, `dotnet format --verify-no-changes src/`, `dotnet test src/Zipper.Tests/Zipper.Tests.csproj && dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj`, and `bash tests/run-mutation-smoke.sh`. Pre-push enforces a hard gate on mutation smoke: any mutant surviving on changed `.cs` lines aborts push. If mutants survive, add targeted unit tests in `src/Zipper.Tests/` exercising those specific conditions/operators until all mutants are killed. Never bypass with `SKIP_MUTATION_SMOKE`. Repeat affected final gates after review-driven fixes; always validate the final tree before pushing.
+7. Run focused tests (`dotnet test --filter ...`) after each behavior change. When modifying `src/Zipper.Analyzers/`, run `dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj`. When modifying production `.cs` files, run `bash tests/run-mutation-smoke.sh` (which supports uncommitted changes and runs matching `*Tests` classes first before falling back to the full suite). Do not manually re-run the full unit test suite or `dotnet build -c Release` immediately before `git commit` / `git push` when git hooks are active: `pre-commit` enforces format + unit tests (and writes `pre-commit.ok`), and `pre-push` reuses `pre-commit.ok`, enforces `run-mutation-smoke.sh` without repeating the baseline test run, and runs `run-e2e-basic.sh` only when CLI/E2E files changed. If mutants survive, add targeted unit tests in `src/Zipper.Tests/` exercising those specific conditions/operators until all mutants are killed. Never bypass with `SKIP_MUTATION_SMOKE`. Repeat affected gates after review-driven fixes.
 8. Run autoreview before creating PR (see Adversarial Review section below). *Required for any change touching logic, error handling, or public contracts. For docs-only, version-bump, or single-line fixes, a self-review suffices — note the exemption in the PR.* Then run the local CodeRabbit CLI pre-PR gate (see CodeRabbit Local Pre-PR Review below) and fix or skip-with-reason every finding before submitting the PR.
 9. Commit and create PR — include `## Release Notes` per the [Release Notes Mandate](#release-notes-mandate) below. Reference `Fixes #NNN`. If the work advances a Roadmap phase, mention the roadmap issue in the PR body (do not auto-close it).
 10. Monitor CI until all checks pass; fix failures before requesting review. Reproduce each gate locally first — see the [docs/cicd.md](docs/cicd.md#quick-reference-for-agents) gate-to-command table so you fail fast instead of waiting on CI minutes. If a CI failure appears flaky (same test passes locally, or failure is in an unrelated component), re-run once. If it fails again, document the flake in the PR and proceed to request review. Before pushing any update to a PR, run the local CodeRabbit CLI review gate (`coderabbit review --committed --base main --agent`) and address all findings first. Push fixes via `git commit --amend --no-edit && git push --force-with-lease`.
@@ -273,7 +276,7 @@ If the user names an issue number or says "skip roadmap," follow the user. Still
 
 **Test location:** `src/Zipper.Tests/`.
 
-**Pre-commit hook:** Runs format + unit tests on every `git commit` (short-circuits for docs-only changes — `*.md` and `docs/`). Bypass: `git commit --no-verify`.
+**Pre-commit hook:** Runs format + unit tests on every `git commit` (short-circuits for docs-only changes — `*.md` and `docs/` — running only `DocsDriftTests`). Bypass: `git commit --no-verify`.
 
 ---
 

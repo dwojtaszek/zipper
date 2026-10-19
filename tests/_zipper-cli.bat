@@ -20,6 +20,10 @@ if not "%_ZIPPER_CLI_READY%"=="" goto :eof
 
 if "%ZIPPER_PROJECT%"=="" set "ZIPPER_PROJECT=src\Zipper.csproj"
 
+if exist "src\obj\project.assets.json" (
+    dotnet build "%ZIPPER_PROJECT%" -c Release --no-restore --nologo -v quiet >nul 2>nul
+    if not errorlevel 1 goto :build_done
+)
 dotnet build "%ZIPPER_PROJECT%" -c Release --nologo -v quiet >nul
 if errorlevel 1 (
     echo [_zipper-cli] dotnet build failed; falling back to 'dotnet run' per call
@@ -29,6 +33,7 @@ if errorlevel 1 (
     set "_ZIPPER_CLI_READY=1"
     goto :eof
 )
+:build_done
 
 REM Resolve BUILD_DIR to an absolute path (%%~fD) so callers can cd elsewhere
 REM between this helper and the first %ZIPPER_CMD% invocation.
