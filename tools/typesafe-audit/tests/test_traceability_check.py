@@ -674,7 +674,7 @@ class DeterministicGateRegressions(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def run_gate(self, strict: bool = True, tsv: Path | None = None, reqs: Path | None = None) -> tuple[int, dict]:
+    def run_gate(self, strict: bool = True, tsv: Path | None = None, reqs: Path | None = None, reverse: bool = False) -> tuple[int, dict]:
         validate_fn = getattr(trace_parse, "validate_traceability", None)
         if validate_fn is None:
             self.fail("trace_parse.validate_traceability is not implemented")
@@ -684,6 +684,7 @@ class DeterministicGateRegressions(unittest.TestCase):
             tests_root=self.root / "src",
             repo_root=self.root,
             strict=strict,
+            reverse=reverse,
         )
 
     def test_valid_manifest_passes_strict(self):
@@ -851,6 +852,33 @@ class DeterministicGateRegressions(unittest.TestCase):
         )
         self.assertEqual(0, res.returncode)
         self.assertIn("Coverage: 100%", res.stdout)
+
+    def test_reverse_traceability_summary_reports_unmapped_test_classes(self):
+        code, report = self.run_gate(strict=True, reverse=True)
+        self.assertEqual(0, code)
+        self.assertIn("reverse_summary", report)
+        reverse = report["reverse_summary"]
+        self.assertIn("discovered_classes", reverse)
+        self.assertIn("mapped_classes", reverse)
+        self.assertIn("unmapped_classes", reverse)
+        self.assertIn("DupTests", reverse["unmapped_classes"])
+        self.assertIn("FixtureTests", reverse["mapped_classes"])
+
+        code_no_rev, report_no_rev = self.run_gate(strict=True, reverse=False)
+        self.assertEqual(0, code_no_rev)
+        self.assertNotIn("reverse_summary", report_no_rev)
+
+    def test_shell_script_gate_supports_reverse_flag(self):
+        script_path = REPO_ROOT / "tests/validate-req-traceability.sh"
+        res = subprocess.run(
+            ["bash", str(script_path), "--strict", "--reverse", "--tsv", str(self.tsv_path), "--requirements", str(self.root / "Requirements.md"), "--tests-root", str(self.root), "--repo-root", str(self.root)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(0, res.returncode)
+        self.assertIn("Coverage: 100%", res.stdout)
+        self.assertIn("Reverse Traceability Summary (Informational)", res.stdout)
 
 
 if __name__ == "__main__":

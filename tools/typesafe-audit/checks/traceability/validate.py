@@ -24,6 +24,7 @@ try:
         SourceIndex,
         TSV_HEADER,
         VALID_COVERAGES,
+        flatten_classes,
         resolve_e2e_reference,
         resolve_unit_reference,
     )
@@ -33,6 +34,7 @@ except ImportError:
         SourceIndex,
         TSV_HEADER,
         VALID_COVERAGES,
+        flatten_classes,
         resolve_e2e_reference,
         resolve_unit_reference,
     )
@@ -121,7 +123,7 @@ def _parse_manifest(
     return rows, malformed_rows, unexplained_exemptions, manifest_entries, unknown_refs, exemptions_set
 
 
-def _check_resolutions(rows: list[dict], tests_root: Path, repo_root: Path) -> tuple[list[dict], list[dict]]:
+def _check_resolutions(rows: list[dict], tests_root: Path, repo_root: Path) -> tuple[list[dict], list[dict], SourceIndex]:
     unit_tests_root = tests_root
     if (tests_root / UNIT_TESTS_REL_DIR).is_dir():
         unit_tests_root = tests_root / UNIT_TESTS_REL_DIR
@@ -147,7 +149,45 @@ def _check_resolutions(rows: list[dict], tests_root: Path, repo_root: Path) -> t
             else:
                 missing_refs.append(entry)
 
-    return missing_refs, ambiguous_refs
+    return missing_refs, ambiguous_refs, source_index
+
+
+def _is_test_class(decl) -> bool:
+    if decl.name.endswith("Tests"):
+        return True
+    return any(re.search(r"\[\s*(?:Fact|Theory|Property)\b", m.body) for m in decl.methods)
+
+
+def _extract_discovered_test_classes(source_index: SourceIndex) -> set[str]:
+    discovered: set[str] = set()
+    for cs_path in sorted(source_index.contents.keys()):
+        if "/bin/" in cs_path.as_posix() or "/obj/" in cs_path.as_posix():
+            continue
+        decls = source_index.get_classes(cs_path)
+        for decl in flatten_classes(decls):
+            if _is_test_class(decl):
+                discovered.add(decl.name)
+    return discovered
+
+
+def _extract_mapped_segments(rows: list[dict]) -> set[str]:
+    mapped_segments: set[str] = set()
+    for row in rows:
+        if row["coverage"] == "unit" and "." in row["reference"]:
+            class_spec = row["reference"].rsplit(".", 1)[0]
+            mapped_segments.update(class_spec.split("."))
+    return mapped_segments
+
+
+def _build_reverse_summary(rows: list[dict], source_index: SourceIndex) -> dict:
+    discovered_classes = _extract_discovered_test_classes(source_index)
+    mapped_segments = _extract_mapped_segments(rows)
+    unmapped_classes = sorted(discovered_classes - mapped_segments)
+    return {
+        "discovered_classes": sorted(discovered_classes),
+        "mapped_classes": sorted(discovered_classes & mapped_segments),
+        "unmapped_classes": unmapped_classes,
+    }
 
 
 def _print_section(header: str, items: list, formatter) -> None:
@@ -187,6 +227,20 @@ def _print_report(report: dict) -> None:
     total = report["active_total"]
     print(f"Coverage: {cov}% ({mapped} mapped + {exempt} exempted = {mapped + exempt}/{total})")
 
+    if "reverse_summary" in report:
+        rev = report["reverse_summary"]
+        print("")
+        print("=== Reverse Traceability Summary (Informational) ===")
+        print(f"Test classes discovered: {len(rev['discovered_classes'])}")
+        print(f"Test classes mapped:     {len(rev['mapped_classes'])}")
+        print(f"Test classes unmapped:   {len(rev['unmapped_classes'])}")
+        print("")
+        _print_section(
+            "--- Unmapped test classes (infrastructure, contract guards, or internal seams) ---",
+            rev["unmapped_classes"],
+            str,
+        )
+
 
 def _print_strict_failures(
     unmapped_reqs: list[str],
@@ -220,6 +274,7 @@ def validate_traceability(
     tests_root: Path,
     repo_root: Path,
     strict: bool = False,
+    reverse: bool = False,
 ) -> tuple[int, dict]:
     """Validate requirement traceability deterministically offline."""
     if not requirements_path.is_file():
@@ -240,7 +295,7 @@ def validate_traceability(
     rows, malformed_rows, unexplained_exemptions, manifest_entries, unknown_refs, exemptions_set = parsed
 
     duplicate_entries = sorted([req for req, entries in manifest_entries.items() if len(entries) > 1])
-    missing_refs, ambiguous_refs = _check_resolutions(rows, tests_root, repo_root)
+    missing_refs, ambiguous_refs, source_index = _check_resolutions(rows, tests_root, repo_root)
 
     unmapped_reqs = [req for req in active_reqs if req not in manifest_entries]
     exempted_count = sum(1 for req in active_reqs if req in manifest_entries and req in exemptions_set)
@@ -270,6 +325,9 @@ def validate_traceability(
         "unexplained_exemptions": unexplained_exemptions,
     }
 
+    if reverse:
+        report["reverse_summary"] = _build_reverse_summary(rows, source_index)
+
     _print_report(report)
 
     has_strict_failures = (
@@ -292,6 +350,7 @@ def validate_traceability(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Deterministic requirement traceability validator.")
     parser.add_argument("--strict", action="store_true", help="Fail on any traceability or reference integrity defect.")
+    parser.add_argument("--reverse", action="store_true", help="Include informational reverse traceability summary.")
     parser.add_argument("--tsv", type=Path, default=None, help="Path to req-traceability.tsv.")
     parser.add_argument("--requirements", type=Path, default=None, help="Path to Requirements.md.")
     parser.add_argument("--tests-root", type=Path, default=None, help="Root directory for test sources.")
@@ -310,6 +369,7 @@ def main(argv: list[str] | None = None) -> int:
         tests_root=tests_root,
         repo_root=repo_root,
         strict=args.strict,
+        reverse=args.reverse,
     )
     return code
 

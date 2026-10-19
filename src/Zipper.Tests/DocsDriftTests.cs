@@ -248,5 +248,53 @@ public class DocsDriftTests
         Assert.True(missingInReadme.Count == 0, $"Scripts called by run-tests.sh with .bat parity missing from tests/README.md: {string.Join(", ", missingInReadme)}");
         Assert.True(extraInReadme.Count == 0, $"Scripts listed in tests/README.md not called by run-tests.sh with .bat parity: {string.Join(", ", extraInReadme)}");
     }
+
+    [Fact]
+    public void Requirements_Section17_ContainsHelpTextGeneratorContractNote()
+    {
+        var reqPath = Path.Combine(RepoRoot, "Requirements.md");
+        var content = File.ReadAllText(reqPath);
+        Assert.Contains("HelpTextGenerator", content);
+        Assert.Contains("CLI Help Text Contract", content);
+    }
+
+    [Fact]
+    public void TraceabilityManifest_ContainsMappingsForReverseCoverageSeams()
+    {
+        var tsvPath = Path.Combine(RepoRoot, "tests", "req-traceability.tsv");
+        var lines = File.ReadAllLines(tsvPath);
+
+        string[] requiredSeams =
+        [
+            "ArchiveCombinedCaseTests.",
+            "ArchiveCompatibilityCaseTests.",
+            "ArchiveStructureCaseTests.",
+            "ArchivePathPolicyCaseTests.",
+            "ArchiveResourceCaseTests.",
+            "ArchiveFixtureLayoutTests.",
+            "ArchiveTestCodecTests.",
+            "ArchiveTestJsonTests.",
+            "Deflate64LongMatchTests.",
+            "ColumnCountValidatorTests.",
+            "LineEndingValidatorTests.",
+            "OptBoundaryValidatorTests.",
+            "StandardModeTests.",
+            "ChaosEngineBuilderTests.",
+            "EmailFactoryTests.",
+            "ProductionSetOrchestratorTests.",
+            "HelpTextGeneratorTests.",
+        ];
+
+        foreach (var seam in requiredSeams)
+        {
+            var matched = lines.Any(line =>
+            {
+                var parts = line.Split('\t');
+                return parts.Length >= 3 && parts[1] == "unit" && parts[2].StartsWith(seam, StringComparison.Ordinal);
+            });
+
+            Assert.True(matched, $"req-traceability.tsv should contain unit test reference for seam: {seam}");
+        }
+    }
 }
 

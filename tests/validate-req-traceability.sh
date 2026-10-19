@@ -5,12 +5,13 @@
 # no requirement cross-reference points to an undefined ID.
 #
 # Usage:
-#   validate-req-traceability.sh [--strict]
+#   validate-req-traceability.sh [--strict] [--reverse]
 #
 #   --strict   Fail on any unmapped active requirement, orphaned reference,
 #              missing/ambiguous test reference, malformed manifest row, or
 #              unexplained exemption (CI mode).
 #              Without --strict, report only (local development).
+#   --reverse  Include informational reverse traceability summary (unmapped test classes).
 #
 # Exit codes:
 #   0  all active requirements mapped or exempted, valid references
