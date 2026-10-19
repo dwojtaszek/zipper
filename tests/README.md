@@ -51,6 +51,12 @@ Each script below is called by `run-tests.sh` and has a `.bat` parity file.
 | `test-typesafe-audit` | TypeSafe audit runner: unit tests, fixture-mode execution, and workflow structure checks |
 | `test-unified-workflow` | End-to-end Standard + Loadfile-Only + Production Set in one run |
 
+## Requirement Traceability
+
+`tests/req-traceability.tsv` maps active requirements (`REQ-NNN` and `REQ_E-NNN`) from `Requirements.md` to representative test cases (unit test methods or E2E scenarios) or reasoned exemptions. It is deterministically validated by `tests/validate-req-traceability.sh --strict` in CI.
+- **Forward traceability:** every active requirement must have at least one mapped test or reasoned exemption (100% coverage enforced).
+- **Reverse traceability:** `tests/validate-req-traceability.sh --reverse` provides an informational summary of test classes in `src/Zipper.Tests` relative to manifest mappings. Test classes without a dedicated REQ mapping represent test helpers, contract guards, profile arbitraries, or internal execution primitives.
+
 ## Related
 
 - Unit tests: `src/Zipper.Tests/` (run with `dotnet test`)
