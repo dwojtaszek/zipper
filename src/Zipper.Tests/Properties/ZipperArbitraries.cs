@@ -2,8 +2,91 @@ using System.Runtime.InteropServices;
 using FsCheck;
 using FsCheck.Fluent;
 using Zipper.ArchiveTests;
+using Zipper.Config;
 
 namespace Zipper.Tests.Properties;
+
+/// <summary>
+/// Bounded input for Load File composer flag combinations, column counts, and record alignment property tests.
+/// </summary>
+[StructLayout(LayoutKind.Auto)]
+public readonly record struct MetadataFlagCombinationInput(
+    bool IncludeMetadata,
+    bool IncludeCustodian,
+    bool IncludeDateRange,
+    bool IncludeFileSize,
+    bool IncludePageCount,
+    bool IncludeHash,
+    bool IncludeNativePath,
+    bool IncludeTextPath,
+    bool IncludeEmailFields,
+    bool IncludeCompressionMethod,
+    string? ColumnProfile,
+    BatesNumberConfig? BatesConfig,
+    ProductionConfig? ProductionConfig,
+    int AttachmentRate,
+    int FileCount,
+    int Seed);
+
+/// <summary>
+/// Bounded input for Load File emitter byte count, preamble, and line-ending contract property tests.
+/// </summary>
+[StructLayout(LayoutKind.Auto)]
+public readonly record struct EmitterPropertyInput(
+    string EncodingName,
+    bool UseByteOrderMark,
+    string EndOfLine,
+    bool HasHeader,
+    int RecordCount,
+    int ColumnCount,
+    int Seed);
+
+/// <summary>
+/// Bounded input for EDRM-XML load file writer structure and character escaping property tests.
+/// </summary>
+[StructLayout(LayoutKind.Auto)]
+public readonly record struct XmlLoadFilePropertyInput(
+    int FileCount,
+    bool WithFamilies,
+    bool WithText,
+    bool WithHash,
+    int AttachmentRate,
+    int Seed,
+    string MetadataValue);
+
+/// <summary>
+/// Bounded input for family plan attachment calculation and child order property tests.
+/// </summary>
+[StructLayout(LayoutKind.Auto)]
+public readonly record struct FamilyPlanPropertyInput(
+    int FileCount,
+    double AttachmentRate,
+    int Seed);
+
+/// <summary>
+/// Bounded input for companion load file audit writer JSON serialization and total record conservation property tests.
+/// </summary>
+[StructLayout(LayoutKind.Auto)]
+public readonly record struct AuditWriterPropertyInput(
+    int FileCount,
+    int AttachmentRate,
+    bool WithFamilies,
+    bool IsLoadfileOnly,
+    LoadFileFormat Format,
+    int Seed);
+
+/// <summary>
+/// Bounded input for coded column generator determinism and category membership property tests.
+/// </summary>
+[StructLayout(LayoutKind.Auto)]
+public readonly record struct CodedGeneratorPropertyInput(
+    string[] Categories,
+    int[]? DistributionIndices,
+    bool MultiValue,
+    int MultiValueMin,
+    int MultiValueMax,
+    int DocumentIndex,
+    int Seed);
 
 /// <summary>
 /// Bounded input for Bates Number sequence and range property tests.
@@ -430,6 +513,394 @@ public static class ZipperArbitraries
         {
             yield return input with { MutationSelector = input.MutationSelector / 2 };
             yield return input with { MutationSelector = 0 };
+        }
+    }
+
+    public static Arbitrary<MetadataFlagCombinationInput> MetadataFlagCombinationInputArb()
+    {
+        var profiles = new[]
+        {
+            null,
+            "minimal",
+            "standard",
+            "litigation",
+            "full",
+            "legacywithmetadata",
+            "legacyeml",
+            "legacywithcollectionmetadata",
+        };
+
+        var prefixes = new[] { "DOC", "BATES", "PROD_", string.Empty };
+
+        var gen =
+            from meta in Gen.Elements(true, false)
+            from custodian in Gen.Elements(true, false)
+            from dateRange in Gen.Elements(true, false)
+            from fileSize in Gen.Elements(true, false)
+            from pageCount in Gen.Elements(true, false)
+            from hash in Gen.Elements(true, false)
+            from nativePath in Gen.Elements(true, false)
+            from textPath in Gen.Elements(true, false)
+            from emailFields in Gen.Elements(true, false)
+            from compression in Gen.Elements(true, false)
+            from profile in Gen.Elements(profiles)
+            from hasBates in Gen.Elements(true, false)
+            from batesPrefix in Gen.Elements(prefixes)
+            from batesStart in Gen.Choose(0, 50_000)
+            from batesDigits in Gen.Choose(1, 10)
+            from isProd in Gen.Elements(true, false)
+            from volSize in Gen.Choose(100, 5000)
+            from rollingMode in Gen.Elements(RollingBatesMode.Continuous, RollingBatesMode.Restart)
+            from attachmentRate in Gen.Choose(0, 100)
+            from fileCount in Gen.Choose(1, 10)
+            from seed in Gen.Choose(1, 100_000)
+            let bates = hasBates
+                ? new BatesNumberConfig { Prefix = batesPrefix, Start = batesStart, Digits = batesDigits }
+                : null
+            let prod = isProd
+                ? new ProductionConfig { ProductionSet = true, VolumeSize = volSize, RollingBatesMode = rollingMode }
+                : null
+            select new MetadataFlagCombinationInput(
+                meta, custodian, dateRange, fileSize, pageCount, hash,
+                nativePath, textPath, emailFields, compression, profile,
+                bates, prod, attachmentRate, fileCount, seed);
+
+        return Arb.From(gen, ShrinkMetadataFlagCombinationInput);
+    }
+
+    public static Arbitrary<EmitterPropertyInput> EmitterPropertyInputArb()
+    {
+        var encodings = new[] { "UTF-8", "UTF-16LE", "ANSI", "ASCII" };
+        var eols = new[] { "CRLF", "LF", "CR" };
+
+        var gen =
+            from enc in Gen.Elements(encodings)
+            from bom in Gen.Elements(true, false)
+            from eol in Gen.Elements(eols)
+            from hasHeader in Gen.Elements(true, false)
+            from recordCount in Gen.Choose(0, 10)
+            from colCount in Gen.Choose(1, 5)
+            from seed in Gen.Choose(1, 100_000)
+            select new EmitterPropertyInput(enc, bom, eol, hasHeader, recordCount, colCount, seed);
+
+        return Arb.From(gen, ShrinkEmitterPropertyInput);
+    }
+
+    public static Arbitrary<XmlLoadFilePropertyInput> XmlLoadFilePropertyInputArb()
+    {
+        var sampleStrings = new[]
+        {
+            "Normal Text",
+            "Special & < > \" ' Characters",
+            "Unicode: 日本語, Español (ñ), Greek (Ω)",
+            "Whitespace: \t spaces and \r\n newlines",
+            string.Empty,
+            "Control Chars: \t \n \r",
+            "A &amp; B &lt; C &gt; D",
+        };
+
+        var gen =
+            from count in Gen.Choose(1, 8)
+            from withFamilies in Gen.Elements(true, false)
+            from withText in Gen.Elements(true, false)
+            from withHash in Gen.Elements(true, false)
+            from rate in Gen.Choose(0, 100)
+            from seed in Gen.Choose(1, 100_000)
+            from meta in Gen.Elements(sampleStrings)
+            select new XmlLoadFilePropertyInput(count, withFamilies, withText, withHash, rate, seed, meta);
+
+        return Arb.From(gen, ShrinkXmlLoadFileInput);
+    }
+
+    public static Arbitrary<FamilyPlanPropertyInput> FamilyPlanPropertyInputArb()
+    {
+        var gen =
+            from count in Gen.Choose(1, 20)
+            from rate in Gen.Choose(0, 100).Select(x => (double)x)
+            from seed in Gen.Choose(0, 100_000)
+            select new FamilyPlanPropertyInput(count, rate, seed);
+
+        return Arb.From(gen, ShrinkFamilyPlanInput);
+    }
+
+    public static Arbitrary<AuditWriterPropertyInput> AuditWriterPropertyInputArb()
+    {
+        var gen =
+            from count in Gen.Choose(1, 15)
+            from rate in Gen.Choose(0, 100)
+            from withFamilies in Gen.Elements(true, false)
+            from isLoadfileOnly in Gen.Elements(true, false)
+            from fmt in Gen.Elements(Enum.GetValues<LoadFileFormat>())
+            from seed in Gen.Choose(1, 100_000)
+            select new AuditWriterPropertyInput(count, rate, withFamilies, isLoadfileOnly, fmt, seed);
+
+        return Arb.From(gen, ShrinkAuditWriterInput);
+    }
+
+    public static Arbitrary<CodedGeneratorPropertyInput> CodedGeneratorPropertyInputArb()
+    {
+        var samplePools = new[]
+        {
+            new[] { "Alpha", "Beta", "Gamma", "Delta" },
+            new[] { "Red", "Green", "Blue", "Yellow", "Orange" },
+            new[] { "CatA", "CatB" },
+            new[] { "SoleCategory" },
+            new[] { "Dup1", "Dup1", "Dup2", "Dup2", "Unique" },
+        };
+
+        var gen =
+            from pool in Gen.Elements(samplePools)
+            from hasIndices in Gen.Elements(true, false)
+            from multiValue in Gen.Elements(true, false)
+            from minCount in Gen.Choose(1, 3)
+            from maxCount in Gen.Choose(3, 5)
+            from docIndex in Gen.Choose(0, 50)
+            from seed in Gen.Choose(1, 100_000)
+            let indices = hasIndices ? Enumerable.Range(0, 10).Select(i => (i + seed) % pool.Length).ToArray() : null
+            select new CodedGeneratorPropertyInput(pool, indices, multiValue, minCount, Math.Max(minCount, maxCount), docIndex, seed);
+
+        return Arb.From(gen, ShrinkCodedGeneratorInput);
+    }
+
+    private static IEnumerable<MetadataFlagCombinationInput> ShrinkMetadataFlagCombinationInput(MetadataFlagCombinationInput input)
+    {
+        if (input.FileCount > 1)
+        {
+            int half = input.FileCount / 2;
+            if (half > 1)
+            {
+                yield return input with { FileCount = half };
+            }
+
+            yield return input with { FileCount = 1 };
+        }
+
+        if (input.AttachmentRate > 0)
+        {
+            yield return input with { AttachmentRate = input.AttachmentRate / 2 };
+            yield return input with { AttachmentRate = 0 };
+        }
+
+        if (input.Seed > 0)
+        {
+            yield return input with { Seed = input.Seed / 2 };
+            yield return input with { Seed = 0 };
+        }
+
+        if (input.ColumnProfile is not null)
+        {
+            yield return input with { ColumnProfile = null };
+        }
+
+        if (input.BatesConfig is not null)
+        {
+            yield return input with { BatesConfig = null };
+        }
+
+        if (input.ProductionConfig is not null)
+        {
+            yield return input with { ProductionConfig = null };
+        }
+
+        if (input.IncludeEmailFields)
+        {
+            yield return input with { IncludeEmailFields = false };
+        }
+
+        if (input.IncludePageCount)
+        {
+            yield return input with { IncludePageCount = false };
+        }
+
+        if (input.IncludeTextPath)
+        {
+            yield return input with { IncludeTextPath = false };
+        }
+
+        if (input.IncludeMetadata)
+        {
+            yield return input with { IncludeMetadata = false };
+        }
+
+        if (input.IncludeHash)
+        {
+            yield return input with { IncludeHash = false };
+        }
+
+        if (input.IncludeCompressionMethod)
+        {
+            yield return input with { IncludeCompressionMethod = false };
+        }
+
+        if (input.IncludeDateRange)
+        {
+            yield return input with { IncludeDateRange = false };
+        }
+
+        if (input.IncludeCustodian)
+        {
+            yield return input with { IncludeCustodian = false };
+        }
+
+        if (input.IncludeFileSize)
+        {
+            yield return input with { IncludeFileSize = false };
+        }
+
+        if (input.IncludeNativePath)
+        {
+            yield return input with { IncludeNativePath = false };
+        }
+    }
+
+    private static IEnumerable<EmitterPropertyInput> ShrinkEmitterPropertyInput(EmitterPropertyInput input)
+    {
+        if (input.RecordCount > 0)
+        {
+            yield return input with { RecordCount = input.RecordCount / 2 };
+            yield return input with { RecordCount = 0 };
+        }
+
+        if (input.ColumnCount > 1)
+        {
+            yield return input with { ColumnCount = Math.Max(1, input.ColumnCount / 2) };
+            yield return input with { ColumnCount = 1 };
+        }
+
+        if (input.Seed > 0)
+        {
+            yield return input with { Seed = input.Seed / 2 };
+            yield return input with { Seed = 0 };
+        }
+
+        if (input.HasHeader)
+        {
+            yield return input with { HasHeader = false };
+        }
+    }
+
+    private static IEnumerable<XmlLoadFilePropertyInput> ShrinkXmlLoadFileInput(XmlLoadFilePropertyInput input)
+    {
+        if (input.FileCount > 1)
+        {
+            yield return input with { FileCount = input.FileCount / 2 };
+            yield return input with { FileCount = 1 };
+        }
+
+        if (input.AttachmentRate > 0)
+        {
+            yield return input with { AttachmentRate = input.AttachmentRate / 2 };
+            yield return input with { AttachmentRate = 0 };
+        }
+
+        if (input.Seed > 0)
+        {
+            yield return input with { Seed = input.Seed / 2 };
+            yield return input with { Seed = 0 };
+        }
+
+        if (input.WithFamilies)
+        {
+            yield return input with { WithFamilies = false };
+        }
+
+        if (input.WithText)
+        {
+            yield return input with { WithText = false };
+        }
+
+        if (input.WithHash)
+        {
+            yield return input with { WithHash = false };
+        }
+    }
+
+    private static IEnumerable<FamilyPlanPropertyInput> ShrinkFamilyPlanInput(FamilyPlanPropertyInput input)
+    {
+        if (input.FileCount > 1)
+        {
+            int half = input.FileCount / 2;
+            if (half > 1)
+            {
+                yield return input with { FileCount = half };
+            }
+
+            yield return input with { FileCount = 1 };
+        }
+
+        if (input.AttachmentRate > 0.0)
+        {
+            yield return input with { AttachmentRate = input.AttachmentRate / 2.0 };
+            yield return input with { AttachmentRate = 0.0 };
+        }
+
+        if (input.Seed > 0)
+        {
+            yield return input with { Seed = input.Seed / 2 };
+            yield return input with { Seed = 0 };
+        }
+    }
+
+    private static IEnumerable<AuditWriterPropertyInput> ShrinkAuditWriterInput(AuditWriterPropertyInput input)
+    {
+        if (input.FileCount > 1)
+        {
+            int half = input.FileCount / 2;
+            if (half > 1)
+            {
+                yield return input with { FileCount = half };
+            }
+
+            yield return input with { FileCount = 1 };
+        }
+
+        if (input.AttachmentRate > 0)
+        {
+            yield return input with { AttachmentRate = input.AttachmentRate / 2 };
+            yield return input with { AttachmentRate = 0 };
+        }
+
+        if (input.Seed > 0)
+        {
+            yield return input with { Seed = input.Seed / 2 };
+            yield return input with { Seed = 0 };
+        }
+
+        if (input.WithFamilies)
+        {
+            yield return input with { WithFamilies = false };
+        }
+
+        if (input.IsLoadfileOnly)
+        {
+            yield return input with { IsLoadfileOnly = false };
+        }
+    }
+
+    private static IEnumerable<CodedGeneratorPropertyInput> ShrinkCodedGeneratorInput(CodedGeneratorPropertyInput input)
+    {
+        if (input.Categories.Length > 2)
+        {
+            var shorter = input.Categories[..(input.Categories.Length / 2)];
+            yield return input with
+            {
+                Categories = shorter,
+                DistributionIndices = input.DistributionIndices?
+                    .Select(i => i % shorter.Length)
+                    .ToArray(),
+            };
+        }
+
+        if (input.DocumentIndex > 0)
+        {
+            yield return input with { DocumentIndex = input.DocumentIndex / 2 };
+            yield return input with { DocumentIndex = 0 };
+        }
+
+        if (input.Seed > 0)
+        {
+            yield return input with { Seed = input.Seed / 2 };
+            yield return input with { Seed = 0 };
         }
     }
 }
