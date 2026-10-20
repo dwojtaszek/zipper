@@ -44,4 +44,24 @@
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" />
   </ItemGroup>
 
+  <!-- Automatically install/sync local Git hooks on local builds (skipped in CI) -->
+  <ItemGroup Condition="'$(ContinuousIntegrationBuild)' != 'true' AND '$(MSBuildProjectName)' == 'Zipper' AND Exists('$(MSBuildThisFileDirectory).github/hooks')">
+    <_GitHookTemplate Include="$(MSBuildThisFileDirectory).github/hooks/pre-commit" />
+    <_GitHookTemplate Include="$(MSBuildThisFileDirectory).github/hooks/post-commit" />
+    <_GitHookTemplate Include="$(MSBuildThisFileDirectory).github/hooks/pre-push" />
+  </ItemGroup>
+
+  <Target Name="SyncGitHooks"
+          BeforeTargets="BeforeBuild"
+          Condition="'@(_GitHookTemplate)' != '' AND (Exists('$(MSBuildThisFileDirectory).git/HEAD') OR Exists('$(MSBuildThisFileDirectory).git'))"
+          Inputs="@(_GitHookTemplate)"
+          Outputs="@(_GitHookTemplate->'$(MSBuildThisFileDirectory).git/hooks/%(Filename)%(Extension)')">
+    <Exec Command="bash &quot;$(MSBuildThisFileDirectory)setup-hook.sh&quot; --quiet"
+          Condition="'$(OS)' != 'Windows_NT'"
+          IgnoreExitError="true" />
+    <Exec Command="cmd /c &quot;$(MSBuildThisFileDirectory)setup-hook.bat&quot; --quiet"
+          Condition="'$(OS)' == 'Windows_NT'"
+          IgnoreExitError="true" />
+  </Target>
+
 </Project>

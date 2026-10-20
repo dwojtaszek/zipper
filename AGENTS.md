@@ -90,15 +90,23 @@ bash tests/run-mutation-smoke.sh                                             # M
 # Lint
 dotnet format --verify-no-changes src/   # Required final format gate
 
+# Smart local developer CLI (recommended — builds Release once and runs only diff-affected gates)
+./dev.sh                                 # Inspect git diff vs main and run only affected gates (check)
+./dev.sh --dry-run                       # Preview which gates would run for current changes
+./dev.sh all                             # Run all required pre-PR gates (build once, lint, unit/analyzer, mutation, E2E smoke)
+dev.bat                                  # Windows equivalent
+
 # Local iteration vs. Git hook gates:
-# - While iterating, run focused tests (--filter "FullyQualifiedName~ClassName") and bash tests/run-mutation-smoke.sh.
+# - Local builds (`dotnet build`) automatically install/sync `.github/hooks/*` via `Directory.Build.props` (`SyncGitHooks` target, skipped in CI).
+# - While iterating, run `./dev.sh` (or focused tests `--filter "FullyQualifiedName~ClassName"` and `bash tests/run-mutation-smoke.sh`).
+# - `run-mutation-smoke.sh` caches killed and compile-error mutants by SHA-256 content hash under `.git/zipper-hooks/mutation-cache/` (bypass with `--no-cache` or `MUTATION_SMOKE_CACHE=0`).
 # - Do NOT manually run the full unit test suite right before `git commit` or `git push`:
-#   * `pre-commit` automatically runs `dotnet format --verify-no-changes src/` + unit tests (or `DocsDriftTests` on docs-only commits) and writes `.git/hooks/pre-commit.ok`.
-#   * `pre-push` reuses a fresh `pre-commit.ok` to skip re-running unit tests, skips the redundant baseline test run in `run-mutation-smoke.sh`, and skips `run-e2e-basic.sh` when no CLI/E2E files changed.
+#   * `pre-commit` automatically runs `dotnet format --verify-no-changes src/` + unit tests (or `DocsDriftTests` on docs-only commits) and writes `.git/zipper-hooks/pre-commit.ok`.
+#   * `pre-push` reuses a fresh `pre-commit.ok` to skip re-running unit tests, skips the redundant baseline test run in `run-mutation-smoke.sh` (and reuses cached mutant results), and skips `run-e2e-basic.sh` when no CLI/E2E files changed.
 # - Run the full manual gate below only when hooks are not installed or when validating without committing:
 dotnet build zipper.sln && dotnet format --verify-no-changes src/ && dotnet test src/Zipper.Tests/Zipper.Tests.csproj --no-build && dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj --no-build && MUTATION_SMOKE_SKIP_BASELINE=1 bash tests/run-mutation-smoke.sh
 
-# Full E2E suite (`_zipper-cli` builds Release automatically once per suite)
+# Full E2E suite (`_zipper-cli` builds Release automatically once per suite; standalone suites run in parallel on Unix, override with `--serial` or `--jobs N`)
 ./tests/run-tests.sh   # Linux/macOS
 tests/run-tests.bat    # Windows
 ```

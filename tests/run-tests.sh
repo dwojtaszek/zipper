@@ -6,6 +6,143 @@ set -euo pipefail
 TOTAL_FAILURES=0
 AGGREGATE_FAILURE=0
 
+# Parallel worker configuration for standalone feature suites.
+# Default to up to 4 workers (override via RUN_TESTS_JOBS=N, --jobs N, or --serial).
+if [[ -z "${RUN_TESTS_JOBS:-}" ]]; then
+    _detected_cpus=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
+    if [[ "$_detected_cpus" -gt 4 ]]; then
+        RUN_TESTS_JOBS=4
+    elif [[ "$_detected_cpus" -lt 1 ]]; then
+        RUN_TESTS_JOBS=1
+    else
+        RUN_TESTS_JOBS="$_detected_cpus"
+    fi
+fi
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --serial)
+            RUN_TESTS_JOBS=1
+            shift
+            ;;
+        -j|--jobs)
+            if [[ $# -lt 2 || ! "${2:-}" =~ ^[0-9]+$ || "$2" -lt 1 ]]; then
+                echo "Error: $1 requires a positive integer" >&2
+                exit 1
+            fi
+            RUN_TESTS_JOBS="$2"
+            shift 2
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            exit 1
+            ;;
+    esac
+done
+
+PARALLEL_LOG_DIR=$(mktemp -d)
+PARALLEL_PIDS=()
+PARALLEL_LOGS=()
+PARALLEL_NAMES=()
+PARALLEL_NEXT_IDX=0
+
+cleanup_parallel_logs() {
+    for pid in ${PARALLEL_PIDS[@]+"${PARALLEL_PIDS[@]}"}; do
+        kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
+    done
+    for pid in ${PARALLEL_PIDS[@]+"${PARALLEL_PIDS[@]}"}; do
+        wait "$pid" 2>/dev/null || true
+    done
+    rm -rf "$PARALLEL_LOG_DIR"
+}
+trap cleanup_parallel_logs EXIT
+trap 'cleanup_parallel_logs; exit 130' INT TERM
+
+reap_oldest_parallel_suite() {
+    if [[ "${#PARALLEL_PIDS[@]}" -eq 0 ]]; then
+        return 0
+    fi
+    local pid="${PARALLEL_PIDS[0]}"
+    local log_file="${PARALLEL_LOGS[0]}"
+    local script_name="${PARALLEL_NAMES[0]}"
+    local rc=0
+    wait "$pid" || rc=$?
+    if [[ -f "$log_file" ]]; then
+        cat "$log_file"
+        rm -f "$log_file"
+    fi
+    if [[ "$rc" -ne 0 ]]; then
+        print_error "${script_name} failed."
+    fi
+    PARALLEL_PIDS=("${PARALLEL_PIDS[@]:1}")
+    PARALLEL_LOGS=("${PARALLEL_LOGS[@]:1}")
+    PARALLEL_NAMES=("${PARALLEL_NAMES[@]:1}")
+}
+
+flush_parallel_suites() {
+    while [[ "${#PARALLEL_PIDS[@]}" -gt 0 ]]; do
+        reap_oldest_parallel_suite
+    done
+}
+
+# Parallel safety contract for standalone suites:
+# - Every standalone suite runs AFTER `source ./tests/_zipper-cli.sh` and inherits
+#   `ZIPPER_EXECUTABLE`, so child scripts never invoke `dotnet build` or compete for `obj/`/`bin/`.
+# - Every parallel-eligible suite writes exclusively to its own `./results/<suite-specific-dir>`
+#   subdirectory (verified across `tests/test-*.sh` and `tests/run-e2e-*.sh`) and receives an
+#   isolated per-worker `TMPDIR` under `$PARALLEL_LOG_DIR`.
+# - Suites that invoke `dotnet msbuild` or inspect shared repo/workflow state are listed in
+#   `force_serial` below and run serially after flushing active workers.
+run_standalone_suite() {
+    local label="$1"
+    shift
+    local script_name="${2#./tests/}"
+    local force_serial=0
+    case "$script_name" in
+        test-artifact-handling.sh|test-run-tests-guard-parity.sh|test-ci-build-props.sh|./.github/actions/coverage-gate/test-coverage-gate.sh)
+            force_serial=1
+            ;;
+    esac
+
+    if [[ "$RUN_TESTS_JOBS" -le 1 || "$force_serial" -eq 1 ]]; then
+        if [[ "$force_serial" -eq 1 ]]; then
+            flush_parallel_suites
+        fi
+        print_info "Running ${label}..."
+        if "$@"; then
+            print_success "${label} passed."
+        else
+            print_error "${script_name} failed."
+        fi
+        return 0
+    fi
+
+    while [[ "${#PARALLEL_PIDS[@]}" -ge "$RUN_TESTS_JOBS" ]]; do
+        reap_oldest_parallel_suite
+    done
+
+    local idx="$PARALLEL_NEXT_IDX"
+    ((PARALLEL_NEXT_IDX+=1)) || true
+    local log_file="$PARALLEL_LOG_DIR/suite_${idx}.log"
+    local worker_tmp="$PARALLEL_LOG_DIR/tmp_${idx}"
+    mkdir -p "$worker_tmp"
+    set -m
+    (
+        export ZIPPER_EXECUTABLE="${ZIPPER_EXECUTABLE:-${_ZIPPER_BIN:-}}"
+        export TMPDIR="$worker_tmp"
+        print_info "Running ${label}..."
+        if "$@"; then
+            print_success "${label} passed."
+        else
+            exit 1
+        fi
+    ) </dev/null >"$log_file" 2>&1 &
+    PARALLEL_PIDS+=("$!")
+    set +m
+    PARALLEL_LOGS+=("$log_file")
+    PARALLEL_NAMES+=("$script_name")
+}
+
 # --- Test Configuration ---
 
 # The directory where test output will be generated.
@@ -376,9 +513,10 @@ print_info "Starting test suite..."
 rm -rf "$TEST_OUTPUT_DIR"
 mkdir -p "$TEST_OUTPUT_DIR"
 
-# Source the shared binary-resolution helper so all 17 inline cases share one Release build.
+# Source the shared binary-resolution helper so all inline cases and parallel standalone suites share one Release build.
 # shellcheck source=./_zipper-cli.sh
 source "$(dirname "$0")/_zipper-cli.sh"
+export ZIPPER_EXECUTABLE="${ZIPPER_EXECUTABLE:-${_ZIPPER_BIN:-}}"
 
 # Function to run a single test case with logging
 function run_test_case() {
@@ -543,131 +681,79 @@ print_success "Test Case 21 passed."
 
 print_info "Cleaning up test output..."
 rm -rf "$TEST_OUTPUT_DIR"
+mkdir -p "$TEST_OUTPUT_DIR"
 
 # --- Standalone Feature Test Suites ---
 # Run all standalone test scripts to ensure comprehensive coverage
 
-print_info "Running standalone feature test suites..."
+print_info "Running standalone feature test suites (jobs=$RUN_TESTS_JOBS)..."
 
 # Test 1: EML comprehensive tests
-print_info "Running EML comprehensive tests..."
-bash ./tests/test-eml-comprehensive.sh || print_error "test-eml-comprehensive.sh failed."
-print_success "EML comprehensive tests passed."
+run_standalone_suite "EML comprehensive tests" bash ./tests/test-eml-comprehensive.sh
 
 # Test 2: Bates numbering tests
-echo "[ INFO ] Running Bates Numbering Tests..."
-bash ./tests/test-bates-numbering.sh || print_error "test-bates-numbering.sh failed."
+run_standalone_suite "Bates Numbering Tests" bash ./tests/test-bates-numbering.sh
 
-if [[ $? -ne 0 ]]; then
-  print_error "Bates Numbering Tests failed."
-fi
-
-echo "[ INFO ] Running Production Sets Tests..."
-bash ./tests/test-production-sets.sh || print_error "test-production-sets.sh failed."
-
-if [[ $? -ne 0 ]]; then
-  print_error "Production Sets Tests failed."
-fi
+run_standalone_suite "Production Sets Tests" bash ./tests/test-production-sets.sh
 
 # Test 3: Multipage TIFF tests
-print_info "Running multipage TIFF tests..."
-bash ./tests/test-multipage-tiff.sh || print_error "test-multipage-tiff.sh failed."
-print_success "Multipage TIFF tests passed."
+run_standalone_suite "multipage TIFF tests" bash ./tests/test-multipage-tiff.sh
 
 # Test 4: Office formats tests
-print_info "Running office formats tests..."
-bash ./tests/test-office-formats.sh || print_error "test-office-formats.sh failed."
-print_success "Office formats tests passed."
+run_standalone_suite "office formats tests" bash ./tests/test-office-formats.sh
 
 # Test 5: Load file formats tests
-print_info "Running load file formats tests..."
-bash ./tests/test-load-file-formats.sh || print_error "test-load-file-formats.sh failed."
-print_success "Load file formats tests passed."
+run_standalone_suite "load file formats tests" bash ./tests/test-load-file-formats.sh
 
 # Test 6: Artifact handling tests
-print_info "Running artifact handling tests..."
-bash ./tests/test-artifact-handling.sh || print_error "test-artifact-handling.sh failed."
-print_success "Artifact handling tests passed."
+run_standalone_suite "artifact handling tests" bash ./tests/test-artifact-handling.sh
 
 # Test 7: Cross-platform tests
-print_info "Running cross-platform tests..."
-bash ./tests/test-cross-platform.sh || print_error "test-cross-platform.sh failed."
-print_success "Cross-platform tests passed."
+run_standalone_suite "cross-platform tests" bash ./tests/test-cross-platform.sh
 
 # Test 10: Path traversal security tests
-print_info "Running path traversal security tests..."
-bash ./tests/test-path-traversal-security.sh || print_error "test-path-traversal-security.sh failed."
-print_success "Path traversal security tests passed."
+run_standalone_suite "path traversal security tests" bash ./tests/test-path-traversal-security.sh
 
 # Test 11: Unified workflow tests
-print_info "Running unified workflow tests..."
-bash ./tests/test-unified-workflow.sh || print_error "test-unified-workflow.sh failed."
-print_success "Unified workflow tests passed."
+run_standalone_suite "unified workflow tests" bash ./tests/test-unified-workflow.sh
 
 # Test 11b: Archive Test workflow CLI tests
-print_info "Running Archive Test suite CLI tests..."
-bash ./tests/test-archive-test-suites.sh || print_error "test-archive-test-suites.sh failed."
-print_success "Archive Test suite CLI tests passed."
+run_standalone_suite "Archive Test suite CLI tests" bash ./tests/test-archive-test-suites.sh
 
 # Test 12: Loadfile-only and Chaos Engine tests
-print_info "Running loadfile-only and Chaos Engine tests..."
-if ! bash ./tests/run-e2e-loadfile.sh; then
-  print_error "Loadfile-only tests failed."
-fi
-print_success "Loadfile-only tests passed."
+run_standalone_suite "loadfile-only and Chaos Engine tests" bash ./tests/run-e2e-loadfile.sh
 
 # Test 13: Chaos anomaly-type and scenario coverage
-print_info "Running chaos anomaly coverage tests..."
-bash ./tests/test-chaos-anomaly-coverage.sh || print_error "test-chaos-anomaly-coverage.sh failed."
-print_success "Chaos anomaly coverage tests passed."
-
+run_standalone_suite "chaos anomaly coverage tests" bash ./tests/test-chaos-anomaly-coverage.sh
 
 # Test 14: Column-profile built-in matrix (40 combos: 4 profiles × 5 file types × 2 seeds)
-print_info "Running column-profile built-in matrix tests..."
-bash ./tests/test-column-profile-builtin-matrix.sh || print_error "test-column-profile-builtin-matrix.sh failed."
-print_success "Column-profile built-in matrix tests passed."
+run_standalone_suite "column-profile built-in matrix tests" bash ./tests/test-column-profile-builtin-matrix.sh
 
 # Test 15: Column-profile custom every-kind profile
-print_info "Running column-profile custom-kinds test..."
-bash ./tests/test-column-profile-custom-kinds.sh || print_error "test-column-profile-custom-kinds.sh failed."
-print_success "Column-profile custom-kinds test passed."
+run_standalone_suite "column-profile custom-kinds test" bash ./tests/test-column-profile-custom-kinds.sh
 
 # Test 16: Column-profile EmptyPercentage chi-square
-print_info "Running column-profile empty-percentage tests..."
-bash ./tests/test-column-profile-empty-pct.sh || print_error "test-column-profile-empty-pct.sh failed."
-print_success "Column-profile empty-percentage tests passed."
+run_standalone_suite "column-profile empty-percentage tests" bash ./tests/test-column-profile-empty-pct.sh
 
-print_info "Running target-zip-size accuracy tests..."
-bash ./tests/test-target-zip-size.sh || print_error "test-target-zip-size.sh failed."
-print_success "Target-zip-size accuracy tests passed."
+run_standalone_suite "target-zip-size accuracy tests" bash ./tests/test-target-zip-size.sh
 
-print_info "Running argument-interaction conflict tests..."
-bash ./tests/test-argument-interactions.sh || print_error "test-argument-interactions.sh failed."
-print_success "Argument-interaction conflict tests passed."
+run_standalone_suite "argument-interaction conflict tests" bash ./tests/test-argument-interactions.sh
 
-print_info "Running CLI coverage gap tests..."
-bash ./tests/test-cli-coverage-gaps.sh || print_error "test-cli-coverage-gaps.sh failed."
-print_success "CLI coverage gap tests passed."
+run_standalone_suite "CLI coverage gap tests" bash ./tests/test-cli-coverage-gaps.sh
 
 # Keep the Windows wrapper's child exit codes guarded (#1040)
-bash ./tests/test-run-tests-guard-parity.sh || print_error "test-run-tests-guard-parity.sh failed."
-print_success "Run-tests child-exit-code guard parity tests passed."
+run_standalone_suite "Run-tests child-exit-code guard parity tests" bash ./tests/test-run-tests-guard-parity.sh
 
-print_info "Running mixed file types tests..."
-bash ./tests/test-mixed-file-types.sh || print_error "test-mixed-file-types.sh failed."
-print_success "Mixed file types tests passed."
+run_standalone_suite "mixed file types tests" bash ./tests/test-mixed-file-types.sh
 
-print_info "Running source-driven generation tests..."
-bash ./tests/test-source-driven.sh || print_error "test-source-driven.sh failed."
-print_success "Source-driven generation tests passed."
+run_standalone_suite "source-driven generation tests" bash ./tests/test-source-driven.sh
 
-print_info "Running CI build properties and docs-only classification tests..."
-bash ./tests/test-ci-build-props.sh || print_error "test-ci-build-props.sh failed."
-print_success "CI build properties and docs-only classification tests passed."
+run_standalone_suite "CI build properties and docs-only classification tests" bash ./tests/test-ci-build-props.sh
 
-print_info "Running CI per-file coverage gate action tests..."
-bash ./.github/actions/coverage-gate/test-coverage-gate.sh || print_error "test-coverage-gate.sh failed."
-print_success "CI per-file coverage gate action tests passed."
+run_standalone_suite "CI per-file coverage gate action tests" bash ./.github/actions/coverage-gate/test-coverage-gate.sh
+
+# Wait for all parallel suites before running test-perf-measure.sh (which counts /tmp/tmp.* directories)
+flush_parallel_suites
 
 print_info "Running performance measurement regression tests..."
 bash ./tests/test-perf-measure.sh || print_error "test-perf-measure.sh failed."
