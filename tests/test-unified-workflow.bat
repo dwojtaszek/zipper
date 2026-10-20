@@ -65,7 +65,7 @@ if errorlevel 1 (
 )
 
 REM Check for all required jobs. The shared graph (lint, runner-tests,
-REM build-and-test) lives in ci.yml; the caller keeps prepare and tag-and-release.
+REM version-metadata, build-and-test) lives in ci.yml; the caller keeps prepare and tag-and-release.
 echo.
 echo 4. Checking for all required jobs...
 for %%J in (prepare: tag-and-release:) do (
@@ -78,7 +78,7 @@ for %%J in (prepare: tag-and-release:) do (
     )
 )
 
-for %%J in (lint: runner-tests: build-and-test:) do (
+for %%J in (lint: runner-tests: version-metadata: build-and-test:) do (
     findstr /C:"%%J" "%SHARED_WORKFLOW_FILE%" > nul
     if errorlevel 1 (
         echo [FAIL] Missing %%J job in ci.yml
@@ -86,6 +86,14 @@ for %%J in (lint: runner-tests: build-and-test:) do (
     ) else (
         echo [OK] Found %%J job in ci.yml
     )
+)
+
+findstr /C:"run: bash tests/test-build-version.sh" "%SHARED_WORKFLOW_FILE%" > nul
+if errorlevel 1 (
+    echo [FAIL] version-metadata job does not run tests/test-build-version.sh
+    exit /b 1
+) else (
+    echo [OK] version-metadata job runs tests/test-build-version.sh
 )
 
 REM The reusable hook and both call sites are what keep the two callers in sync.

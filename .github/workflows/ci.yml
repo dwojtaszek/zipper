@@ -1,8 +1,9 @@
-# Shared CI job graph: `lint`, `runner-tests`, and the three-OS `build-and-test`
-# matrix + goldens CLI publish. Both `pr.yml` and `build-and-test.yml` call this
-# file, so a gate added once applies to PRs and main together — the git-identity
-# divergence that reddened main CI for 15 hours (#1173) came from these two
-# callers drifting apart, and this file removes that class of bug.
+# Shared CI job graph: `lint`, `runner-tests`, `version-metadata`, and the
+# three-OS `build-and-test` matrix, which stages the accepted Linux candidate
+# for the caller's `goldens` job. Both `pr.yml` and `build-and-test.yml` call
+# this file, so a gate added once applies to PRs and main together — the
+# git-identity divergence that reddened main CI for 15 hours (#1173) came from
+# these two callers drifting apart, and this file removes that class of bug.
 
 name: CI
 
@@ -26,7 +27,8 @@ on:
       publish_mode:
         description: >-
           self-contained = publish per-RID binaries for the release job;
-          goldens = publish the framework-dependent Linux CLI for goldens;
+          goldens = publish per-RID candidates for acceptance, then stage the
+          accepted Linux candidate for the caller's goldens job;
           none = publish nothing.
         type: string
         default: none
@@ -156,6 +158,32 @@ jobs:
         shell: bash
         run: python3 -m unittest discover -s tests/goldens/lib/_test -p 'test_*.py' -v
 
+  # REQ-033/REQ-034: compiled version metadata. `tests/test-build-version.sh`
+  # compiles src/Zipper.csproj once per asserted version (three times), which
+  # is why it does not belong inside a matrix leg: in the Linux leg it
+  # serialized ~3 minutes in front of the build, unit tests, E2E, and goldens
+  # handoff. As its own job it runs in parallel; a failure still fails the
+  # caller's `ci` job and therefore `ci-gate`.
+  version-metadata:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: lint
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.source_sha || github.sha }}
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+
+      - name: Compiled development and stable version regressions
+        shell: bash
+        run: bash tests/test-build-version.sh
+
   build-and-test:
     # `runner-tests` is deliberately NOT a dependency: a flaky runner suite must
     # not skip the build, unit tests, coverage gate, and E2E legs behind it.
@@ -206,11 +234,6 @@ jobs:
 
       - name: Restore (locked)
         run: dotnet restore zipper.sln --locked-mode
-
-      - name: Compiled development and stable version regressions (Linux)
-        if: matrix.coverage == true
-        shell: bash
-        run: bash tests/test-build-version.sh
 
       - name: Build solution (Release, includes tests)
         shell: bash
@@ -444,11 +467,19 @@ jobs:
           path: artifact-identity-${{ matrix.platform }}.json
           retention-days: 30
 
-      # Publish the CLI once on Linux and hand it to the caller's `goldens`
-      # job as an artifact, so goldens does not re-restore + re-publish (#397).
-      - name: Publish CLI for goldens (Linux)
+      # Hand the caller's `goldens` job the accepted Linux candidate. The
+      # "Publish self-contained binaries" step above already produced (and
+      # acceptance-tested) those bytes; a second `dotnet publish` here
+      # recompiled an identical bundle (~1 min per PR) because
+      # PublishSingleFile infers a RID and cannot reuse the RID-less solution
+      # build. Copying keeps goldens on the accepted bytes without relying on
+      # compile order between two publishes.
+      - name: Stage accepted Linux candidate for goldens
         if: inputs.publish_mode == 'goldens' && matrix.coverage == true
-        run: dotnet publish src/Zipper.csproj -c Release -o ./publish-bin --no-restore
+        run: |
+          set -euo pipefail
+          mkdir -p publish-bin
+          cp publish/linux-x64/zipper-linux-x64 publish-bin/Zipper
 
       - name: Upload CLI artifact for goldens (Linux)
         if: inputs.publish_mode == 'goldens' && matrix.coverage == true

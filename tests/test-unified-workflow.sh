@@ -63,7 +63,7 @@ else
 fi
 
 # Check for all required jobs. The shared graph (lint, runner-tests,
-# build-and-test) lives in ci.yml; the caller keeps prepare and tag-and-release.
+# version-metadata, build-and-test) lives in ci.yml; the caller keeps prepare and tag-and-release.
 echo "4. Checking for all required jobs..."
 for job in "prepare:" "tag-and-release:"; do
     if grep -q "$job" "$CALLER_WORKFLOW_FILE"; then
@@ -74,7 +74,7 @@ for job in "prepare:" "tag-and-release:"; do
     fi
 done
 
-for job in "lint:" "runner-tests:" "build-and-test:"; do
+for job in "lint:" "runner-tests:" "version-metadata:" "build-and-test:"; do
     if grep -q "$job" "$SHARED_WORKFLOW_FILE"; then
         echo "✓ Found $job job in ci.yml"
     else
@@ -82,6 +82,13 @@ for job in "lint:" "runner-tests:" "build-and-test:"; do
         exit 1
     fi
 done
+
+if grep -q "run: bash tests/test-build-version.sh" "$SHARED_WORKFLOW_FILE"; then
+    echo "✓ version-metadata job runs tests/test-build-version.sh"
+else
+    echo "✗ version-metadata job does not run tests/test-build-version.sh"
+    exit 1
+fi
 
 # The reusable hook and both call sites are what keep the two callers in sync.
 echo "5. Checking reusable workflow wiring..."

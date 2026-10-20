@@ -3,9 +3,17 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 sha=$(git rev-parse HEAD)
-dotnet build tools/artifact-metadata -c Release --nologo
+
+# Restore once up front; every build below is --no-restore. Locked mode
+# matches the CI restore convention (ci.yml). The metadata tool is not part of
+# zipper.sln, so it needs its own restore (it has no lock file, where
+# --locked-mode is a no-op).
+dotnet restore zipper.sln --locked-mode
+dotnet restore tools/artifact-metadata --locked-mode
+
+dotnet build tools/artifact-metadata -c Release --nologo --no-restore
 for version in 1.0.0 9.8.7-dev 9.8.7; do
-  dotnet build src/Zipper.csproj -c Release "-p:Version=$version" "-p:SourceRevisionId=$sha" --nologo
+  dotnet build src/Zipper.csproj -c Release "-p:Version=$version" "-p:SourceRevisionId=$sha" --nologo --no-restore
   VERSION="$version" SHA="$sha" python3 - <<'PY'
 import json, os, subprocess
 from pathlib import Path
