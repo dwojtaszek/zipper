@@ -90,14 +90,18 @@ public readonly record struct CodedGeneratorPropertyInput(
 
 /// <summary>
 /// Bounded input for validation fault-injection, supplemental Bates Number range,
-/// multi-volume rolling Bates, and Volume Analyzer property tests.
+/// rolling Bates, and Volume Analyzer property tests.
 /// <para>
 /// One shared input struct serves the <c>ValidationPropertyTests</c> suite; each property
 /// reads only the fields that vary its own domain:
 /// <list type="bullet">
-/// <item><see cref="FileCount"/>, <see cref="Seed"/>, and <see cref="MutationType"/> drive single-fault injection.</item>
-/// <item><see cref="PriorStart"/>/<see cref="PriorLength"/> and <see cref="PlannedStart"/>/<see cref="PlannedLength"/> are absolute Bates Number intervals for supplemental validation.</item>
-/// <item><see cref="PrefixCount"/>, <see cref="BatesStarts"/>, <see cref="SequenceNumber"/>, <see cref="UseRestartMode"/>, and <see cref="UseExplicitStarts"/> drive multi-volume rolling Bates resolution.</item>
+/// <item><see cref="FileCount"/> and <see cref="MutationType"/> drive single-fault injection.</item>
+/// <item><see cref="Seed"/> plus <see cref="PriorStart"/>/<see cref="PriorLength"/> and
+/// <see cref="PlannedStart"/>/<see cref="PlannedLength"/> drive supplemental interval
+/// generation (<see cref="PlannedStart"/> is generated as a small offset from
+/// <see cref="PriorStart"/> so overlap, adjacency, and disjoint cases all appear).</item>
+/// <item><see cref="PrefixCount"/>, <see cref="BatesStarts"/>, <see cref="SequenceNumber"/>, <see cref="UseRestartMode"/>, and <see cref="UseExplicitStarts"/> drive rolling Bates resolution.</item>
+/// <item><see cref="Seed"/> also seeds Volume Analyzer record generation.</item>
 /// </list>
 /// </para>
 /// </summary>
@@ -665,15 +669,29 @@ public static class ZipperArbitraries
         return Arb.From(gen, ShrinkAuditWriterInput);
     }
 
+    /// <summary>
+    /// Number of single-fault categories <c>ValidationPropertyTests</c> can inject into a
+    /// standard-mode output (PostGenerationValidator property). Shared with the generator so
+    /// the modulus in the property and this range cannot drift apart.
+    /// </summary>
+    public const int PostGenerationFaultCount = 4;
+
+    /// <summary>
+    /// Number of single-fault categories <c>ValidationPropertyTests</c> can inject into a
+    /// synthetic Production Set (ProductionSetPostValidator property). Shared with the
+    /// generator so the modulus in the property and this range cannot drift apart.
+    /// </summary>
+    public const int ProductionSetFaultCount = 14;
+
     public static Arbitrary<ValidationMutationPropertyInput> ValidationMutationPropertyInputArb()
     {
         var gen =
             from fileCount in Gen.Choose(2, 6)
             from seed in Gen.Choose(0, 100_000)
-            from mutationType in Gen.Choose(0, 13)
+            from mutationType in Gen.Choose(0, ProductionSetFaultCount - 1)
             from priorStart in Gen.Choose(1, 50_000)
             from priorLength in Gen.Choose(0, 50)
-            from plannedStart in Gen.Choose(1, 50_000)
+            from plannedOffset in Gen.Choose(-60, 60)
             from plannedLength in Gen.Choose(0, 50)
             from prefixCount in Gen.Choose(1, 6)
             from rawStarts in Gen.ArrayOf(Gen.Choose(1, 50_000), prefixCount)
@@ -686,7 +704,7 @@ public static class ZipperArbitraries
                 mutationType,
                 priorStart,
                 priorLength,
-                plannedStart,
+                Math.Max(1, priorStart + plannedOffset),
                 plannedLength,
                 prefixCount,
                 ToStrictlyIncreasing(rawStarts),

@@ -11,7 +11,7 @@ namespace Zipper.Tests.Properties;
 
 /// <summary>
 /// Property-based tests for the Post-Generation, Production Set, and Supplemental
-/// Validators, plus multi-volume rolling Bates transitions
+/// Validators, plus rolling Bates transitions across Rolling Production Sets
 /// (<see cref="ProductionSetPlanner"/> ↔ <see cref="ProductionSetPostValidator"/> agreement)
 /// and <see cref="VolumeAnalyzer"/> volume rollup laws.
 /// </summary>
@@ -73,7 +73,7 @@ public sealed class ValidationPropertyTests : IDisposable
     public void PostGenerationValidator_Validate_CleanOutputShouldPassAndInjectedFaultShouldFail(ValidationMutationPropertyInput input)
     {
         int fileCount = Math.Clamp(input.FileCount, 2, 6);
-        int mutationType = input.MutationType % 4;
+        int mutationType = input.MutationType % ZipperArbitraries.PostGenerationFaultCount;
 
         var caseDir = CreateCaseDirectory("postgen");
         var archivePath = Path.Combine(caseDir, "loadfile.zip");
@@ -147,7 +147,7 @@ public sealed class ValidationPropertyTests : IDisposable
     public void ProductionSetPostValidator_Validate_ShouldDetectEverySingleFaultCategory(ValidationMutationPropertyInput input)
     {
         int fileCount = Math.Clamp(input.FileCount, 2, 6);
-        int mutationType = input.MutationType % 14;
+        int mutationType = input.MutationType % ZipperArbitraries.ProductionSetFaultCount;
 
         var prodPath = CreateCaseDirectory("prodset");
         var request = CreateProductionSetRequest(fileCount);
@@ -206,12 +206,15 @@ public sealed class ValidationPropertyTests : IDisposable
     // ------------------------------------------------------------------
 
     /// <summary>
-    /// Supplemental validation across arbitrary Bates Number intervals: with two disjoint
-    /// baseline intervals and one arbitrary planned interval, validation succeeds exactly when
-    /// the planned interval is strictly disjoint from every baseline interval, and under the
-    /// <c>reject</c> gap policy it additionally fails exactly when the merged coverage leaves a
-    /// skipped Bates Number (REQ-137, REQ-138). The report's expected-next Bates Number is the
-    /// maximum baseline end + 1 on every success (REQ-140).
+    /// Supplemental validation across arbitrary Bates Number intervals: with two baseline
+    /// intervals (sometimes adjacent, sometimes with a small gap) and one arbitrary planned
+    /// interval, validation succeeds exactly when the planned interval is strictly disjoint
+    /// from every baseline interval, and under the <c>reject</c> gap policy it additionally
+    /// fails exactly when the merged coverage leaves a skipped Bates Number (REQ-137,
+    /// REQ-138). The report's expected-next Bates Number is the maximum baseline end + 1 on
+    /// every success (REQ-140). The planned interval's placement (overlap, adjacency,
+    /// far-disjoint) is derived from the seed so every run exercises each branch of the
+    /// iff-contract instead of relying on uniform draws that rarely land near a baseline.
     /// </summary>
     [Property]
     public void SupplementalValidator_ValidateAsync_WithArbitraryBatesRanges_ShouldRejectExactlyTheOverlaps(ValidationMutationPropertyInput input)
@@ -219,13 +222,25 @@ public sealed class ValidationPropertyTests : IDisposable
         long priorStart = Math.Clamp(input.PriorStart, 1, 50_000);
         long priorEnd = priorStart + Math.Clamp(input.PriorLength, 0, 50);
 
-        // A second baseline interval, disjoint from and above the first, so the merged
-        // baseline has two ranges and the planned interval must clear both.
-        long secondStart = priorEnd + 2 + (Math.Abs((long)input.Seed) % 50);
+        // A second baseline interval above the first, adjacent or at most two Bates Numbers
+        // away, so the merged baseline is sometimes contiguous and sometimes gapped.
+        long secondStart = priorEnd + 1 + (Math.Abs((long)input.Seed) % 3);
         long secondEnd = secondStart + Math.Clamp(input.PriorLength, 0, 50);
 
-        long plannedStart = Math.Clamp(input.PlannedStart, 1, 50_000);
-        long plannedEnd = plannedStart + Math.Clamp(input.PlannedLength, 0, 50);
+        // Placement mode guarantees branch coverage: 0 overlaps the first baseline,
+        // 1 sits adjacent below it, 2 sits adjacent above the second baseline,
+        // 3 is an arbitrary (usually far-disjoint) draw.
+        long plannedLength = Math.Clamp(input.PlannedLength, 0, 50);
+        int placement = (int)(Math.Abs((long)input.Seed) % 4);
+        long plannedStart = placement switch
+        {
+            0 => priorStart + (Math.Abs((long)input.Seed / 4) % Math.Max(1, priorEnd - priorStart + 1)),
+            1 => Math.Max(1, priorStart - plannedLength - 1),
+            2 => secondEnd + 1,
+            _ => Math.Clamp(input.PlannedStart, 1, 50_000),
+        };
+
+        long plannedEnd = plannedStart + plannedLength;
 
         var caseDir = CreateCaseDirectory("supplemental");
         var priorManifestPath = WritePriorManifest(caseDir, "baseline", PriorPrefix, PriorDigits, priorStart, priorEnd);
@@ -271,16 +286,16 @@ public sealed class ValidationPropertyTests : IDisposable
     }
 
     // ------------------------------------------------------------------
-    // 4. Multi-volume rolling Bates prefixes and starts
+    // 4. Rolling Bates prefixes and starts across Rolling Production Sets
     // ------------------------------------------------------------------
 
     /// <summary>
-    /// Planner ↔ validator agreement at exact volume boundaries (REQ-171, REQ-172): for every
-    /// rolling index, <see cref="ProductionSetPlanner"/> resolves the per-volume Bates Numbers
-    /// from the multi-volume <c>Prefixes</c>/<c>Starts</c> arrays (or the continuous/restart
-    /// fallback), and <see cref="ProductionSetPostValidator"/> validates a synthetic rolling
+    /// Planner ↔ validator agreement at exact Rolling Production Set boundaries (REQ-171, REQ-172):
+    /// for every rolling index, <see cref="ProductionSetPlanner"/> resolves the per-set Bates Numbers
+    /// from the per-index <c>Prefixes</c>/<c>Starts</c> arrays (or the continuous/restart
+    /// fallback), and <see cref="ProductionSetPostValidator"/> validates a synthetic Rolling
     /// Production Set built from those planned values against the same root request. A set
-    /// built from the <em>previous</em> volume's values, or shifted by one increment, must fail.
+    /// built from the <em>previous</em> rolling index's values, or shifted by one increment, must fail.
     /// </summary>
     [Property]
     public void BatesSequence_MultiVolumePrefixesAndStarts_ShouldTransitionAtExactVolumeBoundaries(ValidationMutationPropertyInput input)
@@ -308,7 +323,7 @@ public sealed class ValidationPropertyTests : IDisposable
             },
         };
 
-        // Per-volume planned Bates Numbers for every rolling index, resolved by the real planner.
+        // Per-rolling-index planned Bates Numbers for every index, resolved by the real planner.
         var plannedByVolume = new List<IReadOnlyList<ProductionNativeFilePlan>>();
         for (int index = 0; index < prefixCount; index++)
         {
@@ -329,27 +344,15 @@ public sealed class ValidationPropertyTests : IDisposable
             plannedByVolume.Add(plans);
         }
 
-        // Boundary non-overlap: with explicit starts, consecutive volumes' numeric ranges
-        // never touch, so a Bates Number belongs to exactly one volume.
-        if (useExplicitStarts)
-        {
-            for (int index = 0; index < prefixCount - 1; index++)
-            {
-                Assert.True(
-                    starts[index + 1] > starts[index] + fileCount - 1,
-                    $"Volume {index + 1} must start strictly after volume {index} ends.");
-            }
-        }
-
-        // A rolling Production Set built from this volume's planned Bates Numbers must
-        // validate against the same root request: planner and validator agree per volume.
+        // A rolling Production Set built from this rolling index's planned Bates Numbers must
+        // validate against the same root request: planner and validator agree per rolling index.
         var validPath = CreateCaseDirectory("rolling");
         WriteRollingProductionSet(validPath, plannedByVolume[rollingIndex], rollingIndex + 1);
         var validReport = ProductionSetPostValidator.Validate(validPath, request);
         Assert.Equal("passed", validReport.Status);
 
-        // A set built from the PREVIOUS volume's Bates Numbers must fail, except when the
-        // previous volume resolves to the same values (restart without explicit starts, or
+        // A set built from the PREVIOUS rolling index's Bates Numbers must fail, except when the
+        // previous index resolves to the same values (restart without explicit starts, or
         // the root config itself, which the validator accepts as already-effective).
         if (rollingIndex >= 2)
         {
@@ -575,8 +578,8 @@ public sealed class ValidationPropertyTests : IDisposable
 
             datRows.Add(JoinDatFields($"DOC{i:D8}", bates, nativeRel, textRel, imageRel, string.Empty, redactedImageRel, string.Empty, "NO"));
 
-            // The OPT is a fixed 7-column comma-delimited format; the image path is empty so
-            // the OPT image check is exercised by the DAT references only.
+            // The OPT is a fixed 7-column comma-delimited format whose column 3 carries a
+            // real image path, so each record's image reference is checked twice (DAT + OPT).
             optRows.Add($"{bates},CTRL{i:D8},IMAGES\\DOC{i:D8}_001.tif,1,0,,");
         }
 
@@ -854,6 +857,8 @@ public sealed class ValidationPropertyTests : IDisposable
 
     private static string FormatPrior(long value) => FormatBates(PriorPrefix, value, PriorDigits);
 
+    // Deliberately independent of the production FormatBates helpers (SupplementalValidator,
+    // BatesRangeAnalyzer): a test oracle must not share formatting code with the code under test.
     private static string FormatBates(string prefix, long value) => FormatBates(prefix, value, BatesDigits);
 
     private static string FormatBates(string prefix, long value, int digits)

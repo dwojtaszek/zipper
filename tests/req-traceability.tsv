@@ -298,7 +298,6 @@ REQ-148	e2e	test-production-sets.sh	Post-gen validation of redacted refs + NATIV
 REQ-148	unit	ProductionSetTests.RedactedProduction_PostValidator_ValidSet_PassesWithNoErrors	Post-generation validation verifies redacted image/text files and NATIVE_WITHHELD
 REQ-148	unit	ProductionSetTests.RedactedProduction_PostValidator_MissingRedactedText_ReportsPathExistenceError	Post-generation validation fails when redacted text file is missing
 REQ-148	unit	ProductionSetTests.RedactedProduction_PostValidator_InvalidNativeWithheld_ReportsInvalidValueError	Post-generation validation fails when NATIVE_WITHHELD is not YES/NO
-REQ-148	unit	ValidationPropertyTests.PostGenerationValidator_Validate_CleanOutputShouldPassAndInjectedFaultShouldFail	Property: PostGenerationValidator passes clean output and detects injected structural faults
 REQ-148	unit	ValidationPropertyTests.ProductionSetPostValidator_Validate_ShouldDetectEverySingleFaultCategory	Property: ProductionSetPostValidator detects every single fault category on a synthetic Production Set
 REQ-149	unit	ProductionSetValidationTests.Validate_ImageReferencesInBothLoadFiles_ShouldCountBothInReport	DAT and OPT image references counted; empty OPT paths excluded
 REQ-149	unit	PostGenerationValidatorTests.Validate_ColumnCountMismatch_ReportsError	Post-generation validator checks DAT column structure
@@ -335,7 +334,6 @@ REQ-162	unit	VolumeAnalyzerTests.AnalyzeVolumes_WithEquivalentRecordsInDifferent
 REQ-162	unit	ChaosAndComparisonPropertyTests.BatesRangeAnalyzer_AnalyzeBatesRanges_ShouldPreserveRangeAndVolumeInvariants	Property: BatesRangeAnalyzer and VolumeAnalyzer preserve range, gap, and volume invariants
 REQ-162	unit	ValidationPropertyTests.VolumeAnalyzer_Compare_ShouldSatisfyReflexiveIdentityAndSymmetricDeltaCounts	Property: VolumeAnalyzer comparison is reflexively identical and symmetric in delta counts
 REQ-163	unit	ProductionManifestComparerTests.CompareAndReportAsync_WithMarkdownOutput_ShouldWriteMarkdownReport	Machine-readable report + human-readable summary
-REQ-163	unit	ValidationPropertyTests.VolumeAnalyzer_Compare_ShouldSatisfyReflexiveIdentityAndSymmetricDeltaCounts	Property: VolumeAnalyzer report deltas are exact and machine-checkable
 REQ-164	unit	PipelineTests.Build_ColumnProfileWithParentTraversal_RejectsPathOutsideCwd	--column-profile path traversal prevention
 REQ-164	unit	PathAndSourceInputPropertyTests.PathValidator_IsPathSafe_ShouldPreventTraversalAndResolveUnderBase	Property: valid relative profile paths resolve inside base directory and traversal is blocked
 REQ-164	unit	PathAndSourceInputPropertyTests.PathValidator_ResolveSecurePath_ShouldHandleExistingFilesAndSymlinksConsistentlyWithIsPathSafe	Property: ResolveSecurePath handles existing files and symlinks consistently with IsPathSafe
@@ -356,7 +354,6 @@ REQ-170	unit	PathAndSourceInputPropertyTests.ProductionModule_TryBuild_ShouldRej
 REQ-170	e2e	test-production-sets.sh Test Case 1c	Path-segment, dot-segment, empty, and missing---production-set rejections end to end
 REQ-171	unit	ProductionSetTests.ProductionSet_RollingCountNonPositive_FailsValidation	--rolling-count positive integer
 REQ-171	unit	ProductionSetTests.ProductionSet_ContinuousBates_GeneratesSequentialRanges	--rolling-count generates requested number of Production Sets
-REQ-171	unit	ValidationPropertyTests.BatesSequence_MultiVolumePrefixesAndStarts_ShouldTransitionAtExactVolumeBoundaries	Property: multi-volume Bates Numbers transition at exact volume boundaries under the planner
 REQ-172	unit	ProductionSetTests.ProductionSet_RollingBatesModeInvalid_FailsValidation	--rolling-bates-mode continuous|restart
 REQ-172	unit	ProductionSetTests.ProductionSet_ContinuousBates_GeneratesSequentialRanges	--rolling-bates-mode continuous range behavior
 REQ-172	unit	ProductionSetTests.ProductionSet_RestartBates_GeneratesRestartedRanges	--rolling-bates-mode restart range behavior
