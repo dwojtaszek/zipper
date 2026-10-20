@@ -671,8 +671,9 @@ public static class ZipperArbitraries
 
     /// <summary>
     /// Number of single-fault categories <c>ValidationPropertyTests</c> can inject into a
-    /// standard-mode output (PostGenerationValidator property). Shared with the generator so
-    /// the modulus in the property and this range cannot drift apart.
+    /// standard-mode output (PostGenerationValidator property). The property folds the
+    /// generator's wider <c>MutationType</c> draw onto this count with a modulus, so it must
+    /// stay equal to the property's fault-injection switch arity.
     /// </summary>
     public const int PostGenerationFaultCount = 4;
 
@@ -681,7 +682,7 @@ public static class ZipperArbitraries
     /// synthetic Production Set (ProductionSetPostValidator property). Shared with the
     /// generator so the modulus in the property and this range cannot drift apart.
     /// </summary>
-    public const int ProductionSetFaultCount = 14;
+    public const int ProductionSetFaultCount = 15;
 
     public static Arbitrary<ValidationMutationPropertyInput> ValidationMutationPropertyInputArb()
     {

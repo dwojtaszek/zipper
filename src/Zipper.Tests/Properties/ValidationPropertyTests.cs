@@ -138,10 +138,12 @@ public sealed class ValidationPropertyTests : IDisposable
     /// Fault injection across every category the Production Set validator owns: missing
     /// native/text/image/redacted files, an invalid <c>NATIVE_WITHHELD</c> value, duplicate
     /// Bates Numbers, a Bates Number gap, a Load File row dropped behind the Production
-    /// Manifest's back, a corrupt manifest, an OPT boundary violation, duplicate DOCIDs, and
-    /// Azure metadata constraint violations. The clean fixture passes with exact
-    /// checked-count anchors, every single fault fails the report with the owning finding
-    /// code, and reference counts are conserved when a referenced file goes missing (REQ-149).
+    /// Manifest's back, a corrupt manifest, an OPT boundary violation, duplicate DOCIDs,
+    /// Azure metadata constraint violations, and a DAT row carrying an extra column. Every
+    /// finding code <see cref="ProductionSetPostValidator"/> emits is the owning code of at
+    /// least one fault category. The clean fixture passes with exact checked-count anchors,
+    /// every single fault fails the report with the owning finding code, and reference
+    /// counts are conserved when a referenced file goes missing (REQ-149).
     /// </summary>
     [Property]
     public void ProductionSetPostValidator_Validate_ShouldDetectEverySingleFaultCategory(ValidationMutationPropertyInput input)
@@ -196,6 +198,9 @@ public sealed class ValidationPropertyTests : IDisposable
             case 11 or 12 or 13:
                 Assert.Contains(report.Findings, f => f.Code == "MetadataAzureConstraint");
                 break;
+            case 14:
+                Assert.Contains(report.Findings, f => f.Code == "ColumnCount");
+                break;
         }
 
         Assert.True(report.ErrorCount > 0, $"Mutation category {mutationType} must be detected as a validation error.");
@@ -213,8 +218,8 @@ public sealed class ValidationPropertyTests : IDisposable
     /// fails exactly when the merged coverage leaves a skipped Bates Number (REQ-137,
     /// REQ-138). The report's expected-next Bates Number is the maximum baseline end + 1 on
     /// every success (REQ-140). The planned interval's placement (overlap, adjacency,
-    /// far-disjoint) is derived from the seed so every run exercises each branch of the
-    /// iff-contract instead of relying on uniform draws that rarely land near a baseline.
+    /// near-baseline draw) is derived from the seed so every run exercises each branch of
+    /// the iff-contract instead of relying on uniform draws that rarely land near a baseline.
     /// </summary>
     [Property]
     public void SupplementalValidator_ValidateAsync_WithArbitraryBatesRanges_ShouldRejectExactlyTheOverlaps(ValidationMutationPropertyInput input)
@@ -228,8 +233,9 @@ public sealed class ValidationPropertyTests : IDisposable
         long secondEnd = secondStart + Math.Clamp(input.PriorLength, 0, 50);
 
         // Placement mode guarantees branch coverage: 0 overlaps the first baseline,
-        // 1 sits adjacent below it, 2 sits adjacent above the second baseline,
-        // 3 is an arbitrary (usually far-disjoint) draw.
+        // 1 sits adjacent below it (or, when the clamp pins it at 1, overlaps it),
+        // 2 sits adjacent above the second baseline, 3 is a near-baseline draw that
+        // is disjoint only when its offset clears both baselines.
         long plannedLength = Math.Clamp(input.PlannedLength, 0, 50);
         int placement = (int)(Math.Abs((long)input.Seed) % 4);
         long plannedStart = placement switch
@@ -290,15 +296,21 @@ public sealed class ValidationPropertyTests : IDisposable
     // ------------------------------------------------------------------
 
     /// <summary>
-    /// Planner ↔ validator agreement at exact Rolling Production Set boundaries (REQ-171, REQ-172):
+    /// Planner ↔ validator agreement at exact Rolling Production Set boundaries (REQ-172):
     /// for every rolling index, <see cref="ProductionSetPlanner"/> resolves the per-set Bates Numbers
     /// from the per-index <c>Prefixes</c>/<c>Starts</c> arrays (or the continuous/restart
     /// fallback), and <see cref="ProductionSetPostValidator"/> validates a synthetic Rolling
     /// Production Set built from those planned values against the same root request. A set
-    /// built from the <em>previous</em> rolling index's values, or shifted by one increment, must fail.
+    /// built from the <em>previous</em> rolling index's values fails at every rolling index
+    /// ≥ 2 where the previous index's Bates Numbers differ (restart without explicit
+    /// starts resolves to identical values, which the validator accepts). The cross-index
+    /// check runs only at rolling indices ≥ 2: at index 1 the previous index carries the root
+    /// request's own already-effective range, which the validator legitimately accepts as
+    /// already-effective. An off-by-one shifted start always fails at every index because
+    /// the first Bates Number is exact.
     /// </summary>
     [Property]
-    public void BatesSequence_MultiVolumePrefixesAndStarts_ShouldTransitionAtExactVolumeBoundaries(ValidationMutationPropertyInput input)
+    public void ProductionSetPlanner_PlanRollingSets_ShouldTransitionPrefixesAndStartsAtExactRollingSetBoundaries(ValidationMutationPropertyInput input)
     {
         int prefixCount = Math.Clamp(input.PrefixCount, 1, 6);
         int fileCount = Math.Clamp(input.FileCount, 2, 6);
@@ -324,7 +336,7 @@ public sealed class ValidationPropertyTests : IDisposable
         };
 
         // Per-rolling-index planned Bates Numbers for every index, resolved by the real planner.
-        var plannedByVolume = new List<IReadOnlyList<ProductionNativeFilePlan>>();
+        var plannedByRollingIndex = new List<IReadOnlyList<ProductionNativeFilePlan>>();
         for (int index = 0; index < prefixCount; index++)
         {
             var plans = ProductionSetPlanner.Plan(request, index);
@@ -341,25 +353,25 @@ public sealed class ValidationPropertyTests : IDisposable
             Assert.Equal(FormatBates(expectedPrefix, expectedStart), plans[0].BatesNumber);
             Assert.Equal(FormatBates(expectedPrefix, expectedStart + fileCount - 1), plans[^1].BatesNumber);
 
-            plannedByVolume.Add(plans);
+            plannedByRollingIndex.Add(plans);
         }
 
         // A rolling Production Set built from this rolling index's planned Bates Numbers must
         // validate against the same root request: planner and validator agree per rolling index.
         var validPath = CreateCaseDirectory("rolling");
-        WriteRollingProductionSet(validPath, plannedByVolume[rollingIndex], rollingIndex + 1);
+        WriteRollingProductionSet(validPath, plannedByRollingIndex[rollingIndex], rollingIndex + 1);
         var validReport = ProductionSetPostValidator.Validate(validPath, request);
         Assert.Equal("passed", validReport.Status);
 
         // A set built from the PREVIOUS rolling index's Bates Numbers must fail, except when the
-        // previous index resolves to the same values (restart without explicit starts, or
-        // the root config itself, which the validator accepts as already-effective).
+        // previous index resolves to the same values (restart without explicit starts) or is the
+        // root config itself, which the validator accepts as already-effective (index 1).
         if (rollingIndex >= 2)
         {
-            var previousPlans = plannedByVolume[rollingIndex - 1];
-            bool previousVolumeIsDistinct =
-                !string.Equals(previousPlans[0].BatesNumber, plannedByVolume[rollingIndex][0].BatesNumber, StringComparison.Ordinal);
-            if (previousVolumeIsDistinct)
+            var previousPlans = plannedByRollingIndex[rollingIndex - 1];
+            bool previousPlansAreDistinct =
+                !string.Equals(previousPlans[0].BatesNumber, plannedByRollingIndex[rollingIndex][0].BatesNumber, StringComparison.Ordinal);
+            if (previousPlansAreDistinct)
             {
                 var crossedPath = CreateCaseDirectory("rolling_prev");
                 WriteRollingProductionSet(crossedPath, previousPlans, rollingIndex + 1);
@@ -373,11 +385,11 @@ public sealed class ValidationPropertyTests : IDisposable
         string currentPrefix = useExplicitStarts ? prefixes[rollingIndex] : prefixes[0];
         var shiftedPlans = new List<(string Bates, string DocId)>
         {
-            (ShiftOneIncrement(currentPrefix, plannedByVolume[rollingIndex][0].BatesNumber), "DOC00000001"),
+            (ShiftOneIncrement(currentPrefix, plannedByRollingIndex[rollingIndex][0].BatesNumber), "DOC00000001"),
         };
         for (int i = 1; i < fileCount; i++)
         {
-            shiftedPlans.Add((plannedByVolume[rollingIndex][i].BatesNumber, $"DOC{i + 1:D8}"));
+            shiftedPlans.Add((plannedByRollingIndex[rollingIndex][i].BatesNumber, $"DOC{i + 1:D8}"));
         }
 
         var shiftedPath = CreateCaseDirectory("rolling_shift");
@@ -399,7 +411,7 @@ public sealed class ValidationPropertyTests : IDisposable
     /// preserving the <c>changed</c>/<c>unchanged</c> classification of shared Volumes.
     /// </summary>
     [Property]
-    public void VolumeAnalyzer_Compare_ShouldSatisfyReflexiveIdentityAndSymmetricDeltaCounts(ValidationMutationPropertyInput input)
+    public void VolumeAnalyzer_AnalyzeVolumes_ShouldSatisfyReflexiveIdentityAndSymmetricDeltaCounts(ValidationMutationPropertyInput input)
     {
         int seed = (int)(Math.Abs((long)input.Seed) % 1_000_000L);
         var priorRecords = BuildComparisonRecords(seed, "PRIOR");
@@ -660,6 +672,9 @@ public sealed class ValidationPropertyTests : IDisposable
             case 13:
                 MutateManifestMetadata(manifestPath, metadata => metadata["volume_count"] = 42);
                 break;
+            case 14:
+                RewriteDatRow(datPath, 2, fields => fields.Add("EXTRA_COL"));
+                break;
         }
     }
 
@@ -806,30 +821,27 @@ public sealed class ValidationPropertyTests : IDisposable
 
     private static int MergedRangeCount(IReadOnlyList<(long Start, long End)> ranges)
     {
-        // Merge rule per the supplemental validator: adjacent (start <= end + 1)
-        // ranges leave no skipped Bates Number between them.
-        var mergedRanges = new List<(long Start, long End)>();
-        foreach (var range in ranges.OrderBy(r => r.Start))
+        // Independent oracle for the merged-coverage group count: walk every Bates Number
+        // in the covered span and test membership directly against the raw intervals.
+        // Deliberately structurally different from the validator's sort-and-merge sweep
+        // (SupplementalValidator) so a shared merge bug cannot self-confirm.
+        long spanStart = ranges.Min(r => r.Start);
+        long spanEnd = ranges.Max(r => r.End);
+
+        int groups = 0;
+        bool previousCovered = false;
+        for (long value = spanStart; value <= spanEnd; value++)
         {
-            if (mergedRanges.Count == 0)
+            bool covered = ranges.Any(r => r.Start <= value && value <= r.End);
+            if (covered && !previousCovered)
             {
-                mergedRanges.Add(range);
+                groups++;
             }
-            else
-            {
-                var last = mergedRanges[^1];
-                if (range.Start <= last.End + 1)
-                {
-                    mergedRanges[^1] = (last.Start, Math.Max(last.End, range.End));
-                }
-                else
-                {
-                    mergedRanges.Add(range);
-                }
-            }
+
+            previousCovered = covered;
         }
 
-        return mergedRanges.Count;
+        return groups;
     }
 
     private static string WritePriorManifest(string dir, string volumeName, string prefix, int digits, long start, long end)
