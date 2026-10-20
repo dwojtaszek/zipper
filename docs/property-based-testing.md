@@ -37,6 +37,7 @@ All property-based test suites live under `src/Zipper.Tests/Properties/`:
 | `BatesAndDistributionPropertyTests.cs` | `BatesSequence`, `BatesNumber`, `Distributions`, `FileTypePlan`, `FileTypeRatioParser`, `ProductionSetPlanner` |
 | `PathAndSourceInputPropertyTests.cs` | `PathValidator`, `NamingConventionHelper`, `SourcePathSanitizer`, `SourceFileTypeMap`, `SourceCsvReader`, `SourceRecordIntake`, `ProductionModule` |
 | `ChaosAndComparisonPropertyTests.cs` | `ChaosSampler`, `DatAnomalyApplier`, `OptAnomalyApplier`, `ComparisonEngine`, `BatesRangeAnalyzer`, `ProductionMetadataBudget`, `DataGenerator`, `NumberGenerator`, `TextGenerator` |
+| `ValidationPropertyTests.cs` | `PostGenerationValidator`, `ProductionSetPostValidator`, `SupplementalValidator`, `ProductionSetPlanner`, `VolumeAnalyzer` |
 
 ### Mandatory Class & Attribute Structure
 
