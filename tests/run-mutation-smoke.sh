@@ -15,17 +15,54 @@
 #
 # Env:    MUTATION_SMOKE_MAX=N       max mutations (default 3)
 #         MUTATION_SMOKE_TIMEOUT=N   overall timeout in seconds (default 120)
+#         MUTATION_SMOKE_CACHE=0|1   enable content-hash mutant cache (default 1)
+#         MUTATION_CACHE_DIR=PATH    override cache directory (default .git/zipper-hooks/mutation-cache)
 
 set -u
 
 MAX="${MUTATION_SMOKE_MAX:-3}"
 OVERALL_TIMEOUT="${MUTATION_SMOKE_TIMEOUT:-120}"
+USE_CACHE="${MUTATION_SMOKE_CACHE:-1}"
+EXPLICIT_BASE="${MUTATION_SMOKE_BASE:-}"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --no-cache)
+            USE_CACHE=0
+            shift
+            ;;
+        --max)
+            if [[ $# -lt 2 || ! "${2:-}" =~ ^[0-9]+$ || "$2" -lt 1 ]]; then
+                echo "Error: --max requires a positive integer" >&2
+                exit 1
+            fi
+            MAX="$2"
+            shift 2
+            ;;
+        --base)
+            if [[ $# -lt 2 || -z "${2:-}" ]]; then
+                echo "Error: --base requires a Git ref" >&2
+                exit 1
+            fi
+            EXPLICIT_BASE="$2"
+            shift 2
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            exit 1
+            ;;
+    esac
+done
 
 # ── Guards ────────────────────────────────────────────────────
 BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
-MERGE_BASE=$(git merge-base HEAD main 2>/dev/null || git merge-base HEAD origin/main 2>/dev/null || echo "")
+if [[ -n "$EXPLICIT_BASE" ]]; then
+    MERGE_BASE=$(git rev-parse "$EXPLICIT_BASE" 2>/dev/null || echo "")
+else
+    MERGE_BASE=$(git merge-base HEAD main 2>/dev/null || git merge-base HEAD origin/main 2>/dev/null || echo "")
+fi
 
-if [[ "$BRANCH" == "main" || "$BRANCH" == "HEAD" ]]; then
+if [[ -z "$EXPLICIT_BASE" && ( "$BRANCH" == "main" || "$BRANCH" == "HEAD" ) ]]; then
     # Allow running mutation smoke against uncommitted working-tree changes on main
     UNCOMMITTED_CS=$(git diff --name-only HEAD -- 'src/*.cs' 2>/dev/null || echo "")
     if [[ -z "$UNCOMMITTED_CS" ]]; then
@@ -74,14 +111,19 @@ echo "  Changed source files: ${#FILES[@]}"
 # ── Backup / restore (safe even with uncommitted edits) ───────
 CURRENT_FILE=""
 BACKUP_FILE=""
+TMP_FILE=""
 
 restore() {
+    if [[ -n "$TMP_FILE" && -f "$TMP_FILE" ]]; then
+        rm -f "$TMP_FILE"
+    fi
     if [[ -n "$BACKUP_FILE" && -f "$BACKUP_FILE" ]]; then
         cp "$BACKUP_FILE" "$CURRENT_FILE"
         rm -f "$BACKUP_FILE"
     fi
     CURRENT_FILE=""
     BACKUP_FILE=""
+    TMP_FILE=""
 }
 trap restore EXIT INT TERM HUP QUIT
 
@@ -104,7 +146,7 @@ PATTERNS=(
     's/==/!=/'
     's/!=/==/'
     's/&&/||/'
-    's/||/\&\&/'
+    's/\|\|/\&\&/'
     's/\btrue\b/false/'
     's/\bfalse\b/true/'
     's/>=/>/'
@@ -175,54 +217,119 @@ fi
 TEST_PROJ="src/Zipper.Tests/Zipper.Tests.csproj"
 T0=$(date +%s)
 
+# ── Content-hash mutant result cache ──────────────────────────
+CACHE_DIR="${MUTATION_CACHE_DIR:-$(git rev-parse --git-path zipper-hooks/mutation-cache 2>/dev/null || echo "")}"
+if [[ "$USE_CACHE" == "1" && -n "$CACHE_DIR" ]]; then
+    mkdir -p "$CACHE_DIR" 2>/dev/null || USE_CACHE=0
+else
+    USE_CACHE=0
+fi
+
+compute_sha256() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$@" | awk '{print $1}'
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$@" | awk '{print $1}'
+    else
+        python3 -c 'import hashlib,sys; h=hashlib.sha256(); [h.update(open(f,"rb").read()) for f in sys.argv[1:]] if len(sys.argv)>1 else h.update(sys.stdin.buffer.read()); print(h.hexdigest())' "$@"
+    fi
+}
+
+hash_stdin_files() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        xargs -0 sha256sum 2>/dev/null | sha256sum | awk '{print $1}'
+    elif command -v shasum >/dev/null 2>&1; then
+        xargs -0 shasum -a 256 2>/dev/null | shasum -a 256 | awk '{print $1}'
+    else
+        python3 -c 'import hashlib,sys
+h=hashlib.sha256()
+for p in sys.stdin.buffer.read().split(b"\0"):
+    if p:
+        h.update(p + b"\0")
+        with open(p, "rb") as f: h.update(f.read())
+print(h.hexdigest())'
+    fi
+}
+
+PROD_TREE_HASH=""
+TESTS_TREE_HASH=""
+if [[ "$USE_CACHE" == "1" ]]; then
+    PROD_TREE_HASH=$(
+        find src Directory.Build.props global.json BannedSymbols.txt -type f \
+            -not -path '*/Zipper.Tests/*' \
+            -not -path '*/Zipper.Analyzers.Tests/*' \
+            -not -path '*/bin/*' \
+            -not -path '*/obj/*' \
+            -not -name '*.mutation-*' \
+            -print0 2>/dev/null | sort -z | hash_stdin_files
+    )
+    TESTS_TREE_HASH=$(
+        find src/Zipper.Tests -type f \
+            -not -path '*/bin/*' \
+            -not -path '*/obj/*' \
+            -not -name '*.mutation-*' \
+            -print0 2>/dev/null | sort -z | hash_stdin_files
+    )
+fi
+
 BUILD_FLAGS=(--nologo -v quiet)
 if [[ -f "src/Zipper.Tests/obj/project.assets.json" ]]; then
     BUILD_FLAGS+=(--no-restore)
 fi
 
-# Verify baseline build before mutating (enforce baseline timeout)
-BUILD=(dotnet build "$TEST_PROJ" "${BUILD_FLAGS[@]}")
-[[ -n "$TCMD" ]] && BUILD=("$TCMD" 60 "${BUILD[@]}")
-if ! "${BUILD[@]}" >/dev/null 2>&1; then
-    # Fallback once with full restore in case packages changed
-    BUILD_FALLBACK=(dotnet build "$TEST_PROJ" --nologo -v quiet)
-    [[ -n "$TCMD" ]] && BUILD_FALLBACK=("$TCMD" 60 "${BUILD_FALLBACK[@]}")
-    if ! "${BUILD_FALLBACK[@]}" >/dev/null 2>&1; then
-        echo "  ❌ Baseline build failed before mutation smoke; check compilation errors." >&2
-        exit 1
+BASELINE_VERIFIED=0
+ensure_baseline_verified() {
+    if [[ "$BASELINE_VERIFIED" -eq 1 ]]; then
+        return 0
     fi
-fi
 
-# Skip redundant 20s baseline test run when caller (pre-push) or fresh pre-commit.ok already verified HEAD
-SKIP_BASELINE="${MUTATION_SMOKE_SKIP_BASELINE:-0}"
-if [[ "$SKIP_BASELINE" != "1" ]]; then
-    MARKER_FILE="$(git rev-parse --git-path zipper-hooks 2>/dev/null || echo "")/pre-commit.ok"
-    if [[ -f "$MARKER_FILE" ]] && git diff --quiet 2>/dev/null && git diff --cached --quiet 2>/dev/null; then
-        MARKER_TS=$(grep '^timestamp=' "$MARKER_FILE" 2>/dev/null | cut -d= -f2)
-        MARKER_HEAD=$(grep '^head=' "$MARKER_FILE" 2>/dev/null | cut -d= -f2)
-        CURRENT_HEAD=$(git rev-parse HEAD 2>/dev/null || echo "")
-        NOW_TS=$(date +%s)
-        if [[ -n "$MARKER_TS" && -n "$MARKER_HEAD" && "$MARKER_HEAD" == "$CURRENT_HEAD" ]] && (( NOW_TS - MARKER_TS < 600 )); then
-            SKIP_BASELINE=1
+    # Verify baseline build before mutating (enforce baseline timeout)
+    BUILD=(dotnet build "$TEST_PROJ" "${BUILD_FLAGS[@]}")
+    [[ -n "$TCMD" ]] && BUILD=("$TCMD" 60 "${BUILD[@]}")
+    if ! "${BUILD[@]}" >/dev/null 2>&1; then
+        # Fallback once with full restore in case packages changed
+        BUILD_FALLBACK=(dotnet build "$TEST_PROJ" --nologo -v quiet)
+        [[ -n "$TCMD" ]] && BUILD_FALLBACK=("$TCMD" 60 "${BUILD_FALLBACK[@]}")
+        if ! "${BUILD_FALLBACK[@]}" >/dev/null 2>&1; then
+            echo "  ❌ Baseline build failed before mutation smoke; check compilation errors." >&2
+            exit 1
         fi
     fi
-fi
 
-if [[ "$SKIP_BASELINE" == "1" ]]; then
-    echo "  ✓ Baseline unit tests already verified — skipping duplicate baseline test run."
-else
-    TEST=(dotnet test "$TEST_PROJ" --nologo --no-build)
-    [[ -n "$TCMD" ]] && TEST=("$TCMD" 60 "${TEST[@]}")
-    if ! "${TEST[@]}" >/dev/null 2>&1; then
-        echo "  ❌ Baseline tests failed before mutation smoke; unit tests must pass before mutation smoke." >&2
-        exit 1
+    # Skip redundant 20s baseline test run when caller (pre-push) or fresh pre-commit.ok already verified HEAD
+    SKIP_BASELINE="${MUTATION_SMOKE_SKIP_BASELINE:-0}"
+    if [[ "$SKIP_BASELINE" != "1" ]]; then
+        MARKER_FILE="$(git rev-parse --git-path zipper-hooks 2>/dev/null || echo "")/pre-commit.ok"
+        if [[ -f "$MARKER_FILE" ]] && git diff --quiet 2>/dev/null && git diff --cached --quiet 2>/dev/null; then
+            MARKER_TS=$(grep '^timestamp=' "$MARKER_FILE" 2>/dev/null | cut -d= -f2)
+            MARKER_HEAD=$(grep '^head=' "$MARKER_FILE" 2>/dev/null | cut -d= -f2)
+            CURRENT_HEAD=$(git rev-parse HEAD 2>/dev/null || echo "")
+            NOW_TS=$(date +%s)
+            if [[ -n "$MARKER_TS" && -n "$MARKER_HEAD" && "$MARKER_HEAD" == "$CURRENT_HEAD" ]] && (( NOW_TS - MARKER_TS < 600 )); then
+                SKIP_BASELINE=1
+            fi
+        fi
     fi
-fi
+
+    if [[ "$SKIP_BASELINE" == "1" ]]; then
+        echo "  ✓ Baseline unit tests already verified — skipping duplicate baseline test run."
+    else
+        TEST=(dotnet test "$TEST_PROJ" --nologo --no-build)
+        [[ -n "$TCMD" ]] && TEST=("$TCMD" 60 "${TEST[@]}")
+        if ! "${TEST[@]}" >/dev/null 2>&1; then
+            echo "  ❌ Baseline tests failed before mutation smoke; unit tests must pass before mutation smoke." >&2
+            exit 1
+        fi
+    fi
+
+    BASELINE_VERIFIED=1
+}
 
 # ── Run mutations ─────────────────────────────────────────────
 SURVIVORS=()
 KILLED=0
 SKIPPED=0
+CACHED=0
 TESTED=0
 
 for candidate in "${CANDIDATES[@]}"; do
@@ -237,15 +344,53 @@ for candidate in "${CANDIDATES[@]}"; do
     desc="${DESCS[$idx]}"
     TESTED=$((TESTED + 1))
 
+    # Generate mutated candidate into temporary file first so we can check content-hash cache
+    TMP_FILE="${file}.mutation-tmp"
+    sed -E "${ln}${PATTERNS[$idx]}" "$file" > "$TMP_FILE"
+
+    stem=$(basename "$file" .cs)
+    stem_test_file=$(find src/Zipper.Tests -name "${stem}Tests.cs" -print -quit 2>/dev/null || echo "")
+    compile_key=""
+    targeted_key=""
+    full_key=""
+
+    if [[ "$USE_CACHE" == "1" ]]; then
+        mutated_hash=$(compute_sha256 "$TMP_FILE")
+        compile_key=$(printf '%s:%s:%s\n' "$PROD_TREE_HASH" "$file" "$mutated_hash" | compute_sha256)
+        full_key=$(printf '%s:%s\n' "$compile_key" "$TESTS_TREE_HASH" | compute_sha256)
+        targeted_key="$full_key"
+
+        if [[ -f "$CACHE_DIR/compile_${compile_key}" ]]; then
+            printf "  [%d/%d] %s:%s %s ... skipped (compile error, cached)\n" \
+                "$TESTED" "${#CANDIDATES[@]}" "$(basename "$file")" "$ln" "$desc"
+            SKIPPED=$((SKIPPED + 1))
+            CACHED=$((CACHED + 1))
+            rm -f "$TMP_FILE"
+            TMP_FILE=""
+            continue
+        elif [[ -n "$targeted_key" && -f "$CACHE_DIR/killed_targeted_${targeted_key}" ]] || [[ -f "$CACHE_DIR/killed_full_${full_key}" ]]; then
+            printf "  [%d/%d] %s:%s %s ... killed ✓ (cached)\n" \
+                "$TESTED" "${#CANDIDATES[@]}" "$(basename "$file")" "$ln" "$desc"
+            KILLED=$((KILLED + 1))
+            CACHED=$((CACHED + 1))
+            rm -f "$TMP_FILE"
+            TMP_FILE=""
+            continue
+        fi
+    fi
+
+    ensure_baseline_verified
+
     printf "  [%d/%d] %s:%s %s ... " \
         "$TESTED" "${#CANDIDATES[@]}" "$(basename "$file")" "$ln" "$desc"
 
-    # Backup and mutate (portable: no sed -i)
+    # Backup and apply mutation (touch ensures mtime is newer than baseline build outputs)
     CURRENT_FILE="$file"
     BACKUP_FILE="${file}.mutation-bak"
     cp "$file" "$BACKUP_FILE"
-    tmp="${file}.mutation-tmp"
-    sed -E "${ln}${PATTERNS[$idx]}" "$file" > "$tmp" && mv "$tmp" "$file"
+    mv "$TMP_FILE" "$file"
+    touch "$file"
+    TMP_FILE=""
 
     # Phase 1: build — compile error = invalid mutant, skip
     BUILD=(dotnet build "$TEST_PROJ" "${BUILD_FLAGS[@]}")
@@ -262,14 +407,16 @@ for candidate in "${CANDIDATES[@]}"; do
     elif [[ $build_exit -ne 0 ]]; then
         echo "skipped (compile error)"
         SKIPPED=$((SKIPPED + 1))
+        if [[ "$USE_CACHE" == "1" && -n "$compile_key" ]]; then
+            touch "$CACHE_DIR/compile_${compile_key}" 2>/dev/null || true
+        fi
         restore
         continue
     fi
 
     # Phase 2a: fast-path targeted test class (<FileStem>Tests) when present (~1.5 s)
-    stem=$(basename "$file" .cs)
     targeted_killed=0
-    if [[ -n "$(find src/Zipper.Tests -name "${stem}Tests.cs" -print -quit 2>/dev/null)" ]]; then
+    if [[ -n "$stem_test_file" ]]; then
         FAST_TEST=(dotnet test "$TEST_PROJ" --nologo --no-build --filter "FullyQualifiedName~${stem}Tests")
         [[ -n "$TCMD" ]] && FAST_TEST=("$TCMD" 15 "${FAST_TEST[@]}")
         set +e
@@ -280,6 +427,9 @@ for candidate in "${CANDIDATES[@]}"; do
             echo "killed ✓"
             KILLED=$((KILLED + 1))
             targeted_killed=1
+            if [[ "$USE_CACHE" == "1" && -n "$targeted_key" ]]; then
+                touch "$CACHE_DIR/killed_targeted_${targeted_key}" 2>/dev/null || true
+            fi
         fi
     fi
 
@@ -301,6 +451,9 @@ for candidate in "${CANDIDATES[@]}"; do
     elif [[ $test_exit -ne 0 ]]; then
         echo "killed ✓"
         KILLED=$((KILLED + 1))
+        if [[ "$USE_CACHE" == "1" && -n "$full_key" ]]; then
+            touch "$CACHE_DIR/killed_full_${full_key}" 2>/dev/null || true
+        fi
     else
         echo "SURVIVED ⚠"
         SURVIVORS+=("$file:$ln — $desc")
@@ -309,9 +462,14 @@ for candidate in "${CANDIDATES[@]}"; do
     restore
 done
 
+# If any mutant was compiled, restore clean build outputs so subsequent --no-build runs never see a mutated DLL
+if [[ "$BASELINE_VERIFIED" -eq 1 ]]; then
+    dotnet build "$TEST_PROJ" "${BUILD_FLAGS[@]}" >/dev/null 2>&1 || true
+fi
+
 # ── Summary ───────────────────────────────────────────────────
 echo ""
-echo "  Mutation smoke: $KILLED killed, ${#SURVIVORS[@]} survived, $SKIPPED skipped ($TESTED tested)"
+echo "  Mutation smoke: $KILLED killed, ${#SURVIVORS[@]} survived, $SKIPPED skipped ($TESTED tested, $CACHED cached)"
 
 if [[ ${#SURVIVORS[@]} -gt 0 ]]; then
     echo ""

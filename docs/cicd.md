@@ -60,13 +60,15 @@ flowchart TD
 
 ### 1. Local git hooks
 
-Version-controlled in [`.github/hooks/`](../.github/hooks/), installed with `./setup-hook.sh` (Linux/Mac) or `setup-hook.bat` (Windows). They copy into `$(git rev-parse --git-common-dir)/hooks/` and are worktree-aware.
+Version-controlled in [`.github/hooks/`](../.github/hooks/), automatically synced on local `dotnet build` via the `SyncGitHooks` MSBuild target in [`Directory.Build.props`](../Directory.Build.props) (or manually via `./setup-hook.sh` / `setup-hook.bat` / `./dev.sh hooks`). They copy into `$(git rev-parse --git-common-dir)/hooks/` and are worktree-aware.
+
+For interactive local verification before committing, `./dev.sh` (`dev.bat` on Windows) inspects `git diff` against `main` and runs only the affected local gates while sharing a single Release build across all steps.
 
 | Hook | Trigger | Does |
 |------|---------|------|
 | `pre-commit` | `git commit` | Short-circuits full build/test if every staged file is docs (`*.md`, `docs/`), running only `DocsDriftTests`. Else stashes unstaged changes (and untracked files under `src/`), runs `dotnet format` on staged `*.cs`, runs all unit tests, and records the staged tree hash in `pre-commit.pending`. |
 | `post-commit` | after commit object exists | Verifies `HEAD^{tree}` matches `pre-commit.pending` and writes `pre-commit.ok` marker (timestamp + new HEAD) so pre-push can skip redundant unit tests. |
-| `pre-push` | `git push` | Unit tests (skipped if marker is <10 min old on current HEAD) + mutation smoke on changed `.cs` source files (`tests/run-mutation-smoke.sh` with `MUTATION_SMOKE_SKIP_BASELINE=1` and targeted `*Tests` fast-path; hard gate: all mutants must be killed) + basic E2E smoke (`tests/run-e2e-basic.sh` / `.bat`, skipped when no CLI source or basic E2E script files changed). |
+| `pre-push` | `git push` | Unit tests (skipped if marker is <10 min old on current HEAD) + mutation smoke on changed `.cs` source files (`tests/run-mutation-smoke.sh` with `MUTATION_SMOKE_SKIP_BASELINE=1`, targeted `*Tests` fast-path, and SHA-256 content-hash mutant result caching under `.git/zipper-hooks/mutation-cache/`; hard gate: all mutants must be killed) + basic E2E smoke (`tests/run-e2e-basic.sh` / `.bat`, skipped when no CLI source or basic E2E script files changed). |
 
 Bypass (not recommended): `git commit --no-verify`, `git push --no-verify`. Mutation smoke is a hard pre-push gate (surviving mutants must be killed by adding unit tests). Full E2E + coverage checks run in CI; full mutation analysis runs weekly.
 
