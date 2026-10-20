@@ -14,5 +14,7 @@ internal sealed class OptSerializer : ILoadFileSerializer
     public string RenderHeader(IReadOnlyList<string> columns) => string.Empty;
 
     public string RenderRecord(LoadFileRecord record) =>
-        string.Join(",", record.Columns.Select((_, i) => i < record.Values.Count ? record.Values[i] : string.Empty));
+        string.Join(",", record.Columns.Select((_, i) => EscapeValue(i < record.Values.Count ? record.Values[i] : string.Empty)));
+
+    private static string EscapeValue(string value) => value.Replace(",", ";", StringComparison.Ordinal);
 }

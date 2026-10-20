@@ -98,6 +98,33 @@ internal static class EmailFactory
     internal static string GenerateEmailAddress(int index, string type)
     {
         ArgumentNullException.ThrowIfNull(type);
+
+        // Validate index - must be non-negative
+        if (index < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index), "Index must be non-negative.");
+        }
+
+        // Validate type - must be a valid email local-part component
+        // Reject characters that are invalid in email addresses or could cause header injection
+        if (type.Length == 0)
+        {
+            throw new ArgumentException("Type cannot be empty.", nameof(type));
+        }
+
+        foreach (char c in type)
+        {
+            if (c < 32 || c > 126) // Control characters
+            {
+                throw new ArgumentException($"Type contains invalid character U+{(int)c:X4}.", nameof(type));
+            }
+            // Reject characters that are special in email addresses or headers
+            if ("()<>@,;:\\\"[]".Contains(c))
+            {
+                throw new ArgumentException($"Type contains invalid character '{c}'.", nameof(type));
+            }
+        }
+
         var domain = EmailDomains[index % EmailDomains.Length];
         return $"{type.ToLowerInvariant()}{index:D3}@{domain}";
     }

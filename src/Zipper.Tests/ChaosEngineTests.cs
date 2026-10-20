@@ -536,7 +536,7 @@ public class ChaosEngineTests
     }
 
     [Fact]
-    public void ChaosAmount_ZeroPercent_ClampedToMinimumOne()
+    public void ChaosAmount_ZeroPercent_ReturnsZero()
     {
         var engine = new ChaosEngine(
             totalLines: 100,
@@ -557,7 +557,7 @@ public class ChaosEngineTests
             }
         }
 
-        Assert.Equal(1, interceptCount);
+        Assert.Equal(0, interceptCount);
     }
 
     [Fact]
@@ -611,9 +611,9 @@ public class ChaosEngineTests
     }
 
     [Fact]
-    public void ChaosAmount_InvalidString_FallsBackToDefault()
+    public void ChaosAmount_InvalidString_ThrowsArgumentException()
     {
-        var engine = new ChaosEngine(
+        var ex = Assert.Throws<ArgumentException>(() => new ChaosEngine(
             totalLines: 200,
             chaosAmount: "abc",
             chaosTypes: null,
@@ -621,18 +621,9 @@ public class ChaosEngineTests
             columnDelimiter: "\u0014",
             quoteDelimiter: "\u00fe",
             eol: "\r\n",
-            seed: 42);
+            seed: 42));
 
-        int interceptCount = 0;
-        for (int i = 1; i <= 200; i++)
-        {
-            if (engine.ShouldIntercept(i))
-            {
-                interceptCount++;
-            }
-        }
-
-        Assert.Equal(2, interceptCount);
+        Assert.Contains("Invalid chaos amount format", ex.Message);
     }
 
     [Fact]
@@ -759,5 +750,69 @@ public class ChaosEngineTests
         var engine = new ChaosEngine(1, "1", "opt-batesnumber", LoadFileFormat.Opt, ",", "", "\n", 42);
         var result = engine.Intercept(1, input, "DOC");
         Assert.Equal(expected, result);
+    }
+
+    // Issue 1: Chaos types × load-file format silently no-op
+    [Fact]
+    public void Constructor_MultiFormatChaosTypes_EmptyTypesForOpt_ProducesNoAnomalies()
+    {
+        // When chaos types contain only DAT-specific types (e.g., "mixed-delimiters"),
+        // and the engine is constructed for OPT format, the enabled types set becomes empty.
+        // This results in 0 anomalies being produced (silent no-op).
+        // The CLI validation (CrossCuttingRules) now rejects this combination,
+        // but the engine itself gracefully handles empty types by not intercepting.
+        var engine = new ChaosEngine(
+            totalLines: 10,
+            chaosAmount: "10",
+            chaosTypes: "mixed-delimiters",
+            format: LoadFileFormat.Opt,
+            columnDelimiter: ",",
+            quoteDelimiter: string.Empty,
+            eol: "\r\n",
+            seed: 42);
+
+        string line = "IMG001,VOL001,IMAGES\\IMG001.tif,Y,,,1";
+        int interceptedCount = 0;
+        for (int i = 1; i <= 10; i++)
+        {
+            if (engine.ShouldIntercept(i))
+            {
+                engine.Intercept(i, line, $"DOC{i:D8}");
+                interceptedCount++;
+            }
+        }
+
+        // With empty enabledTypes, Intercept returns line unchanged and records no anomalies
+        Assert.Empty(engine.Anomalies);
+        Assert.True(interceptedCount >= 0); // Sampler may still select lines, but Intercept is no-op
+    }
+
+    [Fact]
+    public void Constructor_ValidTypesForFormat_ProducesAnomalies()
+    {
+        // Types valid for the format should produce anomalies
+        var engine = new ChaosEngine(
+            totalLines: 10,
+            chaosAmount: "10",
+            chaosTypes: "opt-boundary",
+            format: LoadFileFormat.Opt,
+            columnDelimiter: ",",
+            quoteDelimiter: string.Empty,
+            eol: "\r\n",
+            seed: 42);
+
+        string line = "IMG001,VOL001,IMAGES\\IMG001.tif,Y,,,1";
+        int interceptedCount = 0;
+        for (int i = 1; i <= 10; i++)
+        {
+            if (engine.ShouldIntercept(i))
+            {
+                engine.Intercept(i, line, $"DOC{i:D8}");
+                interceptedCount++;
+            }
+        }
+
+        Assert.Equal(interceptedCount, engine.Anomalies.Count);
+        Assert.All(engine.Anomalies, a => Assert.Equal("opt-boundary", a.ErrorType));
     }
 }

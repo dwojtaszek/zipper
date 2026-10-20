@@ -46,14 +46,18 @@ internal class OptAnomalyApplier : IAnomalyApplier
                 break;
         }
 
-        anomalies.Add(new ChaosAnomaly
+        // Only record anomaly if the line was actually modified
+        if (result != line)
         {
-            LineNumber = lineNumber.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            RecordID = recordId,
-            Column = "N/A",
-            ErrorType = chaosType,
-            Description = description,
-        });
+            anomalies.Add(new ChaosAnomaly
+            {
+                LineNumber = lineNumber.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                RecordID = recordId,
+                Column = "N/A",
+                ErrorType = chaosType,
+                Description = description,
+            });
+        }
 
         return result;
     }

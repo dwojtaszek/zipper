@@ -7,6 +7,16 @@ namespace Zipper.Cli.Modules;
 public sealed class ChaosModule : CliModule
 {
     private bool _mode;
+    /// <summary>
+    /// Gets whether --chaos-mode was specified.
+    /// </summary>
+    public bool ChaosMode => _mode;
+
+    /// <summary>
+    /// Gets the comma-separated chaos types specified via --chaos-types, or null if not specified.
+    /// </summary>
+    public string? ChaosTypes => _types;
+
     private string? _amount;
     private string? _types;
     private string? _scenario;
