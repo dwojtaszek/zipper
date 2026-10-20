@@ -89,6 +89,34 @@ public readonly record struct CodedGeneratorPropertyInput(
     int Seed);
 
 /// <summary>
+/// Bounded input for validation fault-injection, supplemental Bates Number range,
+/// multi-volume rolling Bates, and Volume Analyzer property tests.
+/// <para>
+/// One shared input struct serves the <c>ValidationPropertyTests</c> suite; each property
+/// reads only the fields that vary its own domain:
+/// <list type="bullet">
+/// <item><see cref="FileCount"/>, <see cref="Seed"/>, and <see cref="MutationType"/> drive single-fault injection.</item>
+/// <item><see cref="PriorStart"/>/<see cref="PriorLength"/> and <see cref="PlannedStart"/>/<see cref="PlannedLength"/> are absolute Bates Number intervals for supplemental validation.</item>
+/// <item><see cref="PrefixCount"/>, <see cref="BatesStarts"/>, <see cref="SequenceNumber"/>, <see cref="UseRestartMode"/>, and <see cref="UseExplicitStarts"/> drive multi-volume rolling Bates resolution.</item>
+/// </list>
+/// </para>
+/// </summary>
+[StructLayout(LayoutKind.Auto)]
+public readonly record struct ValidationMutationPropertyInput(
+    int FileCount,
+    int Seed,
+    int MutationType,
+    int PriorStart,
+    int PriorLength,
+    int PlannedStart,
+    int PlannedLength,
+    int PrefixCount,
+    int[] BatesStarts,
+    int SequenceNumber,
+    bool UseRestartMode,
+    bool UseExplicitStarts);
+
+/// <summary>
 /// Bounded input for Bates Number sequence and range property tests.
 /// </summary>
 [StructLayout(LayoutKind.Auto)]
@@ -637,6 +665,56 @@ public static class ZipperArbitraries
         return Arb.From(gen, ShrinkAuditWriterInput);
     }
 
+    public static Arbitrary<ValidationMutationPropertyInput> ValidationMutationPropertyInputArb()
+    {
+        var gen =
+            from fileCount in Gen.Choose(2, 6)
+            from seed in Gen.Choose(0, 100_000)
+            from mutationType in Gen.Choose(0, 13)
+            from priorStart in Gen.Choose(1, 50_000)
+            from priorLength in Gen.Choose(0, 50)
+            from plannedStart in Gen.Choose(1, 50_000)
+            from plannedLength in Gen.Choose(0, 50)
+            from prefixCount in Gen.Choose(1, 6)
+            from rawStarts in Gen.ArrayOf(Gen.Choose(1, 50_000), prefixCount)
+            from sequenceNumber in Gen.Choose(1, prefixCount)
+            from useRestartMode in Gen.Elements(true, false)
+            from useExplicitStarts in Gen.Elements(true, false)
+            select new ValidationMutationPropertyInput(
+                fileCount,
+                seed,
+                mutationType,
+                priorStart,
+                priorLength,
+                plannedStart,
+                plannedLength,
+                prefixCount,
+                ToStrictlyIncreasing(rawStarts),
+                sequenceNumber,
+                useRestartMode,
+                useExplicitStarts);
+
+        return Arb.From(gen, ShrinkValidationMutationInput);
+    }
+
+    /// <summary>
+    /// Sorts the raw per-volume starts and adds a fixed spacing so every element is
+    /// strictly greater than its predecessor. Rolling volume Bates transitions are only
+    /// observable when consecutive volumes cannot collide, so the generator enforces the
+    /// precondition instead of leaving the test to discard non-increasing draws.
+    /// </summary>
+    private static int[] ToStrictlyIncreasing(int[] rawStarts)
+    {
+        var sorted = (int[])rawStarts.Clone();
+        Array.Sort(sorted);
+        for (var i = 0; i < sorted.Length; i++)
+        {
+            sorted[i] += i * 1_000;
+        }
+
+        return sorted;
+    }
+
     public static Arbitrary<CodedGeneratorPropertyInput> CodedGeneratorPropertyInputArb()
     {
         var samplePools = new[]
@@ -901,6 +979,81 @@ public static class ZipperArbitraries
         {
             yield return input with { Seed = input.Seed / 2 };
             yield return input with { Seed = 0 };
+        }
+    }
+
+    private static IEnumerable<ValidationMutationPropertyInput> ShrinkValidationMutationInput(ValidationMutationPropertyInput input)
+    {
+        if (input.FileCount > 2)
+        {
+            int half = input.FileCount / 2;
+            if (half >= 2)
+            {
+                yield return input with { FileCount = half };
+            }
+
+            yield return input with { FileCount = 2 };
+        }
+
+        if (input.MutationType > 0)
+        {
+            yield return input with { MutationType = input.MutationType / 2 };
+            yield return input with { MutationType = 0 };
+        }
+
+        if (input.PrefixCount > 1)
+        {
+            int half = input.PrefixCount / 2;
+            if (half > 1)
+            {
+                yield return input with
+                {
+                    PrefixCount = half,
+                    BatesStarts = input.BatesStarts[..half],
+                    SequenceNumber = Math.Min(input.SequenceNumber, half),
+                };
+            }
+
+            yield return input with
+            {
+                PrefixCount = 1,
+                BatesStarts = input.BatesStarts[..1],
+                SequenceNumber = 1,
+            };
+        }
+
+        if (input.SequenceNumber > 1)
+        {
+            yield return input with { SequenceNumber = input.SequenceNumber - 1 };
+            yield return input with { SequenceNumber = 1 };
+        }
+
+        if (input.PriorLength > 0)
+        {
+            yield return input with { PriorLength = input.PriorLength - 1 };
+            yield return input with { PriorLength = 0 };
+        }
+
+        if (input.PlannedLength > 0)
+        {
+            yield return input with { PlannedLength = input.PlannedLength - 1 };
+            yield return input with { PlannedLength = 0 };
+        }
+
+        if (input.Seed > 0)
+        {
+            yield return input with { Seed = input.Seed / 2 };
+            yield return input with { Seed = 0 };
+        }
+
+        if (input.UseExplicitStarts)
+        {
+            yield return input with { UseExplicitStarts = false };
+        }
+
+        if (input.UseRestartMode)
+        {
+            yield return input with { UseRestartMode = false };
         }
     }
 }
