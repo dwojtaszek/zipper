@@ -4,6 +4,7 @@ REQ-000	unit	DatComposingWriterTests.WriteAsync_WithMetadata_IncludesMetadataCol
 REQ-001	unit	DatComposingWriterTests.WriteAsync_WithMetadata_IncludesMetadataColumns	Custodian/Date Sent/Author/File Size columns
 REQ-002	unit	LegacyMetadataGeneratorTests.FolderCustodianGenerator_ProducesExpectedFormat	Folder-linked custodian in standard mode
 REQ-003	unit	LegacyMetadataGeneratorTests.AuthorGenerator_ProducesExpectedFormat	Auto-generated Author/Date Sent/File Size
+REQ-003	unit	LoadFileComposerAndEmitterPropertyTests.StandardRowComposer_Compose_ShouldBeDeterministicForIdenticalSeedAndFileData	Property: StandardRowComposer and SyntheticRowValues generate deterministic metadata values for identical seed
 REQ-004	unit	CliModuleSetTests.Parse_AllBooleanFlags_SetCorrectly	--with-text boolean flag parsing
 REQ-004	unit	ZipArchiveServiceTests.CreateArchiveAsync_WithTextFiles_CreatesTextFilesAlongsideMainFiles	--with-text extracted text generation behavior
 REQ-005	unit	ZipArchiveServiceTests.CreateArchiveAsync_WithTextFiles_CreatesTextFilesAlongsideMainFiles	.txt files generated in Archive
@@ -82,6 +83,7 @@ REQ-037	unit	OptComposingWriterTests.WriteAsync_StandardMode_WritesTiffPages	OPT
 REQ-037	unit	LoadFileSerializationPropertyTests.ConcordanceSerializer_RenderRecordAndHeader_ShouldQuoteEveryFieldAndPreserveNewlines	Property: Concordance serializer quote-wraps every field and preserves newlines
 REQ-037	unit	LoadFileSerializationPropertyTests.CsvSerializer_RenderRecord_ShouldRoundTripSingleLineValues	Property: CSV serializer round-trips single-line values
 REQ-037	unit	LoadFileSerializationPropertyTests.OptSerializer_RenderRecordAndHeader_ShouldPreserveCommaSeparatedFields	Property: OPT serializer preserves comma-separated fields
+REQ-037	unit	LoadFileComposerAndEmitterPropertyTests.LoadFileEmitter_Emit_ByteCountAndLineCountShouldMatchPreambleAndEolContract	Property: LoadFileEmitter matches encoding preamble and EOL contract across encodings and line endings
 REQ-038	e2e	test-load-file-formats.sh	Format conformance to industry specifications
 REQ-038	unit	SmokeTests.Main_WithMultipleLoadFileFormats_GeneratesAllRequestedFormatsAndAuditSidecars	End-to-end multi-format Load File and audit sidecar generation
 REQ-038	unit	ConcordanceComposingWriterTests.ConcordanceWriter_ShouldUseProperDelimiters	Concordance format quote-wrapping and delimiter conformance
@@ -97,6 +99,7 @@ REQ-038	unit	PostGenerationValidatorTests.Validate_ValidCsvFromDisk_Passes	Post-
 REQ-038	unit	ValidatorRunnerTests.ValidatorRunner_CleanControl_AllCategoriesPassWithZeroFindings	ValidatorRunner Load File conformance check
 REQ-038	unit	LoadFileSerializationPropertyTests.CsvSerializer_RenderRecord_ShouldQuoteSpecialCharactersAndHandleShortValues	Property: RFC 4180 CSV quotes special characters and handles short values
 REQ-038	unit	LoadFileSerializationPropertyTests.ConcordanceSerializer_RenderRecordAndHeader_ShouldQuoteEveryFieldAndPreserveNewlines	Property: Concordance quotes every field and preserves newlines
+REQ-038	unit	LoadFileComposerAndEmitterPropertyTests.XmlLoadFileWriter_Write_ShouldProduceWellFormedEdrmXmlWithEscapedControlAndUnicodeCharacters	Property: XmlLoadFileWriter produces well-formed EDRM-XML with escaped control and unicode characters
 REQ-039	unit	CliModuleSetTests.Parse_InvalidValueForOption_ReturnsFalse	Bates numbering arguments
 REQ-039	unit	BatesSequenceTests.Generate_WithConfigAndIndex_ReturnsExpectedNumber	Bates numbering sequence generation from config
 REQ-039	unit	BatesAndDistributionPropertyTests.BatesSequence_TryCreate_ShouldValidateConfigBoundaries	Property: BatesSequence validates config boundaries
@@ -140,6 +143,7 @@ REQ-058	unit	PostGenerationValidatorTests.Validate_OptBoundaryMismatch_ReportsEr
 REQ-059	unit	OptComposingWriterLoadFileTests.OptWriter_WithoutEncodingSpecified_ShouldDefaultToWindows1252	OPT ANSI default, --encoding override
 REQ-060	unit	CliModuleSetTests.Parse_AllBooleanFlags_SetCorrectly	--with-families boolean flag
 REQ-060	unit	DatComposingWriterTests.DatWriter_WithFamilies_StandardMode_IncludesFamilyColumnsAndRows	--with-families parent-child relationship generation in DAT
+REQ-060	unit	LoadFileComposerAndEmitterPropertyTests.FamilyPlan_Create_ShouldPreserveParentOrderAndAttachmentBoundsAndDeterminism	Property: FamilyPlan preserves parent-child ordering, attachment bounds, and determinism
 REQ-061	unit	CsvComposingWriterTests.CsvWriter_WithFamilies_IncludesFamilyColumnsAndRows	BEGATTACH/ENDATTACH/PARENTDOCID columns
 REQ-061	unit	OptComposingWriterTests.WriteAsync_WithFamilies_IncludesFamilyAttachments	OPT writer includes attachment child rows
 REQ-062	unit	ZipArchiveServiceTests.CreateArchiveAsync_WithEmlFilesAndAttachments_HandlesAttachmentsCorrectly	Email attachments linked as children
@@ -155,6 +159,7 @@ REQ-068	unit	ChaosAndComparisonPropertyTests.NumberGenerator_Generate_ShouldResp
 REQ-069	unit	DataGeneratorTests.GenerateRow_WithCustodianCountOverride_LimitsDistinctCustodians	Data sources pre-generated and reused
 REQ-070	unit	DataGeneratorTests.GenerateRow_WithSeed_ProducesReproducibleOutput	--seed reproducible generation
 REQ-070	unit	ChaosAndComparisonPropertyTests.DataGenerator_GenerateRow_ShouldRespectDistributionsAndEmptyRates	Property: DataGenerator row generation is reproducible per seed
+REQ-070	unit	LoadFileComposerAndEmitterPropertyTests.StandardRowComposer_Compose_ShouldBeDeterministicForIdenticalSeedAndFileData	Property: StandardRowComposer and SyntheticRowValues produce identical column keys and values given the same seed
 REQ-071	unit	DataGeneratorTests.EmptyPercentage_Observed_MatchesConfigured_WithinTolerance	Per-column empty value percentages
 REQ-071	unit	ChaosAndComparisonPropertyTests.DataGenerator_GenerateRow_ShouldRespectDistributionsAndEmptyRates	Property: DataGenerator honors 0% and 100% emptyPercentage boundaries
 REQ-072	unit	DataGeneratorTests.GenerateRow_MultiValueColumns_UseCorrectDelimiter	Multi-value fields with multiValueCount
@@ -188,7 +193,9 @@ REQ-089	unit	CrossCuttingRulesTests.Validate_LoadfileOnly_WithoutType_ReturnsTru
 REQ-089	unit	LoadFileOnlyGeneratorTests.GenerateAsync_Dat_CreatesLoadFileWithCorrectLineCount	Loadfile-only generates schema without explicit --type
 REQ-090	unit	LoadFileOnlyGeneratorTests.GenerateAsync_CreatesPropertiesJson	_properties.json audit file
 REQ-090	unit	LoadFileOrchestratorTests.EmitAllAsync_MultipleFormats_WritesLoadFileAndAuditPerFormat	LoadFileOrchestrator writes companion audit files per format
+REQ-090	unit	LoadFileComposerAndEmitterPropertyTests.LoadFileAuditWriter_Write_ShouldRoundTripJsonAndConserveRecordTotals	Property: LoadFileAuditWriter round-trips JSON and conserves record totals
 REQ-091	unit	LoadFileModuleTests.TryBuild_LoadfileOnly_WithTargetZipSize_ReturnsFalse	Conflicts with target-zip-size/include-load-file
+REQ-091	unit	LoadFileComposerAndEmitterPropertyTests.LoadFileAuditWriter_Write_ShouldRoundTripJsonAndConserveRecordTotals	Property: LoadFileAuditWriter validates JSON schema fields and totalRecords across generation results
 REQ-092	unit	DelimiterModuleTests.TryBuild_ValidEol_ReturnsTrue	--eol CRLF|LF|CR, default CRLF
 REQ-092	unit	LoadFileEmitterTests.NoChaos_NoHeader_WritesRecordsOnly	LoadFileEmitter writes configured CRLF/LF/CR line endings
 REQ-092	unit	PostGenerationValidatorTests.Validate_InconsistentLineEnding_ReportsError	Post-generation validator verifies Load File line endings
@@ -209,6 +216,7 @@ REQ-099	unit	ChaosAndComparisonPropertyTests.DatAnomalyApplier_Apply_ShouldMutat
 REQ-099	unit	ChaosAndComparisonPropertyTests.OptAnomalyApplier_Apply_ShouldMutateOptLineAndRecordAnomalyMetadata	Property: OPT anomaly applier populates Audit File anomaly metadata
 REQ-100	unit	LoadFileOnlyGeneratorTests.GenerateAsync_WithSeed_ProducesDeterministicOutput	Chaos deterministic with --seed
 REQ-100	unit	ChaosAndComparisonPropertyTests.ChaosSampler_SelectTargets_ShouldRespectBoundsAndDeterminism	Property: ChaosSampler with same seed produces identical target set
+REQ-100	unit	LoadFileComposerAndEmitterPropertyTests.FamilyPlan_Create_ShouldPreserveParentOrderAndAttachmentBoundsAndDeterminism	Property: FamilyPlan produces deterministic attachment decisions and child counts per seed
 REQ-101	unit	ArgumentHelpersTests.GetLoadFileFormat_ValidNames_ReturnsCorrectFormat	edrm-xml/xml aliases; concordance distinct
 REQ-101	unit	ConcordanceComposingWriterTests.WriteAsync_ConcordanceWriter_ProducesConcordanceFormattedOutput	Concordance distinct format with BEGATTY/ENDATTY columns
 REQ-101	unit	ConcordanceSerializerTests.RenderRecord_PreservesEmbeddedNewlinesIntact	Concordance serializer distinct quote-wrapping and newline preservation
@@ -227,6 +235,7 @@ REQ-109	unit	ChaosScenarioTests.ChaosScenario_WithChaosTypes_ReturnsConflictErro
 REQ-110	unit	ChaosScenarioTests.ChaosScenario_AmountOverride_UsesCustomAmount	--chaos-amount overrides scenario default
 REQ-111	unit	ChaosScenarioTests.ChaosScenario_FormatMismatch_ReturnsError	Scenario required format mismatch
 REQ-112	unit	ChaosScenarioTests.ChaosList_PrintsScenariosAndExitsZero	--chaos-list prints scenarios and exits
+REQ-112	unit	LoadFileComposerAndEmitterPropertyTests.CodedGenerator_Generate_ShouldBeDeterministicAndMemberOfConfiguredCategories	Property: CodedGenerator is deterministic and generates values from configured categories
 REQ-113	unit	ChaosScenarioTests.GetByName_AllScenarios_MatchesRequirements	Built-in chaos scenarios catalog
 REQ-114	unit	ProductionSetTests.ProductionSet_ValidArgs_ParsesCorrectly	--production-set argument
 REQ-114	unit	ProductionSetTests.ProductionSet_GeneratesDirectoryStructure	--production-set end-to-end delivery generation
@@ -235,6 +244,7 @@ REQ-116	unit	ProductionSetTests.ProductionSet_DefaultVolumeSize_Is5000	--volume-
 REQ-116	unit	ProductionSetTests.ProductionSet_VolumeSubfoldersCreated	--volume-size controls maximum Native Files per Volume
 REQ-116	unit	BatesAndDistributionPropertyTests.ProductionSetPlanner_Plan_ShouldRespectVolumeSizeAndContiguousBatesRanges	Property: ProductionSetPlanner respects volume size cap and contiguous Bates ranges
 REQ-117	unit	ProductionSetTests.ProductionSet_DatLoadFileIsValid	Always DAT + OPT in DATA directory
+REQ-117	unit	LoadFileComposerAndEmitterPropertyTests.DatStandardComposer_Compose_HeaderColumnCountShouldAlwaysEqualEveryRecordValueCount	Property: DatStandardComposer header column count equals record value count across all flag combinations
 REQ-118	unit	ProductionSetTests.ProductionSet_ManifestJsonIsValid	_manifest.json at production root
 REQ-119	unit	ProductionSetTests.ProductionSet_WithZip_CreatesArchive	--production-zip compresses production set
 REQ-120	unit	ProductionSetTests.ProductionSet_RequiresBatesPrefix	Requires --bates-prefix, conflicts loadfile-only
