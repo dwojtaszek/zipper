@@ -752,6 +752,12 @@ public class ProductionSetOrchestratorTests
             return Task.FromResult(this.FileExistsResult);
         }
 
+        public Task CreateZipAsync(string sourceDir, string zipPath, Config.ZipCompressionMethod method, CancellationToken cancellationToken = default)
+        {
+            this.ZipCreated = true;
+            return Task.CompletedTask;
+        }
+
         public bool ZipCreated { get; private set; }
 
         public Task CreateZipAsync(string sourceDir, string zipPath, CancellationToken cancellationToken = default)
