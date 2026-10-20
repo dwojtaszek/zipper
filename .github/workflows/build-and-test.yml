@@ -76,8 +76,9 @@ jobs:
           RECOVER: ${{ inputs.source_sha != '' }}
           INTENT_TAG: ${{ inputs.release_tag }}
 
-  # Single source of truth for the shared gates (lint, runner-tests, the
-  # three-OS build-and-test matrix). See ci.yml. Main pushes always run it:
+  # Single source of truth for the shared gates (lint, runner-tests,
+  # version-metadata, the three-OS build-and-test matrix). See ci.yml. Main
+  # pushes always run it:
   # unlike pr.yml, the version and the self-contained publish are supplied.
   ci:
     needs: prepare

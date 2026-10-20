@@ -74,8 +74,9 @@ jobs:
         shell: bash
         run: dotnet test src/Zipper.Tests/Zipper.Tests.csproj --filter "FullyQualifiedName~DocsDriftTests" --logger "console;verbosity=normal"
 
-  # Single source of truth for the shared gates (lint, runner-tests, the
-  # three-OS build-and-test matrix, goldens CLI publish). See ci.yml.
+  # Single source of truth for the shared gates (lint, runner-tests,
+  # version-metadata, the three-OS build-and-test matrix, and the accepted
+  # Linux candidate staged for the `goldens` job). See ci.yml.
   # A PR may edit ci.yml itself: `pull_request` checks out the PR head with a
   # read-only token, so a change is validated by the version it ships with.
   ci:
@@ -95,7 +96,8 @@ jobs:
         with:
           persist-credentials: false
 
-      # Runtime only — the binary is framework-dependent; no restore/build here.
+      # Runtime only — the artifact is the self-contained Linux candidate
+      # staged by ci.yml; no restore/build here.
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           global-json-file: global.json

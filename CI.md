@@ -72,7 +72,7 @@ Caveats:
 - A "pass" check status from a review bot can mean "review skipped" (rate limit) — never treat check status as approval.
 - Resolving a thread without a reply is prohibited; the thread must carry a fix reference or a skip reason.
 
-Server-side enforcement: `main` has branch protection with **required conversation resolution** and a **required status check** — GitHub refuses the merge while any review thread is unresolved or the `ci-gate` check is red. `ci-gate` (aggregate job in `pr.yml`) always runs, even on docs-only PRs where the other jobs are skipped, and fails if any needed job (`docs-only`, `ci`, `goldens`) failed or was cancelled. `ci` is the reusable workflow [ci.yml](.github/workflows/ci.yml) — `lint`, `runner-tests`, and the three `build-and-test` matrix legs running the full E2E suite — so a red leg inside it still fails the caller job and therefore `ci-gate`. The required check context is always posted. `enforce_admins` is on — no one merges red CI. One-time setup (admin):
+Server-side enforcement: `main` has branch protection with **required conversation resolution** and a **required status check** — GitHub refuses the merge while any review thread is unresolved or the `ci-gate` check is red. `ci-gate` (aggregate job in `pr.yml`) always runs, even on docs-only PRs where the other jobs are skipped, and fails if any needed job (`docs-only`, `ci`, `goldens`) failed or was cancelled. `ci` is the reusable workflow [ci.yml](.github/workflows/ci.yml) — `lint`, `runner-tests`, `version-metadata`, and the three `build-and-test` matrix legs running the full E2E suite — so a red leg inside it still fails the caller job and therefore `ci-gate`. The required check context is always posted. `enforce_admins` is on — no one merges red CI. One-time setup (admin):
 
 ```bash
 gh api -X PUT "repos/dwojtaszek/zipper/branches/main/protection" \
@@ -170,9 +170,9 @@ Bot infra errors — retry, don't block merge.
 Regenerate with:
 
 ```bash
-# publish-bin/ is created by the publish step below; it is gitignored
-dotnet publish src/Zipper.csproj -c Release -o ./publish-bin
-ZIPPER_CLI=$(pwd)/publish-bin/Zipper bash tests/goldens/run-goldens.sh --capture
+# publish/ is created by the publish step below; it is gitignored
+dotnet publish src/Zipper.csproj -c Release -r linux-x64 --self-contained true -o ./publish/linux-x64
+ZIPPER_CLI=$(pwd)/publish/linux-x64/Zipper bash tests/goldens/run-goldens.sh --capture
 ```
 
 ## Dependency Update Policy
