@@ -39,7 +39,7 @@ public sealed class ChaosModule : CliModule
         }
     }
 
-    public bool TryBuild(bool loadfileOnly, LoadFileFormat currentFormat, out ChaosConfig config)
+    public bool TryBuild(bool loadfileOnly, IReadOnlyList<LoadFileFormat> formats, out ChaosConfig config)
     {
         if (_mode)
         {
@@ -50,11 +50,17 @@ public sealed class ChaosModule : CliModule
                 return false;
             }
 
-            if (currentFormat != LoadFileFormat.Dat && currentFormat != LoadFileFormat.Opt)
+            if (formats is { Count: > 0 })
             {
-                Console.Error.WriteLine("Error: --chaos-mode is only supported for dat and opt load file formats.");
-                config = default!;
-                return false;
+                foreach (var format in formats)
+                {
+                    if (format != LoadFileFormat.Dat && format != LoadFileFormat.Opt)
+                    {
+                        Console.Error.WriteLine("Error: --chaos-mode is only supported for dat and opt load file formats.");
+                        config = default!;
+                        return false;
+                    }
+                }
             }
         }
         else
@@ -96,9 +102,11 @@ public sealed class ChaosModule : CliModule
                 return false;
             }
 
-            if (scenario.RequiredFormat.HasValue && scenario.RequiredFormat.Value != currentFormat)
+            // For scenarios, validate against the first format (or all formats if needed)
+            var primaryFormat = formats?.FirstOrDefault() ?? LoadFileFormat.Dat;
+            if (scenario.RequiredFormat.HasValue && scenario.RequiredFormat.Value != primaryFormat)
             {
-                Console.Error.WriteLine($"Error: Chaos scenario '{_scenario}' requires --loadfile-format {scenario.RequiredFormat.Value.ToString().ToLowerInvariant()} but got {currentFormat.ToString().ToLowerInvariant()}.");
+                Console.Error.WriteLine($"Error: Chaos scenario '{_scenario}' requires --loadfile-format {scenario.RequiredFormat.Value.ToString().ToLowerInvariant()} but got {primaryFormat.ToString().ToLowerInvariant()}.");
                 config = default!;
                 return false;
             }
@@ -113,12 +121,33 @@ public sealed class ChaosModule : CliModule
 
         if (!string.IsNullOrEmpty(_types))
         {
-            var validTypes = new HashSet<string>(ChaosAnomalyTypes.ForFormat(currentFormat), StringComparer.OrdinalIgnoreCase);
+            // Build union of valid types for all formats
+            var validTypesUnion = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (formats is { Count: > 0 })
+            {
+                foreach (var format in formats)
+                {
+                    foreach (var t in ChaosAnomalyTypes.ForFormat(format))
+                    {
+                        validTypesUnion.Add(t);
+                    }
+                }
+            }
+            else
+            {
+                // Fallback to dat format if no formats specified
+                foreach (var t in ChaosAnomalyTypes.ForFormat(LoadFileFormat.Dat))
+                {
+                    validTypesUnion.Add(t);
+                }
+            }
+
             foreach (var t in _types.Split(','))
             {
-                if (!validTypes.Contains(t.Trim()))
+                var trimmed = t.Trim();
+                if (!validTypesUnion.Contains(trimmed))
                 {
-                    Console.Error.WriteLine($"Error: Invalid chaos type '{t.Trim()}'. Valid types for {currentFormat}: {string.Join(", ", validTypes)}");
+                    Console.Error.WriteLine($"Error: Invalid chaos type '{trimmed}'. Valid types for selected formats: {string.Join(", ", validTypesUnion.OrderBy(x => x))}");
                     config = default!;
                     return false;
                 }

@@ -7,7 +7,7 @@ namespace Zipper.Tests;
 [Collection("ConsoleTests")]
 public class ChaosModuleTests
 {
-    private static bool TryBuildWithValues(ChaosConfigSpec spec, out ChaosConfig config, bool loadfileOnly = true, LoadFileFormat currentFormat = LoadFileFormat.Dat)
+    private static bool TryBuildWithValues(ChaosConfigSpec spec, out ChaosConfig config, bool loadfileOnly = true, IReadOnlyList<LoadFileFormat>? formats = null)
     {
         var module = new ChaosModule();
         if (spec.Mode)
@@ -26,7 +26,7 @@ public class ChaosModuleTests
         {
             Assert.True(module.TryApply("--chaos-scenario", spec.Scenario));
         }
-        return module.TryBuild(loadfileOnly, currentFormat, out config);
+        return module.TryBuild(loadfileOnly, formats ?? new List<LoadFileFormat> { LoadFileFormat.Dat }, out config);
     }
 
     private sealed record ChaosConfigSpec(string? Amount, string? Types, string? Scenario)
@@ -125,9 +125,9 @@ public class ChaosModuleTests
     [Fact]
     public void TryBuild_ChaosModeWithCsvFormat_ReturnsFalse()
     {
-        // currentFormat is the single-format value; a non-DAT/OPT format rejects --chaos-mode.
+        // Formats list with a non-DAT/OPT format rejects --chaos-mode.
         var spec = new ChaosConfigSpec(Amount: null, Types: null, Scenario: null) { Mode = true };
-        Assert.False(TryBuildWithValues(spec, out _, currentFormat: LoadFileFormat.Csv));
+        Assert.False(TryBuildWithValues(spec, out _, formats: new List<LoadFileFormat> { LoadFileFormat.Csv }));
     }
 
     [Fact]
@@ -139,7 +139,7 @@ public class ChaosModuleTests
         Assert.True(module.TryApply("--chaos-types", "quotes,columns"));
         Assert.True(module.TryApply("--chaos-scenario", "test"));
 
-        Assert.False(module.TryBuild(true, LoadFileFormat.Dat, out _));
+        Assert.False(module.TryBuild(true, new List<LoadFileFormat> { LoadFileFormat.Dat }, out _));
     }
 
     [Fact]

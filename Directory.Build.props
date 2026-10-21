@@ -58,10 +58,10 @@
           Outputs="@(_GitHookTemplate->'$(MSBuildThisFileDirectory).git/hooks/%(Filename)%(Extension)')">
     <Exec Command="bash &quot;$(MSBuildThisFileDirectory)setup-hook.sh&quot; --quiet"
           Condition="'$(OS)' != 'Windows_NT'"
-          />
+          IgnoreExitError="true" />
     <Exec Command="cmd /c &quot;$(MSBuildThisFileDirectory)setup-hook.bat&quot; --quiet"
           Condition="'$(OS)' == 'Windows_NT'"
-          />
+          IgnoreExitError="true" />
   </Target>
 
 </Project>
