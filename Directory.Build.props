@@ -56,12 +56,16 @@
           Condition="'@(_GitHookTemplate)' != '' AND (Exists('$(MSBuildThisFileDirectory).git/HEAD') OR Exists('$(MSBuildThisFileDirectory).git'))"
           Inputs="@(_GitHookTemplate)"
           Outputs="@(_GitHookTemplate->'$(MSBuildThisFileDirectory).git/hooks/%(Filename)%(Extension)')">
+    <!-- IgnoreExitCode (not IgnoreExitError — the latter is not an Exec parameter
+         and fails every build where this target actually executes, e.g. worktrees
+         where the .git/hooks outputs can never exist). Hook sync must never fail
+         the build; setup-hook.sh is the authoritative installer. -->
     <Exec Command="bash &quot;$(MSBuildThisFileDirectory)setup-hook.sh&quot; --quiet"
           Condition="'$(OS)' != 'Windows_NT'"
-          IgnoreExitError="true" />
+          IgnoreExitCode="true" />
     <Exec Command="cmd /c &quot;$(MSBuildThisFileDirectory)setup-hook.bat&quot; --quiet"
           Condition="'$(OS)' == 'Windows_NT'"
-          IgnoreExitError="true" />
+          IgnoreExitCode="true" />
   </Target>
 
 </Project>
