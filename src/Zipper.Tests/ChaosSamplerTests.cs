@@ -133,4 +133,23 @@ public class ChaosSamplerTests
         int count = ChaosSampler.ParseChaosAmount("10.5%", 100);
         Assert.Equal(10, count); // 10.5% of 100 = 10.5, truncated to 10
     }
+
+    [Fact]
+    public void ParseChaosAmount_PercentageOnlySign_ThrowsArgumentException()
+    {
+        Assert.Throws<ArgumentException>(() => ChaosSampler.ParseChaosAmount("%", 100));
+    }
+
+    [Fact]
+    public void ParseChaosAmount_PercentageWhitespaceBefore_ThrowsArgumentException()
+    {
+        Assert.Throws<ArgumentException>(() => ChaosSampler.ParseChaosAmount(" %", 100));
+    }
+
+    [Fact]
+    public void ParseChaosAmount_ExactCountCappedToTotalLines()
+    {
+        int count = ChaosSampler.ParseChaosAmount("500", 100);
+        Assert.Equal(100, count);
+    }
 }
