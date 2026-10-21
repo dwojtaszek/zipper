@@ -12,6 +12,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import gitenv  # noqa: F401  # Git identity for fixture repositories
 
@@ -419,6 +420,87 @@ class WipCommitTests(unittest.TestCase):
     def test_whenPrHeadCommandFails_returnsFalse(self):
         with patch("runner.run_cmd", return_value=(1, "", "gh: error")):
             self.assertFalse(runner._pr_head_commit_is_wip(1117))
+
+
+class OpenCodeSessionScopingTests(unittest.TestCase):
+    def test_opencodeRunMission_scopesContinueToWorktreeSessionAndSetsPwd(self):
+        opencode = runner.AGENT_PLUGINS["opencode"]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = os.path.join(tmpdir, "opencode.db")
+            wt_dir = os.path.join(tmpdir, "worktree-1267")
+            main_dir = os.path.join(tmpdir, "main-repo")
+            other_wt = os.path.join(tmpdir, "worktree-other")
+            os.makedirs(wt_dir, exist_ok=True)
+            os.makedirs(main_dir, exist_ok=True)
+            os.makedirs(other_wt, exist_ok=True)
+
+            import sqlite3
+            conn = sqlite3.connect(db_path)
+            conn.execute(
+                "CREATE TABLE session_v2 ("
+                "id TEXT PRIMARY KEY, parent_id TEXT, directory TEXT, "
+                "time_updated INTEGER, time_archived INTEGER)"
+            )
+            # Newer session in main_dir must NOT be selected when running in wt_dir
+            conn.execute(
+                "INSERT INTO session_v2 VALUES (?, ?, ?, ?, ?)",
+                ("ses_main", None, os.path.abspath(main_dir), 200, None),
+            )
+            conn.execute(
+                "INSERT INTO session_v2 VALUES (?, ?, ?, ?, ?)",
+                ("ses_wt_child", "ses_wt", os.path.abspath(wt_dir), 190, None),
+            )
+            conn.execute(
+                "INSERT INTO session_v2 VALUES (?, ?, ?, ?, ?)",
+                ("ses_wt", None, os.path.abspath(wt_dir), 150, None),
+            )
+            conn.commit()
+            conn.close()
+
+            with patch.dict(os.environ, {"OPENCODE_DB_PATH": db_path, "PWD": main_dir}):
+                with patch("subprocess.Popen") as mock_popen:
+                    proc = MagicMock()
+                    proc.communicate.return_value = ("ok", "")
+                    proc.returncode = 0
+                    mock_popen.return_value = proc
+
+                    code, _, _ = opencode.run_mission("fix issue", wt_dir, is_continue=True, model="opencode/big-pickle")
+                    self.assertEqual(code, 0)
+                    called_args = mock_popen.call_args.args[0]
+                    called_kwargs = mock_popen.call_args.kwargs
+                    self.assertIn("--session", called_args)
+                    self.assertEqual(called_args[called_args.index("--session") + 1], "ses_wt")
+                    self.assertNotIn("--continue", called_args)
+                    self.assertEqual(called_kwargs["cwd"], os.path.abspath(wt_dir))
+                    self.assertEqual(called_kwargs["env"]["PWD"], os.path.abspath(wt_dir))
+
+                    # When no session exists for other_wt, omit --continue/--session to start fresh in other_wt
+                    mock_popen.reset_mock()
+                    code, _, _ = opencode.run_mission("fix issue", other_wt, is_continue=True, model="opencode/big-pickle")
+                    self.assertEqual(code, 0)
+                    called_args = mock_popen.call_args.args[0]
+                    self.assertNotIn("--continue", called_args)
+                    self.assertNotIn("--session", called_args)
+                    self.assertEqual(mock_popen.call_args.kwargs["env"]["PWD"], os.path.abspath(other_wt))
+
+    def test_autoCommitWipCheckpoint_whenPreCommitHookRejects_fallsBackToNoVerify(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_dir = os.path.join(tmpdir, "repo")
+            os.makedirs(repo_dir)
+            subprocess.run(["git", "init", "-b", "main"], cwd=repo_dir, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_dir, check=True)
+            subprocess.run(["git", "config", "user.name", "Test"], cwd=repo_dir, check=True)
+            hook_path = os.path.join(repo_dir, ".git", "hooks", "pre-commit")
+            with open(hook_path, "w") as f:
+                f.write("#!/usr/bin/env bash\nexit 1\n")
+            os.chmod(hook_path, 0o755)
+
+            with open(os.path.join(repo_dir, "file.txt"), "w") as f:
+                f.write("wip content\n")
+
+            runner._auto_commit_wip_checkpoint(repo_dir, 1267, "opencode")
+            self.assertTrue(runner._worktree_is_clean(repo_dir))
+            self.assertTrue(runner._latest_commit_is_wip(repo_dir))
 
 
 if __name__ == "__main__":

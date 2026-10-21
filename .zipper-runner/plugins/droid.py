@@ -168,8 +168,11 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
     p = None
     terminate = True
     output = _MissionOutput()
+    env = os.environ.copy()
+    env["PWD"] = os.path.abspath(cwd)
+    env.pop("OLDPWD", None)
     try:
-        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=cwd, env=env, start_new_session=True)
         _drain_output(p, cmd, output)
         result = p.returncode, output.stdout_text(), output.stderr.decode(errors="replace")
         terminate = p.returncode != 0

@@ -29,7 +29,7 @@ fi
 # 1. Unit tests — skip if post-commit wrote a recent marker on the same HEAD,
 #    or run only DocsDriftTests if the entire branch diff since merge-base is docs-only.
 # ──────────────────────────────────────────────────
-MERGE_BASE=$(git merge-base HEAD main 2>/dev/null || git merge-base HEAD origin/main 2>/dev/null || echo "")
+MERGE_BASE=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main 2>/dev/null || echo "")
 CHANGED_SINCE_BASE=""
 BRANCH_DIFF_OK=false
 if [[ -n "$MERGE_BASE" ]]; then

@@ -10,6 +10,7 @@ Protocol interface:
     check_token_health() -> bool
     run_mission(prompt, cwd, is_continue=False) -> tuple[int, str, str]
 """
+import os
 import subprocess
 import shutil
 
@@ -88,6 +89,9 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
         base += ["-m", model_name]
 
     print(f"[codex] Running mission (continue={is_continue}) in {cwd}")
+    env = os.environ.copy()
+    env["PWD"] = os.path.abspath(cwd)
+    env.pop("OLDPWD", None)
     try:
         result = subprocess.run(
             base,
@@ -96,6 +100,7 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
             stderr=subprocess.PIPE,
             text=True,
             cwd=cwd,
+            env=env,
             timeout=2700,
         )
         output = result.stdout

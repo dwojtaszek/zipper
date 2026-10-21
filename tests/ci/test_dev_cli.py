@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -131,6 +132,44 @@ class DevCliAndLocalWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertEqual(res.stdout.strip(), "")
+
+    def test_dev_cli_falls_back_gracefully_when_default_main_ref_missing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            for rel in ("dev.sh", "setup-hook.sh"):
+                dst = tmp_path / rel
+                dst.write_text((ROOT / rel).read_text(encoding="utf-8"), encoding="utf-8")
+                dst.chmod(0o755)
+            subprocess.run(["git", "init", "-b", "feature-only"], cwd=tmp_path, check=True, capture_output=True)
+            subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=tmp_path, check=True)
+            subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_path, check=True)
+            (tmp_path / "README.md").write_text("# test\n", encoding="utf-8")
+            subprocess.run(["git", "add", "README.md"], cwd=tmp_path, check=True)
+            subprocess.run(["git", "commit", "-m", "initial"], cwd=tmp_path, check=True, capture_output=True)
+            (tmp_path / "README.md").write_text("# updated\n", encoding="utf-8")
+
+            res = subprocess.run(
+                ["bash", str(tmp_path / "dev.sh"), "check", "--dry-run"],
+                cwd=tmp_path,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(res.returncode, 0, res.stderr)
+            self.assertIn("falling back to 'HEAD'", res.stderr)
+            self.assertIn("DocsDriftTests", res.stdout)
+
+    def test_check_zipper_runner_only_runs_runner_tests_and_docs_drift(self):
+        res = self._run_dev(
+            "check",
+            "--dry-run",
+            "--files",
+            ".zipper-runner/runner.py,.zipper-runner/plugins/opencode.py",
+        )
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("Run zipper-runner tests", res.stdout)
+        self.assertIn("Run DocsDriftTests", res.stdout)
+        self.assertNotIn("Run unit + property tests", res.stdout)
 
 
 if __name__ == "__main__":

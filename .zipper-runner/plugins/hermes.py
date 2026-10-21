@@ -84,6 +84,9 @@ def run_mission(
 
     print(f"[hermes] Running mission (continue={is_continue}) in {cwd}")
     p = None
+    env = os.environ.copy()
+    env["PWD"] = os.path.abspath(cwd)
+    env.pop("OLDPWD", None)
     try:
         p = subprocess.Popen(
             base,
@@ -91,6 +94,7 @@ def run_mission(
             stderr=subprocess.PIPE,
             text=True,
             cwd=cwd,
+            env=env,
         )
         # 45-minute hard timeout to prevent indefinite lockups
         stdout, stderr = p.communicate(timeout=2700)

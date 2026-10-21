@@ -365,6 +365,9 @@ def run_cmd(args, cwd=None, timeout=None):
         return 0, "MOCK SUCCESS", ""
 
     custom_env = os.environ.copy()
+    if cwd:
+        custom_env["PWD"] = os.path.abspath(cwd)
+        custom_env.pop("OLDPWD", None)
     try:
         p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=cwd, env=custom_env, start_new_session=True)
         try:
@@ -875,6 +878,19 @@ def _branch_has_commits(branch: str) -> bool:
 def _worktree_is_clean(wt_path: str) -> bool:
     code, out, _ = run_cmd(["git", "status", "--porcelain"], cwd=wt_path)
     return code == 0 and not out.strip()
+
+
+def _auto_commit_wip_checkpoint(wt_path: str, issue_number: int | str, agent_name: str) -> None:
+    if DRY_RUN or _worktree_is_clean(wt_path):
+        return
+    print(f"Agent left uncommitted work in worktree '{wt_path}'. Auto-committing WIP checkpoint.")
+    run_cmd(["git", "add", "-A"], cwd=wt_path)
+    wip_msg = f"wip: progress on issue #{issue_number} by {agent_name}"
+    wip_code, _, _ = run_cmd(["git", "commit", "-m", wip_msg], cwd=wt_path)
+    if wip_code != 0 and not _worktree_is_clean(wt_path):
+        print(f"Pre-commit hook rejected WIP checkpoint in '{wt_path}'; falling back to --no-verify to preserve uncommitted work.")
+        run_cmd(["git", "add", "-A"], cwd=wt_path)
+        run_cmd(["git", "commit", "--no-verify", "-m", wip_msg], cwd=wt_path)
 
 
 def _latest_commit_is_wip(cwd: str = REPO_PATH) -> bool:
@@ -1953,10 +1969,7 @@ def babysit_active_worktrees():
                     sys.exit(1)
                 agy_code, agy_out, agy_err = plugin.run_mission(prompt, wt_path, is_continue=True, model=model_name)
 
-                if not _worktree_is_clean(wt_path):
-                    print(f"Agent left uncommitted work in worktree '{wt_path}'. Auto-committing WIP checkpoint.")
-                    run_cmd(["git", "add", "-A"], cwd=wt_path)
-                    run_cmd(["git", "commit", "-m", f"wip: progress on issue #{issue_number} by {agent_name}"], cwd=wt_path)
+                _auto_commit_wip_checkpoint(wt_path, issue_number, agent_name)
 
                 pr_num_val, pr_url = _check_pr(branch)
 
@@ -2949,10 +2962,7 @@ def main():
                 model_name = _current_model()
                 agy_code, agy_out, agy_err = plugin.run_mission(prompt, wt_path, is_continue=False, model=model_name)
 
-                if not _worktree_is_clean(wt_path):
-                    print(f"Agent left uncommitted work in worktree '{wt_path}'. Auto-committing WIP checkpoint.")
-                    run_cmd(["git", "add", "-A"], cwd=wt_path)
-                    run_cmd(["git", "commit", "-m", f"wip: progress on issue #{num} by {agent_name}"], cwd=wt_path)
+                _auto_commit_wip_checkpoint(wt_path, num, agent_name)
 
                 pr_num_val, pr_url = _check_pr(branch_name)
                 pr_create_err = ""

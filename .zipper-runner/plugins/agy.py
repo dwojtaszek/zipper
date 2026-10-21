@@ -155,6 +155,11 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
         base += ["--model", model]
     base += ["--prompt", prompt, "--print-timeout", "30m", "--dangerously-skip-permissions"]
 
+    abs_cwd = os.path.abspath(cwd)
+    env = os.environ.copy()
+    env["PWD"] = abs_cwd
+    env.pop("OLDPWD", None)
+
     print(f"[agy] Running mission (continue={is_continue}) in {cwd}")
     try:
         p = subprocess.Popen(
@@ -162,7 +167,8 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            cwd=cwd,
+            cwd=abs_cwd,
+            env=env,
         )
         # 45-minute hard timeout to prevent indefinite lockups
         stdout, stderr = p.communicate(timeout=2700)
