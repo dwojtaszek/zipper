@@ -59,16 +59,24 @@ internal static class CrossCuttingRules
                     .Where(t => !string.IsNullOrEmpty(t))
                     .ToList();
 
+                // Reject any requested type that is not valid for ANY selected format
+                foreach (var requestedType in requestedTypes)
+                {
+                    if (!validTypesPerFormat.Values.Any(v => v.Contains(requestedType, StringComparer.OrdinalIgnoreCase)))
+                    {
+                        Console.Error.WriteLine($"Error: Chaos type '{requestedType}' is not valid for any selected load file format.");
+                        return false;
+                    }
+                }
+
+                // Reject any format whose valid type set matches none of the requested types
                 foreach (var format in formats)
                 {
                     var validTypes = validTypesPerFormat[format];
-                    foreach (var requestedType in requestedTypes)
+                    if (!requestedTypes.Any(t => validTypes.Contains(t, StringComparer.OrdinalIgnoreCase)))
                     {
-                        if (!validTypes.Contains(requestedType, StringComparer.OrdinalIgnoreCase))
-                        {
-                            Console.Error.WriteLine($"Error: Chaos type '{requestedType}' is not valid for load file format '{format.ToString().ToLowerInvariant()}'. Valid types: {string.Join(", ", validTypes)}");
-                            return false;
-                        }
+                        Console.Error.WriteLine($"Error: --chaos-types selects no valid type for load file format '{format.ToString().ToLowerInvariant()}'. Valid types: {string.Join(", ", validTypes)}");
+                        return false;
                     }
                 }
             }

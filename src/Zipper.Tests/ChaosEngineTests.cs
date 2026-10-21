@@ -623,7 +623,7 @@ public class ChaosEngineTests
             eol: "\r\n",
             seed: 42));
 
-        Assert.Contains("Invalid chaos amount format", ex.Message);
+        Assert.Contains("Invalid chaos amount format", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
