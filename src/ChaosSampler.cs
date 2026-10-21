@@ -45,7 +45,16 @@ internal class ChaosSampler
                 {
                     return 0;
                 }
-                return (int)(totalLines * pct / 100.0);
+                if (pct == 0)
+                {
+                    return 0;
+                }
+                var count = (int)(totalLines * pct / 100.0);
+                if (count < 1)
+                {
+                    count = 1;
+                }
+                return count;
             }
             throw new ArgumentException($"Invalid chaos amount percentage format: '{chaosAmount}'.", nameof(chaosAmount));
         }
