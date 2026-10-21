@@ -30,11 +30,23 @@ if "%GIT_COMMON_DIR%"=="" (
 )
 set "HOOK_DIR=%GIT_COMMON_DIR%\hooks"
 
-if not exist "%HOOK_DIR%" mkdir "%HOOK_DIR%"
+if not exist "%HOOK_DIR%" (
+    mkdir "%HOOK_DIR%" >nul 2>nul
+    if errorlevel 1 (
+        if "%QUIET%"=="1" ( popd & endlocal & exit /b 0 )
+        echo Error: failed to create %HOOK_DIR%
+        popd
+        endlocal
+        exit /b 1
+    )
+)
 
 call :install_hook pre-commit
+if errorlevel 1 ( popd & endlocal & exit /b 1 )
 call :install_hook post-commit
+if errorlevel 1 ( popd & endlocal & exit /b 1 )
 call :install_hook pre-push
+if errorlevel 1 ( popd & endlocal & exit /b 1 )
 
 if "%QUIET%"=="0" (
     echo.
@@ -55,13 +67,14 @@ set "src=%TEMPLATE_DIR%\%name%"
 set "dst=%HOOK_DIR%\%name%"
 if not exist "%src%" (
     if "%QUIET%"=="0" echo Warning: template %src% not found -- skipping %name%
-    goto :eof
+    exit /b 0
 )
-copy /y "%src%" "%dst%" >nul
+copy /y "%src%" "%dst%" >nul 2>nul
 if errorlevel 1 (
+    if "%QUIET%"=="1" exit /b 0
     echo Error: failed to copy %src% -^> %dst%
     echo   (check permissions, disk space, and that the destination is writable)
     exit /b 1
 )
 if "%QUIET%"=="0" echo Installed: %dst%
-goto :eof
+exit /b 0

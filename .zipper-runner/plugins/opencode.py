@@ -10,16 +10,62 @@ Protocol interface:
     check_token_health() -> bool
     run_mission(prompt, cwd, is_continue=False) -> tuple[int, str, str]
 """
+import os
+from pathlib import Path
+import sqlite3
 import subprocess
 import shutil
+import tempfile
+
+
+def _with_cwd_env(cwd: str) -> dict[str, str]:
+    env = os.environ.copy()
+    env["PWD"] = os.path.abspath(cwd)
+    env.pop("OLDPWD", None)
+    return env
+
+
+def _find_latest_session_for_cwd(cwd: str) -> str | None:
+    """Finds the latest top-level OpenCode session ID scoped strictly to cwd.
+
+    Returns None if no session exists for cwd or if the OpenCode SQLite DB
+    is unavailable, allowing run_mission to fall back gracefully to starting
+    a fresh session in cwd instead of resuming an unrelated worktree/main session.
+    """
+    db_path = os.environ.get(
+        "OPENCODE_DB_PATH",
+        os.path.expanduser("~/.local/share/opencode/opencode.db"),
+    )
+    if not os.path.isfile(db_path):
+        return None
+    abs_cwd = os.path.abspath(cwd)
+    real_cwd = os.path.realpath(cwd)
+    try:
+        db_uri = f"{Path(os.path.abspath(db_path)).as_uri()}?mode=ro"
+        conn = sqlite3.connect(db_uri, uri=True, timeout=2.0)
+        try:
+            row = conn.execute(
+                "SELECT id FROM session_v2 "
+                "WHERE directory IN (?, ?) AND parent_id IS NULL AND time_archived IS NULL "
+                "ORDER BY time_updated DESC LIMIT 1",
+                (abs_cwd, real_cwd),
+            ).fetchone()
+            return str(row[0]) if row and row[0] else None
+        finally:
+            conn.close()
+    except Exception:
+        return None
 
 
 def list_models() -> list[str]:
     """Returns list of available model strings (agent/model format)."""
+    probe_dir = tempfile.gettempdir()
     for attempt in range(2):
         try:
             stdout = subprocess.check_output(
                 ["opencode", "models"],
+                cwd=probe_dir,
+                env=_with_cwd_env(probe_dir),
                 text=True, stderr=subprocess.DEVNULL, timeout=15,
             )
             models = [
@@ -53,10 +99,13 @@ def check_token_health(model: str | None = None) -> bool:
     is down or credentials are missing. Avoids launching a full run session
     which hangs when the server returns UnknownError on health probes.
     """
+    probe_dir = tempfile.gettempdir()
     for attempt in range(2):
         try:
             result = subprocess.run(
                 ["opencode", "models"],
+                cwd=probe_dir,
+                env=_with_cwd_env(probe_dir),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -103,14 +152,19 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
     Returns:
         (exit_code, stdout, stderr)
     """
+    abs_cwd = os.path.abspath(cwd)
     base = ["opencode", "run"]
     if is_continue:
-        base += ["--continue"]
+        session_id = _find_latest_session_for_cwd(abs_cwd)
+        if session_id:
+            base += ["--session", session_id]
+        else:
+            print(f"[opencode] No existing session found for {abs_cwd}; starting fresh session in worktree.")
     if model and model != "default":
         base += ["--model", model]
     base += ["--auto", prompt]
 
-    print(f"[opencode] Running mission (continue={is_continue}) in {cwd}")
+    print(f"[opencode] Running mission (continue={is_continue}) in {abs_cwd}")
     p = None
     try:
         p = subprocess.Popen(
@@ -118,7 +172,8 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            cwd=cwd,
+            cwd=abs_cwd,
+            env=_with_cwd_env(abs_cwd),
         )
         # 45-minute hard timeout to prevent indefinite lockups
         stdout, stderr = p.communicate(timeout=2700)

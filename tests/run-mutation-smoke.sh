@@ -59,7 +59,7 @@ BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
 if [[ -n "$EXPLICIT_BASE" ]]; then
     MERGE_BASE=$(git rev-parse "$EXPLICIT_BASE" 2>/dev/null || echo "")
 else
-    MERGE_BASE=$(git merge-base HEAD main 2>/dev/null || git merge-base HEAD origin/main 2>/dev/null || echo "")
+    MERGE_BASE=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main 2>/dev/null || echo "")
 fi
 
 if [[ -z "$EXPLICIT_BASE" && ( "$BRANCH" == "main" || "$BRANCH" == "HEAD" ) ]]; then
@@ -236,18 +236,28 @@ compute_sha256() {
 }
 
 hash_stdin_files() {
+    local file_hashes=""
     if command -v sha256sum >/dev/null 2>&1; then
-        xargs -0 sha256sum 2>/dev/null | sha256sum | awk '{print $1}'
+        file_hashes=$(xargs -0 sha256sum 2>/dev/null || true)
+        if [[ -n "$file_hashes" && "$file_hashes" != *"  -" ]]; then
+            printf '%s\n' "$file_hashes" | sha256sum | awk '{print $1}'
+        fi
     elif command -v shasum >/dev/null 2>&1; then
-        xargs -0 shasum -a 256 2>/dev/null | shasum -a 256 | awk '{print $1}'
-    else
+        file_hashes=$(xargs -0 shasum -a 256 2>/dev/null || true)
+        if [[ -n "$file_hashes" && "$file_hashes" != *"  -" ]]; then
+            printf '%s\n' "$file_hashes" | shasum -a 256 | awk '{print $1}'
+        fi
+    elif command -v python3 >/dev/null 2>&1; then
         python3 -c 'import hashlib,sys
 h=hashlib.sha256()
+count=0
 for p in sys.stdin.buffer.read().split(b"\0"):
     if p:
+        count += 1
         h.update(p + b"\0")
         with open(p, "rb") as f: h.update(f.read())
-print(h.hexdigest())'
+if count > 0:
+    print(h.hexdigest())' 2>/dev/null || true
     fi
 }
 
@@ -255,21 +265,25 @@ PROD_TREE_HASH=""
 TESTS_TREE_HASH=""
 if [[ "$USE_CACHE" == "1" ]]; then
     PROD_TREE_HASH=$(
-        find src Directory.Build.props global.json BannedSymbols.txt -type f \
+        (find src Directory.Build.props global.json BannedSymbols.txt -type f \
             -not -path '*/Zipper.Tests/*' \
             -not -path '*/Zipper.Analyzers.Tests/*' \
             -not -path '*/bin/*' \
             -not -path '*/obj/*' \
             -not -name '*.mutation-*' \
-            -print0 2>/dev/null | sort -z | hash_stdin_files
+            -print0 2>/dev/null | sort -z | hash_stdin_files) || true
     )
     TESTS_TREE_HASH=$(
-        find src/Zipper.Tests -type f \
+        (find src/Zipper.Tests -type f \
             -not -path '*/bin/*' \
             -not -path '*/obj/*' \
             -not -name '*.mutation-*' \
-            -print0 2>/dev/null | sort -z | hash_stdin_files
+            -print0 2>/dev/null | sort -z | hash_stdin_files) || true
     )
+    if [[ -z "$PROD_TREE_HASH" || -z "$TESTS_TREE_HASH" ]]; then
+        echo "  ⚠ Mutant cache hashing unavailable; falling back to uncached mutation smoke."
+        USE_CACHE=0
+    fi
 fi
 
 BUILD_FLAGS=(--nologo -v quiet)

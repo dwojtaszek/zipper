@@ -10,6 +10,10 @@ cd "$REPO_ROOT"
 
 COMMAND="check"
 BASE_REF="${DEV_BASE_REF:-main}"
+EXPLICIT_BASE=0
+if [[ -n "${DEV_BASE_REF:-}" ]]; then
+    EXPLICIT_BASE=1
+fi
 DRY_RUN=0
 FULL_E2E=0
 ALL_TESTS=0
@@ -63,6 +67,7 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             BASE_REF="$2"
+            EXPLICIT_BASE=1
             shift 2
             ;;
         --files)
@@ -143,6 +148,12 @@ collect_changed_files() {
         base_commit="$BASE_REF"
     elif git rev-parse --verify "origin/${BASE_REF}^{commit}" >/dev/null 2>&1; then
         base_commit="origin/${BASE_REF}"
+    elif [[ "$EXPLICIT_BASE" -eq 0 ]] && git rev-parse --verify "HEAD~1^{commit}" >/dev/null 2>&1; then
+        echo "Warning: Default base ref '${BASE_REF}' not found; falling back to 'HEAD~1'." >&2
+        base_commit="HEAD~1"
+    elif [[ "$EXPLICIT_BASE" -eq 0 ]] && git rev-parse --verify "HEAD^{commit}" >/dev/null 2>&1; then
+        echo "Warning: Default base ref '${BASE_REF}' not found; falling back to 'HEAD'." >&2
+        base_commit="HEAD"
     else
         echo "Error: Cannot resolve base ref '${BASE_REF}' (checked '${BASE_REF}' and 'origin/${BASE_REF}')." >&2
         return 1
@@ -181,6 +192,7 @@ run_check() {
     local need_e2e_smoke=0
     local need_parity=0
     local need_ci_tests=0
+    local need_runner_tests=0
     local specific_e2e_scripts=()
 
     for file in "${changed_files[@]}"; do
@@ -225,6 +237,10 @@ run_check() {
                 need_ci_tests=1
                 need_docs_drift=1
                 ;;
+            .zipper-runner/*)
+                need_runner_tests=1
+                need_docs_drift=1
+                ;;
             tests/*)
                 need_parity=1
                 need_docs_drift=1
@@ -261,6 +277,10 @@ run_check() {
         run_step "Run CI workflow contract tests" python3 -m unittest discover -s tests/ci -p "test_*.py"
         run_step "Run workflow artifact handling check" bash tests/test-artifact-handling.sh
         run_step "Run coverage gate action tests" bash .github/actions/coverage-gate/test-coverage-gate.sh
+    fi
+
+    if [[ "$need_runner_tests" -eq 1 ]]; then
+        run_step "Run zipper-runner tests" python3 -m unittest discover -s .zipper-runner/tests -p "test_*.py"
     fi
 
     if [[ "$need_docs_drift" -eq 1 ]]; then

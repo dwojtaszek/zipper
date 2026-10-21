@@ -108,11 +108,15 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
         cmd += ["--model", model]
 
     print(f"[claude] Running mission (continue={is_continue}) in {cwd}")
+    env = os.environ.copy()
+    env["PWD"] = os.path.abspath(cwd)
+    env.pop("OLDPWD", None)
     try:
         with open(tmp_path, "w") as log_f:
             result = subprocess.run(
                 cmd,
                 cwd=cwd,
+                env=env,
                 stdout=log_f,
                 stderr=subprocess.STDOUT,
                 timeout=2400,

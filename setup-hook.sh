@@ -24,12 +24,16 @@ TEMPLATE_DIR=".github/hooks"
 
 # Works for both normal repos (returns .git) and worktrees (returns the
 # shared common dir under the main repo). Falls back gracefully.
-if ! HOOK_DIR=$(git rev-parse --git-common-dir 2>/dev/null)/hooks; then
+if ! GIT_COMMON_DIR="$(git rev-parse --git-common-dir 2>/dev/null)" || [[ -z "$GIT_COMMON_DIR" ]]; then
     [[ "$QUIET" -eq 0 ]] && echo "Error: not inside a git repository." >&2
     exit 1
 fi
+HOOK_DIR="$GIT_COMMON_DIR/hooks"
 
-mkdir -p "$HOOK_DIR"
+if ! mkdir -p "$HOOK_DIR" 2>/dev/null; then
+    [[ "$QUIET" -eq 0 ]] && echo "Error: failed to create $HOOK_DIR" >&2
+    [[ "$QUIET" -eq 1 ]] && exit 0 || exit 1
+fi
 
 install_hook() {
     local name="$1"
@@ -43,13 +47,13 @@ install_hook() {
         [[ "$QUIET" -eq 0 ]] && echo "Up-to-date: $dst"
         return 0
     fi
-    if ! cp "$src" "$dst"; then
-        echo "Error: failed to copy $src -> $dst" >&2
-        exit 1
+    if ! cp "$src" "$dst" 2>/dev/null; then
+        [[ "$QUIET" -eq 0 ]] && echo "Error: failed to copy $src -> $dst" >&2
+        [[ "$QUIET" -eq 1 ]] && return 0 || exit 1
     fi
-    if ! chmod u+x "$dst"; then
-        echo "Error: failed to make $dst executable" >&2
-        exit 1
+    if ! chmod u+x "$dst" 2>/dev/null; then
+        [[ "$QUIET" -eq 0 ]] && echo "Error: failed to make $dst executable" >&2
+        [[ "$QUIET" -eq 1 ]] && return 0 || exit 1
     fi
     [[ "$QUIET" -eq 0 ]] && echo "Installed: $dst"
     return 0

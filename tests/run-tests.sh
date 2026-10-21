@@ -40,7 +40,11 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-PARALLEL_LOG_DIR=$(mktemp -d)
+PARALLEL_LOG_DIR=""
+if ! PARALLEL_LOG_DIR=$(mktemp -d 2>/dev/null) || [[ -z "$PARALLEL_LOG_DIR" ]]; then
+    echo "Warning: failed to create temporary directory for parallel logs; falling back to serial execution." >&2
+    RUN_TESTS_JOBS=1
+fi
 PARALLEL_PIDS=()
 PARALLEL_LOGS=()
 PARALLEL_NAMES=()
@@ -53,7 +57,9 @@ cleanup_parallel_logs() {
     for pid in ${PARALLEL_PIDS[@]+"${PARALLEL_PIDS[@]}"}; do
         wait "$pid" 2>/dev/null || true
     done
-    rm -rf "$PARALLEL_LOG_DIR"
+    if [[ -n "$PARALLEL_LOG_DIR" && -d "$PARALLEL_LOG_DIR" ]]; then
+        rm -rf "$PARALLEL_LOG_DIR"
+    fi
 }
 trap cleanup_parallel_logs EXIT
 trap 'cleanup_parallel_logs; exit 130' INT TERM
@@ -96,7 +102,8 @@ flush_parallel_suites() {
 run_standalone_suite() {
     local label="$1"
     shift
-    local script_name="${2#./tests/}"
+    local script_arg="${2:-$1}"
+    local script_name="${script_arg#./tests/}"
     local force_serial=0
     case "$script_name" in
         test-artifact-handling.sh|test-run-tests-guard-parity.sh|test-ci-build-props.sh|./.github/actions/coverage-gate/test-coverage-gate.sh)

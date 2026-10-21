@@ -48,21 +48,41 @@ if %ERRORLEVEL% equ 0 (
         exit /b !EXIT_CODE!
     )
 ) else (
-    if "%COMMAND%"=="check" (
-        echo Error: '%COMMAND%' requires Git Bash ^(bash on PATH^). 1>&2
-        popd
-        exit /b 1
-    )
     if "%COMMAND%"=="mutation" (
-        echo Error: '%COMMAND%' requires Git Bash ^(bash on PATH^). 1>&2
+        echo Warning: 'mutation' smoke requires Git Bash ^(bash on PATH^); skipping mutation smoke on Windows without bash. 1>&2
         popd
-        exit /b 1
+        exit /b 0
+    )
+    if "%COMMAND%"=="check" (
+        echo Warning: Git Bash not found; falling back to native Windows verification gates. 1>&2
+        set "COMMAND=all_native"
     )
     if "%COMMAND%"=="all" (
-        echo Error: '%COMMAND%' requires Git Bash ^(bash on PATH^). 1>&2
-        popd
-        exit /b 1
+        echo Warning: Git Bash not found; falling back to native Windows verification gates. 1>&2
+        set "COMMAND=all_native"
     )
+)
+
+if "%COMMAND%"=="all_native" (
+    echo ==^> [dev] Build solution ^(Release^)
+    dotnet build zipper.sln -c Release
+    if !ERRORLEVEL! neq 0 ( popd & exit /b !ERRORLEVEL! )
+    echo ==^> [dev] Verify code formatting
+    dotnet format --verify-no-changes src/
+    if !ERRORLEVEL! neq 0 ( popd & exit /b !ERRORLEVEL! )
+    echo ==^> [dev] Run unit + property tests
+    dotnet test src\Zipper.Tests\Zipper.Tests.csproj --no-build -c Release
+    if !ERRORLEVEL! neq 0 ( popd & exit /b !ERRORLEVEL! )
+    echo ==^> [dev] Run Roslyn analyzer tests
+    dotnet test src\Zipper.Analyzers.Tests\Zipper.Analyzers.Tests.csproj --no-build -c Release
+    if !ERRORLEVEL! neq 0 ( popd & exit /b !ERRORLEVEL! )
+    call "%REPO_ROOT%tests\_zipper-cli.bat"
+    if !ERRORLEVEL! neq 0 ( popd & exit /b !ERRORLEVEL! )
+    echo ==^> [dev] Run basic E2E smoke
+    call "%REPO_ROOT%tests\run-e2e-basic.bat"
+    set "EXIT_CODE=!ERRORLEVEL!"
+    popd
+    exit /b !EXIT_CODE!
 )
 
 if "%COMMAND%"=="test" (
@@ -87,7 +107,6 @@ if "%COMMAND%"=="e2e" (
     if !ERRORLEVEL! neq 0 ( popd & exit /b !ERRORLEVEL! )
     call "%REPO_ROOT%tests\_zipper-cli.bat"
     if !ERRORLEVEL! neq 0 ( popd & exit /b !ERRORLEVEL! )
-    set "ZIPPER_EXECUTABLE=!_ZIPPER_BIN!"
     if "%~2"=="--full" (
         echo ==^> [dev] Run full E2E suite
         call "%REPO_ROOT%tests\run-tests.bat"
