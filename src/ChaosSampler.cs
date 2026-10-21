@@ -45,7 +45,7 @@ internal class ChaosSampler
                 {
                     return 0;
                 }
-                return Math.Max(1, (int)(totalLines * pct / 100.0));
+                return (int)(totalLines * pct / 100.0);
             }
             throw new ArgumentException($"Invalid chaos amount percentage format: '{chaosAmount}'.", nameof(chaosAmount));
         }
