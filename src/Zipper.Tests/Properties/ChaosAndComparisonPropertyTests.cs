@@ -28,6 +28,12 @@ public sealed class ChaosAndComparisonPropertyTests
 
         int expectedCount = ChaosSampler.ParseChaosAmount(chaosAmount, totalRecords);
         Assert.InRange(expectedCount, 0, totalRecords); // 0 is now valid for "0" or "0%"
+        // For percentage values > 0, expectedCount must be >= 0; sampling may produce 0 when floor is 0? But we changed to floor to 1
+        // But if boundedAmount is 0 and usePercentage is true, chaosAmount is "0%" -> returns 0
+        if (usePercentage && boundedAmount == 0)
+        {
+            Assert.Equal(0, expectedCount);
+        }
 
         var sampler1 = new ChaosSampler(totalRecords, chaosAmount, new Random(seed));
         var sampler2 = new ChaosSampler(totalRecords, chaosAmount, new Random(seed));
