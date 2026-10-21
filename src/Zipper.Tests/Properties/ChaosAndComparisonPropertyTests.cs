@@ -100,6 +100,17 @@ public sealed class ChaosAndComparisonPropertyTests
         else
         {
             // Anomaly is only recorded if the line was actually mutated
+            // Types that must always mutate: quotes (always drops a quote), opt-boundary (always flips boundary)
+            if (string.Equals(chosenType, "quotes", StringComparison.Ordinal))
+            {
+                Assert.NotEqual(line, mutated);
+                Assert.Equal(line.Length - quoteDelim.Length, mutated.Length);
+            }
+            else if (string.Equals(chosenType, "opt-boundary", StringComparison.Ordinal))
+            {
+                Assert.NotEqual(line, mutated);
+            }
+
             if (mutated != line)
             {
                 ChaosAnomaly recorded = Assert.Single(anomalies);
