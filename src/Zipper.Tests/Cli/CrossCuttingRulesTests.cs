@@ -158,4 +158,60 @@ public class CrossCuttingRulesTests
             m.Metadata.TryApply("--column-profile", "edrm-standard");
         }, "Error: --column-profile is not supported with --production-set.");
     }
+
+    [Fact]
+    public void Validate_ChaosTypeInvalidForEverySelectedFormat_ReturnsFalse()
+    {
+        AssertValidationError(m =>
+        {
+            ApplyValidBase(m);
+            m.LoadFile.TryApply("--loadfile-only", null);
+            m.LoadFile.TryApply("--load-file-formats", "dat");
+            m.Chaos.TryApply("--chaos-mode", null);
+            m.Chaos.TryApply("--chaos-types", "opt-boundary");
+        }, "Error: Chaos type 'opt-boundary' is not valid for any selected load file format.");
+    }
+
+    [Fact]
+    public void Validate_ChaosTypeValidForSelectedFormat_ReturnsTrue()
+    {
+        var modules = CreateModules(m =>
+        {
+            ApplyValidBase(m);
+            m.LoadFile.TryApply("--loadfile-only", null);
+            m.LoadFile.TryApply("--load-file-formats", "dat");
+            m.Chaos.TryApply("--chaos-mode", null);
+            m.Chaos.TryApply("--chaos-types", "quotes");
+        });
+
+        Assert.True(CrossCuttingRules.Validate(modules));
+    }
+
+    [Fact]
+    public void Validate_ChaosTypeSelectsNoValidTypeForOneOfSeveralFormats_ReturnsFalse()
+    {
+        AssertValidationError(m =>
+        {
+            ApplyValidBase(m);
+            m.LoadFile.TryApply("--loadfile-only", null);
+            m.LoadFile.TryApply("--load-file-formats", "dat,opt");
+            m.Chaos.TryApply("--chaos-mode", null);
+            m.Chaos.TryApply("--chaos-types", "quotes");
+        }, "Error: --chaos-types selects no valid type for load file format 'opt'.");
+    }
+
+    [Fact]
+    public void Validate_ChaosTypesCoveringEverySelectedFormat_ReturnsTrue()
+    {
+        var modules = CreateModules(m =>
+        {
+            ApplyValidBase(m);
+            m.LoadFile.TryApply("--loadfile-only", null);
+            m.LoadFile.TryApply("--load-file-formats", "dat,opt");
+            m.Chaos.TryApply("--chaos-mode", null);
+            m.Chaos.TryApply("--chaos-types", "quotes,opt-path");
+        });
+
+        Assert.True(CrossCuttingRules.Validate(modules));
+    }
 }

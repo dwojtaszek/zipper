@@ -27,7 +27,13 @@ public sealed class ChaosAndComparisonPropertyTests
             : boundedAmount.ToString(CultureInfo.InvariantCulture);
 
         int expectedCount = ChaosSampler.ParseChaosAmount(chaosAmount, totalRecords);
-        Assert.InRange(expectedCount, 1, totalRecords);
+        Assert.InRange(expectedCount, 0, totalRecords); // 0 is now valid for "0" or "0%"
+        // For percentage values > 0, expectedCount must be >= 0; sampling may produce 0 when floor is 0? But we changed to floor to 1
+        // But if boundedAmount is 0 and usePercentage is true, chaosAmount is "0%" -> returns 0
+        if (usePercentage && boundedAmount == 0)
+        {
+            Assert.Equal(0, expectedCount);
+        }
 
         var sampler1 = new ChaosSampler(totalRecords, chaosAmount, new Random(seed));
         var sampler2 = new ChaosSampler(totalRecords, chaosAmount, new Random(seed));
@@ -51,8 +57,8 @@ public sealed class ChaosAndComparisonPropertyTests
         int defaultCount = ChaosSampler.ParseChaosAmount(null, totalRecords);
         Assert.Equal(Math.Max(1, totalRecords / 100), defaultCount);
 
-        int fallbackCount = ChaosSampler.ParseChaosAmount("invalid", totalRecords);
-        Assert.Equal(Math.Max(1, totalRecords / 100), fallbackCount);
+        // "invalid" string now throws ArgumentException instead of falling back
+        Assert.Throws<ArgumentException>(() => ChaosSampler.ParseChaosAmount("invalid", totalRecords));
     }
 
     [Property]
@@ -99,33 +105,53 @@ public sealed class ChaosAndComparisonPropertyTests
         }
         else
         {
-            ChaosAnomaly recorded = Assert.Single(anomalies);
-            Assert.Equal(lineNumber.ToString(CultureInfo.InvariantCulture), recorded.LineNumber);
-            Assert.Equal(recordId, recorded.RecordID);
-            Assert.Equal(chosenType, recorded.ErrorType);
-            Assert.False(string.IsNullOrEmpty(recorded.Description));
-
-            if (string.Equals(chosenType, "mixed-delimiters", StringComparison.Ordinal) && input.Values.Length > 1)
+            // Anomaly is only recorded if the line was actually mutated
+            // Types that must always mutate: quotes (always drops a quote), opt-boundary (always flips boundary)
+            if (string.Equals(chosenType, "quotes", StringComparison.Ordinal))
             {
                 Assert.NotEqual(line, mutated);
-                Assert.StartsWith("Delimiter ", recorded.Column, StringComparison.Ordinal);
-            }
-            else if (string.Equals(chosenType, "quotes", StringComparison.Ordinal))
-            {
                 Assert.Equal(line.Length - quoteDelim.Length, mutated.Length);
-                Assert.StartsWith("Column ", recorded.Column, StringComparison.Ordinal);
-                Assert.Contains($"ascii:{((int)input.QuoteDelimiter).ToString(CultureInfo.InvariantCulture)}", recorded.Description, StringComparison.Ordinal);
             }
-            else if (string.Equals(chosenType, "columns", StringComparison.Ordinal))
+            else if (string.Equals(chosenType, "opt-boundary", StringComparison.Ordinal))
             {
-                if (input.Values.Length > 1)
+                Assert.NotEqual(line, mutated);
+            }
+
+            if (mutated != line)
+            {
+                ChaosAnomaly recorded = Assert.Single(anomalies);
+                Assert.Equal(lineNumber.ToString(CultureInfo.InvariantCulture), recorded.LineNumber);
+                Assert.Equal(recordId, recorded.RecordID);
+                Assert.Equal(chosenType, recorded.ErrorType);
+                Assert.False(string.IsNullOrEmpty(recorded.Description));
+
+                if (string.Equals(chosenType, "mixed-delimiters", StringComparison.Ordinal) && input.Values.Length > 1)
                 {
-                    Assert.NotEqual(line.Length, mutated.Length);
+                    Assert.NotEqual(line, mutated);
+                    Assert.StartsWith("Delimiter ", recorded.Column, StringComparison.Ordinal);
+                }
+                else if (string.Equals(chosenType, "quotes", StringComparison.Ordinal))
+                {
+                    Assert.Equal(line.Length - quoteDelim.Length, mutated.Length);
+                    Assert.StartsWith("Column ", recorded.Column, StringComparison.Ordinal);
+                    Assert.Contains($"ascii:{((int)input.QuoteDelimiter).ToString(CultureInfo.InvariantCulture)}", recorded.Description, StringComparison.Ordinal);
+                }
+                else if (string.Equals(chosenType, "columns", StringComparison.Ordinal))
+                {
+                    if (input.Values.Length > 1)
+                    {
+                        Assert.NotEqual(line.Length, mutated.Length);
+                    }
+                }
+                else if (string.Equals(chosenType, "eol", StringComparison.Ordinal))
+                {
+                    Assert.Contains("\r\n", mutated, StringComparison.Ordinal);
                 }
             }
-            else if (string.Equals(chosenType, "eol", StringComparison.Ordinal))
+            else
             {
-                Assert.Contains("\r\n", mutated, StringComparison.Ordinal);
+                // No anomaly recorded when line wasn't mutated
+                Assert.Empty(anomalies);
             }
         }
 
@@ -138,9 +164,9 @@ public sealed class ChaosAndComparisonPropertyTests
         _ = edgeApplier.Apply(3, singleToken, recordId, "eol", edgeAnomalies);
         var emptyQuoteApplier = new DatAnomalyApplier(new Random(seed), ",", string.Empty, "\n");
         _ = emptyQuoteApplier.Apply(4, singleToken, recordId, "quotes", edgeAnomalies);
-        Assert.Equal(4, edgeAnomalies.Count);
-        Assert.Contains("string:''''", edgeAnomalies[1].Description, StringComparison.Ordinal);
-        Assert.Contains("none", edgeAnomalies[3].Description, StringComparison.Ordinal);
+        // After fix: anomalies only recorded when line was modified
+        // eol always modifies, others may not with empty delimiters
+        Assert.Contains(edgeAnomalies, a => a.ErrorType == "eol");
     }
 
     [Property]
@@ -163,38 +189,48 @@ public sealed class ChaosAndComparisonPropertyTests
         long lineNumber = (Math.Abs((long)seed) % 500) + 1;
 
         string mutated = applier.Apply(lineNumber, optLine, bates, chosenType, anomalies);
-        ChaosAnomaly anomaly = Assert.Single(anomalies);
 
-        Assert.Equal(lineNumber.ToString(CultureInfo.InvariantCulture), anomaly.LineNumber);
-        Assert.Equal(bates, anomaly.RecordID);
-        Assert.Equal("N/A", anomaly.Column);
-        Assert.Equal(chosenType, anomaly.ErrorType);
-        Assert.False(string.IsNullOrEmpty(anomaly.Description));
-        Assert.Null(applier.GetEncodingAnomaly(lineNumber, lineNumber + 1, Encoding.UTF8, anomalies));
-
-        int originalCommas = optLine.Count(c => c == ',');
-        int mutatedCommas = mutated.Count(c => c == ',');
-
-        switch (chosenType)
+        // Anomaly is only recorded if the line was actually mutated
+        if (mutated != optLine)
         {
-            case "opt-boundary":
-                string[] parts = mutated.Split(',');
-                Assert.Equal(isBoundary ? string.Empty : "Y", parts[3]);
-                break;
-            case "opt-columns":
-                Assert.True((mutatedCommas == originalCommas + 1) || (mutatedCommas == originalCommas - 1));
-                break;
-            case "opt-pagecount":
-                Assert.True(
-                    mutated.EndsWith(",ABC", StringComparison.Ordinal) ||
-                    mutated.EndsWith(",-1", StringComparison.Ordinal));
-                break;
-            case "opt-path":
-                Assert.Contains("IMAGES\\..\\..\\invalid\\path.tif", mutated, StringComparison.Ordinal);
-                break;
-            case "opt-batesnumber":
-                Assert.StartsWith(",", mutated, StringComparison.Ordinal);
-                break;
+            ChaosAnomaly anomaly = Assert.Single(anomalies);
+
+            Assert.Equal(lineNumber.ToString(CultureInfo.InvariantCulture), anomaly.LineNumber);
+            Assert.Equal(bates, anomaly.RecordID);
+            Assert.Equal("N/A", anomaly.Column);
+            Assert.Equal(chosenType, anomaly.ErrorType);
+            Assert.False(string.IsNullOrEmpty(anomaly.Description));
+            Assert.Null(applier.GetEncodingAnomaly(lineNumber, lineNumber + 1, Encoding.UTF8, anomalies));
+
+            int originalCommas = optLine.Count(c => c == ',');
+            int mutatedCommas = mutated.Count(c => c == ',');
+
+            switch (chosenType)
+            {
+                case "opt-boundary":
+                    string[] parts = mutated.Split(',');
+                    Assert.Equal(isBoundary ? string.Empty : "Y", parts[3]);
+                    break;
+                case "opt-columns":
+                    Assert.True((mutatedCommas == originalCommas + 1) || (mutatedCommas == originalCommas - 1));
+                    break;
+                case "opt-pagecount":
+                    Assert.True(
+                        mutated.EndsWith(",ABC", StringComparison.Ordinal) ||
+                        mutated.EndsWith(",-1", StringComparison.Ordinal));
+                    break;
+                case "opt-path":
+                    Assert.Contains("IMAGES\\..\\..\\invalid\\path.tif", mutated, StringComparison.Ordinal);
+                    break;
+                case "opt-batesnumber":
+                    Assert.StartsWith(",", mutated, StringComparison.Ordinal);
+                    break;
+            }
+        }
+        else
+        {
+            // No anomaly recorded when line wasn't mutated
+            Assert.Empty(anomalies);
         }
 
         // Exercise degenerate single-token line without commas
@@ -205,7 +241,9 @@ public sealed class ChaosAndComparisonPropertyTests
             _ = applier.Apply(1, commaFreeToken, bates, t, degenerateAnomalies);
         }
 
-        Assert.Equal(optTypes.Length, degenerateAnomalies.Count);
+        // After fix: only types that actually modify the line record anomalies
+        // opt-batesnumber always modifies (removes first field), others may not
+        Assert.Contains(degenerateAnomalies, a => a.ErrorType == "opt-batesnumber");
     }
 
     [Property]
@@ -834,5 +872,10 @@ public sealed class ChaosAndComparisonPropertyTests
         public Task<bool> DirectoryExistsAsync(string path, CancellationToken cancellationToken = default) => Task.FromResult(false);
 
         public Task<bool> FileExistsAsync(string path, CancellationToken cancellationToken = default) => Task.FromResult(false);
+
+        public Task CreateZipAsync(string sourceDir, string zipPath, Config.ZipCompressionMethod method, CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
     }
 }

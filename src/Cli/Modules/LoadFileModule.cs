@@ -51,6 +51,32 @@ public sealed class LoadFileModule : CliModule
 
     public bool IsLoadFileFormatExplicit => _isLoadFileFormatExplicit;
 
+    /// <summary>
+    /// Gets the list of load file formats specified via --load-file-formats,
+    /// or a single format from --load-file-format, or null if neither was specified.
+    /// </summary>
+    public IReadOnlyList<LoadFileFormat>? Formats
+    {
+        get
+        {
+            if (!string.IsNullOrEmpty(_loadFileFormats))
+            {
+                return _loadFileFormats.Split(',')
+                    .Select(f => ArgumentHelpers.GetLoadFileFormat(f.Trim()))
+                    .Where(f => f.HasValue)
+                    .Select(f => f!.Value)
+                    .ToList();
+            }
+
+            if (_isLoadFileFormatExplicit)
+            {
+                return new List<LoadFileFormat> { ArgumentHelpers.GetLoadFileFormat(_loadFileFormat) ?? LoadFileFormat.Dat };
+            }
+
+            return null;
+        }
+    }
+
     public LoadFileFormat CurrentFormat => ArgumentHelpers.GetLoadFileFormat(_loadFileFormat) ?? LoadFileFormat.Dat;
 
     public bool TryBuild(int attachmentRate, string? encoding, bool isEncodingExplicit, string? distribution, string? targetZipSize, bool includeLoadFile, out LoadFileConfig config)

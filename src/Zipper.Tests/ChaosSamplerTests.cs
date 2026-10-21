@@ -40,13 +40,6 @@ public class ChaosSamplerTests
     }
 
     [Fact]
-    public void ParseChaosAmount_InvalidString_DefaultsToOnePercent()
-    {
-        int count = ChaosSampler.ParseChaosAmount("abc", 200);
-        Assert.Equal(2, count);
-    }
-
-    [Fact]
     public void SelectTargetLines_ReturnsExactUniqueSample()
     {
         var random = new Random(42);
@@ -97,5 +90,66 @@ public class ChaosSamplerTests
             Assert.True(count > 0, "All items should be hit at least once");
             Assert.True(count < 200, "Max frequency should not drastically exceed expected value");
         }
+    }
+
+    // Issue 6: Chaos amount parsing is silently wrong
+    [Theory]
+    [InlineData("10.5")] // No % suffix, should fail int.TryParse
+    [InlineData("abc")]  // Invalid string
+    [InlineData("  ")]   // Whitespace
+    public void ParseChaosAmount_UnparseableString_ThrowsArgumentException(string invalidAmount)
+    {
+        // Currently falls back to default (1% of totalLines) silently
+        // Should throw ArgumentException instead
+        Assert.Throws<ArgumentException>(() => ChaosSampler.ParseChaosAmount(invalidAmount, 100));
+    }
+
+    [Theory]
+    [InlineData("0%")]
+    [InlineData("0")]
+    public void ParseChaosAmount_Zero_ReturnsZero(string zeroAmount)
+    {
+        // Currently "0%" returns 1 (Math.Max(1, ...)), "0" returns 0
+        // Should be consistent: both should return 0
+        int count = ChaosSampler.ParseChaosAmount(zeroAmount, 100);
+        Assert.Equal(0, count);
+    }
+
+    [Theory]
+    [InlineData("-5")]
+    [InlineData("-1%")]
+    [InlineData("-10")]
+    public void ParseChaosAmount_Negative_ThrowsArgumentException(string negativeAmount)
+    {
+        // Currently "-5" is accepted by engine constructor (CLI rejects it)
+        // Should throw ArgumentException
+        Assert.Throws<ArgumentException>(() => ChaosSampler.ParseChaosAmount(negativeAmount, 100));
+    }
+
+    [Fact]
+    public void ParseChaosAmount_PercentageWithDecimal_ReturnsCorrectCount()
+    {
+        // "10.5%" should parse as 10.5% of totalLines
+        int count = ChaosSampler.ParseChaosAmount("10.5%", 100);
+        Assert.Equal(10, count); // 10.5% of 100 = 10.5, truncated to 10
+    }
+
+    [Fact]
+    public void ParseChaosAmount_PercentageOnlySign_ThrowsArgumentException()
+    {
+        Assert.Throws<ArgumentException>(() => ChaosSampler.ParseChaosAmount("%", 100));
+    }
+
+    [Fact]
+    public void ParseChaosAmount_PercentageWhitespaceBefore_ThrowsArgumentException()
+    {
+        Assert.Throws<ArgumentException>(() => ChaosSampler.ParseChaosAmount(" %", 100));
+    }
+
+    [Fact]
+    public void ParseChaosAmount_ExactCountCappedToTotalLines()
+    {
+        int count = ChaosSampler.ParseChaosAmount("500", 100);
+        Assert.Equal(100, count);
     }
 }

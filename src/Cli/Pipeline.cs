@@ -33,7 +33,7 @@ public static class Pipeline
             !modules.LoadFile.TryBuild(modules.Metadata.AttachmentRate, modules.Output.Encoding, modules.Output.IsEncodingExplicit, modules.Output.Distribution, modules.Output.TargetZipSize, modules.Output.IncludeLoadFile, out var loadFile) ||
             !modules.Delimiter.TryBuild(modules.LoadFile.LoadfileOnly, production.ProductionSet, out var delimiters) ||
             !modules.Tiff.TryBuild(out var tiff) ||
-            !modules.Chaos.TryBuild(modules.LoadFile.LoadfileOnly, modules.LoadFile.CurrentFormat, out var chaos) ||
+            !modules.Chaos.TryBuild(modules.LoadFile.LoadfileOnly, modules.LoadFile.Formats ?? new List<LoadFileFormat> { LoadFileFormat.Dat }, out var chaos) ||
             !modules.Hash.TryBuild(modules.LoadFile.LoadfileOnly, out var hash))
         {
             return null;

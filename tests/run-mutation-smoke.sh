@@ -17,12 +17,16 @@
 #         MUTATION_SMOKE_TIMEOUT=N   overall timeout in seconds (default 120)
 #         MUTATION_SMOKE_CACHE=0|1   enable content-hash mutant cache (default 1)
 #         MUTATION_CACHE_DIR=PATH    override cache directory (default .git/zipper-hooks/mutation-cache)
+#         MUTATION_SMOKE_BUILD_TIMEOUT=N  per-mutant build timeout (default 30)
+#         MUTATION_SMOKE_TEST_TIMEOUT=N   per-mutant test timeout (default 30)
 
 set -u
 
 MAX="${MUTATION_SMOKE_MAX:-3}"
 OVERALL_TIMEOUT="${MUTATION_SMOKE_TIMEOUT:-120}"
 USE_CACHE="${MUTATION_SMOKE_CACHE:-1}"
+BUILD_TIMEOUT="${MUTATION_SMOKE_BUILD_TIMEOUT:-30}"
+TEST_TIMEOUT="${MUTATION_SMOKE_TEST_TIMEOUT:-30}"
 EXPLICIT_BASE="${MUTATION_SMOKE_BASE:-}"
 
 while [[ $# -gt 0 ]]; do
@@ -408,13 +412,13 @@ for candidate in "${CANDIDATES[@]}"; do
 
     # Phase 1: build — compile error = invalid mutant, skip
     BUILD=(dotnet build "$TEST_PROJ" "${BUILD_FLAGS[@]}")
-    [[ -n "$TCMD" ]] && BUILD=("$TCMD" 30 "${BUILD[@]}")
+    [[ -n "$TCMD" ]] && BUILD=("$TCMD" "$BUILD_TIMEOUT" "${BUILD[@]}")
     set +e
     "${BUILD[@]}" >/dev/null 2>&1
     build_exit=$?
     set -e
     if [[ $build_exit -eq 124 ]]; then
-        echo "timeout (build >30s) ⚠"
+        echo "timeout (build >${BUILD_TIMEOUT}s) ⚠"
         SURVIVORS+=("$file:$ln — $desc (build timed out)")
         restore
         continue
@@ -432,7 +436,7 @@ for candidate in "${CANDIDATES[@]}"; do
     targeted_killed=0
     if [[ -n "$stem_test_file" ]]; then
         FAST_TEST=(dotnet test "$TEST_PROJ" --nologo --no-build --filter "FullyQualifiedName~${stem}Tests")
-        [[ -n "$TCMD" ]] && FAST_TEST=("$TCMD" 15 "${FAST_TEST[@]}")
+        [[ -n "$TCMD" ]] && FAST_TEST=("$TCMD" "$TEST_TIMEOUT" "${FAST_TEST[@]}")
         set +e
         "${FAST_TEST[@]}" >/dev/null 2>&1
         fast_exit=$?
@@ -454,13 +458,13 @@ for candidate in "${CANDIDATES[@]}"; do
 
     # Phase 2b: fallback to full unit test suite (~16 s)
     TEST=(dotnet test "$TEST_PROJ" --nologo --no-build)
-    [[ -n "$TCMD" ]] && TEST=("$TCMD" 30 "${TEST[@]}")
+    [[ -n "$TCMD" ]] && TEST=("$TCMD" "$TEST_TIMEOUT" "${TEST[@]}")
     set +e
     "${TEST[@]}" >/dev/null 2>&1
     test_exit=$?
     set -e
     if [[ $test_exit -eq 124 ]]; then
-        echo "timeout (test >30s) ⚠"
+        echo "timeout (test >${TEST_TIMEOUT}s) ⚠"
         SURVIVORS+=("$file:$ln — $desc (test timed out)")
     elif [[ $test_exit -ne 0 ]]; then
         echo "killed ✓"

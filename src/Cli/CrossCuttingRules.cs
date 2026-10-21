@@ -32,9 +32,54 @@ internal static class CrossCuttingRules
 
         if (!ValidateStandardMode(modules) ||
             !ValidateProductionSet(modules) ||
-            !ValidateCrossCutting(modules))
+            !ValidateCrossCutting(modules) ||
+            !ValidateChaosTypes(modules))
         {
             return false;
+        }
+
+        return true;
+    }
+
+    private static bool ValidateChaosTypes(CliModuleSet modules)
+    {
+        if (modules.Chaos.ChaosMode && !string.IsNullOrEmpty(modules.Chaos.ChaosTypes))
+        {
+            var formats = modules.LoadFile.Formats;
+            if (formats is not null && formats.Count > 0)
+            {
+                var validTypesPerFormat = new Dictionary<LoadFileFormat, IReadOnlyList<string>>();
+                foreach (var format in formats)
+                {
+                    validTypesPerFormat[format] = ChaosAnomalyTypes.ForFormat(format);
+                }
+
+                var requestedTypes = modules.Chaos.ChaosTypes.Split(',')
+                    .Select(t => t.Trim().ToLowerInvariant())
+                    .Where(t => !string.IsNullOrEmpty(t))
+                    .ToList();
+
+                // Reject any requested type that is not valid for ANY selected format
+                foreach (var requestedType in requestedTypes)
+                {
+                    if (!validTypesPerFormat.Values.Any(v => v.Contains(requestedType, StringComparer.OrdinalIgnoreCase)))
+                    {
+                        Console.Error.WriteLine($"Error: Chaos type '{requestedType}' is not valid for any selected load file format.");
+                        return false;
+                    }
+                }
+
+                // Reject any format whose valid type set matches none of the requested types
+                foreach (var format in formats)
+                {
+                    var validTypes = validTypesPerFormat[format];
+                    if (!requestedTypes.Any(t => validTypes.Contains(t, StringComparer.OrdinalIgnoreCase)))
+                    {
+                        Console.Error.WriteLine($"Error: --chaos-types selects no valid type for load file format '{format.ToString().ToLowerInvariant()}'. Valid types: {string.Join(", ", validTypes)}");
+                        return false;
+                    }
+                }
+            }
         }
 
         return true;

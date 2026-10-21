@@ -30,20 +30,49 @@ internal class ChaosSampler
             return Math.Max(1, totalLines / 100);
         }
 
-        if (chaosAmount.EndsWith('%'))
+        string trimmed = chaosAmount.Trim();
+
+        if (trimmed.Length > 0 && trimmed[^1] == '%')
         {
-            if (double.TryParse(chaosAmount.TrimEnd('%'), System.Globalization.CultureInfo.InvariantCulture, out var pct))
+            string pctStr = trimmed[..^1].Trim();
+            if (double.TryParse(pctStr, System.Globalization.CultureInfo.InvariantCulture, out var pct))
             {
-                return Math.Max(1, (int)(totalLines * pct / 100.0));
+                if (pct < 0)
+                {
+                    throw new ArgumentException("Chaos amount percentage cannot be negative.", nameof(chaosAmount));
+                }
+                if (pct == 0)
+                {
+                    return 0;
+                }
+                if (pct == 0)
+                {
+                    return 0;
+                }
+                var count = (int)(totalLines * pct / 100.0);
+                if (count < 1)
+                {
+                    count = 1;
+                }
+                return count;
             }
+            throw new ArgumentException($"Invalid chaos amount percentage format: '{chaosAmount}'.", nameof(chaosAmount));
         }
 
-        if (int.TryParse(chaosAmount, System.Globalization.CultureInfo.InvariantCulture, out var exact))
+        if (int.TryParse(trimmed, System.Globalization.CultureInfo.InvariantCulture, out var exact))
         {
+            if (exact < 0)
+            {
+                throw new ArgumentException("Chaos amount cannot be negative.", nameof(chaosAmount));
+            }
+            if (exact == 0)
+            {
+                return 0;
+            }
             return Math.Min(exact, totalLines);
         }
 
-        return Math.Max(1, totalLines / 100);
+        throw new ArgumentException($"Invalid chaos amount format: '{chaosAmount}'. Must be a percentage (e.g., '1%') or an exact count (e.g., '500').", nameof(chaosAmount));
     }
 
     public static HashSet<long> SelectTargetLines(int totalLines, int count, Random random)

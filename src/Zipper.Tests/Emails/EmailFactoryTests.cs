@@ -280,6 +280,46 @@ public class EmailFactoryTests
         Assert.Contains("sender001@", EmailFactory.GenerateEmailAddress(1, "sender"), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void GenerateEmailAddress_NegativeIndex_ThrowsArgumentOutOfRangeException()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => EmailFactory.GenerateEmailAddress(-1, "recipient"));
+    }
+
+    [Fact]
+    public void GenerateEmailAddress_EmptyType_ThrowsArgumentException()
+    {
+        Assert.Throws<ArgumentException>(() => EmailFactory.GenerateEmailAddress(0, string.Empty));
+    }
+
+    [Theory]
+    [InlineData('\r')]
+    [InlineData('\n')]
+    [InlineData('\t')]
+    [InlineData('\0')]
+    public void GenerateEmailAddress_ControlCharacterInType_ThrowsArgumentException(char control)
+    {
+        Assert.Throws<ArgumentException>(() => EmailFactory.GenerateEmailAddress(0, $"recipient{control}"));
+    }
+
+    [Theory]
+    [InlineData("recipient@evil")]
+    [InlineData("recipient;evil")]
+    [InlineData("recipient,evil")]
+    [InlineData("recipient<evil")]
+    public void GenerateEmailAddress_HeaderInjectionCharacterInType_ThrowsArgumentException(string type)
+    {
+        Assert.Throws<ArgumentException>(() => EmailFactory.GenerateEmailAddress(0, type));
+    }
+
+    [Theory]
+    [InlineData("recipienté")]
+    [InlineData("recipientÿ")]
+    public void GenerateEmailAddress_NonAsciiCharacterInType_ThrowsArgumentException(string type)
+    {
+        Assert.Throws<ArgumentException>(() => EmailFactory.GenerateEmailAddress(0, type));
+    }
+
     // Tests redistributed from EmailTemplateSystemTests
     [Fact]
     public void Create_BasicParameters_ReturnsValidEmail()

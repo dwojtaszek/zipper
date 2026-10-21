@@ -7,7 +7,7 @@ namespace Zipper.Tests;
 [Collection("ConsoleTests")]
 public class ChaosModuleTests
 {
-    private static bool TryBuildWithValues(ChaosConfigSpec spec, out ChaosConfig config, bool loadfileOnly = true, LoadFileFormat currentFormat = LoadFileFormat.Dat)
+    private static bool TryBuildWithValues(ChaosConfigSpec spec, out ChaosConfig config, bool loadfileOnly = true, IReadOnlyList<LoadFileFormat>? formats = null)
     {
         var module = new ChaosModule();
         if (spec.Mode)
@@ -26,7 +26,7 @@ public class ChaosModuleTests
         {
             Assert.True(module.TryApply("--chaos-scenario", spec.Scenario));
         }
-        return module.TryBuild(loadfileOnly, currentFormat, out config);
+        return module.TryBuild(loadfileOnly, formats ?? new List<LoadFileFormat> { LoadFileFormat.Dat }, out config);
     }
 
     private sealed record ChaosConfigSpec(string? Amount, string? Types, string? Scenario)
@@ -46,12 +46,54 @@ public class ChaosModuleTests
     }
 
     [Fact]
+    public void TryBuild_ChaosTypesWithWhitespace_StoresTrimmedNames()
+    {
+        var spec = new ChaosConfigSpec(Amount: null, Types: "quotes, columns", Scenario: null) { Mode = true };
+        Assert.True(TryBuildWithValues(spec, out var config));
+
+        Assert.Equal("quotes,columns", config.ChaosTypes);
+    }
+
+    [Fact]
+    public void TryBuild_ChaosTypesWithWhitespace_AppliesEveryValidatedType()
+    {
+        var spec = new ChaosConfigSpec(Amount: null, Types: "quotes, columns", Scenario: null) { Mode = true };
+        Assert.True(TryBuildWithValues(spec, out var config));
+
+        var engine = new ChaosEngine(
+            totalLines: 20,
+            chaosAmount: "20",
+            chaosTypes: config.ChaosTypes,
+            format: LoadFileFormat.Dat,
+            columnDelimiter: "\u0014",
+            quoteDelimiter: "\u00fe",
+            eol: "\r\n",
+            seed: 1234);
+
+        var appliedTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 1; i <= 20; i++)
+        {
+            if (engine.ShouldIntercept(i))
+            {
+                engine.Intercept(i, "\u00feValue\u00fe\u0014Other", $"DOC{i:D8}");
+            }
+        }
+
+        foreach (var anomaly in engine.Anomalies)
+        {
+            appliedTypes.Add(anomaly.ErrorType);
+        }
+
+        Assert.Contains("quotes", appliedTypes);
+        Assert.Contains("columns", appliedTypes);
+    }
+
+    [Fact]
     public void TryBuild_ChaosModeWithoutLoadfileOnly_ReturnsFalse()
     {
         var spec = new ChaosConfigSpec(Amount: null, Types: null, Scenario: null) { Mode = true };
         Assert.False(TryBuildWithValues(spec, out _, loadfileOnly: false));
     }
-
     [Fact]
     public void TryBuild_ChaosAmountWithoutChaosMode_ReturnsFalse()
     {
@@ -123,11 +165,28 @@ public class ChaosModuleTests
     }
 
     [Fact]
+    public void TryBuild_ScenarioRequiringDifferentFormat_ReturnsFalse()
+    {
+        // 'broken-boundaries' requires the OPT format; asking for DAT is a mismatch.
+        var spec = new ChaosConfigSpec(Amount: null, Types: null, Scenario: "broken-boundaries") { Mode = true };
+        Assert.False(TryBuildWithValues(spec, out _, formats: new List<LoadFileFormat> { LoadFileFormat.Dat }));
+    }
+
+    [Fact]
+    public void TryBuild_ScenarioRequiringMatchingFormat_BuildsConfig()
+    {
+        var spec = new ChaosConfigSpec(Amount: null, Types: null, Scenario: "broken-boundaries") { Mode = true };
+        Assert.True(TryBuildWithValues(spec, out var config, formats: new List<LoadFileFormat> { LoadFileFormat.Opt }));
+
+        Assert.Equal("broken-boundaries", config.ChaosScenario);
+    }
+
+    [Fact]
     public void TryBuild_ChaosModeWithCsvFormat_ReturnsFalse()
     {
-        // currentFormat is the single-format value; a non-DAT/OPT format rejects --chaos-mode.
+        // Formats list with a non-DAT/OPT format rejects --chaos-mode.
         var spec = new ChaosConfigSpec(Amount: null, Types: null, Scenario: null) { Mode = true };
-        Assert.False(TryBuildWithValues(spec, out _, currentFormat: LoadFileFormat.Csv));
+        Assert.False(TryBuildWithValues(spec, out _, formats: new List<LoadFileFormat> { LoadFileFormat.Csv }));
     }
 
     [Fact]
@@ -139,7 +198,7 @@ public class ChaosModuleTests
         Assert.True(module.TryApply("--chaos-types", "quotes,columns"));
         Assert.True(module.TryApply("--chaos-scenario", "test"));
 
-        Assert.False(module.TryBuild(true, LoadFileFormat.Dat, out _));
+        Assert.False(module.TryBuild(true, new List<LoadFileFormat> { LoadFileFormat.Dat }, out _));
     }
 
     [Fact]
