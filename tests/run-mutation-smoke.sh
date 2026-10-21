@@ -444,13 +444,13 @@ for candidate in "${CANDIDATES[@]}"; do
 
     # Phase 2b: fallback to full unit test suite (~16 s)
     TEST=(dotnet test "$TEST_PROJ" --nologo --no-build)
-    [[ -n "$TCMD" ]] && TEST=("$TCMD" 30 "${TEST[@]}")
+    [[ -n "$TCMD" ]] && TEST=("$TCMD" "$TEST_TIMEOUT" "${TEST[@]}")
     set +e
     "${TEST[@]}" >/dev/null 2>&1
     test_exit=$?
     set -e
     if [[ $test_exit -eq 124 ]]; then
-        echo "timeout (test >30s) ⚠"
+        echo "timeout (test >${TEST_TIMEOUT}s) ⚠"
         SURVIVORS+=("$file:$ln — $desc (test timed out)")
     elif [[ $test_exit -ne 0 ]]; then
         echo "killed ✓"

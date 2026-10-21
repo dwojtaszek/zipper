@@ -102,13 +102,17 @@ public sealed class ChaosModule : CliModule
                 return false;
             }
 
-            // For scenarios, validate against the first format (or all formats if needed)
-            var primaryFormat = formats?.FirstOrDefault() ?? LoadFileFormat.Dat;
-            if (scenario.RequiredFormat.HasValue && scenario.RequiredFormat.Value != primaryFormat)
+            // A scenario with a required format must match every selected format (Dat when none given).
+            var effectiveFormats = formats is { Count: > 0 } ? formats : new[] { LoadFileFormat.Dat };
+            if (scenario.RequiredFormat.HasValue)
             {
-                Console.Error.WriteLine($"Error: Chaos scenario '{_scenario}' requires --loadfile-format {scenario.RequiredFormat.Value.ToString().ToLowerInvariant()} but got {primaryFormat.ToString().ToLowerInvariant()}.");
-                config = default!;
-                return false;
+                var mismatched = effectiveFormats.FirstOrDefault(f => f != scenario.RequiredFormat.Value, scenario.RequiredFormat.Value);
+                if (mismatched != scenario.RequiredFormat.Value)
+                {
+                    Console.Error.WriteLine($"Error: Chaos scenario '{_scenario}' requires --loadfile-format {scenario.RequiredFormat.Value.ToString().ToLowerInvariant()} but got {mismatched.ToString().ToLowerInvariant()}.");
+                    config = default!;
+                    return false;
+                }
             }
         }
 
