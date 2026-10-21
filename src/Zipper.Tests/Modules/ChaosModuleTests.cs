@@ -46,12 +46,54 @@ public class ChaosModuleTests
     }
 
     [Fact]
+    public void TryBuild_ChaosTypesWithWhitespace_StoresTrimmedNames()
+    {
+        var spec = new ChaosConfigSpec(Amount: null, Types: "quotes, columns", Scenario: null) { Mode = true };
+        Assert.True(TryBuildWithValues(spec, out var config));
+
+        Assert.Equal("quotes,columns", config.ChaosTypes);
+    }
+
+    [Fact]
+    public void TryBuild_ChaosTypesWithWhitespace_AppliesEveryValidatedType()
+    {
+        var spec = new ChaosConfigSpec(Amount: null, Types: "quotes, columns", Scenario: null) { Mode = true };
+        Assert.True(TryBuildWithValues(spec, out var config));
+
+        var engine = new ChaosEngine(
+            totalLines: 20,
+            chaosAmount: "20",
+            chaosTypes: config.ChaosTypes,
+            format: LoadFileFormat.Dat,
+            columnDelimiter: "\u0014",
+            quoteDelimiter: "\u00fe",
+            eol: "\r\n",
+            seed: 1234);
+
+        var appliedTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 1; i <= 20; i++)
+        {
+            if (engine.ShouldIntercept(i))
+            {
+                engine.Intercept(i, "\u00feValue\u00fe\u0014Other", $"DOC{i:D8}");
+            }
+        }
+
+        foreach (var anomaly in engine.Anomalies)
+        {
+            appliedTypes.Add(anomaly.ErrorType);
+        }
+
+        Assert.Contains("quotes", appliedTypes);
+        Assert.Contains("columns", appliedTypes);
+    }
+
+    [Fact]
     public void TryBuild_ChaosModeWithoutLoadfileOnly_ReturnsFalse()
     {
         var spec = new ChaosConfigSpec(Amount: null, Types: null, Scenario: null) { Mode = true };
         Assert.False(TryBuildWithValues(spec, out _, loadfileOnly: false));
     }
-
     [Fact]
     public void TryBuild_ChaosAmountWithoutChaosMode_ReturnsFalse()
     {
@@ -120,6 +162,23 @@ public class ChaosModuleTests
         Assert.True(TryBuildWithValues(spec, out var config));
 
         Assert.Equal("structured-import-failures", config.ChaosScenario);
+    }
+
+    [Fact]
+    public void TryBuild_ScenarioRequiringDifferentFormat_ReturnsFalse()
+    {
+        // 'broken-boundaries' requires the OPT format; asking for DAT is a mismatch.
+        var spec = new ChaosConfigSpec(Amount: null, Types: null, Scenario: "broken-boundaries") { Mode = true };
+        Assert.False(TryBuildWithValues(spec, out _, formats: new List<LoadFileFormat> { LoadFileFormat.Dat }));
+    }
+
+    [Fact]
+    public void TryBuild_ScenarioRequiringMatchingFormat_BuildsConfig()
+    {
+        var spec = new ChaosConfigSpec(Amount: null, Types: null, Scenario: "broken-boundaries") { Mode = true };
+        Assert.True(TryBuildWithValues(spec, out var config, formats: new List<LoadFileFormat> { LoadFileFormat.Opt }));
+
+        Assert.Equal("broken-boundaries", config.ChaosScenario);
     }
 
     [Fact]

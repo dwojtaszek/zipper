@@ -123,6 +123,8 @@ public sealed class ChaosModule : CliModule
             return false;
         }
 
+        // Defaults to the raw value so an unset/unparseable input is never silently widened.
+        string? normalizedChaosTypes = _types;
         if (!string.IsNullOrEmpty(_types))
         {
             // Build union of valid types for all formats
@@ -146,6 +148,7 @@ public sealed class ChaosModule : CliModule
                 }
             }
 
+            var normalized = new List<string>();
             foreach (var t in _types.Split(','))
             {
                 var trimmed = t.Trim();
@@ -155,14 +158,20 @@ public sealed class ChaosModule : CliModule
                     config = default!;
                     return false;
                 }
+
+                normalized.Add(trimmed);
             }
+
+            // Store the trimmed names that were actually validated so downstream consumers
+            // see exactly the set that passed validation.
+            normalizedChaosTypes = string.Join(",", normalized);
         }
 
         config = new ChaosConfig
         {
             ChaosMode = _mode,
             ChaosAmount = _amount,
-            ChaosTypes = _types,
+            ChaosTypes = normalizedChaosTypes,
             ChaosScenario = _scenario,
         };
         return true;
