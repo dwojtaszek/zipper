@@ -53,19 +53,33 @@
 
   <Target Name="SyncGitHooks"
           BeforeTargets="BeforeBuild"
-          Condition="'@(_GitHookTemplate)' != '' AND (Exists('$(MSBuildThisFileDirectory).git/HEAD') OR Exists('$(MSBuildThisFileDirectory).git'))"
+          Condition="'@(_GitHookTemplate)' != '' AND Exists('$(MSBuildThisFileDirectory).git/HEAD')"
           Inputs="@(_GitHookTemplate)"
           Outputs="@(_GitHookTemplate->'$(MSBuildThisFileDirectory).git/hooks/%(Filename)%(Extension)')">
-    <!-- IgnoreExitCode (not IgnoreExitError — the latter is not an Exec parameter
-         and fails every build where this target actually executes, e.g. worktrees
-         where the .git/hooks outputs can never exist). Hook sync must never fail
-         the build; setup-hook.sh is the authoritative installer. -->
+    <!-- IgnoreExitCode + IgnoreStandardErrorWarningFormat ensure hook sync failures never fail local builds. -->
     <Exec Command="bash &quot;$(MSBuildThisFileDirectory)setup-hook.sh&quot; --quiet"
           Condition="'$(OS)' != 'Windows_NT'"
-          IgnoreExitCode="true" />
+          IgnoreExitCode="true"
+          IgnoreStandardErrorWarningFormat="true" />
     <Exec Command="cmd /c &quot;$(MSBuildThisFileDirectory)setup-hook.bat&quot; --quiet"
           Condition="'$(OS)' == 'Windows_NT'"
-          IgnoreExitCode="true" />
+          IgnoreExitCode="true"
+          IgnoreStandardErrorWarningFormat="true" />
+  </Target>
+
+  <Target Name="SyncGitHooksWorktree"
+          BeforeTargets="BeforeBuild"
+          Condition="'@(_GitHookTemplate)' != '' AND !Exists('$(MSBuildThisFileDirectory).git/HEAD') AND Exists('$(MSBuildThisFileDirectory).git')">
+    <!-- Linked worktrees share the common .git/hooks directory; setup-hook in quiet mode
+         validates installed hook contents directly without relying on a local stamp. -->
+    <Exec Command="bash &quot;$(MSBuildThisFileDirectory)setup-hook.sh&quot; --quiet"
+          Condition="'$(OS)' != 'Windows_NT'"
+          IgnoreExitCode="true"
+          IgnoreStandardErrorWarningFormat="true" />
+    <Exec Command="cmd /c &quot;$(MSBuildThisFileDirectory)setup-hook.bat&quot; --quiet"
+          Condition="'$(OS)' == 'Windows_NT'"
+          IgnoreExitCode="true"
+          IgnoreStandardErrorWarningFormat="true" />
   </Target>
 
 </Project>

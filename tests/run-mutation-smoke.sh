@@ -17,8 +17,8 @@
 #         MUTATION_SMOKE_TIMEOUT=N   overall timeout in seconds (default 120)
 #         MUTATION_SMOKE_CACHE=0|1   enable content-hash mutant cache (default 1)
 #         MUTATION_CACHE_DIR=PATH    override cache directory (default .git/zipper-hooks/mutation-cache)
-#         MUTATION_SMOKE_BUILD_TIMEOUT=N  per-mutant build timeout (default 30)
-#         MUTATION_SMOKE_TEST_TIMEOUT=N   per-mutant test timeout (default 30)
+#         MUTATION_SMOKE_BUILD_TIMEOUT=N  per-mutant build timeout in seconds (default 30)
+#         MUTATION_SMOKE_TEST_TIMEOUT=N   per-mutant test timeout in seconds (default 30)
 
 set -u
 
@@ -58,6 +58,22 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Clean up / restore any stale backup or temp files from prior interrupted runs
+shopt -s globstar nullglob 2>/dev/null || true
+for bak in src/**/*.mutation-bak src/*.mutation-bak; do
+    if [[ -f "$bak" ]]; then
+        orig="${bak%.mutation-bak}"
+        if [[ -f "$orig" ]]; then
+            cp "$bak" "$orig"
+            rm -f "$bak"
+        fi
+    fi
+done 2>/dev/null || true
+for tmp in src/**/*.mutation-tmp src/*.mutation-tmp; do
+    [[ -f "$tmp" ]] && rm -f "$tmp"
+done 2>/dev/null || true
+shopt -u globstar 2>/dev/null || true
+
 # ── Guards ────────────────────────────────────────────────────
 BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
 if [[ -n "$EXPLICIT_BASE" ]]; then
@@ -78,19 +94,6 @@ elif [[ -z "$MERGE_BASE" ]]; then
     echo "  ⚠ Cannot find merge-base with main or origin/main; mutation smoke skipped."
     exit 0
 fi
-
-# Clean up / restore any stale backup files from prior interrupted runs
-shopt -s globstar nullglob 2>/dev/null || true
-for bak in src/**/*.mutation-bak src/*.mutation-bak; do
-    if [[ -f "$bak" ]]; then
-        orig="${bak%.mutation-bak}"
-        if [[ -f "$orig" ]]; then
-            cp "$bak" "$orig"
-            rm -f "$bak"
-        fi
-    fi
-done 2>/dev/null || true
-shopt -u globstar 2>/dev/null || true
 
 # ── Changed source files ──────────────────────────────────────
 FILES=()
@@ -290,7 +293,11 @@ if [[ "$USE_CACHE" == "1" ]]; then
     fi
 fi
 
-BUILD_FLAGS=(--nologo -v quiet)
+# Disable Roslyn analyzers during mutation smoke builds: static analyzers
+# (especially CA5403/CA5390 security dataflow rules) already run in standard
+# builds/pre-commit, and skipping them cuts per-mutant compile time from ~46s
+# down to ~1.1s while ensuring mutants are only skipped on real C# compiler errors.
+BUILD_FLAGS=(--nologo -v quiet -p:RunAnalyzers=false -p:RunAnalyzersDuringBuild=false)
 if [[ -f "src/Zipper.Tests/obj/project.assets.json" ]]; then
     BUILD_FLAGS+=(--no-restore)
 fi
@@ -306,7 +313,7 @@ ensure_baseline_verified() {
     [[ -n "$TCMD" ]] && BUILD=("$TCMD" 60 "${BUILD[@]}")
     if ! "${BUILD[@]}" >/dev/null 2>&1; then
         # Fallback once with full restore in case packages changed
-        BUILD_FALLBACK=(dotnet build "$TEST_PROJ" --nologo -v quiet)
+        BUILD_FALLBACK=(dotnet build "$TEST_PROJ" --nologo -v quiet -p:RunAnalyzers=false -p:RunAnalyzersDuringBuild=false)
         [[ -n "$TCMD" ]] && BUILD_FALLBACK=("$TCMD" 60 "${BUILD_FALLBACK[@]}")
         if ! "${BUILD_FALLBACK[@]}" >/dev/null 2>&1; then
             echo "  ❌ Baseline build failed before mutation smoke; check compilation errors." >&2
