@@ -198,4 +198,47 @@ public class NumberGeneratorTests
         var result = generator.Generate(MakeContext());
         Assert.Equal("42", result);
     }
+
+    /// <summary>
+    /// Test method for int.MaxValue range branch (lines 78-80 in NumberGenerator.cs).
+    /// When max == int.MaxValue, the generator uses long arithmetic to avoid overflow.
+    /// </summary>
+    [Fact]
+    public void Generate_IntMaxValueRange_UsesLongArithmeticAndStaysInBounds()
+    {
+        var col = new ColumnDefinition
+        {
+            Name = "TestNumber",
+            Range = new RangeConfig { Min = 0, Max = int.MaxValue },
+            Distribution = "uniform"
+        };
+        var generator = new NumberGenerator(col);
+
+        var context = MakeContext();
+        var results = Enumerable.Range(0, 100).Select(_ => long.Parse(generator.Generate(context), System.Globalization.CultureInfo.InvariantCulture)).ToList();
+
+        Assert.All(results, x => Assert.InRange(x, 0L, (long)int.MaxValue));
+        // Should produce varied values (not all the same)
+        Assert.True(results.Distinct().Count() > 1, "Should produce varied values across the full int range");
+    }
+
+    /// <summary>
+    /// Test method for int.MaxValue range with non-zero min (lines 78-80).
+    /// </summary>
+    [Fact]
+    public void Generate_IntMaxValueRange_WithNonZeroMin_StaysInBounds()
+    {
+        var col = new ColumnDefinition
+        {
+            Name = "TestNumber",
+            Range = new RangeConfig { Min = 1000, Max = int.MaxValue },
+            Distribution = "uniform"
+        };
+        var generator = new NumberGenerator(col);
+
+        var context = MakeContext();
+        var results = Enumerable.Range(0, 100).Select(_ => long.Parse(generator.Generate(context), System.Globalization.CultureInfo.InvariantCulture)).ToList();
+
+        Assert.All(results, x => Assert.InRange(x, 1000L, (long)int.MaxValue));
+    }
 }
