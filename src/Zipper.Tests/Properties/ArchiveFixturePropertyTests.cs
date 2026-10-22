@@ -14,11 +14,6 @@ namespace Zipper.Tests.Properties;
 [Properties(Arbitrary = [typeof(ZipperArbitraries)], MaxTest = 100)]
 public sealed class ArchiveFixturePropertyTests
 {
-    private static readonly IReadOnlyList<ArchiveTestCaseDefinition> SingleMutationMalformedCases =
-        ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.MalformedSuite)
-            .Where(d => d.Mutations is { Count: 1 } && d.ControlCaseKey is not null)
-            .ToList();
-
     private static readonly IReadOnlyDictionary<string, IReadOnlyList<ArchiveTestCaseDefinition>> SuiteCasesByCanonicalName =
         ArchiveTestCatalog.SupportedSuites.ToDictionary(
             s => s,
@@ -115,7 +110,8 @@ public sealed class ArchiveFixturePropertyTests
     [Property]
     public void ArchiveFixtureMutator_ApplyMutation_ShouldModifyOnlyTargetedStructureAndPreserveUnmutatedRegions(ArchiveFixturePropertyInput input)
     {
-        var targetCase = SingleMutationMalformedCases[(int)(Math.Abs((long)input.MutationSelector) % SingleMutationMalformedCases.Count)];
+        var targetCase = ZipperArbitraries.SingleMutationMalformedCases[
+            Math.Clamp(input.SingleMutationCaseIndex, 0, ZipperArbitraries.SingleMutationMalformedCases.Count - 1)];
         var controlCase = ArchiveTestCatalog.GetCase(targetCase.ControlCaseKey!);
         var control = ArchiveFixtureBuilder.Build(controlCase, input.Seed, CancellationToken.None);
         var mutationKind = targetCase.Mutations![0];
@@ -161,7 +157,7 @@ public sealed class ArchiveFixturePropertyTests
     public void ArchiveTestCaseSemantics_EvaluateReaderOperations_ShouldEnforceFourReaderOperationsIndependently(ArchiveFixturePropertyInput input)
     {
         var suiteCases = SuiteCasesByCanonicalName[input.SuiteName];
-        var caseDefinition = suiteCases[(int)(Math.Abs((long)input.MutationSelector) % suiteCases.Count)];
+        var caseDefinition = suiteCases[Math.Clamp(input.SuiteCaseIndex, 0, suiteCases.Count - 1)];
         var testCase = ExpectationCaseCache.GetOrAdd(
             caseDefinition.CaseKey,
             _ => ArchiveTestSuiteGenerator.BuildExpectationFile(

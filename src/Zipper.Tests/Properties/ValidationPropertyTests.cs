@@ -218,8 +218,9 @@ public sealed class ValidationPropertyTests : IDisposable
     /// fails exactly when the merged coverage leaves a skipped Bates Number (REQ-137,
     /// REQ-138). The report's expected-next Bates Number is the maximum baseline end + 1 on
     /// every success (REQ-140). The planned interval's placement (overlap, adjacency,
-    /// near-baseline draw) is derived from the seed so every run exercises each branch of
-    /// the iff-contract instead of relying on uniform draws that rarely land near a baseline.
+    /// near-baseline draw) is selected explicitly by the input so every run exercises each
+    /// branch of the iff-contract instead of relying on uniform draws that rarely land near a
+    /// baseline.
     /// </summary>
     [Property]
     public void SupplementalValidator_ValidateAsync_WithArbitraryBatesRanges_ShouldRejectExactlyTheOverlaps(ValidationMutationPropertyInput input)
@@ -229,7 +230,7 @@ public sealed class ValidationPropertyTests : IDisposable
 
         // A second baseline interval above the first, adjacent or at most two Bates Numbers
         // away, so the merged baseline is sometimes contiguous and sometimes gapped.
-        long secondStart = priorEnd + 1 + (Math.Abs((long)input.Seed) % 3);
+        long secondStart = priorEnd + 1 + input.SecondBaselineGap;
         long secondEnd = secondStart + Math.Clamp(input.PriorLength, 0, 50);
 
         // Placement mode guarantees branch coverage: 0 overlaps the first baseline,
@@ -237,10 +238,11 @@ public sealed class ValidationPropertyTests : IDisposable
         // 2 sits adjacent above the second baseline, 3 is a near-baseline draw that
         // is disjoint only when its offset clears both baselines.
         long plannedLength = Math.Clamp(input.PlannedLength, 0, 50);
-        int placement = (int)(Math.Abs((long)input.Seed) % 4);
+        int placement = input.Placement;
+        long placementOffset = Math.Clamp(input.PlacementOffset, 0, Math.Max(0, priorEnd - priorStart));
         long plannedStart = placement switch
         {
-            0 => priorStart + (Math.Abs((long)input.Seed / 4) % Math.Max(1, priorEnd - priorStart + 1)),
+            0 => priorStart + placementOffset,
             1 => Math.Max(1, priorStart - plannedLength - 1),
             2 => secondEnd + 1,
             _ => Math.Clamp(input.PlannedStart, 1, 50_000),
@@ -413,7 +415,7 @@ public sealed class ValidationPropertyTests : IDisposable
     [Property]
     public void VolumeAnalyzer_AnalyzeVolumes_ShouldSatisfyReflexiveIdentityAndSymmetricDeltaCounts(ValidationMutationPropertyInput input)
     {
-        int seed = (int)(Math.Abs((long)input.Seed) % 1_000_000L);
+        int seed = input.VolumeSeed;
         var priorRecords = BuildComparisonRecords(seed, "PRIOR");
         var newRecords = MutateComparisonRecords(priorRecords, seed + 1);
 

@@ -65,13 +65,12 @@ public sealed class ChaosAndComparisonPropertyTests
     public void DatAnomalyApplier_Apply_ShouldMutateLineAndRecordAnomalyMetadata(
         DelimitedRecordPropertyInput input,
         byte rawTypeIndex,
-        int seed)
+        ChaosSeedPropertyInput seedInput)
     {
         string colDelim = input.ColumnDelimiter.ToString();
         string quoteDelim = input.QuoteDelimiter.ToString();
-        long absSeed = Math.Abs((long)seed);
-        string recordId = $"DOC{(absSeed % 10_000).ToString("D4", CultureInfo.InvariantCulture)}";
-        long lineNumber = (absSeed % 500) + 1;
+        string recordId = $"DOC{seedInput.RecordOrdinal.ToString("D4", CultureInfo.InvariantCulture)}";
+        long lineNumber = seedInput.LineNumber;
 
         var quotedCells = input.Values
             .Select(v => $"{quoteDelim}{v.Replace(quoteDelim, string.Empty, StringComparison.Ordinal)}{quoteDelim}")
@@ -82,7 +81,7 @@ public sealed class ChaosAndComparisonPropertyTests
         string chosenType = chaosTypes[rawTypeIndex % chaosTypes.Length];
 
         var anomalies = new List<ChaosAnomaly>();
-        var applier = new DatAnomalyApplier(new Random(seed), colDelim, quoteDelim, "\r\n");
+        var applier = new DatAnomalyApplier(new Random(seedInput.Seed), colDelim, quoteDelim, "\r\n");
 
         string mutated = applier.Apply(lineNumber, line, recordId, chosenType, anomalies);
 
@@ -158,11 +157,11 @@ public sealed class ChaosAndComparisonPropertyTests
         // Exercise single-column / empty-delimiter / multi-char delimiter edge paths
         string singleToken = $"{recordId}_{input.Values[0].Replace(colDelim, string.Empty, StringComparison.Ordinal).Replace(quoteDelim, string.Empty, StringComparison.Ordinal).Replace("\r", string.Empty, StringComparison.Ordinal).Replace("\n", string.Empty, StringComparison.Ordinal)}";
         var edgeAnomalies = new List<ChaosAnomaly>();
-        var edgeApplier = new DatAnomalyApplier(new Random(seed), string.Empty, "''", "\n");
+        var edgeApplier = new DatAnomalyApplier(new Random(seedInput.Seed), string.Empty, "''", "\n");
         _ = edgeApplier.Apply(1, singleToken, recordId, "mixed-delimiters", edgeAnomalies);
         _ = edgeApplier.Apply(2, singleToken, recordId, "quotes", edgeAnomalies);
         _ = edgeApplier.Apply(3, singleToken, recordId, "eol", edgeAnomalies);
-        var emptyQuoteApplier = new DatAnomalyApplier(new Random(seed), ",", string.Empty, "\n");
+        var emptyQuoteApplier = new DatAnomalyApplier(new Random(seedInput.Seed), ",", string.Empty, "\n");
         _ = emptyQuoteApplier.Apply(4, singleToken, recordId, "quotes", edgeAnomalies);
         // After fix: anomalies only recorded when line was modified
         // eol always modifies, others may not with empty delimiters
@@ -174,7 +173,7 @@ public sealed class ChaosAndComparisonPropertyTests
         BatesPropertyInput batesInput,
         byte rawTypeIndex,
         bool isBoundary,
-        int seed)
+        ChaosSeedPropertyInput seedInput)
     {
         string bates = BatesRangeAnalyzer.FormatBates(batesInput.Start, batesInput.Prefix, batesInput.Digits);
         string boundaryFlag = isBoundary ? "Y" : string.Empty;
@@ -185,8 +184,8 @@ public sealed class ChaosAndComparisonPropertyTests
         string chosenType = optTypes[rawTypeIndex % optTypes.Length];
 
         var anomalies = new List<ChaosAnomaly>();
-        var applier = new OptAnomalyApplier(new Random(seed));
-        long lineNumber = (Math.Abs((long)seed) % 500) + 1;
+        var applier = new OptAnomalyApplier(new Random(seedInput.Seed));
+        long lineNumber = seedInput.LineNumber;
 
         string mutated = applier.Apply(lineNumber, optLine, bates, chosenType, anomalies);
 
@@ -602,7 +601,7 @@ public sealed class ChaosAndComparisonPropertyTests
         int rawB,
         byte rawDistIndex,
         byte rawGeneratorIndex,
-        int seed)
+        ChaosSeedPropertyInput seedInput)
     {
         int min = Math.Clamp(Math.Min(rawA, rawB), -10_000, 10_000);
         int max = Math.Clamp(Math.Max(rawA, rawB), -10_000, 10_000);
@@ -619,14 +618,13 @@ public sealed class ChaosAndComparisonPropertyTests
         };
 
         var numGen = new NumberGenerator(numCol);
-        var rng = new Random(seed);
-        long absSeed = Math.Abs((long)seed);
-        int dataLength = (int)((absSeed % 100_000L) + 128L);
-        int pageCount = (int)((absSeed % 50L) + 1L);
+        var rng = new Random(seedInput.Seed);
+        int dataLength = seedInput.DataLength;
+        int pageCount = seedInput.PageCount;
         int folderNumber = (rawDistIndex % 20) + 1;
         string[] extensions = ["pdf", "docx", "xlsx", "eml", "tiff"];
         string expectedExt = extensions[rawGeneratorIndex % extensions.Length];
-        string fileName = $"DOC{((absSeed % 99_999L) + 1L).ToString("D8", CultureInfo.InvariantCulture)}.{expectedExt}";
+        string fileName = $"DOC{seedInput.FileOrdinal.ToString("D8", CultureInfo.InvariantCulture)}.{expectedExt}";
         string filePathInZip = $"VOL001/NATIVES/{folderNumber.ToString("D3", CultureInfo.InvariantCulture)}/{fileName}";
         var workItem = new FileWorkItem
         {

@@ -29,7 +29,7 @@
 - Fix all tests that fail, even if your change didn't break them.
 - Always root cause bugs. Never fix just the symptom. Never implement a workaround.
 - If you cannot find the root cause, stop and compile what you've learned.
-- **Property-Based Testing (`FsCheck.Xunit`):** When adding or modifying serializers/parsers, path/metadata sanitizers, Bates/distribution/volume planners, Chaos Engine appliers, or Production Manifest Comparison logic, add or update `[Property]` tests in `src/Zipper.Tests/Properties/` following [docs/property-based-testing.md](docs/property-based-testing.md). Verify real production seams (never copy-paste production logic into test helpers), use `Math.Abs((long)seed)` to avoid `int.MinValue` overflow during shrinking, and keep each property's 100 cases under 500 ms.
+- **Property-Based Testing (`FsCheck.Xunit`):** When adding or modifying serializers/parsers, path/metadata sanitizers, Bates/distribution/volume planners, Chaos Engine appliers, or Production Manifest Comparison logic, add or update `[Property]` tests in `src/Zipper.Tests/Properties/` following [docs/property-based-testing.md](docs/property-based-testing.md). Verify real production seams (never copy-paste production logic into test helpers), draw seed ranges in the arbitraries with `Gen.Choose` (fall back to `Math.Abs((long)seed)` only for raw `int` seeds) to avoid `int.MinValue` overflow during shrinking, and keep each property's 100 cases under 500 ms.
 
 **See also:** [docs/property-based-testing.md](docs/property-based-testing.md), `.claude/skills/test-driven-development/SKILL.md`, `.claude/skills/testing-anti-patterns/SKILL.md`, `.claude/skills/systematic-debugging/SKILL.md`, `.claude/skills/root-cause-tracing/SKILL.md`
 
