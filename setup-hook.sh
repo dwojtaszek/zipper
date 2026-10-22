@@ -44,6 +44,7 @@ install_hook() {
         return 0
     fi
     if [[ -f "$dst" && -x "$dst" ]] && cmp -s "$src" "$dst"; then
+        touch "$dst" 2>/dev/null || true
         [[ "$QUIET" -eq 0 ]] && echo "Up-to-date: $dst"
         return 0
     fi

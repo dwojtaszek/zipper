@@ -11,9 +11,23 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def _has_compatible_dotnet_sdk() -> bool:
+    if shutil.which("dotnet") is None or not (ROOT / "src/obj/project.assets.json").is_file():
+        return False
+    res = subprocess.run(
+        ["dotnet", "--version"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return res.returncode == 0
 
 
 @unittest.skipIf(os.name == "nt" or shutil.which("bash") is None, "POSIX bash execution boundary")
@@ -114,14 +128,29 @@ class DevCliAndLocalWorkflowTests(unittest.TestCase):
         self.assertIn("compile_${compile_key}", mutation_text)
         self.assertIn("killed_targeted_${targeted_key}", mutation_text)
         self.assertIn("killed_full_${full_key}", mutation_text)
+        self.assertIn("-p:RunAnalyzers=false", mutation_text)
+        self.assertIn("-p:RunAnalyzersDuringBuild=false", mutation_text)
 
     def test_directory_build_props_auto_syncs_git_hooks_locally_only(self):
         props_text = (ROOT / "Directory.Build.props").read_text(encoding="utf-8")
-        self.assertIn('Target Name="SyncGitHooks"', props_text)
+        xml_root = ET.fromstring(props_text)
+        targets = {t.attrib.get("Name"): t for t in xml_root.findall("Target")}
+        self.assertIn("SyncGitHooks", targets)
+        self.assertIn("SyncGitHooksWorktree", targets)
+        allowed_exec_attrs = {"Command", "Condition", "IgnoreExitCode", "IgnoreStandardErrorWarningFormat"}
+        for target_name in ("SyncGitHooks", "SyncGitHooksWorktree"):
+            exec_nodes = targets[target_name].findall("Exec")
+            self.assertEqual(len(exec_nodes), 2)
+            for node in exec_nodes:
+                self.assertTrue(set(node.attrib).issubset(allowed_exec_attrs), node.attrib)
+                self.assertEqual(node.attrib.get("IgnoreExitCode"), "true")
+                self.assertEqual(node.attrib.get("IgnoreStandardErrorWarningFormat"), "true")
+
         self.assertIn("'$(ContinuousIntegrationBuild)' != 'true'", props_text)
         self.assertIn("'$(MSBuildProjectName)' == 'Zipper'", props_text)
         self.assertIn("setup-hook.sh", props_text)
         self.assertIn("setup-hook.bat", props_text)
+        self.assertNotIn("IgnoreExitError", props_text)
 
         res = subprocess.run(
             ["bash", str(ROOT / "setup-hook.sh"), "--quiet"],
@@ -132,6 +161,18 @@ class DevCliAndLocalWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertEqual(res.stdout.strip(), "")
+
+    @unittest.skipUnless(_has_compatible_dotnet_sdk(), "Compatible .NET SDK and restored project required")
+    def test_directory_build_props_msbuild_sync_git_hooks_targets_succeed(self):
+        for target in ("SyncGitHooks", "SyncGitHooksWorktree"):
+            msbuild_res = subprocess.run(
+                ["dotnet", "build", str(ROOT / "src/Zipper.csproj"), f"-t:{target}", "--nologo", "--no-restore"],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(msbuild_res.returncode, 0, msbuild_res.stdout + msbuild_res.stderr)
 
     def test_dev_cli_falls_back_gracefully_when_default_main_ref_missing(self):
         with tempfile.TemporaryDirectory() as tmpdir:
