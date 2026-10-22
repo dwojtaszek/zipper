@@ -875,5 +875,7 @@ public sealed class ChaosAndComparisonPropertyTests
         {
             return Task.CompletedTask;
         }
+
+        public bool ShouldValidate => false;
     }
 }

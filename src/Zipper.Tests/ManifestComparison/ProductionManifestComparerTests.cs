@@ -847,4 +847,309 @@ public class ProductionManifestComparerTests
             }
         }
     }
+
+    [Fact]
+    public async Task CompareAndReportAsync_HashFallback_Sha256WhenMd5Missing()
+    {
+        // Tests lines 294-300: hash fallback priority MD5 → SHA256 → SHA1
+        var tempDir = Path.Combine(Path.GetTempPath(), $"test_hash_fallback_{Guid.NewGuid()}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var prodDir = Path.Combine(tempDir, "PROD001");
+            var dataDir = Path.Combine(prodDir, "DATA");
+            Directory.CreateDirectory(dataDir);
+
+            var datPath = Path.Combine(dataDir, "loadfile.dat");
+            var sb = new StringBuilder();
+            // Header with SHA256HASH but no MD5HASH
+            sb.AppendLine("þBATES_NUMBERþ\u0014þVOLUMEþ\u0014þFILE_PATHþ\u0014þSHA256HASHþ");
+            sb.AppendLine($"þABC00000001þ\u0014þVOL001þ\u0014þIMAGES/001.tifþ\u0014þe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855þ");
+            File.WriteAllText(datPath, sb.ToString(), Encoding.UTF8);
+
+            var manifestData = new
+            {
+                ProductionId = "PROD001",
+                BatesNumberStart = "ABC00000001",
+                BatesNumberEnd = "ABC00000001",
+                BatesRange = new { Start = "ABC00000001", End = "ABC00000001", Prefix = "ABC", Digits = 8 },
+                LoadFiles = new { Dat = "DATA/loadfile.dat", Opt = "DATA/loadfile.opt" },
+                Settings = new { Encoding = "UTF-8", ColumnDelimiter = "\u0014", QuoteDelimiter = "þ" }
+            };
+            var manifestPath = Path.Combine(prodDir, "_manifest.json");
+            File.WriteAllText(manifestPath, JsonSerializer.Serialize(manifestData));
+
+            var outputPath = Path.Combine(tempDir, "report.json");
+            var success = await ProductionManifestComparer.CompareAndReportAsync($"{manifestPath},{manifestPath}", "replacement", outputPath);
+
+            Assert.True(success);
+            var reportJson = await File.ReadAllTextAsync(outputPath);
+            using var doc = JsonDocument.Parse(reportJson);
+            var details = doc.RootElement.GetProperty("details");
+            var unchanged = details.GetProperty("unchanged");
+            Assert.Equal(1, unchanged.GetArrayLength());
+            var record = unchanged[0];
+            Assert.Equal("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", record.GetProperty("hash").GetString());
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
+    [Fact]
+    public async Task CompareAndReportAsync_HashFallback_Sha1WhenMd5AndSha256Missing()
+    {
+        // Tests lines 294-300: hash fallback priority MD5 → SHA256 → SHA1
+        var tempDir = Path.Combine(Path.GetTempPath(), $"test_hash_fallback_sha1_{Guid.NewGuid()}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var prodDir = Path.Combine(tempDir, "PROD001");
+            var dataDir = Path.Combine(prodDir, "DATA");
+            Directory.CreateDirectory(dataDir);
+
+            var datPath = Path.Combine(dataDir, "loadfile.dat");
+            var sb = new StringBuilder();
+            // Header with SHA1HASH but no MD5HASH or SHA256HASH
+            sb.AppendLine("þBATES_NUMBERþ\u0014þVOLUMEþ\u0014þFILE_PATHþ\u0014þSHA1HASHþ");
+            sb.AppendLine($"þABC00000001þ\u0014þVOL001þ\u0014þIMAGES/001.tifþ\u0014þda39a3ee5e6b4b0d3255bfef95601890afd80709þ");
+            File.WriteAllText(datPath, sb.ToString(), Encoding.UTF8);
+
+            var manifestData = new
+            {
+                ProductionId = "PROD001",
+                BatesNumberStart = "ABC00000001",
+                BatesNumberEnd = "ABC00000001",
+                BatesRange = new { Start = "ABC00000001", End = "ABC00000001", Prefix = "ABC", Digits = 8 },
+                LoadFiles = new { Dat = "DATA/loadfile.dat", Opt = "DATA/loadfile.opt" },
+                Settings = new { Encoding = "UTF-8", ColumnDelimiter = "\u0014", QuoteDelimiter = "þ" }
+            };
+            var manifestPath = Path.Combine(prodDir, "_manifest.json");
+            File.WriteAllText(manifestPath, JsonSerializer.Serialize(manifestData));
+
+            var outputPath = Path.Combine(tempDir, "report.json");
+            var success = await ProductionManifestComparer.CompareAndReportAsync($"{manifestPath},{manifestPath}", "replacement", outputPath);
+
+            Assert.True(success);
+            var reportJson = await File.ReadAllTextAsync(outputPath);
+            using var doc = JsonDocument.Parse(reportJson);
+            var details = doc.RootElement.GetProperty("details");
+            var unchanged = details.GetProperty("unchanged");
+            Assert.Equal(1, unchanged.GetArrayLength());
+            var record = unchanged[0];
+            Assert.Equal("da39a3ee5e6b4b0d3255bfef95601890afd80709", record.GetProperty("hash").GetString());
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
+    [Fact]
+    public async Task CompareAndReportAsync_VolumeInference_FromFilePath()
+    {
+        // Tests lines 302-309: volume inference from file path when VOLUME column is missing
+        var tempDir = Path.Combine(Path.GetTempPath(), $"test_volume_inference_{Guid.NewGuid()}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var prodDir = Path.Combine(tempDir, "PROD001");
+            var dataDir = Path.Combine(prodDir, "DATA");
+            Directory.CreateDirectory(dataDir);
+
+            var datPath = Path.Combine(dataDir, "loadfile.dat");
+            var sb = new StringBuilder();
+            // Header WITHOUT VOLUME column
+            sb.AppendLine("þBATES_NUMBERþ\u0014þFILE_PATHþ\u0014þMD5HASHþ");
+            sb.AppendLine($"þABC00000001þ\u0014þNATIVES/VOL003/file1.pdfþ\u0014þd41d8cd98f00b204e9800998ecf8427eþ");
+            sb.AppendLine($"þABC00000002þ\u0014þNATIVES/VOL005/file2.pdfþ\u0014þd41d8cd98f00b204e9800998ecf8427eþ");
+            File.WriteAllText(datPath, sb.ToString(), Encoding.UTF8);
+
+            var manifestData = new
+            {
+                ProductionId = "PROD001",
+                BatesNumberStart = "ABC00000001",
+                BatesNumberEnd = "ABC00000002",
+                BatesRange = new { Start = "ABC00000001", End = "ABC00000002", Prefix = "ABC", Digits = 8 },
+                LoadFiles = new { Dat = "DATA/loadfile.dat", Opt = "DATA/loadfile.opt" },
+                Settings = new { Encoding = "UTF-8", ColumnDelimiter = "\u0014", QuoteDelimiter = "þ" }
+            };
+            var manifestPath = Path.Combine(prodDir, "_manifest.json");
+            File.WriteAllText(manifestPath, JsonSerializer.Serialize(manifestData));
+
+            var outputPath = Path.Combine(tempDir, "report.json");
+            var success = await ProductionManifestComparer.CompareAndReportAsync($"{manifestPath},{manifestPath}", "replacement", outputPath);
+
+            Assert.True(success);
+            var reportJson = await File.ReadAllTextAsync(outputPath);
+            using var doc = JsonDocument.Parse(reportJson);
+            var details = doc.RootElement.GetProperty("details");
+            var unchanged = details.GetProperty("unchanged");
+            Assert.Equal(2, unchanged.GetArrayLength());
+            var volumes = new HashSet<string>();
+            foreach (var record in unchanged.EnumerateArray())
+            {
+                volumes.Add(record.GetProperty("volume").GetString() ?? "");
+            }
+            Assert.Contains("VOL003", volumes);
+            Assert.Contains("VOL005", volumes);
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
+    [Fact]
+    public async Task CompareAndReportAsync_ParseDelimiter_None_ReturnsNullChar()
+    {
+        // Tests line 329: ParseDelimiter "none" returns '\x00'
+        var tempDir = Path.Combine(Path.GetTempPath(), $"test_parse_delim_none_{Guid.NewGuid()}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var prodDir = Path.Combine(tempDir, "PROD001");
+            var dataDir = Path.Combine(prodDir, "DATA");
+            Directory.CreateDirectory(dataDir);
+
+            var datPath = Path.Combine(dataDir, "loadfile.dat");
+            // Use null char as delimiter (no delimiter - single field)
+            File.WriteAllText(datPath, "BATES_NUMBER\nABC00000001\n", Encoding.UTF8);
+
+            var manifestData = new
+            {
+                ProductionId = "PROD001",
+                BatesNumberStart = "ABC00000001",
+                BatesNumberEnd = "ABC00000001",
+                BatesRange = new { Start = "ABC00000001", End = "ABC00000001", Prefix = "ABC", Digits = 8 },
+                LoadFiles = new { Dat = "DATA/loadfile.dat", Opt = "DATA/loadfile.opt" },
+                Settings = new { Encoding = "UTF-8", ColumnDelimiter = "none", QuoteDelimiter = "none" }
+            };
+            var manifestPath = Path.Combine(prodDir, "_manifest.json");
+            File.WriteAllText(manifestPath, JsonSerializer.Serialize(manifestData));
+
+            var outputPath = Path.Combine(tempDir, "report.json");
+            var success = await ProductionManifestComparer.CompareAndReportAsync($"{manifestPath},{manifestPath}", "replacement", outputPath);
+
+            Assert.True(success);
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
+    [Fact]
+    public async Task CompareAndReportAsync_ParseDelimiter_AsciiCode_ReturnsChar()
+    {
+        // Tests lines 330-335: ParseDelimiter "ascii:XX" returns char
+        var tempDir = Path.Combine(Path.GetTempPath(), $"test_parse_delim_ascii_{Guid.NewGuid()}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var prodDir = Path.Combine(tempDir, "PROD001");
+            var dataDir = Path.Combine(prodDir, "DATA");
+            Directory.CreateDirectory(dataDir);
+
+            var datPath = Path.Combine(dataDir, "loadfile.dat");
+            // Use ASCII 20 (DC4) as delimiter
+            var delim = (char)20;
+            File.WriteAllText(datPath, $"BATES_NUMBER{delim}VOLUME{delim}FILE_PATH{delim}MD5HASH\nABC00000001{delim}VOL001{delim}IMAGES/001.tif{delim}d41d8cd98f00b204e9800998ecf8427e\n", Encoding.UTF8);
+
+            var manifestData = new
+            {
+                ProductionId = "PROD001",
+                BatesNumberStart = "ABC00000001",
+                BatesNumberEnd = "ABC00000001",
+                BatesRange = new { Start = "ABC00000001", End = "ABC00000001", Prefix = "ABC", Digits = 8 },
+                LoadFiles = new { Dat = "DATA/loadfile.dat", Opt = "DATA/loadfile.opt" },
+                Settings = new { Encoding = "UTF-8", ColumnDelimiter = "ascii:20", QuoteDelimiter = "none" }
+            };
+            var manifestPath = Path.Combine(prodDir, "_manifest.json");
+            File.WriteAllText(manifestPath, JsonSerializer.Serialize(manifestData));
+
+            var outputPath = Path.Combine(tempDir, "report.json");
+            var success = await ProductionManifestComparer.CompareAndReportAsync($"{manifestPath},{manifestPath}", "replacement", outputPath);
+
+            Assert.True(success);
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
+    [Fact]
+    public async Task CompareAndReportAsync_ParseDelimiter_CharPrefix_ReturnsChar()
+    {
+        // Tests lines 337-341: ParseDelimiter "char:X" returns char
+        var tempDir = Path.Combine(Path.GetTempPath(), $"test_parse_delim_char_{Guid.NewGuid()}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var prodDir = Path.Combine(tempDir, "PROD001");
+            var dataDir = Path.Combine(prodDir, "DATA");
+            Directory.CreateDirectory(dataDir);
+
+            var datPath = Path.Combine(dataDir, "loadfile.dat");
+            // Use | as delimiter
+            File.WriteAllText(datPath, "BATES_NUMBER|VOLUME|FILE_PATH|MD5HASH\nABC00000001|VOL001|IMAGES/001.tif|d41d8cd98f00b204e9800998ecf8427e\n", Encoding.UTF8);
+
+            var manifestData = new
+            {
+                ProductionId = "PROD001",
+                BatesNumberStart = "ABC00000001",
+                BatesNumberEnd = "ABC00000001",
+                BatesRange = new { Start = "ABC00000001", End = "ABC00000001", Prefix = "ABC", Digits = 8 },
+                LoadFiles = new { Dat = "DATA/loadfile.dat", Opt = "DATA/loadfile.opt" },
+                Settings = new { Encoding = "UTF-8", ColumnDelimiter = "char:|", QuoteDelimiter = "none" }
+            };
+            var manifestPath = Path.Combine(prodDir, "_manifest.json");
+            File.WriteAllText(manifestPath, JsonSerializer.Serialize(manifestData));
+
+            var outputPath = Path.Combine(tempDir, "report.json");
+            var success = await ProductionManifestComparer.CompareAndReportAsync($"{manifestPath},{manifestPath}", "replacement", outputPath);
+
+            Assert.True(success);
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
+
+    [Fact]
+    public async Task CompareAndReportAsync_RollbackOnSummaryPublishFailure_PreservesOriginalReport()
+    {
+        // Tests lines 153-172: rollback on summary publish failure
+        // This is tested by CompareAndReportAsync_WhenSummaryPathIsDirectory_ShouldPreservePreExistingReport
+        // but we add a more explicit test for the rollback logic
+        var tempDir = Path.Combine(Path.GetTempPath(), $"test_rollback_{Guid.NewGuid()}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var p1 = CreateTestProductionSet(tempDir, "PROD001", "VOL001", new[] { "ABC00000001" });
+            var p2 = CreateTestProductionSet(tempDir, "PROD002", "VOL001", new[] { "ABC00000002" });
+            var outputPath = Path.Combine(tempDir, "report.json");
+            var summaryPath = Path.ChangeExtension(outputPath, ".summary.md");
+
+            // Pre-create the output file
+            await File.WriteAllTextAsync(outputPath, "ORIGINAL REPORT");
+
+            // Make summary path a directory to cause publish failure
+            Directory.CreateDirectory(summaryPath);
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                ProductionManifestComparer.CompareAndReportAsync($"{p1},{p2}", "replacement", outputPath));
+
+            // Original report should be preserved (rollback worked)
+            var preserved = await File.ReadAllTextAsync(outputPath);
+            Assert.Equal("ORIGINAL REPORT", preserved);
+        }
+        finally
+        {
+            CleanupDirectory(tempDir);
+        }
+    }
 }

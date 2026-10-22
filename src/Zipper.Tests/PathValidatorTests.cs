@@ -515,4 +515,132 @@ public class PathValidatorTests
             if (Directory.Exists(baseDir)) Directory.Delete(baseDir, true);
         }
     }
+
+    [Fact]
+    public void ResolveSecurePath_CircularSymlinkDepthGuard_ThrowsIOException()
+    {
+        // This test exercises the depth > 32 guard in GetRealPathInternal (lines 120-123).
+        // We create a chain of 33 symlinks where each points to the next, forming a cycle
+        // at the end. The resolver should detect the cycle and throw IOException.
+        string baseDir = Path.Combine(Path.GetTempPath(), "ZipperCycleTest_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(baseDir);
+
+        try
+        {
+            const int chainLength = 34; // 34 > 32, so depth guard should trigger
+            var linkPaths = new string[chainLength];
+
+            // Create the chain: link0 -> link1 -> link2 -> ... -> link33 -> link0 (cycle)
+            for (int i = 0; i < chainLength; i++)
+            {
+                linkPaths[i] = Path.Combine(baseDir, $"link{i}");
+            }
+
+            // Create the cycle
+            for (int i = 0; i < chainLength; i++)
+            {
+                try
+                {
+                    Directory.CreateSymbolicLink(linkPaths[i], linkPaths[(i + 1) % chainLength]);
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    return; // Skip if symlinks not permitted
+                }
+                catch (PlatformNotSupportedException)
+                {
+                    return;
+                }
+                catch (System.ComponentModel.Win32Exception)
+                {
+                    return;
+                }
+                catch (System.IO.IOException)
+                {
+                    return;
+                }
+            }
+
+            // Act & Assert - resolving any link in the cycle should hit the depth guard
+            var result = PathValidator.ResolveSecurePath(linkPaths[0], baseDir);
+
+            // The guard throws IOException, so ResolveSecurePath catches it and returns null
+            Assert.Null(result);
+        }
+        finally
+        {
+            if (Directory.Exists(baseDir))
+            {
+                try
+                {
+                    Directory.Delete(baseDir, true);
+                }
+                catch
+                {
+                    // Best effort cleanup
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void IsPathSafe_CircularSymlinkDepthGuard_ReturnsFalse()
+    {
+        // Same setup as above but testing IsPathSafe which swallows exceptions
+        string baseDir = Path.Combine(Path.GetTempPath(), "ZipperCycleSafeTest_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(baseDir);
+
+        try
+        {
+            const int chainLength = 34;
+            var linkPaths = new string[chainLength];
+
+            for (int i = 0; i < chainLength; i++)
+            {
+                linkPaths[i] = Path.Combine(baseDir, $"link{i}");
+            }
+
+            for (int i = 0; i < chainLength; i++)
+            {
+                try
+                {
+                    Directory.CreateSymbolicLink(linkPaths[i], linkPaths[(i + 1) % chainLength]);
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    return;
+                }
+                catch (PlatformNotSupportedException)
+                {
+                    return;
+                }
+                catch (System.ComponentModel.Win32Exception)
+                {
+                    return;
+                }
+                catch (System.IO.IOException)
+                {
+                    return;
+                }
+            }
+
+            // Act & Assert - IsPathSafe should return false (swallows the IOException)
+            var result = PathValidator.IsPathSafe(linkPaths[0], baseDir);
+            Assert.False(result);
+        }
+        finally
+        {
+            if (Directory.Exists(baseDir))
+            {
+                try
+                {
+                    Directory.Delete(baseDir, true);
+                }
+                catch
+                {
+                    // Best effort cleanup
+                }
+            }
+        }
+    }
 }

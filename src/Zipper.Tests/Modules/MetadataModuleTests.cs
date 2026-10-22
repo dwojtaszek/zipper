@@ -1,6 +1,7 @@
 using Xunit;
 using Zipper.Cli.Modules;
 using Zipper.Config;
+using Zipper.Profiles;
 
 namespace Zipper.Tests;
 
@@ -242,5 +243,51 @@ public class MetadataModuleTests : WorkingDirectoryTestBase
     public void TryApply_UnknownFlag_ReturnsFalse()
     {
         Assert.False(new MetadataModule().TryApply("--unknown-flag", "x"));
+    }
+
+    [Fact]
+    public void TryBuild_WithCollectionMetadataAndColumnProfile_MergesCollectionMetadata()
+    {
+        // Tests lines 151-154 in MetadataModule.cs: --with-collection-metadata × --column-profile
+        // When both are specified, the collection metadata is merged into the column profile
+        var baseProfile = BuiltInProfiles.GetProfile("standard");
+        var baseColumnCount = baseProfile?.Columns.Count ?? 0;
+
+        var (config, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() =>
+        {
+            Assert.True(TryBuild(false, false, new[] { "--with-collection-metadata", "--column-profile", "standard" }, out var builtConfig));
+            return builtConfig;
+        });
+
+        Assert.NotNull(config.ColumnProfile);
+        Assert.True(config.WithCollectionMetadata);
+        // The merged profile should have more columns than the base profile
+        Assert.True(config.ColumnProfile.Columns.Count > baseColumnCount,
+            $"Expected merged profile to have more columns than base ({baseColumnCount}), but got {config.ColumnProfile.Columns.Count}");
+    }
+
+    [Fact]
+    public void TryBuild_WithCollectionMetadataWithoutColumnProfile_SetsFlag()
+    {
+        // --with-collection-metadata alone should set the flag but not create a profile
+        Assert.True(TryBuild(false, false, new[] { "--with-collection-metadata" }, out var config));
+        Assert.True(config.WithCollectionMetadata);
+        Assert.Null(config.ColumnProfile);
+    }
+
+    [Fact]
+    public void TryBuild_WithCollectionMetadataAndMetadataAndProfile_PrecedenceWarning()
+    {
+        // --with-collection-metadata with --with-metadata AND --column-profile should warn
+        var (config, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() =>
+        {
+            Assert.True(TryBuild(false, false, new[] { "--with-metadata", "--with-collection-metadata", "--column-profile", "standard" }, out var builtConfig));
+            return builtConfig;
+        });
+
+        Assert.Contains("Warning: --column-profile takes precedence over --with-metadata", stderr, StringComparison.Ordinal);
+        Assert.False(config.WithMetadata);
+        Assert.True(config.WithCollectionMetadata);
+        Assert.NotNull(config.ColumnProfile);
     }
 }

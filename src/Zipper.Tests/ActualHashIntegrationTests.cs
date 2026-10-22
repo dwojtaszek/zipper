@@ -55,6 +55,8 @@ public sealed class ActualHashIntegrationTests : TempDirectoryTestBase
 
         public Task CreateZipAsync(string sourceDir, string zipPath, Config.ZipCompressionMethod method, CancellationToken cancellationToken = default)
             => _inner.CreateZipAsync(sourceDir, zipPath, method, cancellationToken);
+
+        public bool ShouldValidate => _inner.ShouldValidate;
     }
 
     [Theory]

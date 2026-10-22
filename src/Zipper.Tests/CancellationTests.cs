@@ -261,13 +261,13 @@ public class CancellationTests : WorkingDirectoryTestBase
             {
                 OnWriteBytesAsync = async (path, content, ct) =>
                 {
-                    await innerMaterializer.WriteBytesAsync(path, content, ct);
                     if (path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
                     {
                         generationStarted = true;
                         cts.Cancel();
                         throw new OperationCanceledException(cts.Token);
                     }
+                    return false;
                 },
             };
 
@@ -321,8 +321,7 @@ public class CancellationTests : WorkingDirectoryTestBase
                         cts.Cancel();
                         throw new OperationCanceledException(cts.Token);
                     }
-
-                    await innerMaterializer.WriteBytesAsync(path, content, ct);
+                    return false;
                 },
             };
 
@@ -513,13 +512,13 @@ public class CancellationTests : WorkingDirectoryTestBase
             {
                 OnWriteBytesAsync = async (path, content, ct) =>
                 {
-                    await innerMaterializer.WriteBytesAsync(path, content, ct);
                     if (path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
                     {
                         generationStarted = true;
                         cts.Cancel();
                         throw new OperationCanceledException(cts.Token);
                     }
+                    return false;
                 },
             };
 

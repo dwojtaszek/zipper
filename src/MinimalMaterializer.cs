@@ -21,4 +21,6 @@ internal sealed class MinimalMaterializer : IFileMaterializer
 
     public Task CreateZipAsync(string sourceDir, string zipPath, Config.ZipCompressionMethod method, CancellationToken cancellationToken = default)
         => Task.CompletedTask;
+
+    public bool ShouldValidate => false;
 }

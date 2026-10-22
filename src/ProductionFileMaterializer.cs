@@ -141,4 +141,6 @@ internal sealed class ProductionFileMaterializer : IFileMaterializer
     {
         return File.WriteAllBytesAsync(childNativePath, attach.content, cancellationToken);
     }
+
+    public bool ShouldValidate => true;
 }

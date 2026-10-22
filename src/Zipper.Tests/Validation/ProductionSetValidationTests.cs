@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Xunit;
 using Zipper.Config;
@@ -708,6 +709,226 @@ public class ProductionSetValidationTests : IDisposable
 
         Assert.Equal(1, report.CheckedFileCounts["dat"]);
         Assert.Equal(1, report.CheckedFileCounts["opt"]);
+    }
+
+    [Fact]
+    public void Validate_MissingManifestJson_StillValidatesLoadFiles()
+    {
+        // Regression test for line 463: missing _manifest.json should not skip Bates validation
+        // but should continue validating DAT/OPT load files.
+        var request = this.CreateTestRequest(count: 2);
+        var prodDir = Path.Combine(this.testOutputPath, "missing_manifest");
+        Directory.CreateDirectory(prodDir);
+        var dataDir = Path.Combine(prodDir, "DATA");
+        Directory.CreateDirectory(dataDir);
+
+        var datPath = Path.Combine(dataDir, "loadfile.dat");
+        var optPath = Path.Combine(dataDir, "loadfile.opt");
+        var nativesDir = Path.Combine(prodDir, "NATIVES", "VOL001");
+        Directory.CreateDirectory(nativesDir);
+
+        // Valid DAT with duplicate Bates to test BatesConsistency without manifest
+        var colDelim = request.Delimiters.ColumnDelimiter[0];
+        var quoteDelim = request.Delimiters.QuoteDelimiter[0];
+        var quoteStr = quoteDelim.ToString();
+        var colStr = colDelim.ToString();
+
+        var sb = new StringBuilder();
+        var headerFields = new[] { "DOCID", "BATES_NUMBER", "NATIVE_PATH" };
+        sb.AppendLine(string.Join(colStr, headerFields.Select(f => $"{quoteStr}{f}{quoteStr}")));
+        sb.AppendLine(string.Join(colStr, $"{quoteStr}DOC001{quoteStr}", $"{quoteStr}TEST00000001{quoteStr}", $"{quoteStr}NATIVES/VOL001/file1.pdf{quoteStr}"));
+        // Duplicate Bates on second row
+        sb.AppendLine(string.Join(colStr, $"{quoteStr}DOC002{quoteStr}", $"{quoteStr}TEST00000001{quoteStr}", $"{quoteStr}NATIVES/VOL001/file2.pdf{quoteStr}"));
+        File.WriteAllText(datPath, sb.ToString());
+
+        // Valid OPT
+        File.WriteAllText(optPath, "TEST00000001,1,NATIVES/VOL001/file1.pdf,,,1,1\nTEST00000002,1,NATIVES/VOL001/file2.pdf,,,1,1\n");
+
+        File.WriteAllBytes(Path.Combine(nativesDir, "file1.pdf"), [0x25, 0x50, 0x44, 0x46]);
+        File.WriteAllBytes(Path.Combine(nativesDir, "file2.pdf"), [0x25, 0x50, 0x44, 0x46]);
+
+        var report = ProductionSetPostValidator.Validate(prodDir, request);
+
+        // Should still detect duplicate Bates in DAT even without manifest
+        Assert.Equal("failed", report.Status);
+        Assert.Contains(report.Findings, f => f.Code == "UniqueId" && f.Message.Contains("Duplicate Bates Number"));
+    }
+
+    [Fact]
+    public void Validate_DatChildBatesDoesNotStartWithParentDocId_ReportsBatesConsistencyError()
+    {
+        // Tests lines 346-366: child Bates must start with parent Doc ID
+        var request = this.CreateTestRequest(count: 2);
+        var prodDir = Path.Combine(this.testOutputPath, "child_bates_mismatch");
+        Directory.CreateDirectory(prodDir);
+        var dataDir = Path.Combine(prodDir, "DATA");
+        Directory.CreateDirectory(dataDir);
+        var nativesDir = Path.Combine(prodDir, "NATIVES", "VOL001");
+        Directory.CreateDirectory(nativesDir);
+
+        var datPath = Path.Combine(dataDir, "loadfile.dat");
+        var optPath = Path.Combine(dataDir, "loadfile.opt");
+
+        var colDelim = request.Delimiters.ColumnDelimiter[0];
+        var quoteDelim = request.Delimiters.QuoteDelimiter[0];
+        var quoteStr = quoteDelim.ToString();
+        var colStr = colDelim.ToString();
+
+        var sb = new StringBuilder();
+        var headerFieldsWithParent = new[] { "DOCID", "BATES_NUMBER", "NATIVE_PATH", "PARENTDOCID" };
+        sb.AppendLine(string.Join(colStr, headerFieldsWithParent.Select(f => $"{quoteStr}{f}{quoteStr}")));
+        // Parent row
+        sb.AppendLine(string.Join(colStr, $"{quoteStr}PARENT001{quoteStr}", $"{quoteStr}TEST00000001{quoteStr}", $"{quoteStr}NATIVES/VOL001/parent.pdf{quoteStr}", $"{quoteStr}{quoteStr}"));
+        // Child row: Bates does not start with parent Doc ID
+        sb.AppendLine(string.Join(colStr, $"{quoteStr}CHILD001{quoteStr}", $"{quoteStr}TEST00000002{quoteStr}", $"{quoteStr}NATIVES/VOL001/child.pdf{quoteStr}", $"{quoteStr}PARENT001{quoteStr}"));
+        File.WriteAllText(datPath, sb.ToString());
+
+        File.WriteAllText(optPath, "TEST00000001,1,NATIVES/VOL001/parent.pdf,,,1,1\nTEST00000002,1,NATIVES/VOL001/child.pdf,,,1,1\n");
+
+        File.WriteAllBytes(Path.Combine(nativesDir, "parent.pdf"), [0x25, 0x50, 0x44, 0x46]);
+        File.WriteAllBytes(Path.Combine(nativesDir, "child.pdf"), [0x25, 0x50, 0x44, 0x46]);
+
+        var report = ProductionSetPostValidator.Validate(prodDir, request);
+
+        Assert.Equal("failed", report.Status);
+        Assert.Contains(report.Findings, f =>
+            f.Code == "BatesConsistency" &&
+            f.Message.Contains("Child Bates number") &&
+            f.Message.Contains("does not start with parent Doc ID"));
+    }
+
+    [Fact]
+    public void Validate_OptDuplicateBates_ReportsUniqueIdError()
+    {
+        // Tests lines 686-699: OPT Bates uniqueness
+        var request = this.CreateTestRequest(count: 2);
+        var prodDir = Path.Combine(this.testOutputPath, "opt_duplicate_bates");
+        Directory.CreateDirectory(prodDir);
+        var dataDir = Path.Combine(prodDir, "DATA");
+        Directory.CreateDirectory(dataDir);
+        var nativesDir = Path.Combine(prodDir, "NATIVES", "VOL001");
+        Directory.CreateDirectory(nativesDir);
+
+        var datPath = Path.Combine(dataDir, "loadfile.dat");
+        var optPath = Path.Combine(dataDir, "loadfile.opt");
+
+        var colDelim = request.Delimiters.ColumnDelimiter[0];
+        var quoteDelim = request.Delimiters.QuoteDelimiter[0];
+        var quoteStr = quoteDelim.ToString();
+        var colStr = colDelim.ToString();
+
+        var sb = new StringBuilder();
+        var headerFields = new[] { "DOCID", "BATES_NUMBER", "NATIVE_PATH" };
+        sb.AppendLine(string.Join(colStr, headerFields.Select(f => $"{quoteStr}{f}{quoteStr}")));
+        sb.AppendLine(string.Join(colStr, $"{quoteStr}DOC001{quoteStr}", $"{quoteStr}TEST00000001{quoteStr}", $"{quoteStr}NATIVES/VOL001/file1.pdf{quoteStr}"));
+        sb.AppendLine(string.Join(colStr, $"{quoteStr}DOC002{quoteStr}", $"{quoteStr}TEST00000002{quoteStr}", $"{quoteStr}NATIVES/VOL001/file2.pdf{quoteStr}"));
+        File.WriteAllText(datPath, sb.ToString());
+
+        // OPT with duplicate Bates on line 2
+        File.WriteAllText(optPath, "TEST00000001,1,NATIVES/VOL001/file1.pdf,,,1,1\nTEST00000001,1,NATIVES/VOL001/file2.pdf,,,1,1\n");
+
+        File.WriteAllBytes(Path.Combine(nativesDir, "file1.pdf"), [0x25, 0x50, 0x44, 0x46]);
+        File.WriteAllBytes(Path.Combine(nativesDir, "file2.pdf"), [0x25, 0x50, 0x44, 0x46]);
+
+        var report = ProductionSetPostValidator.Validate(prodDir, request);
+
+        Assert.Equal("failed", report.Status);
+        Assert.Contains(report.Findings, f =>
+            f.Code == "UniqueId" &&
+            f.Path == "DATA/loadfile.opt" &&
+            f.Message.Contains("Duplicate Bates Number in OPT"));
+    }
+
+    [Fact]
+    public void Validate_OptLineWithInvalidColumnCount_ReportsOptBoundaryError()
+    {
+        // Tests lines 676-683: OPT boundary check (7 columns expected)
+        var request = this.CreateTestRequest(count: 2);
+        var prodDir = Path.Combine(this.testOutputPath, "opt_boundary");
+        Directory.CreateDirectory(prodDir);
+        var dataDir = Path.Combine(prodDir, "DATA");
+        Directory.CreateDirectory(dataDir);
+        var nativesDir = Path.Combine(prodDir, "NATIVES", "VOL001");
+        Directory.CreateDirectory(nativesDir);
+
+        var datPath = Path.Combine(dataDir, "loadfile.dat");
+        var optPath = Path.Combine(dataDir, "loadfile.opt");
+
+        var colDelim = request.Delimiters.ColumnDelimiter[0];
+        var quoteDelim = request.Delimiters.QuoteDelimiter[0];
+        var quoteStr = quoteDelim.ToString();
+        var colStr = colDelim.ToString();
+
+        var sb = new StringBuilder();
+        var headerFields = new[] { "DOCID", "BATES_NUMBER", "NATIVE_PATH" };
+        sb.AppendLine(string.Join(colStr, headerFields.Select(f => $"{quoteStr}{f}{quoteStr}")));
+        sb.AppendLine(string.Join(colStr, $"{quoteStr}DOC001{quoteStr}", $"{quoteStr}TEST00000001{quoteStr}", $"{quoteStr}NATIVES/VOL001/file1.pdf{quoteStr}"));
+        sb.AppendLine(string.Join(colStr, $"{quoteStr}DOC002{quoteStr}", $"{quoteStr}TEST00000002{quoteStr}", $"{quoteStr}NATIVES/VOL001/file2.pdf{quoteStr}"));
+        File.WriteAllText(datPath, sb.ToString());
+
+        // OPT with 8 columns (should be 7)
+        File.WriteAllText(optPath, "TEST00000001,1,NATIVES/VOL001/file1.pdf,,,1,1,EXTRA\nTEST00000002,1,NATIVES/VOL001/file2.pdf,,,1,1\n");
+
+        File.WriteAllBytes(Path.Combine(nativesDir, "file1.pdf"), [0x25, 0x50, 0x44, 0x46]);
+        File.WriteAllBytes(Path.Combine(nativesDir, "file2.pdf"), [0x25, 0x50, 0x44, 0x46]);
+
+        var report = ProductionSetPostValidator.Validate(prodDir, request);
+
+        Assert.Equal("failed", report.Status);
+        Assert.Contains(report.Findings, f =>
+            f.Code == "OptBoundary" &&
+            f.Path == "DATA/loadfile.opt" &&
+            f.Message.Contains("columns, expected 7"));
+    }
+
+    [Fact]
+    public void Validate_ManifestMetadataNotObject_ReportsMetadataAzureConstraintError()
+    {
+        // Tests lines 483-497: manifest metadata present but not an object
+        var request = this.CreateTestRequest(count: 1);
+        var prodDir = Path.Combine(this.testOutputPath, "manifest_metadata_not_object");
+        Directory.CreateDirectory(prodDir);
+        var dataDir = Path.Combine(prodDir, "DATA");
+        Directory.CreateDirectory(dataDir);
+        var nativesDir = Path.Combine(prodDir, "NATIVES", "VOL001");
+        Directory.CreateDirectory(nativesDir);
+
+        var datPath = Path.Combine(dataDir, "loadfile.dat");
+        var optPath = Path.Combine(dataDir, "loadfile.opt");
+        var manifestPath = Path.Combine(prodDir, "_manifest.json");
+
+        var colDelim = request.Delimiters.ColumnDelimiter[0];
+        var quoteDelim = request.Delimiters.QuoteDelimiter[0];
+        var quoteStr = quoteDelim.ToString();
+        var colStr = colDelim.ToString();
+
+        var sb = new StringBuilder();
+        var headerFields = new[] { "DOCID", "BATES_NUMBER", "NATIVE_PATH" };
+        sb.AppendLine(string.Join(colStr, headerFields.Select(f => $"{quoteStr}{f}{quoteStr}")));
+        sb.AppendLine(string.Join(colStr, $"{quoteStr}DOC001{quoteStr}", $"{quoteStr}TEST00000001{quoteStr}", $"{quoteStr}NATIVES/VOL001/file1.pdf{quoteStr}"));
+        File.WriteAllText(datPath, sb.ToString());
+
+        File.WriteAllText(optPath, "TEST00000001,1,NATIVES/VOL001/file1.pdf,,,1,1\n");
+
+        File.WriteAllBytes(Path.Combine(nativesDir, "file1.pdf"), [0x25, 0x50, 0x44, 0x46]);
+
+        // Manifest with metadata as string instead of object
+        var manifestJson = """
+        {
+            "ProductionId": "TESTPROD",
+            "BatesNumberStart": "TEST00000001",
+            "BatesNumberEnd": "TEST00000001",
+            "metadata": "not-an-object"
+        }
+        """;
+        File.WriteAllText(manifestPath, manifestJson);
+
+        var report = ProductionSetPostValidator.Validate(prodDir, request);
+
+        Assert.Equal("failed", report.Status);
+        Assert.Contains(report.Findings, f =>
+            f.Code == "MetadataAzureConstraint" &&
+            f.Message.Contains("must be an object of string key/value pairs, but it is a String"));
     }
 }
 

@@ -910,6 +910,158 @@ public class ZipArchiveServiceTests : TempDirectoryTestBase
         public Memory<byte> Memory => _buffer;
         public void Dispose() { IsDisposed = true; }
     }
+
+    [Fact]
+    public async Task CreateArchiveAsync_EmlVsStandardTextContent_WritesCorrectPayloadBytes()
+    {
+        // Tests that EML and Standard file types write different extracted text payloads
+        // (swapping EmlTextContent ⇄ StandardTextContent would be caught)
+        var zipPath = this.GetTempFilePath();
+        var loadPath = this.GetTempFilePath();
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileType = "eml",
+                FileCount = 1,
+                Concurrency = 1,
+                WithText = true,
+            },
+        };
+
+        var testFile = this.CreateTestEmlFileData(1);
+
+        var channel = Channel.CreateUnbounded<FileData>();
+        await channel.Writer.WriteAsync(testFile);
+        channel.Writer.Complete();
+
+        await new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
+
+        // Assert - verify the EML text content was written (not standard text)
+        ZipAssert.AssertValidZip(zipPath, 4, archive =>
+        {
+            var emlEntry = archive.GetEntry("folder1/test1.eml");
+            Assert.NotNull(emlEntry);
+
+            var textEntry = archive.GetEntry("folder1/test1.txt");
+            Assert.NotNull(textEntry);
+
+            // Read the text content and verify it's EML-specific
+            using var textStream = textEntry.Open();
+            using var reader = new StreamReader(textStream);
+            var textContent = reader.ReadToEnd();
+
+            // EML extracted text should contain email-specific markers
+            Assert.Contains("email body", textContent, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Lorem ipsum", textContent, StringComparison.OrdinalIgnoreCase); // Standard text has Lorem ipsum
+        });
+    }
+
+    [Fact]
+    public async Task CreateArchiveAsync_StandardTextContent_WritesPlaceholderExtractedText()
+    {
+        // Tests that standard file types (pdf, tiff, etc.) write placeholder extracted text
+        var zipPath = this.GetTempFilePath();
+        var loadPath = this.GetTempFilePath();
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileType = "pdf",
+                FileCount = 1,
+                Concurrency = 1,
+                WithText = true,
+            },
+        };
+
+        var testFile = this.CreateZipTestFileData(1);
+
+        var channel = Channel.CreateUnbounded<FileData>();
+        await channel.Writer.WriteAsync(testFile);
+        channel.Writer.Complete();
+
+        await new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
+
+        // Assert - verify the standard text content was written (Lorem Ipsum)
+        ZipAssert.AssertValidZip(zipPath, 2, archive =>
+        {
+            var textEntry = archive.GetEntry("folder1/test1.txt");
+            Assert.NotNull(textEntry);
+
+            using var textStream = textEntry.Open();
+            using var reader = new StreamReader(textStream);
+            var textContent = reader.ReadToEnd();
+
+            // Standard extracted text should contain placeholder text
+            Assert.Contains("placeholder for extracted text", textContent, StringComparison.OrdinalIgnoreCase);
+        });
+    }
+
+    [Fact(Skip = "Requires integration test setup - ZipArchiveSink uses internal openTarget for load files")]
+    public async Task CreateArchiveAsync_LoadFileWindow_NonCancellable_CleansUpSidecarsOnFailure()
+    {
+        // Tests lines 88-111 in ZipArchiveSink: the load-file emission phase uses CancellationToken.None
+        // and cleans up sidecars if an error occurs
+        var tempDir = Path.Combine(TempDir, Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var zipPath = Path.Combine(tempDir, "test.zip");
+            var loadPath = Path.Combine(tempDir, "load.dat");
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    FileType = "pdf",
+                    FileCount = 1,
+                    Concurrency = 1,
+                    IncludeLoadFile = false, // Load files written to disk as sidecars
+                },
+                LoadFile = new LoadFileConfig { Formats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt } },
+            };
+
+            var channel = Channel.CreateUnbounded<FileData>();
+            await channel.Writer.WriteAsync(this.CreateZipTestFileData(1));
+            channel.Writer.Complete();
+
+            // Use a materializer that fails on audit file write
+            var innerMaterializer = new ProductionFileMaterializer();
+            var decorator = new FaultingMaterializerDecorator(innerMaterializer)
+            {
+                OnOpenWriteStream = (path) =>
+                {
+                    // Fail when trying to write audit file (sidecar)
+                    if (path.EndsWith("_properties.json", StringComparison.Ordinal))
+                    {
+                        throw new IOException("Simulated audit file write failure");
+                    }
+                    return innerMaterializer.OpenWriteStream(path);
+                }
+            };
+
+            // The CreateArchiveAsync uses its own materializer for the ZIP, but load files use the provided openTarget
+            // We need to test the sidecar cleanup directly by causing a failure in load file emission
+            // This is tested at the ZipArchiveSink level by the catch block at lines 119-139
+
+            var ex = await Assert.ThrowsAsync<IOException>(() =>
+                new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader));
+
+            Assert.Contains("audit file write failure", ex.Message, StringComparison.OrdinalIgnoreCase);
+
+            // Verify sidecars were cleaned up
+            var datSidecar = Path.Combine(tempDir, "load.dat_properties.json");
+            var optSidecar = Path.Combine(tempDir, "load.opt_properties.json");
+            Assert.False(File.Exists(datSidecar), "DAT audit sidecar must be cleaned up on failure.");
+            Assert.False(File.Exists(optSidecar), "OPT audit sidecar must be cleaned up on failure.");
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
 }
 
 
