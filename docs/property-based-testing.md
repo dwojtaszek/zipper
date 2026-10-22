@@ -38,6 +38,9 @@ All property-based test suites live under `src/Zipper.Tests/Properties/`:
 | `PathAndSourceInputPropertyTests.cs` | `PathValidator`, `NamingConventionHelper`, `SourcePathSanitizer`, `SourceFileTypeMap`, `SourceCsvReader`, `SourceRecordIntake`, `ProductionModule` |
 | `ChaosAndComparisonPropertyTests.cs` | `ChaosSampler`, `DatAnomalyApplier`, `OptAnomalyApplier`, `ComparisonEngine`, `BatesRangeAnalyzer`, `ProductionMetadataBudget`, `DataGenerator`, `NumberGenerator`, `TextGenerator` |
 | `ValidationPropertyTests.cs` | `PostGenerationValidator`, `ProductionSetPostValidator`, `SupplementalValidator`, `ProductionSetPlanner`, `VolumeAnalyzer` |
+| `LoadFileComposerAndEmitterPropertyTests.cs` | `DatStandardComposer`, `StandardRowComposer`, `SyntheticRowValues`, `LoadFileEmitter`, `XmlLoadFileWriter`, `FamilyPlan`, `LoadFileAuditWriter`, `CodedGenerator` |
+| `ArchiveFixturePropertyTests.cs` | `ArchiveTestModule`, `ArchiveFixtureMutator`, `ArchiveFixtureLayout`, `ArchiveTestCaseSemantics` |
+| `StreamingAndCliRulesPropertyTests.cs` | `OrderingWindow`, `DiskBackedFileDataList`, `FileDataSerializer`, `HashUtility`, `CrossCuttingRules`, `DelimiterModule` |
 
 ### Mandatory Class & Attribute Structure
 
@@ -119,14 +122,24 @@ await ProductionManifestWriter.WriteAsync(
     materializer: materializer).ConfigureAwait(false);
 ```
 
-### C. Safe Seed Normalization (`Math.Abs((long)seed)`)
+### C. Draw Seed Ranges in the Arbitrary (No Modulo Reductions in the Test Body)
 
-FsCheck's `int` generator and shrinker actively test boundary values including `int.MinValue` (`-2147483648`). Calling `Math.Abs(int.MinValue)` throws `OverflowException`. Always widen to `long` or mask the sign bit before taking the absolute value:
+FsCheck's `int` generator and shrinker actively test boundary values including `int.MinValue` (`-2147483648`). Calling `Math.Abs(int.MinValue)` throws `OverflowException`, and folding a wide seed through `Math.Abs((long)seed) % N` inside a `[Property]` body hides the range the test actually exercises. Draw the seed range in the arbitrary instead, so the test body consumes the seed verbatim:
 
 ```csharp
-// GOOD: Widens to long before Math.Abs so int.MinValue never overflows
-int safeSeed = (int)(Math.Abs((long)seed) % 1_000_000L) + 1;
+// GOOD: The arbitrary bounds the seed, so the property body never reduces it
+from seed in Gen.Choose(0, 100_000)
+select new EmitterPropertyInput(enc, bom, eol, hasHeader, recordCount, colCount, seed);
 ```
+
+```csharp
+// GOOD: The property body uses the seed as drawn
+int seed = input.Seed;
+```
+
+Draw seed ranges from `0` (inclusive). The CLI documents `--seed` as a non-negative integer, and no production path branches on the seed being positive — every consumer checks `Metadata.Seed.HasValue`, never `Seed > 0` — so `0` is a valid, meaningful input. It is also the value the seed shrinkers reach: a shrinker that halves a seed also yields `0`. Keeping the lower bound at `0` therefore guarantees that a shrunk counterexample is still a value the generator can produce, instead of a value that only the shrinker can reach.
+
+Only widen to `long` (`Math.Abs((long)seed)`) or mask the sign bit (`seed & int.MaxValue`) when a seed is genuinely produced outside the arbitraries (for example, by a `[Theory]` or a hand-written `int` parameter).
 
 ### D. Reusing Per-Class Temp Directories for I/O Properties
 

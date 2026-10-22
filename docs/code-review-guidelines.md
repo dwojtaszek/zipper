@@ -49,6 +49,7 @@ See [docs/property-based-testing.md](property-based-testing.md) for the full gui
 
 - **Flag as defects (must fix):**
   - Calling `Math.Abs(int)` on an FsCheck-generated `int` without casting to `long` first (throws `OverflowException` when shrunk to `int.MinValue`).
+  - Folding a seed through `Math.Abs((long)seed) % N` inside a `[Property]` body instead of drawing the bounded range in the arbitrary with `Gen.Choose`.
   - Copying production logic into a private test helper instead of invoking the real production type/seam.
   - Creating/deleting temporary directories per iteration inside a `[Property]` method instead of reusing a class-level `IDisposable` temp root.
   - Unconstrained primitive arbitraries where guard clauses discard most generated inputs.

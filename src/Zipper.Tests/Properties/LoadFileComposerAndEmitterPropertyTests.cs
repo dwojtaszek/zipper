@@ -31,7 +31,7 @@ public sealed class LoadFileComposerAndEmitterPropertyTests
         MetadataFlagCombinationInput input)
     {
         int fileCount = Math.Clamp(input.FileCount, 1, 10);
-        int seed = NormalizeSeed(input.Seed);
+        int seed = input.Seed;
         var request = BuildRequest(input, fileCount, seed);
         var namingConvention = request.Metadata.ColumnProfile?.FieldNamingConvention;
 
@@ -85,7 +85,7 @@ public sealed class LoadFileComposerAndEmitterPropertyTests
         MetadataFlagCombinationInput input)
     {
         int fileCount = Math.Clamp(input.FileCount, 1, 8);
-        int seed = NormalizeSeed(input.Seed);
+        int seed = input.Seed;
         var request = BuildRequest(input, fileCount, seed);
         var processedFiles = BuildProcessedFiles(request, fileCount, input.AttachmentRate);
 
@@ -215,7 +215,7 @@ public sealed class LoadFileComposerAndEmitterPropertyTests
         XmlLoadFilePropertyInput input)
     {
         int fileCount = Math.Clamp(input.FileCount, 1, 6);
-        int seed = (int)(Math.Abs((long)input.Seed) % 1_000_000L) + 1;
+        int seed = input.Seed;
 
         var request = new FileGenerationRequest
         {
@@ -359,7 +359,7 @@ public sealed class LoadFileComposerAndEmitterPropertyTests
     {
         int fileCount = Math.Clamp(input.FileCount, 1, 20);
         double rate = Math.Clamp(input.AttachmentRate, 0.0, 100.0);
-        int seed = NormalizeSeed(input.Seed);
+        int seed = input.Seed;
 
         var request = new FileGenerationRequest
         {
@@ -433,7 +433,7 @@ public sealed class LoadFileComposerAndEmitterPropertyTests
     {
         int fileCount = Math.Clamp(input.FileCount, 1, 15);
         int rate = Math.Clamp(input.AttachmentRate, 0, 100);
-        int seed = NormalizeSeed(input.Seed);
+        int seed = input.Seed;
         var format = input.Format;
 
         var request = new FileGenerationRequest
@@ -523,7 +523,7 @@ public sealed class LoadFileComposerAndEmitterPropertyTests
         var settings = new ProfileSettings { MultiValueDelimiter = ";" };
         var generator = new CodedGenerator(input.Categories, input.DistributionIndices, col, settings);
 
-        int safeSeed = NormalizeSeed(input.Seed);
+        int safeSeed = input.Seed;
         var ctx1 = new ColumnGenerationContext
         {
             NativeFileIndex = input.DocumentIndex + 1,
@@ -660,8 +660,6 @@ public sealed class LoadFileComposerAndEmitterPropertyTests
 
         return files;
     }
-
-    private static int NormalizeSeed(int seed) => (int)(Math.Abs((long)seed) % 1_000_000L) + 1;
 
     private static void AssertComposedRecordsEqual(
         IReadOnlyList<string> headerColumns,

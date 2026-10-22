@@ -96,29 +96,35 @@ public readonly record struct CodedGeneratorPropertyInput(
 /// reads only the fields that vary its own domain:
 /// <list type="bullet">
 /// <item><see cref="FileCount"/> and <see cref="MutationType"/> drive single-fault injection.</item>
-/// <item><see cref="Seed"/> plus <see cref="PriorStart"/>/<see cref="PriorLength"/> and
+/// <item><see cref="PriorStart"/>/<see cref="PriorLength"/> and
 /// <see cref="PlannedStart"/>/<see cref="PlannedLength"/> drive supplemental interval
 /// generation (<see cref="PlannedStart"/> is generated as a small offset from
 /// <see cref="PriorStart"/> so overlap, adjacency, and disjoint cases all appear).</item>
+/// <item><see cref="SecondBaselineGap"/>, <see cref="Placement"/>, and
+/// <see cref="PlacementOffset"/> drive the supplemental interval placement so every
+/// branch of the iff-contract is exercised instead of relying on uniform draws.</item>
 /// <item><see cref="PrefixCount"/>, <see cref="BatesStarts"/>, <see cref="SequenceNumber"/>, <see cref="UseRestartMode"/>, and <see cref="UseExplicitStarts"/> drive rolling Bates resolution.</item>
-/// <item><see cref="Seed"/> also seeds Volume Analyzer record generation.</item>
+/// <item><see cref="VolumeSeed"/> seeds Volume Analyzer record generation.</item>
 /// </list>
 /// </para>
 /// </summary>
 [StructLayout(LayoutKind.Auto)]
 public readonly record struct ValidationMutationPropertyInput(
     int FileCount,
-    int Seed,
     int MutationType,
     int PriorStart,
     int PriorLength,
     int PlannedStart,
     int PlannedLength,
+    int SecondBaselineGap,
+    int Placement,
+    int PlacementOffset,
     int PrefixCount,
     int[] BatesStarts,
     int SequenceNumber,
     bool UseRestartMode,
-    bool UseExplicitStarts);
+    bool UseExplicitStarts,
+    int VolumeSeed);
 
 /// <summary>
 /// Bounded input for Bates Number sequence and range property tests.
@@ -179,11 +185,128 @@ public readonly record struct ArchiveFixturePropertyInput(
     string RawSuiteInput,
     bool IsCanonicalSuite,
     int Seed,
-    int MutationSelector,
+    int SingleMutationCaseIndex,
+    int SuiteCaseIndex,
     ArchiveEntrySpec[] Entries);
 
 /// <summary>
+/// Bounded input for Ordering Window admission, blocking, and cancellation property tests.
+/// </summary>
+[StructLayout(LayoutKind.Auto)]
+public readonly record struct OrderingWindowPropertyInput(
+    int WindowSize,
+    int ItemCount,
+    int[] CompletionOrder,
+    int CommitsBeforeProbe);
+
+/// <summary>
+/// Bounded CLI flag combination for cross-cutting rule exclusivity property tests.
+/// </summary>
+[StructLayout(LayoutKind.Auto)]
+public readonly record struct CliFlagCombinationPropertyInput(
+    bool HasFileType,
+    bool HasFileTypes,
+    bool HasCount,
+    bool LoadfileOnly,
+    bool ProductionSet,
+    bool RedactedProduction,
+    bool HasBatesPrefix,
+    bool HasColumnProfile,
+    bool HasSourceInput,
+    bool HasSourcePathMode);
+
+/// <summary>
+/// Bounded File Data projection for the disk-backed spool serializer round-trip property tests.
+/// </summary>
+[StructLayout(LayoutKind.Auto)]
+public readonly record struct FileDataPropertyInput(
+    long Index,
+    int FolderNumber,
+    string FolderName,
+    string FileName,
+    string FilePathInZip,
+    string FileType,
+    int DataLength,
+    int PageCount,
+    string Hash,
+    bool HasHashes,
+    HashAlgorithm HashAlgorithm,
+    string HashValue,
+    bool HasAttachment,
+    string AttachmentFilename,
+    int AttachmentLength,
+    bool HasEmail,
+    bool HasCc,
+    string EmailRecipient,
+    string EmailSender,
+    string EmailSubject,
+    long SentDateTicks,
+    string CcAddress,
+    string ControlNumberOverride,
+    string BatesNumberOverride,
+    bool HasSourceMetadata,
+    string[] MetadataKeys,
+    string[] MetadataValues,
+    int ItemCount);
+
+/// <summary>
+/// Bounded hash algorithm, payload, and seed for the HashUtility property tests.
+/// </summary>
+[StructLayout(LayoutKind.Auto)]
+public readonly record struct HashPropertyInput(
+    HashAlgorithm Algorithm,
+    byte[] Data,
+    int Seed);
+
+/// <summary>
+/// Bounded strict-prefix delimiter flag and value for the DelimiterModule build property tests.
+/// </summary>
+[StructLayout(LayoutKind.Auto)]
+public readonly record struct StrictDelimiterPropertyInput(
+    int RoleIndex,
+    string Value);
+
+/// <summary>
+/// Bounded legacy (non-prefixed) delimiter flag and value for the DelimiterModule build
+/// property tests.
+/// </summary>
+[StructLayout(LayoutKind.Auto)]
+public readonly record struct LegacyDelimiterPropertyInput(
+    int RoleIndex,
+    string Value);
+
+/// <summary>
+/// Bounded End-of-Line flag value plus the mode flags that gate it, for the DelimiterModule
+/// build property tests.
+/// </summary>
+[StructLayout(LayoutKind.Auto)]
+public readonly record struct EolDelimiterPropertyInput(
+    string Eol,
+    bool LoadfileOnly,
+    bool ProductionSet);
+
+/// <summary>
+/// Bounded seed-derived values for the chaos applier and column generator property tests.
+/// </summary>
+[StructLayout(LayoutKind.Auto)]
+public readonly record struct ChaosSeedPropertyInput(
+    int Seed,
+    int RecordOrdinal,
+    int LineNumber,
+    int DataLength,
+    int PageCount,
+    int FileOrdinal);
+
+/// <summary>
 /// Shared FsCheck Arbitrary registrations for Zipper domain property-based tests.
+/// <para>
+/// Seed ranges are drawn from <c>0</c> (inclusive) so they match the CLI's documented
+/// non-negative <c>--seed</c> contract and stay inside the domain the seed shrinkers
+/// explore: a shrinker that halves a seed also yields <c>0</c>, and a counterexample that
+/// lands on <c>0</c> is a value the generator can produce. No production path treats
+/// <c>0</c> differently from any other seed — every consumer branches on
+/// <c>Metadata.Seed.HasValue</c>, never on the seed being positive.
+/// </para>
 /// </summary>
 public static class ZipperArbitraries
 {
@@ -223,7 +346,7 @@ public static class ZipperArbitraries
         var gen =
             from totalFiles in Gen.Choose(1, 500)
             from folderCount in Gen.Choose(1, 50)
-            from seed in Gen.Choose(1, 100_000)
+            from seed in Gen.Choose(0, 100_000)
             select new DistributionPropertyInput(totalFiles, folderCount, seed);
 
         return Arb.From(gen, ShrinkDistributionInput);
@@ -305,6 +428,52 @@ public static class ZipperArbitraries
         "   "
     ];
 
+    /// <summary>
+    /// Malformed-suite Archive Test cases that carry exactly one mutation and a control case.
+    /// Shared with <c>ArchiveFixturePropertyTests</c> so the generator can draw a direct case
+    /// index instead of folding a wide seed through a modulo reduction.
+    /// </summary>
+    internal static readonly IReadOnlyList<ArchiveTestCaseDefinition> SingleMutationMalformedCases =
+        ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.MalformedSuite)
+            .Where(definition => definition.Mutations is { Count: 1 } && definition.ControlCaseKey is not null)
+            .ToList();
+
+    /// <summary>
+    /// Number of Archive Test cases in each supported suite. Used to draw a case index that is
+    /// already in range for the selected suite.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, int> SuiteCaseCounts =
+        ArchiveTestCatalog.SupportedSuites.ToDictionary(
+            suite => suite,
+            suite => ArchiveTestCatalog.ListSuite(suite).Count,
+            StringComparer.Ordinal);
+
+    /// <summary>
+    /// Strict-prefix delimiter values exercised by the delimiter property tests. The pool mixes
+    /// valid <c>ascii:</c>/<c>char:</c> prefixes, out-of-range and malformed prefixes, the
+    /// quote-only <c>none</c> keyword, and the empty value that means "flag not supplied".
+    /// </summary>
+    private static readonly string[] StrictDelimiterValues =
+    [
+        "ascii:0", "ascii:20", "ascii:65", "ascii:254", "ascii:255",
+        "ascii:256", "ascii:-1", "ascii:abc", "ascii:",
+        "char:;", "char:z", "char:1", "char:", "char",
+        "none", "NONE", "None",
+        "20", ";", string.Empty,
+    ];
+
+    /// <summary>
+    /// Legacy (non-prefixed) delimiter values exercised by the delimiter property tests. The pool
+    /// mixes escape sequences, numeric codes, out-of-range codes, and multi-character values.
+    /// </summary>
+    private static readonly string[] LegacyDelimiterValues =
+    [
+        "\\t", "\\n", "\\r", "\\r\\n",
+        "\t", "\n", "\r",
+        "0", "20", "65", "255", "256", "-1",
+        "abc", ";", "|", "NONE", string.Empty,
+    ];
+
     public static Arbitrary<ArchiveEntrySpec> ArchiveEntrySpecArb()
     {
         var gen =
@@ -375,17 +544,221 @@ public static class ZipperArbitraries
         var gen =
             from suiteInfo in suiteGen
             from seed in Gen.Choose(0, 100_000)
-            from mutationSelector in Gen.Choose(0, 9_999)
+            from singleMutationCaseIndex in Gen.Choose(0, SingleMutationMalformedCases.Count - 1)
+            from suiteCaseIndex in Gen.Choose(0, SuiteCaseCounts[suiteInfo.Suite] - 1)
             from entries in entriesGen
             select new ArchiveFixturePropertyInput(
                 suiteInfo.Suite,
                 suiteInfo.Raw,
                 suiteInfo.IsCanonical,
                 seed,
-                mutationSelector,
+                singleMutationCaseIndex,
+                suiteCaseIndex,
                 entries);
 
         return Arb.From(gen, ShrinkArchiveFixturePropertyInput);
+    }
+
+    /// <summary>
+    /// Strict-prefix delimiter flags exercised by the delimiter property tests. The order is a
+    /// stable draw order for the properties; it does not mirror the order
+    /// <c>DelimiterModule.TryBuild</c> validates the flags in, because each property case
+    /// supplies exactly one flag.
+    /// </summary>
+    public static readonly IReadOnlyList<string> StrictDelimiterFlags =
+        Array.AsReadOnly(
+            new[]
+            {
+                "--col-delim",
+                "--quote-delim",
+                "--newline-delim",
+                "--multi-delim",
+                "--nested-delim",
+            });
+
+    /// <summary>
+    /// Legacy (non-prefixed) delimiter flags exercised by the delimiter property tests.
+    /// </summary>
+    public static readonly IReadOnlyList<string> LegacyDelimiterFlags =
+        Array.AsReadOnly(
+            new[]
+            {
+                "--delimiter-column",
+                "--delimiter-quote",
+                "--delimiter-newline",
+            });
+
+    public static Arbitrary<OrderingWindowPropertyInput> OrderingWindowPropertyInputArb()
+    {
+        var gen =
+            from windowSize in Gen.Choose(1, 6)
+            from itemCount in Gen.Choose(1, 12)
+            from keys in Gen.ArrayOf(Gen.Choose(0, 1_000_000), itemCount)
+            from commitsBeforeProbe in Gen.Choose(0, itemCount)
+            let completionOrder = Enumerable.Range(1, itemCount)
+                .OrderBy(index => keys[index - 1])
+                .ToArray()
+            select new OrderingWindowPropertyInput(windowSize, itemCount, completionOrder, commitsBeforeProbe);
+
+        return Arb.From(gen, ShrinkOrderingWindowInput);
+    }
+
+    public static Arbitrary<CliFlagCombinationPropertyInput> CliFlagCombinationPropertyInputArb()
+    {
+        var gen =
+            from hasFileType in Gen.Elements(true, false)
+            from hasFileTypes in Gen.Elements(true, false)
+            from hasCount in Gen.Elements(true, false)
+            from loadfileOnly in Gen.Elements(true, false)
+            from productionSet in Gen.Elements(true, false)
+            from redactedProduction in Gen.Elements(true, false)
+            from hasBatesPrefix in Gen.Elements(true, false)
+            from hasColumnProfile in Gen.Elements(true, false)
+            from hasSourceInput in Gen.Elements(true, false)
+            from hasSourcePathMode in Gen.Elements(true, false)
+            select new CliFlagCombinationPropertyInput(
+                hasFileType,
+                hasFileTypes,
+                hasCount,
+                loadfileOnly,
+                productionSet,
+                redactedProduction,
+                hasBatesPrefix,
+                hasColumnProfile,
+                hasSourceInput,
+                hasSourcePathMode);
+
+        return Arb.From(gen, ShrinkCliFlagCombinationInput);
+    }
+
+    public static Arbitrary<FileDataPropertyInput> FileDataPropertyInputArb()
+    {
+        var textGen = Gen.Elements(
+            string.Empty,
+            "a",
+            "DOC00000001.pdf",
+            "folder name",
+            "Ünïcødé",
+            "  padded  ");
+
+        var gen =
+            from index in Gen.Choose(1, 100_000).Select(x => (long)x)
+            from folderNumber in Gen.Choose(0, 999)
+            from folderName in textGen
+            from fileName in textGen
+            from filePathInZip in textGen
+            from fileType in Gen.Elements(string.Empty, "pdf", "jpg", "eml")
+            from dataLength in Gen.Choose(0, 100_000)
+            from pageCount in Gen.Choose(0, 5_000)
+            from hash in Gen.Elements(string.Empty, "d41d8cd98f00b204e9800998ecf8427e")
+            from hasHashes in Gen.Elements(true, false)
+            from hashAlgorithm in Gen.Elements(HashAlgorithm.MD5, HashAlgorithm.SHA1, HashAlgorithm.SHA256)
+            from hashValue in Gen.Elements(string.Empty, "abc123")
+            from hasAttachment in Gen.Elements(true, false)
+            from attachmentFilename in textGen
+            from attachmentLength in Gen.Choose(0, 4_096)
+            from hasEmail in Gen.Elements(true, false)
+            from hasCc in Gen.Elements(true, false)
+            from emailRecipient in textGen
+            from emailSender in textGen
+            from emailSubject in textGen
+            from sentDateTicks in Gen.Choose(0, 2_000_000_000).Select(x => (long)x)
+            from ccAddress in textGen
+            from controlNumberOverride in Gen.Elements(string.Empty, "DOC00000001")
+            from batesNumberOverride in Gen.Elements(string.Empty, "BATES00000001")
+            from hasSourceMetadata in Gen.Elements(true, false)
+            from metadataKeyDraw in Gen.ArrayOf(Gen.Elements("custodian", "author", "date-sent"))
+            let metadataKeys = metadataKeyDraw.Distinct(StringComparer.Ordinal).OrderBy(key => key, StringComparer.Ordinal).ToArray()
+            from metadataValues in Gen.ArrayOf(textGen, metadataKeys.Length)
+            from itemCount in Gen.Choose(1, 4)
+            select new FileDataPropertyInput(
+                index,
+                folderNumber,
+                folderName,
+                fileName,
+                filePathInZip,
+                fileType,
+                dataLength,
+                pageCount,
+                hash,
+                hasHashes,
+                hashAlgorithm,
+                hashValue,
+                hasAttachment,
+                attachmentFilename,
+                attachmentLength,
+                hasEmail,
+                hasCc,
+                emailRecipient,
+                emailSender,
+                emailSubject,
+                sentDateTicks,
+                ccAddress,
+                controlNumberOverride,
+                batesNumberOverride,
+                hasSourceMetadata,
+                metadataKeys,
+                metadataValues,
+                itemCount);
+
+        return Arb.From(gen, ShrinkFileDataInput);
+    }
+
+    public static Arbitrary<HashPropertyInput> HashPropertyInputArb()
+    {
+        var gen =
+            from algorithm in Gen.Elements(HashAlgorithm.MD5, HashAlgorithm.SHA1, HashAlgorithm.SHA256)
+            from length in Gen.Choose(0, 512)
+            from bytes in Gen.ArrayOf(Gen.Choose(0, 255).Select(x => (byte)x), length)
+            from seed in Gen.Choose(0, 1_000_000)
+            select new HashPropertyInput(algorithm, bytes, seed);
+
+        return Arb.From(gen, ShrinkHashInput);
+    }
+
+    public static Arbitrary<StrictDelimiterPropertyInput> StrictDelimiterPropertyInputArb()
+    {
+        var gen =
+            from roleIndex in Gen.Choose(0, StrictDelimiterFlags.Count - 1)
+            from value in Gen.Elements(StrictDelimiterValues)
+            select new StrictDelimiterPropertyInput(roleIndex, value);
+
+        return Arb.From(gen, ShrinkStrictDelimiterInput);
+    }
+
+    public static Arbitrary<LegacyDelimiterPropertyInput> LegacyDelimiterPropertyInputArb()
+    {
+        var gen =
+            from roleIndex in Gen.Choose(0, LegacyDelimiterFlags.Count - 1)
+            from value in Gen.Elements(LegacyDelimiterValues)
+            select new LegacyDelimiterPropertyInput(roleIndex, value);
+
+        return Arb.From(gen, ShrinkLegacyDelimiterInput);
+    }
+
+    public static Arbitrary<EolDelimiterPropertyInput> EolDelimiterPropertyInputArb()
+    {
+        var gen =
+            from eol in Gen.Elements("CRLF", "LF", "CR", "crlf", "lf", "cr", "bogus", "CRLF ", string.Empty)
+            from loadfileOnly in Gen.Elements(true, false)
+            from productionSet in Gen.Elements(true, false)
+            select new EolDelimiterPropertyInput(eol, loadfileOnly, productionSet);
+
+        return Arb.From(gen, ShrinkEolDelimiterInput);
+    }
+
+    public static Arbitrary<ChaosSeedPropertyInput> ChaosSeedPropertyInputArb()
+    {
+        var gen =
+            from seed in Gen.Choose(0, 1_000_000)
+            from recordOrdinal in Gen.Choose(0, 9_999)
+            from lineNumber in Gen.Choose(1, 500)
+            from dataLength in Gen.Choose(128, 100_127)
+            from pageCount in Gen.Choose(1, 50)
+            from fileOrdinal in Gen.Choose(1, 99_999)
+            select new ChaosSeedPropertyInput(seed, recordOrdinal, lineNumber, dataLength, pageCount, fileOrdinal);
+
+        return Arb.From(gen, ShrinkChaosSeedInput);
     }
 
     private static IEnumerable<BatesPropertyInput> ShrinkBatesInput(BatesPropertyInput input)
@@ -541,10 +914,258 @@ public static class ZipperArbitraries
             yield return input with { RawSuiteInput = input.SuiteName };
         }
 
-        if (input.MutationSelector > 0)
+        if (input.SingleMutationCaseIndex > 0)
         {
-            yield return input with { MutationSelector = input.MutationSelector / 2 };
-            yield return input with { MutationSelector = 0 };
+            yield return input with { SingleMutationCaseIndex = input.SingleMutationCaseIndex / 2 };
+            yield return input with { SingleMutationCaseIndex = 0 };
+        }
+
+        if (input.SuiteCaseIndex > 0)
+        {
+            yield return input with { SuiteCaseIndex = input.SuiteCaseIndex / 2 };
+            yield return input with { SuiteCaseIndex = 0 };
+        }
+    }
+
+    private static IEnumerable<OrderingWindowPropertyInput> ShrinkOrderingWindowInput(OrderingWindowPropertyInput input)
+    {
+        if (input.WindowSize > 1)
+        {
+            yield return input with { WindowSize = Math.Max(1, input.WindowSize / 2) };
+        }
+
+        if (input.ItemCount > 1)
+        {
+            int half = input.ItemCount / 2;
+            if (half > 1)
+            {
+                yield return input with
+                {
+                    ItemCount = half,
+                    CompletionOrder = Enumerable.Range(1, half).ToArray(),
+                    CommitsBeforeProbe = Math.Min(input.CommitsBeforeProbe, half),
+                };
+            }
+
+            yield return input with
+            {
+                ItemCount = 1,
+                CompletionOrder = [1],
+                CommitsBeforeProbe = Math.Min(input.CommitsBeforeProbe, 1),
+            };
+        }
+
+        if (input.CommitsBeforeProbe > 0)
+        {
+            yield return input with { CommitsBeforeProbe = 0 };
+        }
+    }
+
+    private static IEnumerable<CliFlagCombinationPropertyInput> ShrinkCliFlagCombinationInput(CliFlagCombinationPropertyInput input)
+    {
+        if (input.HasFileType)
+        {
+            yield return input with { HasFileType = false };
+        }
+
+        if (input.HasFileTypes)
+        {
+            yield return input with { HasFileTypes = false };
+        }
+
+        if (input.HasCount)
+        {
+            yield return input with { HasCount = false };
+        }
+
+        if (input.LoadfileOnly)
+        {
+            yield return input with { LoadfileOnly = false };
+        }
+
+        if (input.ProductionSet)
+        {
+            yield return input with { ProductionSet = false };
+        }
+
+        if (input.RedactedProduction)
+        {
+            yield return input with { RedactedProduction = false };
+        }
+
+        if (input.HasBatesPrefix)
+        {
+            yield return input with { HasBatesPrefix = false };
+        }
+
+        if (input.HasColumnProfile)
+        {
+            yield return input with { HasColumnProfile = false };
+        }
+
+        if (input.HasSourceInput)
+        {
+            yield return input with { HasSourceInput = false };
+        }
+
+        if (input.HasSourcePathMode)
+        {
+            yield return input with { HasSourcePathMode = false };
+        }
+    }
+
+    private static IEnumerable<FileDataPropertyInput> ShrinkFileDataInput(FileDataPropertyInput input)
+    {
+        if (input.DataLength > 0)
+        {
+            yield return input with { DataLength = input.DataLength / 2 };
+            yield return input with { DataLength = 0 };
+        }
+
+        if (input.PageCount > 0)
+        {
+            yield return input with { PageCount = input.PageCount / 2 };
+            yield return input with { PageCount = 0 };
+        }
+
+        if (input.AttachmentLength > 0)
+        {
+            yield return input with { AttachmentLength = input.AttachmentLength / 2 };
+            yield return input with { AttachmentLength = 0 };
+        }
+
+        if (input.FolderNumber > 0)
+        {
+            yield return input with { FolderNumber = input.FolderNumber / 2 };
+            yield return input with { FolderNumber = 0 };
+        }
+
+        if (input.HasAttachment)
+        {
+            yield return input with { HasAttachment = false };
+        }
+
+        if (input.HasEmail)
+        {
+            yield return input with { HasEmail = false };
+        }
+
+        if (input.HasHashes)
+        {
+            yield return input with { HasHashes = false };
+        }
+
+        if (input.HasSourceMetadata)
+        {
+            yield return input with { HasSourceMetadata = false };
+        }
+
+        if (input.ItemCount > 1)
+        {
+            yield return input with { ItemCount = input.ItemCount - 1 };
+            yield return input with { ItemCount = 1 };
+        }
+    }
+
+    private static IEnumerable<HashPropertyInput> ShrinkHashInput(HashPropertyInput input)
+    {
+        if (input.Data.Length > 0)
+        {
+            yield return input with { Data = input.Data[..(input.Data.Length / 2)] };
+            yield return input with { Data = [] };
+        }
+
+        if (input.Seed > 0)
+        {
+            yield return input with { Seed = input.Seed / 2 };
+            yield return input with { Seed = 0 };
+        }
+    }
+
+    private static IEnumerable<StrictDelimiterPropertyInput> ShrinkStrictDelimiterInput(StrictDelimiterPropertyInput input)
+    {
+        if (input.RoleIndex > 0)
+        {
+            yield return input with { RoleIndex = input.RoleIndex / 2 };
+            yield return input with { RoleIndex = 0 };
+        }
+
+        if (input.Value.Length > 0)
+        {
+            yield return input with { Value = input.Value[..(input.Value.Length / 2)] };
+            yield return input with { Value = string.Empty };
+        }
+    }
+
+    private static IEnumerable<LegacyDelimiterPropertyInput> ShrinkLegacyDelimiterInput(LegacyDelimiterPropertyInput input)
+    {
+        if (input.RoleIndex > 0)
+        {
+            yield return input with { RoleIndex = input.RoleIndex / 2 };
+            yield return input with { RoleIndex = 0 };
+        }
+
+        if (input.Value.Length > 0)
+        {
+            yield return input with { Value = input.Value[..(input.Value.Length / 2)] };
+            yield return input with { Value = string.Empty };
+        }
+    }
+
+    private static IEnumerable<EolDelimiterPropertyInput> ShrinkEolDelimiterInput(EolDelimiterPropertyInput input)
+    {
+        if (input.Eol.Length > 0)
+        {
+            yield return input with { Eol = input.Eol[..(input.Eol.Length / 2)] };
+            yield return input with { Eol = string.Empty };
+        }
+
+        if (input.LoadfileOnly)
+        {
+            yield return input with { LoadfileOnly = false };
+        }
+
+        if (input.ProductionSet)
+        {
+            yield return input with { ProductionSet = false };
+        }
+    }
+
+    private static IEnumerable<ChaosSeedPropertyInput> ShrinkChaosSeedInput(ChaosSeedPropertyInput input)
+    {
+        if (input.RecordOrdinal > 0)
+        {
+            yield return input with { RecordOrdinal = input.RecordOrdinal / 2 };
+            yield return input with { RecordOrdinal = 0 };
+        }
+
+        if (input.LineNumber > 1)
+        {
+            yield return input with { LineNumber = input.LineNumber / 2 };
+            yield return input with { LineNumber = 1 };
+        }
+
+        if (input.DataLength > 128)
+        {
+            yield return input with { DataLength = Math.Max(128, input.DataLength / 2) };
+        }
+
+        if (input.PageCount > 1)
+        {
+            yield return input with { PageCount = input.PageCount / 2 };
+            yield return input with { PageCount = 1 };
+        }
+
+        if (input.FileOrdinal > 1)
+        {
+            yield return input with { FileOrdinal = input.FileOrdinal / 2 };
+            yield return input with { FileOrdinal = 1 };
+        }
+
+        if (input.Seed > 0)
+        {
+            yield return input with { Seed = input.Seed / 2 };
+            yield return input with { Seed = 0 };
         }
     }
 
@@ -585,7 +1206,7 @@ public static class ZipperArbitraries
             from rollingMode in Gen.Elements(RollingBatesMode.Continuous, RollingBatesMode.Restart)
             from attachmentRate in Gen.Choose(0, 100)
             from fileCount in Gen.Choose(1, 10)
-            from seed in Gen.Choose(1, 100_000)
+            from seed in Gen.Choose(0, 100_000)
             let bates = hasBates
                 ? new BatesNumberConfig { Prefix = batesPrefix, Start = batesStart, Digits = batesDigits }
                 : null
@@ -612,7 +1233,7 @@ public static class ZipperArbitraries
             from hasHeader in Gen.Elements(true, false)
             from recordCount in Gen.Choose(0, 10)
             from colCount in Gen.Choose(1, 5)
-            from seed in Gen.Choose(1, 100_000)
+            from seed in Gen.Choose(0, 100_000)
             select new EmitterPropertyInput(enc, bom, eol, hasHeader, recordCount, colCount, seed);
 
         return Arb.From(gen, ShrinkEmitterPropertyInput);
@@ -637,7 +1258,7 @@ public static class ZipperArbitraries
             from withText in Gen.Elements(true, false)
             from withHash in Gen.Elements(true, false)
             from rate in Gen.Choose(0, 100)
-            from seed in Gen.Choose(1, 100_000)
+            from seed in Gen.Choose(0, 100_000)
             from meta in Gen.Elements(sampleStrings)
             select new XmlLoadFilePropertyInput(count, withFamilies, withText, withHash, rate, seed, meta);
 
@@ -663,7 +1284,7 @@ public static class ZipperArbitraries
             from withFamilies in Gen.Elements(true, false)
             from isLoadfileOnly in Gen.Elements(true, false)
             from fmt in Gen.Elements(Enum.GetValues<LoadFileFormat>())
-            from seed in Gen.Choose(1, 100_000)
+            from seed in Gen.Choose(0, 100_000)
             select new AuditWriterPropertyInput(count, rate, withFamilies, isLoadfileOnly, fmt, seed);
 
         return Arb.From(gen, ShrinkAuditWriterInput);
@@ -688,30 +1309,36 @@ public static class ZipperArbitraries
     {
         var gen =
             from fileCount in Gen.Choose(2, 6)
-            from seed in Gen.Choose(0, 100_000)
             from mutationType in Gen.Choose(0, ProductionSetFaultCount - 1)
             from priorStart in Gen.Choose(1, 50_000)
             from priorLength in Gen.Choose(0, 50)
             from plannedOffset in Gen.Choose(-60, 60)
             from plannedLength in Gen.Choose(0, 50)
+            from secondBaselineGap in Gen.Choose(0, 2)
+            from placement in Gen.Choose(0, 3)
+            from placementOffset in Gen.Choose(0, priorLength)
             from prefixCount in Gen.Choose(1, 6)
             from rawStarts in Gen.ArrayOf(Gen.Choose(1, 50_000), prefixCount)
             from sequenceNumber in Gen.Choose(1, prefixCount)
             from useRestartMode in Gen.Elements(true, false)
             from useExplicitStarts in Gen.Elements(true, false)
+            from volumeSeed in Gen.Choose(0, 999_999)
             select new ValidationMutationPropertyInput(
                 fileCount,
-                seed,
                 mutationType,
                 priorStart,
                 priorLength,
                 Math.Max(1, priorStart + plannedOffset),
                 plannedLength,
+                secondBaselineGap,
+                placement,
+                placementOffset,
                 prefixCount,
                 ToStrictlyIncreasing(rawStarts),
                 sequenceNumber,
                 useRestartMode,
-                useExplicitStarts);
+                useExplicitStarts,
+                volumeSeed);
 
         return Arb.From(gen, ShrinkValidationMutationInput);
     }
@@ -752,7 +1379,7 @@ public static class ZipperArbitraries
             from minCount in Gen.Choose(1, 3)
             from maxCount in Gen.Choose(3, 5)
             from docIndex in Gen.Choose(0, 50)
-            from seed in Gen.Choose(1, 100_000)
+            from seed in Gen.Choose(0, 100_000)
             let indices = hasIndices ? Enumerable.Range(0, 10).Select(i => (i + seed) % pool.Length).ToArray() : null
             select new CodedGeneratorPropertyInput(pool, indices, multiValue, minCount, Math.Max(minCount, maxCount), docIndex, seed);
 
@@ -1059,12 +1686,6 @@ public static class ZipperArbitraries
             yield return input with { PlannedLength = 0 };
         }
 
-        if (input.Seed > 0)
-        {
-            yield return input with { Seed = input.Seed / 2 };
-            yield return input with { Seed = 0 };
-        }
-
         if (input.UseExplicitStarts)
         {
             yield return input with { UseExplicitStarts = false };
@@ -1073,6 +1694,27 @@ public static class ZipperArbitraries
         if (input.UseRestartMode)
         {
             yield return input with { UseRestartMode = false };
+        }
+
+        if (input.SecondBaselineGap > 0)
+        {
+            yield return input with { SecondBaselineGap = 0 };
+        }
+
+        if (input.Placement > 0)
+        {
+            yield return input with { Placement = 0 };
+        }
+
+        if (input.PlacementOffset > 0)
+        {
+            yield return input with { PlacementOffset = 0 };
+        }
+
+        if (input.VolumeSeed > 0)
+        {
+            yield return input with { VolumeSeed = input.VolumeSeed / 2 };
+            yield return input with { VolumeSeed = 0 };
         }
     }
 }
