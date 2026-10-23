@@ -246,6 +246,10 @@ class ProbeAndSelectAgentsModelSwitchingTests(unittest.TestCase):
                 self.assertEqual(len(candidates), 1)
                 self.assertEqual(candidates[0], ("opencode", "opencode/gemini-3.8-flash"))
 
+    def test_is_quota_exhausted_detects_opencode_free_usage_limit(self):
+        stderr = "\x1b[91m\x1b[1mError: \x1b[0mFree usage limit reached. Subscribe to OpenCode Go to keep going: https://opencode.ai/go"
+        self.assertTrue(runner.is_quota_exhausted("", stderr))
+
 
 if __name__ == "__main__":
     unittest.main()

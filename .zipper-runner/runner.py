@@ -168,6 +168,9 @@ QUOTA_EXHAUSTION_KEYWORDS = [
     "too many requests",
     "subscription limit",
     "upgrade your subscription",
+    "usage limit reached",
+    "free usage limit",
+    "subscribe to opencode go",
     "run out of",
     "code 429",
     "status 429",
@@ -1959,6 +1962,8 @@ def babysit_active_worktrees():
             print(f"No open PR found matching issue #{issue_number}. Re-invoking agent to implement and open PR.")
 
             prompt = _build_babysit_prompt(issue_number, issue_title, safe_body, branch, pr_create_err)
+            pre_loop_pr_err = bool(pr_create_err)
+            made_any_progress = False
             while True:
                 wait_for_tokens()
                 agent_name = _current_agent()
@@ -1967,21 +1972,37 @@ def babysit_active_worktrees():
                 if plugin is None:
                     print(f"FATAL: Agent {agent_name!r} not loaded. Available: {list(AGENT_PLUGINS)}")
                     sys.exit(1)
+                _, before_head, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
                 agy_code, agy_out, agy_err = plugin.run_mission(prompt, wt_path, is_continue=True, model=model_name)
 
                 _auto_commit_wip_checkpoint(wt_path, issue_number, agent_name)
+                _, after_head, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
+                made_progress = bool(
+                    before_head.strip() and after_head.strip() and before_head.strip() != after_head.strip()
+                )
+                made_any_progress = made_any_progress or made_progress
 
                 pr_num_val, pr_url = _check_pr(branch)
 
                 had_prior_work = _branch_has_commits(branch)
                 pr_create_err = ""
-                if agy_code == 0 and not pr_num_val and had_prior_work and _worktree_is_clean(wt_path) and not _latest_commit_is_wip(wt_path):
+                if (
+                    agy_code == 0
+                    and not pr_num_val
+                    and had_prior_work
+                    and (made_progress or not pre_loop_pr_err)
+                    and _worktree_is_clean(wt_path)
+                    and not _latest_commit_is_wip(wt_path)
+                ):
                     pr_num_val, pr_url, pr_create_err = _create_pr_for_branch(branch, issue_number, issue_title, cwd=wt_path)
 
                 if pr_num_val:
                     ready = agy_code == 0 and not _latest_commit_is_wip(wt_path)
                     origin = _record_initial_pr_origin(issue_number, pr_num_val, branch, ready)
                     if agy_code != 0:
+                        if is_quota_exhausted(agy_out, agy_err):
+                            mark_model_exhausted(agent_name, model_name)
+                            _fallback()
                         _record_coderabbit_gate_failure(int(pr_num_val), branch, "Initial mission interrupted before completion", False)
                         break
                     if _latest_commit_is_wip(wt_path):
@@ -2002,24 +2023,38 @@ def babysit_active_worktrees():
                     mark_model_exhausted(agent_name, model_name)
                     print(f"Agent {agent_name}/{model_name} exhausted quota on orphaned issue #{issue_number}.")
                     if not _fallback():
-                        print(f"All agents/models exhausted for issue #{issue_number}. Removing worktree '{branch}' if safe.")
-                        if not _remove_worktree(wt_path, branch):
-                            print(f"Worktree '{branch}' preserved due to uncommitted changes or unpushed commits.")
+                        if made_any_progress:
+                            print(f"Progress recorded on issue #{issue_number}. Preserving worktree for next cycle/agent.")
+                        else:
+                            print(f"All agents/models exhausted for issue #{issue_number}. Removing worktree '{branch}' if safe.")
+                            if not _remove_worktree(wt_path, branch):
+                                print(f"Worktree '{branch}' preserved due to uncommitted changes or unpushed commits.")
                         break
                     print(f"Switching to {_current_agent()}/{_current_model()} and continuing orphaned issue #{issue_number}...")
-                elif agy_code == 0 and not had_prior_work:
+                elif agy_code == 0 and made_progress:
+                    print(f"Progress recorded on issue #{issue_number}. Preserving worktree for next cycle/agent.")
+                    break
+                elif agy_code == 0:
                     print(f"Agent exited 0 but no work done on branch '{branch}'.")
                     if not _fallback():
-                        print(f"All agents failed for issue #{issue_number}. Removing worktree '{branch}' if safe.")
-                        if not _remove_worktree(wt_path, branch):
-                            print(f"Worktree '{branch}' preserved due to uncommitted changes or unpushed commits.")
+                        if made_any_progress:
+                            print(f"Progress recorded on issue #{issue_number}. Preserving worktree for next cycle/agent.")
+                        else:
+                            print(f"All agents failed for issue #{issue_number}. Removing worktree '{branch}' if safe.")
+                            if not _remove_worktree(wt_path, branch):
+                                print(f"Worktree '{branch}' preserved due to uncommitted changes or unpushed commits.")
                         break
+                    print(f"Switching to {_current_agent()}/{_current_model()} and continuing orphaned issue #{issue_number}...")
                 elif agy_code != 0:
                     if not _fallback():
-                        print(f"All agents failed for issue #{issue_number}. Removing worktree '{branch}' if safe.")
-                        if not _remove_worktree(wt_path, branch):
-                            print(f"Worktree '{branch}' preserved due to uncommitted changes or unpushed commits.")
-                    break
+                        if made_any_progress:
+                            print(f"Progress recorded on issue #{issue_number}. Preserving worktree for next cycle/agent.")
+                        else:
+                            print(f"All agents failed for issue #{issue_number}. Removing worktree '{branch}' if safe.")
+                            if not _remove_worktree(wt_path, branch):
+                                print(f"Worktree '{branch}' preserved due to uncommitted changes or unpushed commits.")
+                        break
+                    print(f"Switching to {_current_agent()}/{_current_model()} and continuing orphaned issue #{issue_number}...")
             continue
 
         pr_data = json.loads(pr_out)
