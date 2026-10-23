@@ -12,10 +12,13 @@ _reconcile_active_worktree uses to notice a rewrite. What was missing was the
 signal, so these guards are:
 
   * escalation instead of a silent return when authorization fails,
-  * a rate-limited blocked-worktree email whose remediation actually works,
-  * escalation only for PRs the runner itself recorded,
+  * a rate-limited blocked-worktree email naming a reason it can actually see,
+  * every fail-closed reason reported, not only a moved head: a draft, a
+    retargeted base, a fork head, a renamed branch, a missing record,
+  * escalation for PRs whose record names a different PR or no PR at all,
   * escalation for green PRs the runner has no authorization record for,
   * the orphan path escalating when it cannot recreate a worktree,
+  * a malformed or null statusCheckRollup treated as not-yet-green, not a crash,
   * distinct log files per runner mode.
 
 Run from the .zipper-runner directory:
@@ -183,7 +186,8 @@ class _RunnerFixture:
             "    if args[1].endswith('/reviews'):\n"
             "        print(json.dumps([load('reviews.json', [])]))\n"
             "    else:\n"
-            "        print((root / 'pr.json').read_text())\n"
+            "        specific = root / ('pr-%s.json' % args[1].split('/')[-1])\n"
+            "        print(specific.read_text() if specific.exists() else (root / 'pr.json').read_text())\n"
             "elif args[:2] == ['pr', 'view']:\n"
             "    pr = load('pr.json', {})\n"
             "    if args[args.index('--json') + 1] == 'commits':\n"
@@ -235,26 +239,113 @@ class BlockedWorktreeEscalationTests(unittest.TestCase):
         self.assertNotIn("delete", body)
         self.assertNotIn("issue-42.json", body)
 
-    def test_escalation_withoutARunnerRecord_staysQuiet(self):
-        """Only PRs the runner itself recorded are reported, so a contributor PR
-        that merely mentions an issue number never triggers this."""
-        runner = self.runner
-        runner._escalate_blocked_worktree(98, "42", "fix/ISSUE-42-proof")
-        runner._escalate_blocked_worktree(99, "77", "fix/ISSUE-42-proof")
-        runner._escalate_blocked_worktree(99, "42", "fix/ISSUE-OTHER")
+    def _write_pr(self, **overrides):
+        pr = dict(self.fixture.pr)
+        pr.update(overrides)
+        (self.root / "pr.json").write_text(json.dumps(pr))
+        return pr
+
+    def _make_green_and_stale(self):
+        """A gh api body that also satisfies the unrecorded-PR gates."""
+        self._write_pr(
+            author={"login": "dwojtaszek"},
+            updatedAt=_stale_timestamp(),
+            statusCheckRollup=[{"__typename": "CheckRun", "name": "ci-gate",
+                                "status": "COMPLETED", "conclusion": "SUCCESS"}],
+        )
+
+    def test_escalation_stateForAnotherPr_reportsUnrecorded(self):
+        """A record that names a different PR authorizes nothing, so the PR must
+        still be reported rather than skipped because *some* state exists."""
+        self._make_green_and_stale()
+        (self.root / "state" / "issue-42.json").write_text(json.dumps({
+            "pr_number": "77", "branch": "fix/ISSUE-42-old", "authorized_head": self.fixture.old_head,
+        }))
+        self.runner._escalate_blocked_worktree(99, "42", "fix/ISSUE-42-proof")
+        self.assertEqual(len(self.fixture.emails.messages), 1)
+        self.assertIn("Cannot Be Authorized", self.fixture.emails.subjects()[0])
+
+    def test_escalation_stateForAnotherBranch_reportsUnrecorded(self):
+        self._make_green_and_stale()
+        self.runner._escalate_blocked_worktree(99, "42", "fix/ISSUE-42-renamed")
+        self.assertEqual(len(self.fixture.emails.messages), 1)
+        self.assertIn("Cannot Be Authorized", self.fixture.emails.subjects()[0])
+
+    def test_escalation_unrecordedContributorPr_staysQuiet(self):
+        """A contributor PR that merely mentions an issue number is not the
+        runner's to report, even when the issue has a record for another PR."""
+        self._write_pr(number=98, user={"login": "outsider", "type": "User", "id": 7},
+                       author={"login": "outsider"}, updatedAt=_stale_timestamp())
+        self.runner._escalate_blocked_worktree(98, "42", "fix/ISSUE-42-proof")
         self.assertEqual(self.fixture.emails.messages, [])
+
+    def test_escalation_draftPr_reportsDraftReason(self):
+        """A maintainer converting the PR to a draft also fails authorization
+        closed, with the head unchanged. That used to stall in silence."""
+        self._write_pr(draft=True)
+        self.runner._escalate_blocked_worktree(99, "42", "fix/ISSUE-42-proof")
+        self.assertEqual(len(self.fixture.emails.messages), 1)
+        self.assertIn("draft", self.fixture.emails.messages[0][1])
+
+    def test_escalation_retargetedBase_reportsBaseReason(self):
+        self._write_pr(base={"ref": "release", "repo": {"full_name": "dwojtaszek/zipper"}})
+        self.runner._escalate_blocked_worktree(99, "42", "fix/ISSUE-42-proof")
+        self.assertEqual(len(self.fixture.emails.messages), 1)
+        self.assertIn("release", self.fixture.emails.messages[0][1])
+
+    def test_escalation_renamedHeadBranch_reportsBranchReason(self):
+        self._write_pr(head={"ref": "fix/ISSUE-42-renamed", "sha": self.fixture.new_head,
+                             "repo": {"full_name": "dwojtaszek/zipper"}})
+        self.runner._escalate_blocked_worktree(99, "42", "fix/ISSUE-42-proof")
+        self.assertEqual(len(self.fixture.emails.messages), 1)
+        self.assertIn("fix/ISSUE-42-renamed", self.fixture.emails.messages[0][1])
+
+    def test_escalation_forkHead_reportsForkReason(self):
+        self._write_pr(head={"ref": "fix/ISSUE-42-proof", "sha": self.fixture.new_head,
+                             "repo": {"full_name": "someone/zipper"}})
+        self.runner._escalate_blocked_worktree(99, "42", "fix/ISSUE-42-proof")
+        self.assertEqual(len(self.fixture.emails.messages), 1)
+        self.assertIn("fork", self.fixture.emails.messages[0][1])
+
+    def test_escalation_closedPr_staysQuiet(self):
+        """A closed or merged PR needs no authorization, so it must not mail."""
+        self._write_pr(state="closed")
+        self.runner._escalate_blocked_worktree(99, "42", "fix/ISSUE-42-proof")
+        self.assertEqual(self.fixture.emails.messages, [])
+
+    def test_escalation_nonDictPrBody_staysQuiet(self):
+        """A 200 response that is not a mapping must not crash the cycle."""
+        (self.root / "pr.json").write_text('"not a mapping"')
+        self.runner._escalate_blocked_worktree(99, "42", "fix/ISSUE-42-proof")
+        self.assertEqual(self.fixture.emails.messages, [])
+
+    def test_escalation_nonDictHead_staysQuiet(self):
+        self._write_pr(head="not-a-mapping")
+        self.runner._escalate_blocked_worktree(99, "42", "fix/ISSUE-42-proof")
+        self.assertEqual(self.fixture.emails.messages, [])
+
+    def test_escalation_headMatchingRecord_staysQuiet(self):
+        """Nothing to report while the recorded head is still the PR head and no
+        other reason explains the refusal."""
+        self._write_pr(head={"ref": "fix/ISSUE-42-proof", "sha": self.fixture.old_head,
+                             "repo": {"full_name": "dwojtaszek/zipper"}})
+        self.runner._escalate_blocked_worktree(99, "42", "fix/ISSUE-42-proof")
+        self.assertEqual(self.fixture.emails.messages, [])
+
+    def test_escalation_legacyStateWithoutRecordedHead_reportsReason(self):
+        """A record with no authorized_head cannot authorize anything either."""
+        self._write_pr()
+        (self.root / "state" / "issue-42.json").write_text(json.dumps({
+            "pr_number": "99", "branch": "fix/ISSUE-42-proof",
+        }))
+        self.runner._escalate_blocked_worktree(99, "42", "fix/ISSUE-42-proof")
+        self.assertEqual(len(self.fixture.emails.messages), 1)
+        self.assertIn("no recorded head", self.fixture.emails.messages[0][1])
 
     def test_escalation_unreadablePr_staysQuiet(self):
         """A failed PR read also makes authorization fail. Escalating for it
         would assert a head mismatch that does not exist."""
         (self.root / "pr.json").unlink()
-        self.runner._escalate_blocked_worktree(99, "42", "fix/ISSUE-42-proof")
-        self.assertEqual(self.fixture.emails.messages, [])
-
-    def test_escalation_headMatchingRecord_staysQuiet(self):
-        """Nothing to report while the recorded head is still the PR head."""
-        self.fixture.pr["head"]["sha"] = self.fixture.old_head
-        (self.root / "pr.json").write_text(json.dumps(self.fixture.pr))
         self.runner._escalate_blocked_worktree(99, "42", "fix/ISSUE-42-proof")
         self.assertEqual(self.fixture.emails.messages, [])
 
@@ -274,6 +365,20 @@ class BlockedWorktreeEscalationTests(unittest.TestCase):
         self.assertEqual(len(self.fixture.emails.messages), 1)
         self.assertIn("Needs Manual Authorization", self.fixture.emails.subjects()[0])
 
+    def test_babysit_draftPr_escalatesWithoutDispatchingAMission(self):
+        """Authorization fails closed for reasons other than a moved head too:
+        a draft PR, with the head untouched, used to stall this path silently."""
+        pr = dict(self.fixture.pr)
+        pr["draft"] = True
+        (self.root / "pr.json").write_text(json.dumps(pr))
+        marker = self.root / "mission-dispatched"
+        self.runner.AGENT_CANDIDATES = [("fake", "model")]
+        self.runner.AGENT_PLUGINS = {"fake": _FakePlugin(marker)}
+        self.runner._babysit_with_fallback("prompt", str(self.wt), "fix/ISSUE-42-proof", 42, 99)
+        self.assertFalse(marker.exists())
+        self.assertEqual(len(self.fixture.emails.messages), 1)
+        self.assertIn("draft", self.fixture.emails.messages[0][1])
+
     def test_activeWorktree_unauthorizedPr_escalatesAndKeepsSlot(self):
         runner = self.runner
         marker = self.root / "mission-dispatched"
@@ -284,6 +389,32 @@ class BlockedWorktreeEscalationTests(unittest.TestCase):
         self.assertFalse((self.root / "merged").exists())
         self.assertTrue(self.wt.exists(), "the worktree must keep its slot until a human decides")
         self.assertIn("Needs Manual Authorization", self.fixture.emails.subjects()[0])
+
+    def test_activeWorktree_missingStateFile_reportsUnrecorded(self):
+        """A runner-owned worktree with no authorization record holds the only
+        slot and can never be authorized, so it must not go silent either."""
+        (self.root / "state" / "issue-42.json").unlink()
+        self.runner.babysit_active_worktrees()
+        self.assertFalse((self.root / "merged").exists())
+        self.assertTrue(self.wt.exists())
+        self.assertEqual(len(self.fixture.emails.messages), 1)
+        self.assertIn("Cannot Be Authorized", self.fixture.emails.subjects()[0])
+
+    def test_activeWorktree_stateForAnotherPr_reportsUnrecorded(self):
+        (self.root / "state" / "issue-42.json").write_text(json.dumps({
+            "pr_number": "77", "branch": "fix/ISSUE-42-old", "authorized_head": self.fixture.old_head,
+        }))
+        self.runner.babysit_active_worktrees()
+        self.assertFalse((self.root / "merged").exists())
+        self.assertEqual(len(self.fixture.emails.messages), 1)
+        self.assertIn("Cannot Be Authorized", self.fixture.emails.subjects()[0])
+
+    def test_activeWorktree_unauthorizedPr_rateLimited(self):
+        """A stalled worktree must not mail on every cycle."""
+        runner = self.runner
+        for _ in range(4):
+            runner.babysit_active_worktrees()
+        self.assertEqual(len(self.fixture.emails.messages), 3)
 
 
 class StateHardeningTests(unittest.TestCase):
@@ -310,6 +441,15 @@ class StateHardeningTests(unittest.TestCase):
         (self.root / "state" / "issue-42.json").write_text('"not a mapping"')
         self.runner._escalate_blocked_worktree(99, "42", "fix/ISSUE-42-proof")
         self.assertEqual(self.fixture.emails.messages, [])
+
+    def test_ciStatus_malformedRollup_isPendingNotACrash(self):
+        """A null or malformed rollup must not raise: the cycle repeats every
+        five minutes, so a crash here would loop identically forever."""
+        self.assertEqual(self.runner._ci_status_from_rollup(None)[0], "PENDING")
+        self.assertEqual(self.runner._ci_status_from_rollup([])[0], "PENDING")
+        malformed = [{"__typename": "CheckRun", "name": "ci-gate",
+                      "status": "COMPLETED", "conclusion": "SUCCESS"}, "not-a-check"]
+        self.assertEqual(self.runner._ci_status_from_rollup(malformed)[0], "PENDING")
 
 
 class UnreferencedPrEscalationTests(unittest.TestCase):
@@ -424,9 +564,19 @@ class OrphanRecoveryEscalationTests(unittest.TestCase):
         self.assertEqual(len(self.fixture.emails.messages), 1)
         self.assertIn("Needs Manual Authorization", self.fixture.emails.subjects()[0])
 
-    def test_orphanScan_unrecordedPr_staysQuiet(self):
-        """A PR the runner never recorded cannot be recovered, and reporting it
-        would bury the real stall signal."""
+    def test_orphanScan_stalePrWithNoRecord_escalates(self):
+        """A PR naming an issue the runner never recorded work for can never be
+        authorized, so it must surface rather than be skipped forever."""
+        (self.root / "state" / "issue-42.json").unlink()
+        pr = self._orphan_pr()
+        pr["updatedAt"] = _stale_timestamp()
+        self._scan(pr)
+        self.assertFalse((self.root / "merged").exists())
+        self.assertEqual(len(self.fixture.emails.messages), 1)
+        self.assertIn("Cannot Be Authorized", self.fixture.emails.subjects()[0])
+
+    def test_orphanScan_freshPrWithNoRecord_staysQuiet(self):
+        """A freshly opened PR is not a stall yet, so it must not mail."""
         (self.root / "state" / "issue-42.json").unlink()
         self._scan(self._orphan_pr())
         self.assertEqual(self.fixture.emails.messages, [])
@@ -477,6 +627,14 @@ class OrphanRecoveryEscalationTests(unittest.TestCase):
         self._scan(pr)
         self.assertEqual(len(self.fixture.emails.messages), 1)
         self.assertIn("no authorization record", self.fixture.emails.messages[0][1])
+
+    def test_orphanScan_unrecoverablePr_repeatedCycles_rateLimited(self):
+        """A worktree that stays unrecreatable must not mail every cycle."""
+        self._authorize_current_head(block_recreation=True)
+        for _ in range(5):
+            self._scan(self._orphan_pr(conclusion="FAILURE"))
+        self.assertEqual(len(self.fixture.emails.messages), 3)
+        self.assertIn("Cannot Be Babied", self.fixture.emails.subjects()[0])
 
 
 class CronWrapperLogTests(unittest.TestCase):
