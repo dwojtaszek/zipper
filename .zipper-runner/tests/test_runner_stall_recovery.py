@@ -198,6 +198,7 @@ class _RunnerFixture:
             "            'statusCheckRollup': [{'__typename': 'CheckRun', 'name': 'ci-gate',\n"
             "                'status': 'COMPLETED', 'conclusion': 'SUCCESS'}]}))\n"
             "elif args[:2] == ['pr', 'list']:\n"
+            "    (root / 'pr-list-fields.txt').write_text(args[args.index('--json') + 1])\n"
             "    print(json.dumps(load('pr_list.json', [])))\n"
             "else:\n"
             "    raise AssertionError(args)\n"
@@ -500,6 +501,16 @@ class UnreferencedPrEscalationTests(unittest.TestCase):
         pr["statusCheckRollup"][0]["conclusion"] = "FAILURE"
         fixture = self._scan([pr])
         self.assertEqual(fixture.emails.messages, [])
+
+    def test_orphanScan_staleUnreferencedDraftPr_staysQuiet(self):
+        """A draft PR is not awaiting merge, so escalating for it would be noise.
+        gh pr list must therefore request isDraft, not just gh api's draft."""
+        pr = self._green_pr(self._stale())
+        pr["isDraft"] = True
+        fixture = self._scan([pr])
+        self.assertEqual(fixture.emails.messages, [])
+        self.assertIn("isDraft", (self.root / "pr-list-fields.txt").read_text(),
+                      "gh pr list must request isDraft, or _pr_is_draft cannot see it")
 
     def test_orphanScan_untrustedAuthor_staysQuiet(self):
         """An outsider's PR is not the runner's business to report."""

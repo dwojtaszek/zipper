@@ -2891,7 +2891,7 @@ def _escalate_unrecorded_pr(pr: dict, *, require_green_and_stale: bool = True) -
 def babysit_orphaned_issue_prs():
     """Scans open issue PRs on GitHub without local worktrees, checking CI and review gates, and auto-merging or recreating worktrees."""
     print("Scanning for open issue PRs without local worktrees...")
-    code, out, err = run_cmd(["gh", "pr", "list", "--state", "open", "--json", "number,title,author,headRefName,statusCheckRollup,url,updatedAt,body"], cwd=REPO_PATH)
+    code, out, err = run_cmd(["gh", "pr", "list", "--state", "open", "--json", "number,title,author,headRefName,statusCheckRollup,url,updatedAt,body,isDraft"], cwd=REPO_PATH)
     if code != 0 or not out.strip():
         return
 
@@ -2997,7 +2997,7 @@ def babysit_orphaned_issue_prs():
 def babysit_dependabot_prs():
     """Scans open Dependabot PRs on GitHub, checks CI and review gates, and auto-merges when green."""
     print("Scanning for open Dependabot PRs...")
-    code, out, err = run_cmd(["gh", "pr", "list", "--state", "open", "--json", "number,title,author,headRefName,statusCheckRollup,url,updatedAt"], cwd=REPO_PATH)
+    code, out, err = run_cmd(["gh", "pr", "list", "--state", "open", "--json", "number,title,author,headRefName,statusCheckRollup,url,updatedAt,isDraft"], cwd=REPO_PATH)
     if code != 0 or not out.strip():
         return
 
