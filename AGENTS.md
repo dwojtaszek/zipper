@@ -37,7 +37,6 @@
 
 - Treat the current tool catalog and schemas as authoritative. Call already-loaded tools directly. Discover missing tools with one non-empty exact-name lookup, then at most one targeted search. If no matching tool appears, report the missing capability and follow the harness's connector/fallback policy.
 - Map skill examples to the host's native subagent tool. For Droid `Task`, use a catalog-listed `subagent_type` and its actual schema. Review effort `High` is not a tool argument: `complexity` accepts `light`, `medium`, or `heavy` where exposed. Keep reviewers read-only.
-- RTK is optional. Check availability once, then use native commands if absent.
 - For GitHub CLI access allowed by the harness, read issue comments with `gh issue view NNN --json title,body,labels,comments` or `gh issue view NNN --comments`. Use one form, not both. `gh pr checks` exit 8 means pending, not failed.
 - Batch accepted review findings before the next review. Rerun focused tests while iterating; run every required final gate against the final changes. Re-review behavior-changing fixes, stop when no actionable findings remain, and retain the autoreview cycle limit.
 

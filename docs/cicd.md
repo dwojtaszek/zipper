@@ -146,7 +146,7 @@ Trigger: `push` → `main`, stable tags `v*`, and manual recovery via `workflow_
 
 ## Quick Reference for Agents
 
-Reproduce each CI gate locally **before** pushing — CI minutes are slow feedback. Use `rtk` prefixes per [CLAUDE.md](../CLAUDE.md).
+Reproduce each CI gate locally **before** pushing — CI minutes are slow feedback.
 
 | CI gate | Local equivalent |
 |---------|------------------|
