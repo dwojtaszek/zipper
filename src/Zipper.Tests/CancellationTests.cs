@@ -259,15 +259,18 @@ public class CancellationTests : WorkingDirectoryTestBase
             var innerMaterializer = new ProductionFileMaterializer();
             var decorator = new FaultingMaterializerDecorator(innerMaterializer)
             {
-                OnWriteBytesAsync = async (path, content, ct) =>
+                OnWriteBytesAsync = (path, content, ct) =>
                 {
+                    // Write first, then cancel — exercises cleanup of written native files
+                    var writeTask = innerMaterializer.WriteBytesAsync(path, content, ct);
+                    writeTask.GetAwaiter().GetResult();
                     if (path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
                     {
                         generationStarted = true;
                         cts.Cancel();
                         throw new OperationCanceledException(cts.Token);
                     }
-                    return false;
+                    return Task.FromResult(false);
                 },
             };
 
@@ -311,8 +314,11 @@ public class CancellationTests : WorkingDirectoryTestBase
             var innerMaterializer = new ProductionFileMaterializer();
             var decorator = new FaultingMaterializerDecorator(innerMaterializer)
             {
-                OnWriteBytesAsync = async (path, content, ct) =>
+                OnWriteBytesAsync = (path, content, ct) =>
                 {
+                    // Write first, then cancel — exercises cleanup of written native files
+                    var writeTask = innerMaterializer.WriteBytesAsync(path, content, ct);
+                    writeTask.GetAwaiter().GetResult();
                     if (path.Contains("PROD_2", StringComparison.Ordinal) && path.Contains("NATIVES", StringComparison.Ordinal))
                     {
                         var prod1Manifest = Path.Combine(outputPath, "PROD_1", "_manifest.json");
@@ -321,7 +327,7 @@ public class CancellationTests : WorkingDirectoryTestBase
                         cts.Cancel();
                         throw new OperationCanceledException(cts.Token);
                     }
-                    return false;
+                    return Task.FromResult(false);
                 },
             };
 
@@ -511,15 +517,18 @@ public class CancellationTests : WorkingDirectoryTestBase
             var innerMaterializer = new ProductionFileMaterializer();
             var decorator = new FaultingMaterializerDecorator(innerMaterializer)
             {
-                OnWriteBytesAsync = async (path, content, ct) =>
+                OnWriteBytesAsync = (path, content, ct) =>
                 {
+                    // Write first, then cancel — exercises cleanup of written native files
+                    var writeTask = innerMaterializer.WriteBytesAsync(path, content, ct);
+                    writeTask.GetAwaiter().GetResult();
                     if (path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
                     {
                         generationStarted = true;
                         cts.Cancel();
                         throw new OperationCanceledException(cts.Token);
                     }
-                    return false;
+                    return Task.FromResult(false);
                 },
             };
 

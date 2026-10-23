@@ -195,7 +195,12 @@ public class LoadFileOrchestratorTests
             processedFiles,
             formats,
             WriterMode.Standard,
-            (format, writer) => (writer.FileExtension, writer.FileExtension + "_audit.json"),
+            (format, writer) =>
+            {
+                // Concordance and Dat both use .dat extension; disambiguate targets
+                var loadFileName = format == LoadFileFormat.Concordance ? ".concordance.dat" : writer.FileExtension;
+                return (loadFileName, loadFileName + "_audit.json");
+            },
             target =>
             {
                 var stream = new NonDisposingStream();
@@ -210,8 +215,8 @@ public class LoadFileOrchestratorTests
         Assert.Contains(".opt_audit.json", streams.Keys);
         Assert.Contains(".csv", streams.Keys);
         Assert.Contains(".csv_audit.json", streams.Keys);
-        Assert.Contains(".dat", streams.Keys); // Concordance uses .dat extension
-        Assert.Contains(".dat_audit.json", streams.Keys); // But separate audit file
+        Assert.Contains(".concordance.dat", streams.Keys);
+        Assert.Contains(".concordance.dat_audit.json", streams.Keys);
     }
 
     [Fact]
@@ -307,7 +312,7 @@ public class LoadFileOrchestratorTests
         var formats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Csv, LoadFileFormat.Opt };
         var cts = new CancellationTokenSource();
 
-        // Act - cancel after first format's load file is written (but before audit)
+        // Act - cancel in getTargets for the first format (DAT)
         var task = LoadFileOrchestrator.EmitAllAsync(
             request,
             processedFiles,
@@ -315,22 +320,28 @@ public class LoadFileOrchestratorTests
             WriterMode.Standard,
             (format, writer) =>
             {
+                System.Console.Error.WriteLine($"[TEST] getTargets called for format {format}, token cancelled: {cts.Token.IsCancellationRequested}");
                 if (format == LoadFileFormat.Dat)
                 {
+                    System.Console.Error.WriteLine($"[TEST] Cancelling for format {format}");
                     cts.Cancel();
+                    System.Console.Error.WriteLine($"[TEST] Token cancelled after: {cts.Token.IsCancellationRequested}");
                 }
                 return (writer.FileExtension, writer.FileExtension + "_audit.json");
             },
             target =>
             {
+                System.Console.Error.WriteLine($"[TEST] openTarget called for {target}, token cancelled: {cts.Token.IsCancellationRequested}");
                 var stream = new NonDisposingStream();
                 streams[target] = stream;
                 return stream;
             },
             cts.Token);
 
+        System.Console.Error.WriteLine($"[TEST] Task created, awaiting...");
         // Assert - cancellation should propagate
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => task);
+        System.Console.Error.WriteLine($"[TEST] Exception thrown");
 
         // DAT load file should have been written, but audit file NOT written (cancellation checked before audit)
         Assert.Contains(".dat", streams.Keys);

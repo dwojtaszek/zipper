@@ -543,21 +543,16 @@ public class PathValidatorTests
                 {
                     Directory.CreateSymbolicLink(linkPaths[i], linkPaths[(i + 1) % chainLength]);
                 }
-                catch (UnauthorizedAccessException)
+                catch (Exception ex) when (ex is UnauthorizedAccessException
+                                        or PlatformNotSupportedException
+                                        or System.ComponentModel.Win32Exception
+                                        or IOException)
                 {
-                    return; // Skip if symlinks not permitted
-                }
-                catch (PlatformNotSupportedException)
-                {
-                    return;
-                }
-                catch (System.ComponentModel.Win32Exception)
-                {
-                    return;
-                }
-                catch (System.IO.IOException)
-                {
-                    return;
+                    // Symlink traversal safety cannot be exercised without symlink support; fail loudly
+                    // rather than self-skipping so this guard cannot silently disappear.
+                    throw new InvalidOperationException(
+                        $"Symbolic link creation is required for this test but failed on this platform/environment: {ex.Message}",
+                        ex);
                 }
             }
 
@@ -606,27 +601,21 @@ public class PathValidatorTests
                 {
                     Directory.CreateSymbolicLink(linkPaths[i], linkPaths[(i + 1) % chainLength]);
                 }
-                catch (UnauthorizedAccessException)
+                catch (Exception ex) when (ex is UnauthorizedAccessException
+                                        or PlatformNotSupportedException
+                                        or System.ComponentModel.Win32Exception
+                                        or IOException)
                 {
-                    return;
-                }
-                catch (PlatformNotSupportedException)
-                {
-                    return;
-                }
-                catch (System.ComponentModel.Win32Exception)
-                {
-                    return;
-                }
-                catch (System.IO.IOException)
-                {
-                    return;
+                    // Symlink traversal safety cannot be exercised without symlink support; fail loudly
+                    // rather than self-skipping so this guard cannot silently disappear.
+                    throw new InvalidOperationException(
+                        $"Symbolic link creation is required for this test but failed on this platform/environment: {ex.Message}",
+                        ex);
                 }
             }
 
-            // Act & Assert - IsPathSafe should return false (swallows the IOException)
-            var result = PathValidator.IsPathSafe(linkPaths[0], baseDir);
-            Assert.False(result);
+            // Act & Assert - IsPathSafe should return false for cyclic symlinks
+            Assert.False(PathValidator.IsPathSafe(linkPaths[0], baseDir));
         }
         finally
         {

@@ -1134,38 +1134,4 @@ public class ProductionManifestComparerTests
             CleanupDirectory(tempDir);
         }
     }
-
-    [Fact]
-    public async Task CompareAndReportAsync_RollbackOnSummaryPublishFailure_PreservesOriginalReport()
-    {
-        // Tests lines 153-172: rollback on summary publish failure
-        // This is tested by CompareAndReportAsync_WhenSummaryPathIsDirectory_ShouldPreservePreExistingReport
-        // but we add a more explicit test for the rollback logic
-        var tempDir = Path.Combine(Path.GetTempPath(), $"test_rollback_{Guid.NewGuid()}");
-        Directory.CreateDirectory(tempDir);
-        try
-        {
-            var p1 = CreateTestProductionSet(tempDir, "PROD001", "VOL001", new[] { "ABC00000001" });
-            var p2 = CreateTestProductionSet(tempDir, "PROD002", "VOL001", new[] { "ABC00000002" });
-            var outputPath = Path.Combine(tempDir, "report.json");
-            var summaryPath = Path.ChangeExtension(outputPath, ".summary.md");
-
-            // Pre-create the output file
-            await File.WriteAllTextAsync(outputPath, "ORIGINAL REPORT");
-
-            // Make summary path a directory to cause publish failure
-            Directory.CreateDirectory(summaryPath);
-
-            await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                ProductionManifestComparer.CompareAndReportAsync($"{p1},{p2}", "replacement", outputPath));
-
-            // Original report should be preserved (rollback worked)
-            var preserved = await File.ReadAllTextAsync(outputPath);
-            Assert.Equal("ORIGINAL REPORT", preserved);
-        }
-        finally
-        {
-            CleanupDirectory(tempDir);
-        }
-    }
 }

@@ -946,14 +946,14 @@ public class ZipArchiveServiceTests : TempDirectoryTestBase
             var textEntry = archive.GetEntry("folder1/test1.txt");
             Assert.NotNull(textEntry);
 
-            // Read the text content and verify it's EML-specific
+            // Read the text content and verify it's EML-specific (exact byte match)
             using var textStream = textEntry.Open();
             using var reader = new StreamReader(textStream);
             var textContent = reader.ReadToEnd();
 
-            // EML extracted text should contain email-specific markers
-            Assert.Contains("email body", textContent, StringComparison.OrdinalIgnoreCase);
-            Assert.DoesNotContain("Lorem ipsum", textContent, StringComparison.OrdinalIgnoreCase); // Standard text has Lorem ipsum
+            // EML extracted text should match the production constant exactly
+            var expectedEmlText = System.Text.Encoding.UTF8.GetString(PlaceholderFiles.EmlExtractedText);
+            Assert.Equal(expectedEmlText, textContent);
         });
     }
 
@@ -982,7 +982,7 @@ public class ZipArchiveServiceTests : TempDirectoryTestBase
 
         await new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
 
-        // Assert - verify the standard text content was written (Lorem Ipsum)
+        // Assert - verify the standard text content was written (exact byte match)
         ZipAssert.AssertValidZip(zipPath, 2, archive =>
         {
             var textEntry = archive.GetEntry("folder1/test1.txt");
@@ -992,8 +992,9 @@ public class ZipArchiveServiceTests : TempDirectoryTestBase
             using var reader = new StreamReader(textStream);
             var textContent = reader.ReadToEnd();
 
-            // Standard extracted text should contain placeholder text
-            Assert.Contains("placeholder for extracted text", textContent, StringComparison.OrdinalIgnoreCase);
+            // Standard extracted text should match the production constant exactly
+            var expectedStandardText = System.Text.Encoding.UTF8.GetString(PlaceholderFiles.ExtractedText);
+            Assert.Equal(expectedStandardText, textContent);
         });
     }
 

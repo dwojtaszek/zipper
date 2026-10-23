@@ -384,13 +384,13 @@ public class ProductionSetOrchestratorTests
 
             var decorator = new FaultingMaterializerDecorator(new ProductionFileMaterializer())
             {
-                OnWriteBytesAsync = async (path, content, ct) =>
+                OnWriteBytesAsync = (path, content, ct) =>
                 {
                     if (path.Contains("PROD_2", StringComparison.Ordinal) && path.Contains("NATIVES", StringComparison.Ordinal))
                     {
                         throw new IOException("Simulated disk error writing set 2 native file");
                     }
-                    return false;
+                    return Task.FromResult(false);
                 },
             };
 
@@ -489,7 +489,7 @@ public class ProductionSetOrchestratorTests
             var innerMaterializer = new ProductionFileMaterializer();
             var decorator = new FaultingMaterializerDecorator(innerMaterializer)
             {
-                OnWriteBytesAsync = async (path, content, ct) =>
+                OnWriteBytesAsync = (path, content, ct) =>
                 {
                     if (path.Contains("PROD_2", StringComparison.Ordinal) && path.Contains("NATIVES", StringComparison.Ordinal))
                     {
@@ -500,7 +500,7 @@ public class ProductionSetOrchestratorTests
                         cts.Cancel();
                         throw new OperationCanceledException(cts.Token);
                     }
-                    return false;
+                    return Task.FromResult(false);
                 },
             };
 
@@ -704,15 +704,15 @@ public class ProductionSetOrchestratorTests
             var innerMaterializer = new ProductionFileMaterializer();
             var decorator = new FaultingMaterializerDecorator(innerMaterializer)
             {
-                OnWriteBytesAsync = async (path, content, ct) =>
+                OnWriteBytesAsync = (path, content, ct) =>
                 {
                     // Skip writing native files (they're written to NATIVES/ directory)
                     if (path.Contains("NATIVES", StringComparison.Ordinal) && path.EndsWith(".pdf", StringComparison.Ordinal))
                     {
                         // Don't write the native file - validation will fail because it's missing
-                        return true; // Handled - suppress inner call
+                        return Task.FromResult(true); // Handled - suppress inner call
                     }
-                    return false; // Not handled - let decorator call inner
+                    return Task.FromResult(false); // Not handled - let decorator call inner
                 }
             };
 
@@ -771,15 +771,15 @@ public class ProductionSetOrchestratorTests
             var innerMaterializer = new ProductionFileMaterializer();
             var decorator = new FaultingMaterializerDecorator(innerMaterializer)
             {
-                OnWriteBytesAsync = async (path, content, ct) =>
+                OnWriteBytesAsync = (path, content, ct) =>
                 {
                     // Skip writing native files for the second set only
                     if (path.Contains("PROD_2", StringComparison.Ordinal) && path.Contains("NATIVES", StringComparison.Ordinal) && path.EndsWith(".pdf", StringComparison.Ordinal))
                     {
                         // Don't write the native file - validation will fail because it's missing
-                        return true; // Handled - suppress inner call
+                        return Task.FromResult(true); // Handled - suppress inner call
                     }
-                    return false; // Not handled - let decorator call inner
+                    return Task.FromResult(false); // Not handled - let decorator call inner
                 }
             };
 

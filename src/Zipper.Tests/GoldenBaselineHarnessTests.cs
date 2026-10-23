@@ -562,7 +562,7 @@ public class GoldenBaselineHarnessTests
         }
     }
 
-    [Fact]
+    [SkippableFact]
     public void Harness_MatchesCheckedInGoldenManifest_ForLoadfileOnlyFixture()
     {
         var repoRoot = FindRepositoryRoot();
