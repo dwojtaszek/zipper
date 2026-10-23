@@ -502,6 +502,274 @@ class OpenCodeSessionScopingTests(unittest.TestCase):
             self.assertTrue(runner._worktree_is_clean(repo_dir))
             self.assertTrue(runner._latest_commit_is_wip(repo_dir))
 
+    def test_opencodeRunMission_prunesFailedTrailingTurnsAndRetriesOriginalSessionModelOnContextOverflow(self):
+        import json
+        import sqlite3
+        from plugins import opencode
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = os.path.join(tmpdir, "opencode.db")
+            wt_dir = os.path.join(tmpdir, "worktree-1268")
+            os.makedirs(wt_dir, exist_ok=True)
+
+            conn = sqlite3.connect(db_path)
+            conn.execute(
+                "CREATE TABLE session_v2 ("
+                "id TEXT PRIMARY KEY, parent_id TEXT, directory TEXT, "
+                "time_updated INTEGER, time_archived INTEGER)"
+            )
+            conn.execute(
+                "CREATE TABLE session_message ("
+                "id TEXT PRIMARY KEY, session_id TEXT NOT NULL, type TEXT NOT NULL, "
+                "seq INTEGER NOT NULL, time_created INTEGER NOT NULL, "
+                "time_updated INTEGER NOT NULL, data TEXT NOT NULL)"
+            )
+            conn.execute(
+                "INSERT INTO session_v2 VALUES (?, ?, ?, ?, ?)",
+                ("ses_1268", None, os.path.abspath(wt_dir), 100, None),
+            )
+            conn.execute(
+                "INSERT INTO session_message VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    "msg_10",
+                    "ses_1268",
+                    "assistant",
+                    10,
+                    100,
+                    100,
+                    json.dumps(
+                        {
+                            "finish": "stop",
+                            "model": {"providerID": "opencode", "id": "nemotron-3-ultra-free"},
+                        }
+                    ),
+                ),
+            )
+            conn.execute(
+                "INSERT INTO session_message VALUES (?, ?, ?, ?, ?, ?, ?)",
+                ("msg_10_idle", "ses_1268", "idle", 11, 100, 100, json.dumps({"outcome": "succeeded"})),
+            )
+            # Trailing failed retry rows (including an empty error assistant stub) that bloated context
+            conn.execute(
+                "INSERT INTO session_message VALUES (?, ?, ?, ?, ?, ?, ?)",
+                ("msg_11", "ses_1268", "user", 12, 101, 101, json.dumps({"text": "Resume work"})),
+            )
+            conn.execute(
+                "INSERT INTO session_message VALUES (?, ?, ?, ?, ?, ?, ?)",
+                ("msg_12", "ses_1268", "compaction", 13, 102, 102, json.dumps({"status": "failed"})),
+            )
+            conn.execute(
+                "INSERT INTO session_message VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    "msg_13",
+                    "ses_1268",
+                    "assistant",
+                    14,
+                    103,
+                    103,
+                    json.dumps(
+                        {
+                            "finish": "error",
+                            "content": [],
+                            "model": {"providerID": "opencode", "id": "big-pickle"},
+                        }
+                    ),
+                ),
+            )
+            conn.commit()
+            conn.close()
+
+            with patch.dict(os.environ, {"OPENCODE_DB_PATH": db_path}):
+                with patch("subprocess.Popen") as mock_popen:
+                    proc_fail = MagicMock()
+                    proc_fail.communicate.return_value = (
+                        "",
+                        "Error: Your request resulted in more tokens than this model's maximum context length allows.",
+                    )
+                    proc_fail.returncode = 1
+
+                    proc_ok = MagicMock()
+                    proc_ok.communicate.return_value = ("resumed with original model", "")
+                    proc_ok.returncode = 0
+
+                    mock_popen.side_effect = [proc_fail, proc_ok]
+
+                    code, out, _ = opencode.run_mission(
+                        "resume issue 1268",
+                        wt_dir,
+                        is_continue=True,
+                        model="opencode/big-pickle",
+                    )
+                    self.assertEqual(code, 0)
+                    self.assertEqual(out, "resumed with original model")
+                    self.assertEqual(mock_popen.call_count, 2)
+
+                    first_cmd = mock_popen.call_args_list[0].args[0]
+                    second_cmd = mock_popen.call_args_list[1].args[0]
+                    self.assertEqual(first_cmd[first_cmd.index("--session") + 1], "ses_1268")
+                    self.assertEqual(first_cmd[first_cmd.index("--model") + 1], "opencode/big-pickle")
+                    self.assertEqual(second_cmd[second_cmd.index("--session") + 1], "ses_1268")
+                    self.assertEqual(second_cmd[second_cmd.index("--model") + 1], "opencode/nemotron-3-ultra-free")
+
+                    conn = sqlite3.connect(db_path)
+                    remaining = conn.execute(
+                        "SELECT seq FROM session_message WHERE session_id = 'ses_1268' ORDER BY seq"
+                    ).fetchall()
+                    conn.close()
+                    self.assertEqual(remaining, [(10,), (11,)])
+
+    def test_opencodeRunMission_whenSessionModelAlsoOverflowsContext_archivesSessionAndStartsFresh(self):
+        import json
+        import sqlite3
+        from plugins import opencode
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = os.path.join(tmpdir, "opencode.db")
+            wt_dir = os.path.join(tmpdir, "worktree-1268")
+            os.makedirs(wt_dir, exist_ok=True)
+
+            conn = sqlite3.connect(db_path)
+            conn.execute(
+                "CREATE TABLE session_v2 ("
+                "id TEXT PRIMARY KEY, parent_id TEXT, directory TEXT, "
+                "time_updated INTEGER, time_archived INTEGER)"
+            )
+            conn.execute(
+                "CREATE TABLE session_message ("
+                "id TEXT PRIMARY KEY, session_id TEXT NOT NULL, type TEXT NOT NULL, "
+                "seq INTEGER NOT NULL, time_created INTEGER NOT NULL, "
+                "time_updated INTEGER NOT NULL, data TEXT NOT NULL)"
+            )
+            conn.execute(
+                "INSERT INTO session_v2 VALUES (?, ?, ?, ?, ?)",
+                ("ses_overflow", None, os.path.abspath(wt_dir), 100, None),
+            )
+            conn.execute(
+                "INSERT INTO session_message VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    "msg_10",
+                    "ses_overflow",
+                    "assistant",
+                    10,
+                    100,
+                    100,
+                    json.dumps(
+                        {
+                            "finish": "stop",
+                            "model": {"providerID": "opencode", "id": "big-pickle"},
+                        }
+                    ),
+                ),
+            )
+            conn.commit()
+            conn.close()
+
+            with patch.dict(os.environ, {"OPENCODE_DB_PATH": db_path}):
+                with patch("subprocess.Popen") as mock_popen:
+                    proc_fail = MagicMock()
+                    proc_fail.communicate.return_value = (
+                        "",
+                        "Error: Your request resulted in more tokens than this model's maximum context length allows.",
+                    )
+                    proc_fail.returncode = 1
+
+                    proc_fresh = MagicMock()
+                    proc_fresh.communicate.return_value = ("fresh session ok", "")
+                    proc_fresh.returncode = 0
+
+                    mock_popen.side_effect = [proc_fail, proc_fresh]
+
+                    code, out, _ = opencode.run_mission(
+                        "resume issue 1268",
+                        wt_dir,
+                        is_continue=True,
+                        model="opencode/big-pickle",
+                    )
+                    self.assertEqual(code, 0)
+                    self.assertEqual(out, "fresh session ok")
+                    self.assertEqual(mock_popen.call_count, 2)
+
+                    first_cmd = mock_popen.call_args_list[0].args[0]
+                    second_cmd = mock_popen.call_args_list[1].args[0]
+                    self.assertIn("--session", first_cmd)
+                    self.assertNotIn("--session", second_cmd)
+
+                    conn = sqlite3.connect(db_path)
+                    archived = conn.execute(
+                        "SELECT time_archived FROM session_v2 WHERE id = 'ses_overflow'"
+                    ).fetchone()
+                    conn.close()
+                    self.assertIsNotNone(archived[0])
+
+    def test_babysitActiveWorktrees_whenFirstCandidateFailsOnUnPrdWorktree_fallsBackToNextCandidate(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            wt_dir = os.path.join(tmpdir, "issue-1268")
+            os.makedirs(wt_dir, exist_ok=True)
+
+            mock_plugin = MagicMock()
+            called_models: list[str | None] = []
+
+            def fake_run_mission(prompt, cwd, is_continue=False, model=None):
+                called_models.append(model)
+                if len(called_models) == 1:
+                    return 1, "", "Error: Model unavailable"
+                return 0, "done", ""
+
+            mock_plugin.run_mission.side_effect = fake_run_mission
+
+            def fake_run_cmd(cmd, cwd=None, timeout=60):
+                if cmd[:2] == ["git", "branch"]:
+                    return 0, "feat/ISSUE-1268-test\n", ""
+                if cmd[:3] == ["gh", "pr", "view"]:
+                    return 1, "", "no pull requests found"
+                if cmd[:3] == ["gh", "pr", "list"]:
+                    return 0, "[]", ""
+                if cmd[:3] == ["gh", "issue", "view"]:
+                    return 0, '{"state": "OPEN"}', ""
+                if cmd[:3] == ["git", "rev-parse", "HEAD"]:
+                    # Second candidate records a new commit after running so made_progress=True
+                    return (0, "bbbbb\n", "") if len(called_models) >= 2 and fake_run_cmd.rev_calls >= 3 else (0, "aaaaa\n", "")
+                if cmd[:3] == ["git", "status", "--porcelain"]:
+                    return 0, "", ""
+                return 0, "", ""
+
+            fake_run_cmd.rev_calls = 0
+            orig_fake_run_cmd = fake_run_cmd
+
+            def counting_run_cmd(cmd, cwd=None, timeout=60):
+                if cmd[:3] == ["git", "rev-parse", "HEAD"]:
+                    orig_fake_run_cmd.rev_calls += 1
+                return orig_fake_run_cmd(cmd, cwd=cwd, timeout=timeout)
+
+            with (
+                patch.object(runner, "ACTIVE_AGENT", "opencode"),
+                patch.object(runner, "ACTIVE_MODEL", "opencode/big-pickle"),
+                patch.object(
+                    runner,
+                    "AGENT_CANDIDATES",
+                    [
+                        ("opencode", "opencode/big-pickle"),
+                        ("opencode", "opencode/nemotron-3-ultra-free"),
+                    ],
+                ),
+                patch.object(runner, "WORKTREES_BASE", tmpdir),
+                patch.dict(runner.AGENT_PLUGINS, {"opencode": mock_plugin}, clear=True),
+                patch.object(runner, "run_cmd", side_effect=counting_run_cmd),
+                patch.object(runner, "wait_for_tokens"),
+                patch.object(runner, "_load_pr_state", return_value=None),
+                patch.object(runner, "_fetch_issue_body", return_value=("Issue 1268", "body")),
+                patch.object(runner, "_branch_has_commits", return_value=True),
+                patch.object(runner, "_worktree_is_clean", return_value=True),
+                patch.object(runner, "_latest_commit_is_wip", return_value=True),
+                patch.object(runner, "_check_pr", return_value=("", "")),
+            ):
+                runner.babysit_active_worktrees()
+
+            self.assertEqual(
+                called_models,
+                ["opencode/big-pickle", "opencode/nemotron-3-ultra-free"],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
