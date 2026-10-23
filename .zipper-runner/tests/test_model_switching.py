@@ -17,6 +17,20 @@ import runner
 runner.STATE_DIR = _STATE_DIR
 
 
+def _clear_quota_state() -> None:
+    """Remove persisted quota-exhaustion marks between tests.
+
+    mark_model_exhausted persists its mark in STATE_DIR so quota windows are
+    remembered across cron cycles; without this sweep one test's mark would
+    leak into every later test in the same process."""
+    import glob
+    for path in glob.glob(os.path.join(runner.STATE_DIR, "quota-*.json")):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
 class QuotaDetectionTests(unittest.TestCase):
     def test_detects_resource_exhausted_from_issue_1120(self):
         err = (
@@ -55,9 +69,11 @@ class QuotaDetectionTests(unittest.TestCase):
 class ModelExhaustionTrackingTests(unittest.TestCase):
     def setUp(self):
         runner.EXHAUSTED_MODELS.clear()
+        _clear_quota_state()
 
     def tearDown(self):
         runner.EXHAUSTED_MODELS.clear()
+        _clear_quota_state()
 
     def test_mark_and_check_model_exhausted(self):
         self.assertFalse(runner.is_model_exhausted("agy", "claude-opus-4-6-thinking"))
@@ -98,10 +114,12 @@ class ModelPriorityMatchingTests(unittest.TestCase):
 class FallbackQueueTests(unittest.TestCase):
     def setUp(self):
         runner.EXHAUSTED_MODELS.clear()
+        _clear_quota_state()
         self.orig_candidates = list(runner.AGENT_CANDIDATES)
 
     def tearDown(self):
         runner.EXHAUSTED_MODELS.clear()
+        _clear_quota_state()
         runner.AGENT_CANDIDATES[:] = self.orig_candidates
 
     def test_fallback_advances_to_next_model_on_same_agent(self):
@@ -144,9 +162,11 @@ class FallbackQueueTests(unittest.TestCase):
 class TokenHealthCheckWithModelTests(unittest.TestCase):
     def setUp(self):
         runner.EXHAUSTED_MODELS.clear()
+        _clear_quota_state()
 
     def tearDown(self):
         runner.EXHAUSTED_MODELS.clear()
+        _clear_quota_state()
 
     def test_short_circuits_if_model_already_exhausted(self):
         runner.mark_model_exhausted("agy", "claude-opus-4-6-thinking")
@@ -171,11 +191,13 @@ class TokenHealthCheckWithModelTests(unittest.TestCase):
 class ProbeAndSelectAgentsModelSwitchingTests(unittest.TestCase):
     def setUp(self):
         runner.EXHAUSTED_MODELS.clear()
+        _clear_quota_state()
         self.orig_active_agent = runner.ACTIVE_AGENT
         self.orig_active_model = runner.ACTIVE_MODEL
 
     def tearDown(self):
         runner.EXHAUSTED_MODELS.clear()
+        _clear_quota_state()
         runner.ACTIVE_AGENT = self.orig_active_agent
         runner.ACTIVE_MODEL = self.orig_active_model
 

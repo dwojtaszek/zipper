@@ -2,6 +2,7 @@
 import csv
 import argparse
 import html
+import hashlib
 import importlib.util
 import io
 import itertools
@@ -51,6 +52,21 @@ STATE_DIR = os.environ.get("STATE_DIR", os.path.join(RUNNER_BASE, "state"))
 MAIN_REMOTE_REF = "origin/main"
 REVIEW_GATE_SCRIPT = "tests/wait-for-reviews.sh"
 GITHUB_REPOSITORY = "dwojtaszek/zipper"
+
+# Unattended-endurance limits. Every external command is bounded so a network
+# black hole can never hang a locked run; a holder past MAX_RUN_SECONDS is
+# killed and its lock reclaimed by the next cycle; quota exhaustion is
+# remembered across cycles so multi-hour quota windows do not relaunch
+# failing missions every 5 minutes; and stale state files are swept so
+# STATE_DIR stays bounded over multi-week runs.
+DEFAULT_CMD_TIMEOUT = int(os.environ.get("RUNNER_CMD_TIMEOUT", "300"))
+# Network git operations get a wider bound: a legitimate slow push/fetch on a
+# congested link must not be killed at the default, while still never hanging
+# the locked run indefinitely.
+NETWORK_GIT_TIMEOUT = int(os.environ.get("RUNNER_GIT_NETWORK_TIMEOUT", "900"))
+MAX_RUN_SECONDS = int(os.environ.get("RUNNER_MAX_RUN_SECONDS", "43200"))
+QUOTA_COOLDOWN_MINUTES = int(os.environ.get("RUNNER_QUOTA_COOLDOWN_MINUTES", "60"))
+STATE_MAX_AGE_DAYS = int(os.environ.get("RUNNER_STATE_MAX_AGE_DAYS", "90"))
 
 # ---------------------------------------------------------------------------
 # Plugin loader — discovers all .py files in plugins/ and registers them.
@@ -191,25 +207,74 @@ def is_quota_exhausted(output: str, stderr: str = "") -> bool:
         return True
     return False
 
-def mark_model_exhausted(agent_name: str, model_name: str | None) -> None:
-    """Marks a specific (agent, model) as exhausted for the current run cycle."""
+def _quota_state_path(agent_name: str, model_name: str | None) -> str:
+    key = _model_key(model_name) if model_name else "default"
+    return os.path.join(STATE_DIR, f"quota-{slugify(agent_name)}-{slugify(key)}.json")
+
+def _quota_cooldown_active(agent_name: str, model_name: str | None) -> bool:
+    """True while a persisted quota-exhaustion mark is inside its cooldown.
+
+    Cron respawns the runner every few minutes, so in-memory exhaustion alone
+    would relaunch failing missions every cycle during a multi-hour quota
+    window. The mark expires after QUOTA_COOLDOWN_MINUTES so quotas that reset
+    (daily windows, provider rollover) are retried automatically."""
+    if QUOTA_COOLDOWN_MINUTES <= 0:
+        return False
+    try:
+        with open(_quota_state_path(agent_name, model_name)) as f:
+            data = json.load(f)
+        marked_at = datetime.fromisoformat(data["at"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+    return (datetime.now(timezone.utc) - marked_at).total_seconds() < QUOTA_COOLDOWN_MINUTES * 60
+
+def mark_model_exhausted(agent_name: str, model_name: str | None, persist: bool = True) -> None:
+    """Marks a specific (agent, model) as exhausted for the current run cycle.
+
+    persist=False keeps the mark in-memory only: used for health-probe
+    failures, which may be transient (server error, network blip) and must
+    not lock the model out of the next cron cycle. Confirmed quota exhaustion
+    (mission output matched quota keywords) persists across cycles."""
     EXHAUSTED_MODELS.add((agent_name, model_name))
     if model_name:
         clean = _model_key(model_name)
         EXHAUSTED_MODELS.add((agent_name, clean))
         clean_suffix = clean.split("/")[-1]
         EXHAUSTED_MODELS.add((agent_name, clean_suffix))
-    print(f"[quota] Marked {agent_name}/{model_name or 'default'} as exhausted.")
+    print(f"[quota] Marked {agent_name}/{model_name or 'default'} as exhausted"
+          f"{'' if persist else ' (transient, not persisted)'}.")
+    if not persist:
+        return
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        now_iso = datetime.now(timezone.utc).isoformat()
+        # Persist every lookup variant (clean key and suffix) so cross-cycle
+        # checks match the in-memory suffix-tolerant semantics.
+        keys: list[str | None] = [model_name if not model_name else _model_key(model_name)]
+        if model_name:
+            suffix = _model_key(model_name).split("/")[-1]
+            if suffix not in [k for k in keys if k]:
+                keys.append(suffix)
+        for key in keys:
+            with open(_quota_state_path(agent_name, key), "w") as f:
+                json.dump({"agent": agent_name, "model": model_name, "at": now_iso}, f)
+    except OSError as e:
+        print(f"[quota] Could not persist exhaustion mark: {e}")
 
 def is_model_exhausted(agent_name: str, model_name: str | None) -> bool:
     """Returns True if the given (agent, model) is marked exhausted."""
     if (agent_name, model_name) in EXHAUSTED_MODELS:
         return True
+    keys: list[str | None] = [model_name]
     if model_name:
         clean = _model_key(model_name)
-        if (agent_name, clean) in EXHAUSTED_MODELS:
+        suffix = clean.split("/")[-1]
+        if (agent_name, clean) in EXHAUSTED_MODELS or (agent_name, suffix) in EXHAUSTED_MODELS:
             return True
-        if (agent_name, clean.split("/")[-1]) in EXHAUSTED_MODELS:
+        keys += [clean, suffix]
+    for key in keys:
+        if _quota_cooldown_active(agent_name, key):
+            print(f"[quota] {agent_name}/{model_name or 'default'} is within a persisted exhaustion cooldown.")
             return True
     return False
 
@@ -261,8 +326,12 @@ def send_email(subject, body_html):
 
 
 def _rate_key(subject: str) -> str:
-    """Stable key for rate-limiting by subject prefix."""
-    return re.sub(r"[^a-z]", "-", subject.lower())[:60]
+    """Stable key for rate-limiting by subject.
+
+    Digits are kept (distinct PR/issue numbers must not share one counter) and
+    a hash of the full subject guards against slug-prefix collisions."""
+    slug = re.sub(r"[^a-z0-9]", "-", subject.lower())[:40]
+    return f"{slug}-{hashlib.sha1(subject.encode()).hexdigest()[:12]}"
 
 def _prune_rate_files(cooldown_hours: int) -> None:
     """Delete rate-limit state files older than the cooldown window (#989):
@@ -282,6 +351,55 @@ def _prune_rate_files(cooldown_hours: int) -> None:
                 os.remove(path)
         except OSError:
             pass
+
+
+def _prune_stale_state_files() -> None:
+    """Sweep issue-*/pr-*/quota-* state files older than STATE_MAX_AGE_DAYS.
+
+    Keeps STATE_DIR bounded over multi-week unattended runs. rate-* files have
+    their own pruning, and a state file for an issue with a live worktree is
+    always preserved (it may hold the worktree's authorization head)."""
+    cutoff = time.time() - STATE_MAX_AGE_DAYS * 86400
+    protected = _live_worktree_issue_numbers()
+    try:
+        names = os.listdir(STATE_DIR)
+    except OSError:
+        return
+    for name in names:
+        if not _prunable_state_file(name, protected):
+            continue
+        path = os.path.join(STATE_DIR, name)
+        try:
+            if os.path.getmtime(path) < cutoff:
+                os.remove(path)
+                print(f"[state] Pruned stale state file {name} (older than {STATE_MAX_AGE_DAYS} days)")
+        except OSError:
+            pass
+
+
+def _live_worktree_issue_numbers() -> set[str]:
+    """Issue numbers that still have a worktree directory under WORKTREES_BASE."""
+    protected: set[str] = set()
+    if not os.path.isdir(WORKTREES_BASE):
+        return protected
+    try:
+        for name in os.listdir(WORKTREES_BASE):
+            if name.startswith("issue-"):
+                protected.add(name.replace("issue-", ""))
+    except OSError:
+        pass
+    return protected
+
+
+def _prunable_state_file(name: str, protected: set[str]) -> bool:
+    if not name.startswith(("issue-", "pr-", "quota-", "worktree-", "opencode-poisoned-")):
+        return False
+    # Injection markers are sticky by design: pickup of a flagged issue is
+    # re-enabled only by manual removal, never by the age sweep.
+    if name.endswith("-injection.json"):
+        return False
+    match = re.match(r"^(?:issue|pr)-(\d+)", name)
+    return not (match and match.group(1) in protected)
 
 
 def _should_send_rate_limited(subject: str, *, min_consecutive: int = 3, cooldown_hours: int = 24) -> bool:
@@ -325,7 +443,13 @@ def _should_send_rate_limited(subject: str, *, min_consecutive: int = 3, cooldow
     return True
 
 def run_cmd(args, cwd=None, timeout=None):
-    """Runs a system command, returning exit code, stdout, and stderr."""
+    """Runs a system command, returning exit code, stdout, and stderr.
+
+    Commands without an explicit timeout are bounded by DEFAULT_CMD_TIMEOUT so
+    a hung gh/git/network call can never freeze the runner while it holds the
+    lock (unattended-endurance guarantee)."""
+    if timeout is None:
+        timeout = DEFAULT_CMD_TIMEOUT
     print(f"Running command: {' '.join(args)} (cwd: {cwd})")
 
     # Safety guard: refuse any git checkout/switch to main in a worktree context
@@ -368,6 +492,13 @@ def run_cmd(args, cwd=None, timeout=None):
         return 0, "MOCK SUCCESS", ""
 
     custom_env = os.environ.copy()
+    # Abort stalled git HTTP I/O instead of blocking on a half-open TCP
+    # connection for the kernel's ~2h keepalive window (unattended endurance).
+    # GIT_SSH_COMMAND is deliberately NOT injected: it would override the
+    # repository's core.sshCommand configuration; SSH stalls are bounded by
+    # the per-call timeouts instead.
+    custom_env.setdefault("GIT_HTTP_LOW_SPEED_LIMIT", "1000")
+    custom_env.setdefault("GIT_HTTP_LOW_SPEED_TIME", "60")
     if cwd:
         custom_env["PWD"] = os.path.abspath(cwd)
         custom_env.pop("OLDPWD", None)
@@ -564,7 +695,9 @@ def check_api_token_health(agent_name: str, model_name: str | None = None):
         except TypeError:
             healthy = check_fn()
         if not healthy:
-            mark_model_exhausted(agent_name, model_name)
+            # Transient probe failure (server error, blip): in-memory only, so
+            # the next cron cycle re-probes instead of honoring a 60m lockout.
+            mark_model_exhausted(agent_name, model_name, persist=False)
             return False
         return True
     return True
@@ -795,6 +928,15 @@ def refresh_models_table() -> None:
     discovered = list_agent_models()
     existing_prefs = load_preferences()
 
+    # Discovery fell back to 'default' for every agent (server outage, expired
+    # credentials). Rewriting now would destroy every user priority — including
+    # deliberate 0 = disabled rows — and make all models selectable again.
+    real_model_rows = sum(len(models) for models in discovered.values() if models != ["default"])
+    if real_model_rows == 0 and existing_prefs:
+        print("[refresh-models] No real models discovered (all probes fell back to 'default'); "
+              "refusing to overwrite the existing preferences table.")
+        return
+
     buf = io.StringIO()
     buf.write("# Agent × Model Preferences\n\n")
     buf.write("Set priority: `0` = don't use, `1` = best, `2` = good, `3` = fallback.\n\n")
@@ -871,6 +1013,26 @@ def _check_pr(branch: str) -> tuple[str, str]:
         return str(data.get("number", "")), data.get("url", "")
     except Exception:
         return "", ""
+
+def _gh_is_functional() -> bool:
+    """Cheap liveness probe for the GitHub CLI/API (rate_limit is free).
+
+    `gh pr view` fails identically for 'no PR' and for network/API/auth
+    outages. Treating the latter as 'no PR' would dispatch pointless repair
+    missions on a false premise for the outage's duration, so callers that
+    branch on pr-view failure must first prove gh can reach the API."""
+    code, _, _ = run_cmd(["gh", "api", "rate_limit", "--jq", ".rate.remaining"], cwd=REPO_PATH, timeout=30)
+    if code != 0:
+        subject = "[Runner] GitHub CLI Unavailable"
+        if _should_send_rate_limited(subject):
+            send_email(
+                subject,
+                "<h3>The GitHub CLI cannot reach the API (network, auth, or outage).</h3>"
+                "<p>PR babysitting is paused this cycle so a failed <code>gh pr view</code> is not "
+                "mistaken for 'no PR'. The runner retries automatically next cycle.</p>",
+            )
+        return False
+    return True
 
 
 def _branch_has_commits(branch: str) -> bool:
@@ -1025,7 +1187,7 @@ def _create_pr_for_branch(branch: str, issue_number: str, issue_title: str, cwd:
     if not cr_ok:
         return "", "", f"Pre-PR CodeRabbit review failed:\n{cr_err}"
 
-    push_code, push_out, push_err = run_cmd(["git", "push", "-u", "origin", branch], cwd=cwd)
+    push_code, push_out, push_err = run_cmd(["git", "push", "-u", "origin", branch], cwd=cwd, timeout=NETWORK_GIT_TIMEOUT)
     if push_code != 0:
         return "", "", f"git push failed\nstdout:\n{push_out}\nstderr:\n{push_err}"
 
@@ -1392,7 +1554,7 @@ def _publish_reviewed_completion(wt_path: str, branch: str, pr_number: int,
     push_code, push_out, push_error = run_cmd([
         "git", "push", "origin", f"{completion_head}:refs/heads/{branch}",
         f"--force-with-lease=refs/heads/{branch}:{expected_head}",
-    ], cwd=wt_path)
+    ], cwd=wt_path, timeout=NETWORK_GIT_TIMEOUT)
     if push_code != 0:
         push_details = f"{push_error}\n{push_out}".strip()
         _record_coderabbit_gate_failure(pr_number, branch, f"git push failed: {push_details}")
@@ -1422,6 +1584,86 @@ def _babysit_progressed(pr_number: int, before: tuple[str, int, str], after: tup
     )
 
 
+def _worktree_backoff_path(branch: str) -> str:
+    return os.path.join(STATE_DIR, f"worktree-{slugify(branch)}-backoff.json")
+
+
+def _load_worktree_backoff(branch: str) -> dict:
+    try:
+        with open(_worktree_backoff_path(branch)) as f:
+            state = json.load(f)
+        if isinstance(state, dict):
+            return state
+    except (OSError, ValueError):
+        pass
+    return {"failures": 0, "last_failure": None}
+
+
+def _save_worktree_backoff(branch: str, state: dict) -> None:
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        with open(_worktree_backoff_path(branch), "w") as f:
+            json.dump(state, f)
+    except OSError as e:
+        print(f"[backoff] Could not persist backoff state for {branch}: {e}")
+
+
+def _worktree_backoff_should_skip(branch: str) -> bool:
+    """True while a worktree is cooling down after consecutive fruitless missions.
+
+    Cron respawns the runner every few minutes and _WIP_CONTINUATIONS only
+    dedupes within one process, so a worktree whose repair missions keep
+    failing identically would otherwise relaunch up to 288 missions/day. The
+    cooldown doubles per failure (capped at 6h) and resets on any progress."""
+    state = _load_worktree_backoff(branch)
+    failures = int(state.get("failures", 0) or 0)
+    if failures < 3:
+        return False
+    last = state.get("last_failure")
+    if not last:
+        return False
+    try:
+        last_dt = datetime.fromisoformat(last)
+    except (TypeError, ValueError):
+        return False
+    cooldown_min = min(2 ** min(failures, 8), 360)
+    elapsed = (datetime.now(timezone.utc) - last_dt).total_seconds()
+    if elapsed >= cooldown_min * 60:
+        # Cooldown served: retry now, keeping the failure count so a further
+        # failure escalates the ladder (8m → 16m → ... → 6h cap). Only real
+        # progress (commits, PR state, thread resolution) clears the count.
+        return False
+    remaining = int((cooldown_min * 60 - elapsed) / 60) + 1
+    print(f"[backoff] Branch '{branch}' has {failures} consecutive fruitless mission(s); "
+          f"cooling down {cooldown_min}m ({remaining}m left) before dispatching another.")
+    return True
+
+
+def _record_worktree_failure(branch: str) -> None:
+    state = _load_worktree_backoff(branch)
+    failures = int(state.get("failures", 0) or 0) + 1
+    _save_worktree_backoff(branch, {"failures": failures, "last_failure": datetime.now(timezone.utc).isoformat()})
+    print(f"[backoff] Recorded fruitless mission for '{branch}' ({failures} consecutive).")
+
+
+def _record_worktree_progress(branch: str) -> None:
+    path = _worktree_backoff_path(branch)
+    if os.path.exists(path):
+        try:
+            os.remove(path)
+            print(f"[backoff] Progress on '{branch}'; backoff cleared.")
+        except OSError:
+            pass
+
+
+def _is_environmental_gate_failure(pr_create_err: str) -> bool:
+    """True for gate failures an agent mission cannot fix (missing CLI).
+
+    Dispatching a mission to 'fix' a missing coderabbit binary just burns a
+    45-minute run per cycle for the outage's duration."""
+    return "coderabbit cli not found" in (pr_create_err or "").lower()
+
+
 def _babysit_with_fallback(
     prompt: str,
     wt_path: str,
@@ -1434,6 +1676,8 @@ def _babysit_with_fallback(
     Existing PRs require published head/check/thread progress after exit 0;
     local commits alone do not publish a completion.
     """
+    if _worktree_backoff_should_skip(branch):
+        return
     before = _babysit_snapshot(wt_path, branch, pr_number, before_review_output)
     authorized = _authorized_pr(pr_number, str(issue_number)) if pr_number else None
     if pr_number and not authorized:
@@ -1471,10 +1715,12 @@ def _babysit_with_fallback(
             if _publish_reviewed_completion(wt_path, branch, pr_number, str(issue_number), authorized["head"]["sha"], completion_head):
                 _save_pr_state(str(issue_number), str(pr_number), branch, completion_head)
                 print(f"[babysit] {agent_name}/{model_name} succeeded (reviewed completion published)")
+                _record_worktree_progress(branch)
                 _jev_verify_completion(wt_path, branch, issue_number)
             return
         if code == 0 and _babysit_progressed(pr_number, before, after):
             print(f"[babysit] {agent_name}/{model_name} succeeded (commits/state/threads changed)")
+            _record_worktree_progress(branch)
             _jev_verify_completion(wt_path, branch, issue_number)
             return
         if code == 0 and "PENDING" in after[0]:
@@ -1484,6 +1730,7 @@ def _babysit_with_fallback(
 
         before = after
 
+    _record_worktree_failure(branch)
     if _should_send_rate_limited(f"[Runner] Babysit Failed: Issue #{issue_number}"):
         send_email(
             f"[Runner] Babysit Failed: Issue #{issue_number}",
@@ -1547,7 +1794,7 @@ def _sync_main_after_merge() -> bool:
         print("Main sync deferred: repository is not clean on main. User work preserved.")
         return False
     for command in (["git", "fetch", "origin", "main"], ["git", "merge", "--ff-only", MAIN_REMOTE_REF]):
-        code, _, error = run_cmd(command, cwd=REPO_PATH)
+        code, _, error = run_cmd(command, cwd=REPO_PATH, timeout=NETWORK_GIT_TIMEOUT if command[1] == "fetch" else None)
         if code != 0:
             print(f"Main sync deferred: {error.strip()}")
             return False
@@ -1596,7 +1843,7 @@ def _reconcile_active_worktree(wt_path: str, branch: str, pr_number: int,
     local_head = local_head.strip()
 
     # Ensure remote commits are available locally before inspecting ancestry
-    fetch_code, _, fetch_err = run_cmd(["git", "fetch", "origin", branch], cwd=wt_path)
+    fetch_code, _, fetch_err = run_cmd(["git", "fetch", "origin", branch], cwd=wt_path, timeout=NETWORK_GIT_TIMEOUT)
     head_code, _, _ = run_cmd(["git", "cat-file", "-e", f"{reviewed_head}^{{commit}}"], cwd=wt_path)
     if head_code != 0:
         # Unresolvable authorized head: block without touching the worktree
@@ -1823,20 +2070,24 @@ def babysit_active_worktrees():
                 )
                 if not _is_stash_verified(stash_code, stash_msg) or not _worktree_is_clean(wt_path):
                     print(f"SAFETY: Worktree {wt_path} on 'main' has uncommitted changes that could not be stashed ({stash_err}). Preserving worktree.")
-                    send_email(
-                        f"[Runner] Safety: Preserved dirty worktree on 'main' branch",
-                        f"<h3>Worktree at {wt_path} is on 'main' with uncommitted changes that could not be stashed. Preserving worktree to prevent data loss.</h3>"
-                    )
+                    subject = "[Runner] Safety: Preserved dirty worktree on 'main' branch"
+                    if _should_send_rate_limited(subject):
+                        send_email(
+                            subject,
+                            f"<h3>Worktree at {wt_path} is on 'main' with uncommitted changes that could not be stashed. Preserving worktree to prevent data loss.</h3>"
+                        )
                     continue
                 print(f"SAFETY: Stashed uncommitted changes for worktree {wt_path} on 'main' ({stash_msg}).")
 
             wt_rc, _, wt_err = run_cmd(["git", "worktree", "remove", wt_path, "--force"], cwd=REPO_PATH)
             if wt_rc != 0:
                 print(f"SAFETY: git worktree remove failed for {wt_path} on 'main' (exit code {wt_rc}): {wt_err}. Preserving directory.")
-                send_email(
-                    f"[Runner] Safety: Failed to remove worktree on main branch",
-                    f"<h3>Failed to remove worktree at {wt_path}: {wt_err}. Preserving directory.</h3>"
-                )
+                subject = "[Runner] Safety: Failed to remove worktree on main branch"
+                if _should_send_rate_limited(subject):
+                    send_email(
+                        subject,
+                        f"<h3>Failed to remove worktree at {wt_path}: {wt_err}. Preserving directory.</h3>"
+                    )
                 continue
 
             if not DRY_RUN and os.path.exists(wt_path):
@@ -1887,6 +2138,13 @@ def babysit_active_worktrees():
                         print(f"WARNING: Failed to parse PR #{state_pr} verification JSON.")
 
             if pr_code != 0:
+                # Saved state did not resolve the PR. Before concluding "no PR
+                # exists", prove gh can reach the API: a network/auth/outage
+                # failure looks identical to "not found" here, and acting on
+                # the false conclusion would dispatch pointless repair missions.
+                if not _gh_is_functional():
+                    print(f"gh is unavailable; cannot distinguish 'no PR' from an API failure. Skipping {folder_name} this cycle.")
+                    continue
                 print(f"PR does not exist for branch '{branch}'. Checking for other open PRs for issue #{issue_number}...")
                 find_code, find_out, _ = run_cmd(["gh", "pr", "list", "--state", "open", "--json", "number,headRefName,url,title,body,author"], cwd=REPO_PATH)
                 matched_branch = None
@@ -1914,7 +2172,7 @@ def babysit_active_worktrees():
                             break
 
             if matched_branch:
-                run_cmd(["git", "fetch", "origin", matched_branch], cwd=wt_path)
+                run_cmd(["git", "fetch", "origin", matched_branch], cwd=wt_path, timeout=NETWORK_GIT_TIMEOUT)
                 checkout_code, checkout_out, checkout_err = run_cmd(["git", "checkout", matched_branch], cwd=wt_path)
                 if checkout_code == 0:
                     print(f"Successfully switched worktree {wt_path} to branch '{matched_branch}'. Re-evaluating in next cycle.")
@@ -1961,6 +2219,19 @@ def babysit_active_worktrees():
 
             print(f"No open PR found matching issue #{issue_number}. Re-invoking agent to implement and open PR.")
 
+            if _worktree_backoff_should_skip(branch):
+                continue
+            if _is_environmental_gate_failure(pr_create_err):
+                subject = f"[Runner] Environmental Gate Failure: Issue #{issue_number}"
+                if _should_send_rate_limited(subject):
+                    send_email(
+                        subject,
+                        f"<h3>PR creation for Issue <a href=\"https://github.com/dwojtaszek/zipper/issues/{issue_number}\">#{issue_number}</a> is blocked by a missing coderabbit CLI, which an agent mission cannot fix.</h3>"
+                        f"<p>No mission dispatched this cycle. The runner retries automatically once the CLI is available.</p>",
+                    )
+                print("[babysit] PR gate failure is environmental (coderabbit CLI missing); skipping mission dispatch this cycle.")
+                continue
+
             prompt = _build_babysit_prompt(issue_number, issue_title, safe_body, branch, pr_create_err)
             pre_loop_pr_err = bool(pr_create_err)
             made_any_progress = False
@@ -1999,6 +2270,7 @@ def babysit_active_worktrees():
                 if pr_num_val:
                     ready = agy_code == 0 and not _latest_commit_is_wip(wt_path)
                     origin = _record_initial_pr_origin(issue_number, pr_num_val, branch, ready)
+                    _record_worktree_progress(branch)
                     if agy_code != 0:
                         if is_quota_exhausted(agy_out, agy_err):
                             mark_model_exhausted(agent_name, model_name)
@@ -2025,39 +2297,58 @@ def babysit_active_worktrees():
                     if not _fallback():
                         if made_any_progress:
                             print(f"Progress recorded on issue #{issue_number}. Preserving worktree for next cycle/agent.")
+                            _record_worktree_progress(branch)
                         else:
                             print(f"All agents/models exhausted for issue #{issue_number}. Removing worktree '{branch}' if safe.")
                             if not _remove_worktree(wt_path, branch):
                                 print(f"Worktree '{branch}' preserved due to uncommitted changes or unpushed commits.")
+                                _record_worktree_failure(branch)
+                            else:
+                                _record_worktree_progress(branch)
                         break
                     print(f"Switching to {_current_agent()}/{_current_model()} and continuing orphaned issue #{issue_number}...")
                 elif agy_code == 0 and made_progress:
                     print(f"Progress recorded on issue #{issue_number}. Preserving worktree for next cycle/agent.")
+                    _record_worktree_progress(branch)
                     break
                 elif agy_code == 0:
                     print(f"Agent exited 0 but no work done on branch '{branch}'.")
                     if not _fallback():
                         if made_any_progress:
                             print(f"Progress recorded on issue #{issue_number}. Preserving worktree for next cycle/agent.")
+                            _record_worktree_progress(branch)
                         else:
                             print(f"All agents failed for issue #{issue_number}. Removing worktree '{branch}' if safe.")
                             if not _remove_worktree(wt_path, branch):
                                 print(f"Worktree '{branch}' preserved due to uncommitted changes or unpushed commits.")
+                                _record_worktree_failure(branch)
+                            else:
+                                _record_worktree_progress(branch)
                         break
                     print(f"Switching to {_current_agent()}/{_current_model()} and continuing orphaned issue #{issue_number}...")
                 elif agy_code != 0:
                     if not _fallback():
                         if made_any_progress:
                             print(f"Progress recorded on issue #{issue_number}. Preserving worktree for next cycle/agent.")
+                            _record_worktree_progress(branch)
                         else:
                             print(f"All agents failed for issue #{issue_number}. Removing worktree '{branch}' if safe.")
                             if not _remove_worktree(wt_path, branch):
                                 print(f"Worktree '{branch}' preserved due to uncommitted changes or unpushed commits.")
+                                _record_worktree_failure(branch)
+                            else:
+                                _record_worktree_progress(branch)
                         break
                     print(f"Switching to {_current_agent()}/{_current_model()} and continuing orphaned issue #{issue_number}...")
             continue
 
-        pr_data = json.loads(pr_out)
+        try:
+            pr_data = json.loads(pr_out)
+        except json.JSONDecodeError:
+            # A crash here would repeat identically every cron cycle; skip the
+            # worktree this cycle instead (transient gh output corruption).
+            print(f"WARNING: Unparseable PR JSON for branch '{branch}' (worktree {folder_name}). Skipping this cycle.")
+            continue
         pr_number = pr_data.get("number")
         pr_state = pr_data.get("state")
 
@@ -2184,7 +2475,7 @@ def babysit_active_worktrees():
                     )
             if not _is_coderabbit_gate_failed(pr_number):
                 print(f"CI is SUCCESS for PR #{pr_number}. Checking robot review gate...")
-                review_code, review_out, review_err = run_cmd(["bash", REVIEW_GATE_SCRIPT, str(pr_number)], cwd=wt_path)
+                review_code, review_out, review_err = run_cmd(["bash", REVIEW_GATE_SCRIPT, str(pr_number)], cwd=wt_path, timeout=1500)
                 if review_code != 0:
                     before_review_out = review_out
                     print(
@@ -2224,7 +2515,7 @@ def babysit_active_worktrees():
                                 _clear_pr_state(issue_number)
                                 _clear_rerun_count(pr_number)
                                 _clear_coderabbit_gate_failure(pr_number)
-                                run_cmd(["git", "push", "origin", "--delete", branch], cwd=REPO_PATH)
+                                run_cmd(["git", "push", "origin", "--delete", branch], cwd=REPO_PATH, timeout=NETWORK_GIT_TIMEOUT)
                                 _sync_main_after_merge()
                                 send_email(
                                     f"[Runner] Success: PR #{pr_number} Merged Automatically for Issue #{issue_number}",
@@ -2264,11 +2555,13 @@ def babysit_active_worktrees():
 
             if is_hanging:
                 print(f"PR #{pr_number} checks have been pending for > 2 hours. Triggering babysit.")
-                send_email(
-                    f"[Runner] Hanging CI Alert: PR #{pr_number}",
-                    f"<h3>PR <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">#{pr_number}</a> has been pending for over 2 hours.</h3>"
-                    f"<p>Triggering babysit to investigate or rerun checks.</p>"
-                )
+                subject = f"[Runner] Hanging CI Alert: PR #{pr_number}"
+                if _should_send_rate_limited(subject):
+                    send_email(
+                        subject,
+                        f"<h3>PR <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">#{pr_number}</a> has been pending for over 2 hours.</h3>"
+                        f"<p>Triggering babysit to investigate or rerun checks.</p>"
+                    )
                 prompt = "babysit. CI checks have been pending for over 2 hours. Investigate why they are stuck, rerun them if necessary, and ensure the PR gets merged."
             else:
                 print(f"PR #{pr_number} checks are still pending. Waiting for completion.")
@@ -2328,7 +2621,7 @@ def _recreate_worktree_for_pr(issue_number: str, branch: str, pr_number, expecte
     if os.path.exists(wt_path):
         return
     print(f"Recreating worktree for orphan PR on branch '{branch}' at {wt_path}...")
-    fetch_code, _, _ = run_cmd(["git", "fetch", "origin", f"refs/heads/{branch}"], cwd=REPO_PATH)
+    fetch_code, _, _ = run_cmd(["git", "fetch", "origin", f"refs/heads/{branch}"], cwd=REPO_PATH, timeout=NETWORK_GIT_TIMEOUT)
     head_code, head_out, _ = run_cmd(["git", "rev-parse", "FETCH_HEAD"], cwd=REPO_PATH)
     if fetch_code != 0 or head_code != 0 or head_out.strip() != expected_head:
         return
@@ -2399,7 +2692,7 @@ def babysit_orphaned_issue_prs():
 
         if ci_status == "SUCCESS":
             print(f"[orphan-pr] CI is SUCCESS for PR #{pr_num}. Checking robot review gate...")
-            review_code, review_out, review_err = run_cmd(["bash", REVIEW_GATE_SCRIPT, str(pr_num), "1"], cwd=REPO_PATH)
+            review_code, review_out, _ = run_cmd(["bash", REVIEW_GATE_SCRIPT, str(pr_num), "1"], cwd=REPO_PATH, timeout=300)
             if review_code != 0:
                 print(f"[orphan-pr] Review gate not yet satisfied for PR #{pr_num}. Recreating worktree for babysitting.\n{review_out}")
                 if issue_num_str:
@@ -2419,7 +2712,7 @@ def babysit_orphaned_issue_prs():
                     print(f"[orphan-pr] Successfully merged PR #{pr_num} into main.")
                     if issue_num_str:
                         _clear_pr_state(issue_num_str)
-                    run_cmd(["git", "push", "origin", "--delete", head_branch], cwd=REPO_PATH)
+                    run_cmd(["git", "push", "origin", "--delete", head_branch], cwd=REPO_PATH, timeout=NETWORK_GIT_TIMEOUT)
                     _sync_main_after_merge()
                     send_email(
                         f"[Runner] Success: PR #{pr_num} Merged Automatically",
@@ -2472,7 +2765,7 @@ def babysit_dependabot_prs():
 
         if ci_status == "SUCCESS":
             print(f"[dependabot] CI is SUCCESS for Dependabot PR #{pr_num}. Checking robot review gate...")
-            review_code, review_out, review_err = run_cmd(["bash", REVIEW_GATE_SCRIPT, str(pr_num), "1"], cwd=REPO_PATH)
+            review_code, review_out, _ = run_cmd(["bash", REVIEW_GATE_SCRIPT, str(pr_num), "1"], cwd=REPO_PATH, timeout=300)
             if review_code != 0:
                 print(f"[dependabot] Review gate not yet satisfied for PR #{pr_num}. Waiting.\n{review_out}")
                 continue
@@ -2609,7 +2902,10 @@ def verify_repo_on_main():
         return True
 
     print(f"RECOVERY: Main repo is on branch '{current}' instead of 'main'. Attempting auto-recovery...")
-    stash_code, stash_out, stash_err = run_cmd(["git", "stash", "--include-untracked"], cwd=REPO_PATH)
+    # Named stash: an unnamed stash here would accumulate one entry per cycle if
+    # recovery repeats, growing the stash list without bound.
+    recovery_stash_msg = f"runner-main-recovery-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
+    stash_code, stash_out, stash_err = run_cmd(["git", "stash", "push", "--include-untracked", "-m", recovery_stash_msg], cwd=REPO_PATH)
     if stash_code != 0:
         print(f"RECOVERY: git stash failed: {stash_err}")
     else:
@@ -2618,38 +2914,44 @@ def verify_repo_on_main():
     co_code, co_out, co_err = run_cmd(["git", "checkout", "main"], cwd=REPO_PATH)
     if co_code != 0:
         print(f"RECOVERY: git checkout main failed: {co_err}")
-        send_email(
-            "[Runner] Safety Abort: Failed to recover main branch",
-            f"<h3>The main repo at {REPO_PATH} is on branch '{current}' and automatic recovery to 'main' failed.</h3>"
-            f"<p>Stash result: {stash_out.strip()}</p>"
-            f"<p>Checkout error: {co_err}</p>"
-            f"<p>All worktree operations have been aborted. Manual intervention required.</p>"
-        )
+        subject = "[Runner] Safety Abort: Failed to recover main branch"
+        if _should_send_rate_limited(subject):
+            send_email(
+                subject,
+                f"<h3>The main repo at {REPO_PATH} is on branch '{current}' and automatic recovery to 'main' failed.</h3>"
+                f"<p>Stash result: {stash_out.strip()}</p>"
+                f"<p>Checkout error: {co_err}</p>"
+                f"<p>All worktree operations have been aborted. Manual intervention required.</p>"
+            )
         sys.exit(1)
 
     code2, out2, _ = run_cmd(["git", "branch", "--show-current"], cwd=REPO_PATH)
     if out2.strip() != "main":
         print(f"RECOVERY: Still not on main after checkout (on '{out2.strip()}'). Aborting.")
-        send_email(
-            "[Runner] Safety Abort: Main branch recovery verification failed",
-            f"<h3>Attempted to switch main repo back to 'main' but verification shows branch '{out2.strip()}'.</h3>"
-            f"<p>Manual intervention required.</p>"
-        )
+        subject = "[Runner] Safety Abort: Main branch recovery verification failed"
+        if _should_send_rate_limited(subject):
+            send_email(
+                subject,
+                f"<h3>Attempted to switch main repo back to 'main' but verification shows branch '{out2.strip()}'.</h3>"
+                f"<p>Manual intervention required.</p>"
+            )
         sys.exit(1)
 
     print("RECOVERY: Successfully switched main repo back to 'main'.")
-    send_email(
-        "[Runner] Auto-Recovery: Main repo switched back to main",
-        f"<h3>The main repo at {REPO_PATH} was on branch '{current}' and has been automatically recovered to 'main'.</h3>"
-        f"<p>Stashed changes: {stash_out.strip()}</p>"
-        f"<p>If this happens repeatedly, investigate what is changing the branch.</p>"
-    )
+    subject = "[Runner] Auto-Recovery: Main repo switched back to main"
+    if _should_send_rate_limited(subject):
+        send_email(
+            subject,
+            f"<h3>The main repo at {REPO_PATH} was on branch '{current}' and has been automatically recovered to 'main'.</h3>"
+            f"<p>Stashed changes: {stash_out.strip()}</p>"
+            f"<p>If this happens repeatedly, investigate what is changing the branch.</p>"
+        )
     return True
 
 
 def _fetch_origin_or_abort():
     print("Fetching latest from origin...")
-    fetch_code, _, fetch_err = run_cmd(["git", "fetch", "origin"], cwd=REPO_PATH)
+    fetch_code, _, fetch_err = run_cmd(["git", "fetch", "origin"], cwd=REPO_PATH, timeout=NETWORK_GIT_TIMEOUT)
     if fetch_code != 0:
         print(f"RECOVERY: git fetch origin failed ({fetch_err.strip()}). Aborting startup.")
         if _should_send_rate_limited("[Runner] Safety Abort: Failed to fetch origin"):
@@ -2690,34 +2992,60 @@ def _check_ignored_file_collisions():
         sys.exit(1)
 
 
+def _safety_abort(subject: str, body: str) -> None:
+    """Rate-limited abort email + hard stop: recovery must never continue past
+    a safety check, but a repeating failure must not flood the inbox."""
+    if _should_send_rate_limited(subject):
+        send_email(subject, body)
+    sys.exit(1)
+
+
+def _pin_head_in_backup_branch() -> tuple[str, str]:
+    """Return (name, error) of a backup branch pinning HEAD, creating one if needed.
+
+    Reuses a runner-backup-* branch already at HEAD so a repeating recovery does
+    not mint one new timestamped branch (and email) per cron cycle."""
+    reuse_code, reuse_out, _ = run_cmd(["git", "branch", "--list", "runner-backup-*", "--points-at", "HEAD"], cwd=REPO_PATH)
+    if reuse_code == 0:
+        for line in reuse_out.splitlines():
+            candidate = line.strip().lstrip("*+ ").strip()
+            if candidate:
+                print(f"RECOVERY: Reusing backup branch '{candidate}' already pinning HEAD.")
+                return candidate, ""
+    backup_branch = f"runner-backup-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
+    b_code, _, b_err = run_cmd(["git", "branch", backup_branch, "HEAD"], cwd=REPO_PATH)
+    if b_code != 0:
+        return "", b_err.strip()
+    return backup_branch, ""
+
+
 def _backup_local_commits_before_reset(reason: str = "blocking rebase"):
     rev_code, rev_out, rev_err = run_cmd(["git", "rev-list", f"{MAIN_REMOTE_REF}..HEAD"], cwd=REPO_PATH)
     if rev_code != 0:
         print(f"RECOVERY: Failed to check unmerged local commits: {rev_err.strip()}. Aborting reset.")
-        send_email(
+        _safety_abort(
             "[Runner] Safety Abort: Failed to check local commits before reset",
             f"<h3>Main repository at {REPO_PATH}: rev-list failed ({rev_err.strip()}).</h3>"
-            f"<p>Reset aborted to prevent data loss. Manual intervention required.</p>"
+            f"<p>Reset aborted to prevent data loss. Manual intervention required.</p>",
         )
-        sys.exit(1)
-    if rev_out.strip():
-        ts = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
-        backup_branch = f"runner-backup-{ts}"
-        b_code, _, b_err = run_cmd(["git", "branch", backup_branch, "HEAD"], cwd=REPO_PATH)
-        if b_code != 0:
-            print(f"RECOVERY: Failed to create backup branch {backup_branch}: {b_err.strip()}. Aborting reset.")
-            send_email(
-                "[Runner] Safety Abort: Failed to back up local commits before reset",
-                f"<h3>Main repository at {REPO_PATH} has local commits that could not be backed up.</h3>"
-                f"<p>Branch creation error: {b_err.strip()}</p>"
-                f"<p>Reset aborted to prevent data loss. Manual intervention required.</p>"
-            )
-            sys.exit(1)
-        print(f"RECOVERY: Backed up unmerged local commits to branch '{backup_branch}'.")
+    if not rev_out.strip():
+        return
+    backup_branch, branch_err = _pin_head_in_backup_branch()
+    if not backup_branch:
+        print(f"RECOVERY: Failed to create backup branch: {branch_err}. Aborting reset.")
+        _safety_abort(
+            "[Runner] Safety Abort: Failed to back up local commits before reset",
+            f"<h3>Main repository at {REPO_PATH} has local commits that could not be backed up.</h3>"
+            f"<p>Branch creation error: {branch_err}</p>"
+            f"<p>Reset aborted to prevent data loss. Manual intervention required.</p>",
+        )
+    print(f"RECOVERY: Backed up unmerged local commits to branch '{backup_branch}'.")
+    subject = "[Runner] Auto-Recovery: Backed up local commits before resetting main"
+    if _should_send_rate_limited(subject):
         send_email(
-            "[Runner] Auto-Recovery: Backed up local commits before resetting main",
+            subject,
             f"<h3>Main repository at {REPO_PATH} had local commits {reason}.</h3>"
-            f"<p>The local commits were backed up to branch <code>{backup_branch}</code> before resetting 'main' to <code>{MAIN_REMOTE_REF}</code>.</p>"
+            f"<p>The local commits were backed up to branch <code>{backup_branch}</code> before resetting 'main' to <code>{MAIN_REMOTE_REF}</code>.</p>",
         )
 
 
@@ -2725,12 +3053,14 @@ def _reset_main_to_remote():
     reset_code, _, reset_err = run_cmd(["git", "reset", "--hard", MAIN_REMOTE_REF], cwd=REPO_PATH)
     if reset_code != 0:
         print(f"RECOVERY: git reset --hard {MAIN_REMOTE_REF} failed ({reset_err.strip()}). Aborting.")
-        send_email(
-            "[Runner] Safety Abort: Failed to reset main branch",
-            f"<h3>Main repository at {REPO_PATH} failed to reset to {MAIN_REMOTE_REF}.</h3>"
-            f"<p>Reset error: {reset_err.strip()}</p>"
-            f"<p>Manual intervention required.</p>"
-        )
+        subject = "[Runner] Safety Abort: Failed to reset main branch"
+        if _should_send_rate_limited(subject):
+            send_email(
+                subject,
+                f"<h3>Main repository at {REPO_PATH} failed to reset to {MAIN_REMOTE_REF}.</h3>"
+                f"<p>Reset error: {reset_err.strip()}</p>"
+                f"<p>Manual intervention required.</p>"
+            )
         sys.exit(1)
 
 
@@ -2763,15 +3093,17 @@ def _recover_dirty_main_repo(rebase_err: str):
 
     if not _is_stash_verified(stash_code, stash_msg):
         print(f"RECOVERY: git stash failed or could not be verified (code {stash_code}): {stash_err.strip() or stash_out.strip()}. Aborting recovery to preserve uncommitted work.")
-        send_email(
-            "[Runner] Safety Abort: Failed to stash dirty files during recovery",
-            f"<h3>Main repository at {REPO_PATH} had uncommitted changes blocking rebase, but automatic stash backup failed or could not be verified.</h3>"
-            f"<p>Rebase error: {rebase_err.strip()}</p>"
-            f"<p>Stash return code: {stash_code}</p>"
-            f"<p>Stash output: {stash_out.strip()}</p>"
-            f"<p>Stash error: {stash_err.strip()}</p>"
-            f"<p>Destructive reset/clean aborted to prevent data loss. Working tree left untouched. Manual intervention required.</p>"
-        )
+        subject = "[Runner] Safety Abort: Failed to stash dirty files during recovery"
+        if _should_send_rate_limited(subject):
+            send_email(
+                subject,
+                f"<h3>Main repository at {REPO_PATH} had uncommitted changes blocking rebase, but automatic stash backup failed or could not be verified.</h3>"
+                f"<p>Rebase error: {rebase_err.strip()}</p>"
+                f"<p>Stash return code: {stash_code}</p>"
+                f"<p>Stash output: {stash_out.strip()}</p>"
+                f"<p>Stash error: {stash_err.strip()}</p>"
+                f"<p>Destructive reset/clean aborted to prevent data loss. Working tree left untouched. Manual intervention required.</p>"
+            )
         sys.exit(1)
 
     _backup_local_commits_before_reset("alongside uncommitted changes")
@@ -2860,13 +3192,77 @@ def show_status():
     sys.exit(0)
 
 
+def _heartbeat_path() -> str:
+    return os.path.join(STATE_DIR, "runner-heartbeat.json")
+
+
+def _write_heartbeat() -> None:
+    """Record the lock holder's pid/pgid/start so a later cycle can reclaim a hung run."""
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        with open(_heartbeat_path(), "w") as f:
+            json.dump(
+                {"pid": os.getpid(), "pgid": os.getpgid(0), "started": datetime.now(timezone.utc).isoformat()},
+                f,
+            )
+    except OSError as e:
+        print(f"[watchdog] Could not write heartbeat: {e}")
+
+
+def _reclaim_stale_lock() -> bool:
+    """True when the lock holder has run past MAX_RUN_SECONDS and was killed.
+
+    flock is released by the kernel when the holder dies, so a held lock always
+    means a live process — but a process wedged in an unkillable state (D-state
+    I/O, pre-timeout subprocess hang) holds it forever and every later cron
+    cycle would exit at the lock. The watchdog caps that at MAX_RUN_SECONDS.
+    Without a usable heartbeat nothing can be proven about the holder, so the
+    takeover fails closed (returns False) and the caller exits normally."""
+    try:
+        with open(_heartbeat_path()) as f:
+            heartbeat = json.load(f)
+        started = datetime.fromisoformat(heartbeat["started"])
+        pid = int(heartbeat["pid"])
+        pgid = int(heartbeat.get("pgid", pid))
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+    age = (datetime.now(timezone.utc) - started).total_seconds()
+    if age < MAX_RUN_SECONDS:
+        return False
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        print(f"[watchdog] Lock holder pid {pid} ran {int(age)}s and is dead; reclaiming its lock.")
+        return True
+    if pid == os.getpid() or pgid == os.getpgid(0):
+        print("[watchdog] Heartbeat points at this process; not reclaiming.")
+        return False
+    print(f"[watchdog] Lock holder pid {pid} has run {int(age)}s (limit {MAX_RUN_SECONDS}s); killing its process group.")
+    subject = "[Runner] Watchdog: Reclaimed Stuck Runner Lock"
+    if _should_send_rate_limited(subject):
+        send_email(
+            subject,
+            f"<h3>A runner invocation held the lock for {int(age / 3600)}h and was killed by the watchdog.</h3>"
+            f"<p>The next cron cycle takes over automatically. If this repeats, inspect the logs for the command that hung.</p>",
+        )
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except OSError:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+    time.sleep(2)
+    return True
+
+
 def main():
     global AGENT_CANDIDATES
 
     if STATUS_ONLY:
         show_status()
 
-    lock_file = open(LOCK_FILE_PATH, "w")
+    lock_file = open(LOCK_FILE_PATH, "a")
     lock_timeout_sec = int(os.environ.get("RUNNER_LOCK_TIMEOUT", "120"))
     start_lock = time.time()
     acquired = False
@@ -2884,9 +3280,19 @@ def main():
                 break
             time.sleep(5)
 
+    if not acquired and _reclaim_stale_lock():
+        try:
+            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            acquired = True
+        except (IOError, BlockingIOError):
+            acquired = False
+
     if not acquired:
         print("Another instance of the runner is active. Exiting.")
         sys.exit(0)
+
+    _write_heartbeat()
+    _prune_stale_state_files()
 
     print("Autonomous Runner Wakeup")
     os.makedirs(WORKTREES_BASE, exist_ok=True)
@@ -2908,7 +3314,7 @@ def main():
         if issue:
             num = issue.get("number")
             title = issue.get("title")
-            labels = [l.get("name").lower() for l in issue.get("labels", [])]
+            labels = [(l.get("name") if isinstance(l, dict) else str(l)).lower() for l in issue.get("labels", [])]
 
             _, safe_body = _fetch_issue_body(str(num))
 
@@ -2956,12 +3362,14 @@ def main():
 
             wt_code, wt_out, wt_err = run_cmd(["git", "worktree", "add", wt_path, "-b", branch_name, "main"], cwd=REPO_PATH)
             if wt_code != 0:
-                send_email(
-                    f"[Runner] Worktree Creation Failed: Issue #{num}",
-                    f"<h3>Failed to create git worktree for Issue <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">#{num}</a></h3>"
-                    f"<p><b>Issue Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">https://github.com/dwojtaszek/zipper/issues/{num}</a></p>"
-                    f"<pre>{wt_out}\n{wt_err}</pre>"
-                )
+                subject = f"[Runner] Worktree Creation Failed: Issue #{num}"
+                if _should_send_rate_limited(subject):
+                    send_email(
+                        subject,
+                        f"<h3>Failed to create git worktree for Issue <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">#{num}</a></h3>"
+                        f"<p><b>Issue Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">https://github.com/dwojtaszek/zipper/issues/{num}</a></p>"
+                        f"<pre>{wt_out}\n{wt_err}</pre>"
+                    )
                 sys.exit(1)
 
             prompt = (
@@ -3039,14 +3447,16 @@ def main():
                         break
                 elif agy_code == 0 and pr_create_err:
                     print(pr_create_err)
-                    send_email(
-                        f"[Runner] PR Creation Failed: Issue #{num}",
-                        f"<h3>Agent completed Issue <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">#{num}</a>, but the runner could not create a PR.</h3>"
-                        f"<p><b>Issue Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">https://github.com/dwojtaszek/zipper/issues/{num}</a></p>"
-                        f"<p><b>Title:</b> {title}</p>"
-                        f"<p><b>Branch:</b> {branch_name}</p>"
-                        f"<pre>{pr_create_err}</pre>"
-                    )
+                    subject = f"[Runner] PR Creation Failed: Issue #{num}"
+                    if _should_send_rate_limited(subject):
+                        send_email(
+                            subject,
+                            f"<h3>Agent completed Issue <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">#{num}</a>, but the runner could not create a PR.</h3>"
+                            f"<p><b>Issue Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">https://github.com/dwojtaszek/zipper/issues/{num}</a></p>"
+                            f"<p><b>Title:</b> {title}</p>"
+                            f"<p><b>Branch:</b> {branch_name}</p>"
+                            f"<pre>{pr_create_err}</pre>"
+                        )
                     break
                 elif agy_code != 0 and is_quota_exhausted(agy_out, agy_err):
                     mark_model_exhausted(agent_name, model_name)
@@ -3065,14 +3475,16 @@ def main():
                     print(f"Switching to {_current_agent()}/{_current_model()} and continuing issue #{num}...")
                 elif work_done:
                     print(f"Progress recorded on issue #{num} ({added_commits} new commit(s)). Preserving worktree for next cycle/agent.")
-                    send_email(
-                        f"[Runner] Progress: Issue #{num} Progress Checkpointed",
-                        f"<h3>Agent made progress on Issue <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">#{num}</a> and work was preserved.</h3>"
-                        f"<p><b>Issue Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">https://github.com/dwojtaszek/zipper/issues/{num}</a></p>"
-                        f"<p><b>Title:</b> {title}</p>"
-                        f"<p><b>Branch:</b> {branch_name}</p>"
-                        f"<p>The worktree is preserved and execution will automatically resume in the next cycle.</p>"
-                    )
+                    subject = f"[Runner] Progress: Issue #{num} Progress Checkpointed"
+                    if _should_send_rate_limited(subject):
+                        send_email(
+                            subject,
+                            f"<h3>Agent made progress on Issue <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">#{num}</a> and work was preserved.</h3>"
+                            f"<p><b>Issue Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">https://github.com/dwojtaszek/zipper/issues/{num}</a></p>"
+                            f"<p><b>Title:</b> {title}</p>"
+                            f"<p><b>Branch:</b> {branch_name}</p>"
+                            f"<p>The worktree is preserved and execution will automatically resume in the next cycle.</p>"
+                        )
                     break
                 else:
                     lines = agy_out.splitlines()
@@ -3113,12 +3525,14 @@ def main():
                         if _remove_worktree(wt_path, branch_name):
                             wt_code, wt_out, wt_err = run_cmd(["git", "worktree", "add", wt_path, "-b", branch_name, "main"], cwd=REPO_PATH)
                             if wt_code != 0:
-                                send_email(
-                                    f"[Runner] Worktree Recreation Failed: Issue #{num}",
-                                    f"<h3>Failed to recreate git worktree during retry for Issue <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">#{num}</a></h3>"
-                                    f"<p><b>Issue Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">https://github.com/dwojtaszek/zipper/issues/{num}</a></p>"
-                                    f"<pre>{wt_out}\n{wt_err}</pre>"
-                                )
+                                subject = f"[Runner] Worktree Recreation Failed: Issue #{num}"
+                                if _should_send_rate_limited(subject):
+                                    send_email(
+                                        subject,
+                                        f"<h3>Failed to recreate git worktree during retry for Issue <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">#{num}</a></h3>"
+                                        f"<p><b>Issue Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/issues/{num}\">https://github.com/dwojtaszek/zipper/issues/{num}</a></p>"
+                                        f"<pre>{wt_out}\n{wt_err}</pre>"
+                                    )
                                 sys.exit(1)
                         else:
                             print(f"Worktree {wt_path} or branch '{branch_name}' could not be removed — retrying in-place.")

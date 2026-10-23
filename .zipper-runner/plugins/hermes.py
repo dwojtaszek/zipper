@@ -12,6 +12,7 @@ Protocol interface:
 """
 import os
 import shutil
+import signal
 import subprocess
 
 HERMES_BIN = shutil.which("hermes") or (
@@ -95,6 +96,7 @@ def run_mission(
             text=True,
             cwd=cwd,
             env=env,
+            start_new_session=True,
         )
         # 45-minute hard timeout to prevent indefinite lockups
         stdout, stderr = p.communicate(timeout=2700)
@@ -107,7 +109,15 @@ def run_mission(
             "[hermes] CRITICAL: Agent process hung for over 45 minutes! Forcefully killing it."
         )
         if p:
-            p.kill()
+            # Kill the whole process group: p.kill() alone leaves children
+            # alive holding the pipes, and communicate() would block forever.
+            # start_new_session=True made the child the group leader, so p.pid
+            # is the pgid; using os.getpgid() here can fail on an already-reaped
+            # child while its group descendants still hold the output pipes.
+            try:
+                os.killpg(p.pid, signal.SIGKILL)
+            except OSError:
+                p.kill()
             stdout, stderr = p.communicate()
             print(f"--- [hermes stdout (partial)] ---\n{stdout}")
             if stderr:

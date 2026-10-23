@@ -11,6 +11,7 @@ Protocol interface:
     run_mission(prompt, cwd, is_continue=False) -> tuple[int, str, str]
 """
 import os
+import signal
 import subprocess
 import shutil
 import tempfile
@@ -169,6 +170,7 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
             text=True,
             cwd=abs_cwd,
             env=env,
+            start_new_session=True,
         )
         # 45-minute hard timeout to prevent indefinite lockups
         stdout, stderr = p.communicate(timeout=2700)
@@ -178,7 +180,15 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
         return p.returncode, stdout, stderr
     except subprocess.TimeoutExpired:
         print("[agy] CRITICAL: Agent process hung for over 45 minutes! Forcefully killing it.")
-        p.kill()
+        # Kill the whole process group: p.kill() alone leaves children
+        # alive holding the pipes, and communicate() would block forever.
+        # start_new_session=True made the child the group leader, so p.pid
+        # is the pgid; using os.getpgid() here can fail on an already-reaped
+        # child while its group descendants still hold the output pipes.
+        try:
+            os.killpg(p.pid, signal.SIGKILL)
+        except OSError:
+            p.kill()
         stdout, stderr = p.communicate()
         print(f"--- [agy stdout (partial)] ---\n{stdout}")
         if stderr:

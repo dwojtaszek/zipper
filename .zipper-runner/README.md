@@ -49,6 +49,23 @@ Use one scheduler, not both. Committing the drop-ins does not change live timers
 
 Runner regressions: `cd .zipper-runner && python3 -m unittest discover -s tests`.
 
+## Unattended endurance
+
+The runner is designed to run for days without human intervention. Every known freeze, crash-loop, flood, and churn path has a bound:
+
+- **Bounded commands:** every `run_cmd` call gets a default timeout (`RUNNER_CMD_TIMEOUT`, 300s; explicit values for longer gates — 25m for the full review-gate wait, 10m for CodeRabbit, and `RUNNER_GIT_NETWORK_TIMEOUT`, 15m, for push/fetch). Git HTTP I/O additionally aborts on stalled transfers (`GIT_HTTP_LOW_SPEED_LIMIT`/`GIT_HTTP_LOW_SPEED_TIME`); operator-configured values always win, and `GIT_SSH_COMMAND` is deliberately not injected so repository `core.sshCommand` stays authoritative. `tests/wait-for-reviews.sh` bounds each of its own `gh` calls (`timeout`/`gtimeout`) because its deadline only fires between polls.
+- **Stale-lock watchdog:** each invocation writes `state/runner-heartbeat.json` (pid, pgid, start time). A later cycle that cannot take the lock after `RUNNER_LOCK_TIMEOUT` reclaims it by killing the holder's process group once the holder exceeds `RUNNER_MAX_RUN_SECONDS` (12h default) — a wedged run can no longer freeze the pipeline silently. Fail-closed: no usable heartbeat, no takeover.
+- **Process-group cleanup:** all agent plugins launch missions with `start_new_session=True` and kill the whole group on timeout, so orphaned LSP servers or build nodes cannot hold the output pipes (which would block `communicate()` forever while the lock is held).
+- **gh outage guard:** before a failed `gh pr view` is interpreted as "no PR", the runner proves gh can reach the API (`gh api rate_limit`, free). During network/auth outages the worktree is skipped for the cycle instead of dispatching repair missions on a false premise; one rate-limited alert email is sent.
+- **Crash-loop guards:** every `json.loads` on `gh` output is guarded; unparseable output skips the worktree for a cycle instead of crashing identically every 5 minutes.
+- **Cross-cycle quota cooldown:** quota exhaustion is persisted in `state/quota-*.json` for `RUNNER_QUOTA_COOLDOWN_MINUTES` (60 default). During multi-hour quota windows each cycle probes health instead of relaunching doomed missions; the marks expire so reset quotas retry automatically.
+- **Worktree mission backoff:** three consecutive fruitless missions on one branch trigger an exponential cooldown (8m → … → 6h cap, `state/worktree-*.json`). Any progress — commits, PR state, thread resolution — clears it; after a served cooldown the ladder restarts low.
+- **Environmental gate failures:** a PR blocked by a missing coderabbit CLI (something a mission cannot fix) skips mission dispatch entirely.
+- **Notification discipline:** every email that can recur with a persistent condition is rate-limited (3 immediate, then one per 24h per subject). Success emails stay one-shot. Recovery stashes are named, and repeated main-repo recovery reuses the existing `runner-backup-*` branch instead of minting one per cycle.
+- **Bounded state:** `state/` is swept at startup — `issue-*`, `pr-*`, `quota-*`, `worktree-*`, and `opencode-poisoned-*` files older than `RUNNER_STATE_MAX_AGE_DAYS` (90 default) are deleted, except state for issues with a live worktree. `rate-*` files keep their own 24h pruning; logs are rotated at 7 days by `cron-wrapper.sh`.
+- **Session poisoning:** an overflowed opencode session that cannot be archived (locked DB) is marked poisoned in state and never resumed again, breaking the resume → overflow → fail cycle.
+- **Preference wipe guard:** `--refresh-models` refuses to rewrite `AGENT_PREFERENCES.md` when model discovery fell back entirely to `default` (outage/credential expiry), so transient failures cannot destroy priorities or re-enable disabled models.
+
 ## Jev gate (TypeSafe reflex layer)
 
 `.zipper-runner/jev_gate.py` adds advisory TypeSafe (Jev) judgments to the runner loop. Set `TYPESAFE_API_KEY` in `.zipper-runner/.env` to enable; without it every judgment returns `None` and the runner keeps its deterministic behavior.

@@ -636,6 +636,9 @@ class WorktreeResilienceTests(unittest.TestCase):
             "if sys.argv[1:3] == ['pr', 'list']:\n"
             "    print('[]')\n"
             "    sys.exit(0)\n"
+            "if sys.argv[1:3] == ['api', 'rate_limit']:\n"
+            "    print('4999')\n"
+            "    sys.exit(0)\n"
             "sys.exit(1)\n"
         )
         with self._runner_env(gh_script=gh_script) as (root, repo, git, module):
@@ -700,6 +703,9 @@ class WorktreeResilienceTests(unittest.TestCase):
             "    sys.exit(0)\n"
             "if sys.argv[1:3] == ['pr', 'list']:\n"
             "    print('[]')\n"
+            "    sys.exit(0)\n"
+            "if sys.argv[1:3] == ['api', 'rate_limit']:\n"
+            "    print('4999')\n"
             "    sys.exit(0)\n"
             "sys.exit(1)\n"
         )

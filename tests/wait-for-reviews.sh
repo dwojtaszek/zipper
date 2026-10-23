@@ -51,7 +51,27 @@ if ! [[ "$PR" =~ ^[0-9]+$ ]] || ! [[ "$TIMEOUT_MINUTES" =~ ^[0-9]+$ ]]; then
 fi
 DEADLINE=$(( $(date +%s) + TIMEOUT_MINUTES * 60 ))
 
-REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
+# Every gh call is bounded: the script's own deadline only fires between
+# polls, so a single wedged TCP connection would otherwise block the script
+# (and its runner caller) indefinitely. GNU timeout on Linux, gtimeout on
+# macOS; unbounded only when neither exists (the runner-side run_cmd timeout
+# still bounds the whole script there).
+GH_CALL_TIMEOUT=60
+
+with_timeout() {
+    if command -v timeout >/dev/null 2>&1; then
+        timeout "$GH_CALL_TIMEOUT" "$@"
+    elif command -v gtimeout >/dev/null 2>&1; then
+        gtimeout "$GH_CALL_TIMEOUT" "$@"
+    else
+        "$@"
+    fi
+}
+
+if ! REPO=$(with_timeout gh repo view --json nameWithOwner --jq .nameWithOwner); then
+    echo "Error: could not resolve repository (gh repo view failed or timed out)." >&2
+    exit 2
+fi
 OWNER="${REPO%%/*}"
 NAME="${REPO##*/}"
 
@@ -67,9 +87,9 @@ print_ok()    { printf '\033[42m[ OK ]\033[0m %s\n' "$1"; }
 reviews_json=""
 comments_json=""
 fetch_review_state() {
-    reviews_json=$(gh api --paginate "repos/$REPO/pulls/$PR/reviews" 2>/dev/null \
+    reviews_json=$(with_timeout gh api --paginate "repos/$REPO/pulls/$PR/reviews" 2>/dev/null \
         | jq -s 'flatten' 2>/dev/null) || reviews_json="[]"
-    comments_json=$(gh api --paginate "repos/$REPO/issues/$PR/comments" 2>/dev/null \
+    comments_json=$(with_timeout gh api --paginate "repos/$REPO/issues/$PR/comments" 2>/dev/null \
         | jq -s 'flatten' 2>/dev/null) || comments_json="[]"
 }
 
@@ -113,7 +133,7 @@ done
 # --- Phase 2: report unresolved review threads ---
 
 # shellcheck disable=SC2016  # $vars below are GraphQL variables, not shell
-threads_json=$(gh api graphql \
+threads_json=$(with_timeout gh api graphql \
     -f owner="$OWNER" -f name="$NAME" -F pr="$PR" -f query='
     query($owner: String!, $name: String!, $pr: Int!) {
       repository(owner: $owner, name: $name) {
