@@ -15,7 +15,17 @@ mkdir -p "$LOGS_DIR"
 find "$LOGS_DIR" -type f -name "run_*.log" -mtime +7 -delete 2>/dev/null || true
 
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-LOG_FILE="$LOGS_DIR/run_$TIMESTAMP.log"
+# The intake and babysit timers both fire at minute :05, so a name built from
+# the timestamp alone makes two processes append to one file: interleaved
+# output, duplicated banners, and an exit line that reports the other run's
+# duration. Mode and PID keep every invocation's log distinct.
+MODE="intake"
+for arg in "$@"; do
+    case "$arg" in
+        --babysit-only) MODE="babysit" ;;
+    esac
+done
+LOG_FILE="$LOGS_DIR/run_${TIMESTAMP}_${MODE}_$$.log"
 
 echo "==== Starting Autonomous Runner Cron Run: $(date) ====" >> "$LOG_FILE"
 /usr/bin/env python3 -u "$RUNNER_BASE/runner.py" "$@" >> "$LOG_FILE" 2>&1

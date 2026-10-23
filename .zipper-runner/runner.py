@@ -67,6 +67,9 @@ NETWORK_GIT_TIMEOUT = int(os.environ.get("RUNNER_GIT_NETWORK_TIMEOUT", "900"))
 MAX_RUN_SECONDS = int(os.environ.get("RUNNER_MAX_RUN_SECONDS", "43200"))
 QUOTA_COOLDOWN_MINUTES = int(os.environ.get("RUNNER_QUOTA_COOLDOWN_MINUTES", "60"))
 STATE_MAX_AGE_DAYS = int(os.environ.get("RUNNER_STATE_MAX_AGE_DAYS", "90"))
+# A green PR the runner can never authorize is otherwise invisible: the orphan
+# scanner skips it (no issue reference) and nothing else merges it.
+STALLED_PR_HOURS = float(os.environ.get("RUNNER_STALLED_PR_HOURS", "12"))
 
 # ---------------------------------------------------------------------------
 # Plugin loader — discovers all .py files in plugins/ and registers them.
@@ -1257,10 +1260,13 @@ def _load_pr_state(issue_number: str) -> dict | None:
         return None
     try:
         with open(path) as f:
-            return json.load(f)
+            state = json.load(f)
     except Exception as e:
         print(f"[state] Failed to load state for issue #{issue_number}: {e}")
         return None
+    # A truncated or hand-edited file can parse to a non-dict; callers index it,
+    # so never hand one back.
+    return state if isinstance(state, dict) else None
 
 
 def _clear_pr_state(issue_number: str) -> None:
@@ -1329,6 +1335,80 @@ def _authorized_pr(pr_number, issue_number=None, expected_head=None):
         pass
     print(f"[authorization] PR #{pr_number} is not authorized for automated action.")
     return None
+
+
+def _escalate_blocked_worktree(pr_number, issue_number, branch) -> None:
+    """Tell a human that a PR the runner recorded can no longer be authorized.
+
+    Without this the runner retries silently forever: the single worktree slot
+    stays occupied, intake skips every cycle, and no email is ever sent. A head
+    the runner cannot attribute to its own recorded work needs a human decision,
+    so the message names the one remediation that works: an APPROVED review of
+    the exact current head. Deleting the issue state is deliberately not offered,
+    because provenance is read from that state and removing it leaves the PR
+    unauthorized permanently.
+
+    Only a genuinely moved head on a PR the runner itself recorded is reported.
+    A failed read of the PR (rate limit, network blip, expired token) also makes
+    _authorized_pr fail, and escalating for it would assert a mismatch that does
+    not exist and drown out the one signal this adds. An unrelated contributor PR
+    that merely mentions an issue number is suppressed by the record check.
+    """
+    state = _load_pr_state(str(issue_number))
+    if not state or str(state.get("pr_number")) != str(pr_number) or state.get("branch") != branch:
+        return
+    recorded = state.get("authorized_head") or ""
+    code, out, _ = run_cmd(["gh", "api", f"repos/{GITHUB_REPOSITORY}/pulls/{pr_number}"], cwd=REPO_PATH)
+    try:
+        pr = json.loads(out) if code == 0 else None
+    except (ValueError, TypeError):
+        pr = None
+    if not isinstance(pr, dict):
+        return
+    current = (pr.get("head") or {}).get("sha") or ""
+    if not current or current == recorded:
+        return
+    subject = f"[Runner] PR #{pr_number} Needs Manual Authorization"
+    if not _should_send_rate_limited(subject):
+        return
+    send_email(
+        subject,
+        f"<h3>PR <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">#{pr_number}</a> "
+        f"(Issue #{html.escape(str(issue_number))}) cannot be authorized automatically.</h3>"
+        f"<p><b>Branch:</b> {html.escape(str(branch))}<br>"
+        f"<b>Recorded head:</b> <code>{html.escape(str(recorded))}</code><br>"
+        f"<b>Current head:</b> <code>{html.escape(str(current))}</code></p>"
+        f"<p>The PR head no longer matches the head the runner recorded, and the runner never adopts a moved "
+        f"head on its own authority. The worktree keeps its slot and no repair missions are dispatched while "
+        f"the PR is unauthorized.</p>"
+        f"<p><b>To unblock:</b> add an <code>APPROVED</code> review from a merge maintainer on the current "
+        f"head. The runner re-checks that exact head SHA and completes the merge once CI and the "
+        f"robot-review gate pass on it.</p>"
+    )
+
+
+def _escalate_unrecoverable_pr(pr_number, issue_number, branch) -> None:
+    """Tell a human that an orphan PR cannot be babied any further.
+
+    The orphan path merges without a worktree, so a PR whose gate cannot be
+    satisfied and whose worktree cannot be recreated — a local branch parked at
+    a different head, a fetch mismatch, or a failed worktree add — is skipped
+    every cycle. Without this the operator never hears about it.
+    """
+    subject = f"[Runner] PR #{pr_number} Cannot Be Babied"
+    if not _should_send_rate_limited(subject):
+        return
+    send_email(
+        subject,
+        f"<h3>PR <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">#{pr_number}</a> "
+        f"(Issue #{html.escape(str(issue_number))}) needs manual recovery.</h3>"
+        f"<p><b>Branch:</b> {html.escape(str(branch))}</p>"
+        f"<p>The orphan scanner could not recreate a worktree to resolve this PR, so the runner cannot "
+        f"babysit it. That normally means a local branch is parked at a different head than the PR, or the "
+        f"branch could not be fetched.</p>"
+        f"<p><b>To unblock:</b> reconcile the local branch or worktree by hand. The runner retries the PR on "
+        f"the next cycle once a worktree can be created.</p>"
+    )
 
 
 def _merge_authorized_pr(pr_number, issue_number, reviewed_head, delete_branch=False):
@@ -1681,6 +1761,9 @@ def _babysit_with_fallback(
     before = _babysit_snapshot(wt_path, branch, pr_number, before_review_output)
     authorized = _authorized_pr(pr_number, str(issue_number)) if pr_number else None
     if pr_number and not authorized:
+        # Never fail silently here: a bare return leaves the worktree holding the
+        # only slot with no email and no escalation.
+        _escalate_blocked_worktree(pr_number, issue_number, branch)
         return
     if pr_number:
         prompt += (
@@ -2383,6 +2466,10 @@ def babysit_active_worktrees():
 
         authorized = _authorized_pr(pr_number, issue_number)
         if not authorized:
+            # A PR whose head moved without the runner publishing it used to stall
+            # this worktree forever with no signal. A head the runner cannot
+            # attribute needs a human, so escalate instead of failing silent.
+            _escalate_blocked_worktree(pr_number, issue_number, branch)
             continue
         reviewed_head = authorized["head"]["sha"]
         recorded_head = (_load_pr_state(str(issue_number)) or {}).get("authorized_head")
@@ -2613,29 +2700,77 @@ def babysit_active_worktrees():
     babysit_dependabot_prs()
     return _active_worktree_count()
 
-def _recreate_worktree_for_pr(issue_number: str, branch: str, pr_number, expected_head) -> None:
+def _recreate_worktree_for_pr(issue_number: str, branch: str, pr_number, expected_head) -> bool:
+    """Recreate a worktree for an orphan PR. True when one now exists.
+
+    Returns False when the worktree could not be created (existing local branch
+    at a different head, fetch mismatch, or a failed worktree add) so the caller
+    can escalate instead of retrying silently every cycle."""
     authorized = _authorized_pr(pr_number, issue_number, expected_head)
     if not authorized or authorized["head"]["ref"] != branch:
-        return
+        return False
     wt_path = os.path.join(WORKTREES_BASE, f"issue-{issue_number}")
     if os.path.exists(wt_path):
-        return
+        return True
     print(f"Recreating worktree for orphan PR on branch '{branch}' at {wt_path}...")
     fetch_code, _, _ = run_cmd(["git", "fetch", "origin", f"refs/heads/{branch}"], cwd=REPO_PATH, timeout=NETWORK_GIT_TIMEOUT)
     head_code, head_out, _ = run_cmd(["git", "rev-parse", "FETCH_HEAD"], cwd=REPO_PATH)
     if fetch_code != 0 or head_code != 0 or head_out.strip() != expected_head:
-        return
+        return False
     # Do not replace any existing local branch with externally fetched content.
     branch_code, branch_head, _ = run_cmd(["git", "rev-parse", f"refs/heads/{branch}"], cwd=REPO_PATH)
     if branch_code == 0 and branch_head.strip() != expected_head:
-        return
+        return False
     if branch_code != 0:
         run_cmd(["git", "branch", branch, expected_head], cwd=REPO_PATH)
     wt_code, wt_out, wt_err = run_cmd(["git", "worktree", "add", wt_path, branch], cwd=REPO_PATH)
     if wt_code == 0:
         print(f"Successfully recreated worktree at {wt_path} on branch '{branch}'.")
-    else:
-        print(f"Failed to recreate worktree at {wt_path}: {wt_err}")
+        return True
+    print(f"Failed to recreate worktree at {wt_path}: {wt_err}")
+    return False
+
+
+def _escalate_unrecorded_pr(pr: dict) -> None:
+    """Surface a green runner PR that nothing will ever merge.
+
+    A PR is only authorizable through the issue state the runner wrote when it
+    created the work, so a PR with no such record is skipped by the orphan
+    scanner silently. Two shapes reach here: a PR whose branch, title, and body
+    carry no issue reference at all (PR #1258 sat green and unmerged for four
+    days), and a PR that names an issue the runner never recorded work for. This
+    reports them; it never merges, because an unverifiable origin must stay
+    fail-closed.
+    """
+    if (pr.get("author") or {}).get("login") not in TRUSTED_AUTHORS:
+        return
+    ci_status, _ = _ci_status_from_rollup(pr.get("statusCheckRollup") or [])
+    if ci_status != "SUCCESS":
+        return
+    updated_at = pr.get("updatedAt") or ""
+    try:
+        updated = datetime.strptime(updated_at.replace("Z", "+0000"), "%Y-%m-%dT%H:%M:%S%z")
+    except (ValueError, AttributeError):
+        return
+    if (datetime.now(timezone.utc) - updated).total_seconds() < STALLED_PR_HOURS * 3600:
+        return
+    pr_num = pr.get("number")
+    subject = f"[Runner] PR #{pr_num} Cannot Be Authorized"
+    if not _should_send_rate_limited(subject):
+        return
+    send_email(
+        subject,
+        f"<h3>PR <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_num}\">#{pr_num}</a> "
+        f"({html.escape(str(pr.get('title') or ''))}) is green but cannot be authorized.</h3>"
+        f"<p><b>Branch:</b> {html.escape(str(pr.get('headRefName') or ''))}<br>"
+        f"<b>Last updated:</b> {html.escape(str(updated_at))}</p>"
+        f"<p>The runner has no authorization record for this PR, so it cannot verify where the PR came from "
+        f"and will not merge it automatically. That happens when the branch, title, and body carry no issue "
+        f"reference, or when they name an issue the runner never recorded work for. It has been waiting "
+        f"longer than {STALLED_PR_HOURS:g}h.</p>"
+        f"<p><b>To unblock:</b> name the issue the PR serves in its body or branch if it does not already, "
+        f"and add an <code>APPROVED</code> review from a merge maintainer on the current head.</p>"
+    )
 
 
 def babysit_orphaned_issue_prs():
@@ -2680,14 +2815,25 @@ def babysit_orphaned_issue_prs():
         if issue_num_str and issue_num_str in existing_wt_issues:
             continue
         if not issue_num_str:
+            _escalate_unrecorded_pr(pr)
             continue
         authorized = _authorized_pr(pr_num, issue_num_str)
         if not authorized or authorized["head"]["ref"] != head_branch:
+            # A PR the runner recorded whose head then moved used to be skipped
+            # here every cycle with no signal. Only a human can authorize a head
+            # whose provenance the runner cannot verify, so tell them. Without a
+            # runner record for this issue there is nothing to authorize: fall
+            # back to the unrecorded-PR report so the PR cannot go quiet just
+            # because someone named an issue in it.
+            if _load_pr_state(issue_num_str):
+                _escalate_blocked_worktree(pr_num, issue_num_str, head_branch)
+            else:
+                _escalate_unrecorded_pr(pr)
             continue
         reviewed_head = authorized["head"]["sha"]
 
         print(f"[orphan-pr] Evaluating PR #{pr_num}: '{title}' ({head_branch})...")
-        rollup = pr.get("statusCheckRollup", [])
+        rollup = pr.get("statusCheckRollup") or []
         ci_status, ci_failures = _ci_status_from_rollup(rollup)
 
         if ci_status == "SUCCESS":
@@ -2695,8 +2841,8 @@ def babysit_orphaned_issue_prs():
             review_code, review_out, _ = run_cmd(["bash", REVIEW_GATE_SCRIPT, str(pr_num), "1"], cwd=REPO_PATH, timeout=300)
             if review_code != 0:
                 print(f"[orphan-pr] Review gate not yet satisfied for PR #{pr_num}. Recreating worktree for babysitting.\n{review_out}")
-                if issue_num_str:
-                    _recreate_worktree_for_pr(issue_num_str, head_branch, pr_num, reviewed_head)
+                if not _recreate_worktree_for_pr(issue_num_str, head_branch, pr_num, reviewed_head):
+                    _escalate_unrecoverable_pr(pr_num, issue_num_str, head_branch)
                 continue
 
             print(f"[orphan-pr] Robot review gate passed for PR #{pr_num}. Auto-merging...")
@@ -2721,14 +2867,14 @@ def babysit_orphaned_issue_prs():
                     )
                 else:
                     print(f"[orphan-pr] Auto-merge failed for PR #{pr_num}: {merge_err.strip()}")
-                    if issue_num_str:
-                        _recreate_worktree_for_pr(issue_num_str, head_branch, pr_num, reviewed_head)
+                    if not _recreate_worktree_for_pr(issue_num_str, head_branch, pr_num, reviewed_head):
+                        _escalate_unrecoverable_pr(pr_num, issue_num_str, head_branch)
             else:
                 print(f"[DRY RUN] Would auto-merge PR #{pr_num} ({head_branch})")
         elif ci_status == "FAILED":
             print(f"[orphan-pr] PR #{pr_num} has failing CI checks: {', '.join(ci_failures)}. Recreating worktree for babysitting.")
-            if issue_num_str:
-                _recreate_worktree_for_pr(issue_num_str, head_branch, pr_num, reviewed_head)
+            if not _recreate_worktree_for_pr(issue_num_str, head_branch, pr_num, reviewed_head):
+                _escalate_unrecoverable_pr(pr_num, issue_num_str, head_branch)
         else:
             print(f"[orphan-pr] PR #{pr_num} CI checks still pending...")
 

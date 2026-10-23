@@ -15,7 +15,7 @@ echo ""
 echo "=== Recent Activity ==="
 latest_logs=$(ls -t "$LOGS_DIR"/*.log 2>/dev/null | head -6)
 for log in $latest_logs; do
-    ts=$(basename "$log" .log | sed 's/run_//' | sed 's/\(....\)\(..\)\(..\)_\(..\)\(..\)\(..\)/\1-\2-\3 \4:\5:\6/')
+    ts=$(basename "$log" .log | sed 's/^run_//' | sed 's/\(....\)\(..\)\(..\)_\(..\)\(..\)\(..\).*/\1-\2-\3 \4:\5:\6/')
     events=$(grep -E "(Selected eligible|PR #.*(Created|Merged)|Started:|SUCCESS|FAILED|Error|FATAL|CRITICAL|Token Exhaustion|exceed|at capacity)" "$log" 2>/dev/null | tail -3 | paste -sd '; ')
     echo "  $ts | $events"
 done
@@ -51,7 +51,7 @@ while true; do
     if [ "$current_count" -gt "$last_count" ]; then
         new_logs=$(ls -t "$LOGS_DIR"/*.log 2>/dev/null | head -$((current_count - last_count)))
         for log in $new_logs; do
-            ts=$(basename "$log" .log | sed 's/run_//' | sed 's/\(....\)\(..\)\(..\)_\(..\)\(..\)\(..\)/\1-\2-\3 \4:\5:\6/')
+            ts=$(basename "$log" .log | sed 's/^run_//' | sed 's/\(....\)\(..\)\(..\)_\(..\)\(..\)\(..\).*/\1-\2-\3 \4:\5:\6/')
             echo "=== NEW LOG: $ts ==="
             grep -vE "^(Running command:|CLEANUP:|\[model discovery\]|\[select\]|WARNING:|INFO:|\[opencode\]|\[agy\]|\[claude\]|\[droid\])" "$log" | grep -v "^$"
             echo "---"
