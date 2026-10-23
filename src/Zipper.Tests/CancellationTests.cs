@@ -405,6 +405,7 @@ public class CancellationTests : WorkingDirectoryTestBase
         int exitCode = await GenerationRunner.RunAsync(mode, BuildStandardRequest(Path.GetTempPath()), cts.Token);
 
         Assert.Equal(130, exitCode);
+        Assert.True(mode.ObservedCancellation, "The pre-cancelled token must be passed into the mode.");
     }
 
     [Fact]
@@ -648,8 +649,11 @@ public class CancellationTests : WorkingDirectoryTestBase
 
     private sealed class TokenCheckingMode : IGenerationMode
     {
+        public bool ObservedCancellation { get; private set; }
+
         public Task RunAsync(FileGenerationRequest request, CancellationToken cancellationToken = default)
         {
+            this.ObservedCancellation = cancellationToken.IsCancellationRequested;
             cancellationToken.ThrowIfCancellationRequested();
             return Task.CompletedTask;
         }

@@ -19,10 +19,6 @@ internal sealed class FaultingMaterializerDecorator : IFileMaterializer
 
     public Func<string, byte[], CancellationToken, Task<bool>>? OnWriteBytesAsync { get; set; }
 
-    public Func<string, string, Encoding, CancellationToken, Task>? OnWriteTextAsync { get; set; }
-
-    public Func<string, Stream>? OnOpenWriteStream { get; set; }
-
     public Func<string, string, Config.ZipCompressionMethod, CancellationToken, Task>? OnCreateZipAsync { get; set; }
 
     public Task CreateDirectoryAsync(string path, CancellationToken cancellationToken = default)
@@ -43,24 +39,10 @@ internal sealed class FaultingMaterializerDecorator : IFileMaterializer
     }
 
     public Task WriteTextAsync(string path, string text, Encoding encoding, CancellationToken cancellationToken = default)
-    {
-        if (this.OnWriteTextAsync is not null)
-        {
-            return this.OnWriteTextAsync(path, text, encoding, cancellationToken);
-        }
-
-        return this._inner.WriteTextAsync(path, text, encoding, cancellationToken);
-    }
+        => this._inner.WriteTextAsync(path, text, encoding, cancellationToken);
 
     public Stream OpenWriteStream(string path)
-    {
-        if (this.OnOpenWriteStream is not null)
-        {
-            return this.OnOpenWriteStream(path);
-        }
-
-        return this._inner.OpenWriteStream(path);
-    }
+        => this._inner.OpenWriteStream(path);
 
     public void AddFileData(FileData data)
         => this._inner.AddFileData(data);

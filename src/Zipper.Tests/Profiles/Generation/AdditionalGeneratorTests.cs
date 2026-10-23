@@ -326,10 +326,8 @@ public class AdditionalGeneratorTests
         {
             GeneratorParams = new Dictionary<string, object>(StringComparer.Ordinal) { { "min", "x" } }
         };
-        var generator = new LongTextGenerator(col);
-        var context = this.CreateContext();
 
-        Assert.Throws<FormatException>(() => generator.Generate(context));
+        Assert.Throws<FormatException>(() => new LongTextGenerator(col));
     }
 
     [Fact]
@@ -340,14 +338,12 @@ public class AdditionalGeneratorTests
         {
             GeneratorParams = new Dictionary<string, object>(StringComparer.Ordinal) { { "max", "y" } }
         };
-        var generator = new LongTextGenerator(col);
-        var context = this.CreateContext();
 
-        Assert.Throws<FormatException>(() => generator.Generate(context));
+        Assert.Throws<FormatException>(() => new LongTextGenerator(col));
     }
 
     [Fact]
-    public void LongTextGenerator_MinGreaterThanMax_ThrowsArgumentException()
+    public void LongTextGenerator_MinGreaterThanMax_ThrowsArgumentOutOfRangeException()
     {
         // Tests line 37 in LongTextGenerator.cs: Seeded.Next(min, max+1) throws if min > max
         var col = new ColumnDefinition

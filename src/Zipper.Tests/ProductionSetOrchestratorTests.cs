@@ -748,9 +748,10 @@ public class ProductionSetOrchestratorTests
     }
 
     [Fact]
-    public async Task GenerateAsync_RollingSetValidationFailureOnSecondSet_CleansUpFirstSet()
+    public async Task GenerateAsync_RollingSetValidationFailureOnSecondSet_LeavesAllArtifactsForInspection()
     {
-        // Tests that when second rolling set fails validation, first set is cleaned up
+        // A ValidationFailedException is intentionally not cleaned up: both the completed
+        // first set and the partial failed set stay on disk for inspection.
         var tempDir = Path.Combine(Path.GetTempPath(), "ProdRollingValidationFail_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
         try
@@ -970,51 +971,5 @@ public class ProductionSetOrchestratorTests
                 Encoding = "UTF-8",
             },
         };
-    }
-
-    private sealed class CorruptingStream : Stream
-    {
-        private readonly Stream _inner;
-        private bool _corrupted;
-
-        public CorruptingStream(Stream inner)
-        {
-            _inner = inner;
-        }
-
-        public override bool CanRead => _inner.CanRead;
-        public override bool CanSeek => _inner.CanSeek;
-        public override bool CanWrite => _inner.CanWrite;
-        public override long Length => _inner.Length;
-        public override long Position { get => _inner.Position; set => _inner.Position = value; }
-
-        public override void Flush() => _inner.Flush();
-
-        public override int Read(byte[] buffer, int offset, int count) => _inner.Read(buffer, offset, count);
-
-        public override long Seek(long offset, SeekOrigin origin) => _inner.Seek(offset, origin);
-
-        public override void SetLength(long value) => _inner.SetLength(value);
-
-        public override void Write(byte[] buffer, int offset, int count)
-        {
-            if (!_corrupted)
-            {
-                // Write corrupt data instead of the actual data
-                var corruptData = "INVALID DAT CONTENT"u8.ToArray();
-                _inner.Write(corruptData, 0, corruptData.Length);
-                _corrupted = true;
-            }
-            // Ignore the actual data written by the LoadFileOrchestrator
-        }
-
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                _inner.Dispose();
-            }
-            base.Dispose(disposing);
-        }
     }
 }

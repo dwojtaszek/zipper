@@ -218,7 +218,11 @@ public class DirectoryTemplateReaderTests : IDisposable
                                 or System.ComponentModel.Win32Exception
                                 or IOException)
         {
-            Skip.If(true, $"Symbolic link creation is not supported or permitted on this platform/environment: {ex.Message}");
+            // Symlink traversal safety cannot be exercised without symlink support; fail loudly
+            // rather than self-skipping so this guard cannot silently disappear.
+            throw new InvalidOperationException(
+                $"Symbolic link creation is required for this test but failed on this platform/environment: {ex.Message}",
+                ex);
         }
 
         try

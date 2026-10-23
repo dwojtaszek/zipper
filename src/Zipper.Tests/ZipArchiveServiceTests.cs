@@ -997,11 +997,12 @@ public class ZipArchiveServiceTests : TempDirectoryTestBase
         });
     }
 
-    [Fact(Skip = "Requires integration test setup - ZipArchiveSink uses internal openTarget for load files")]
+    [Fact]
     public async Task CreateArchiveAsync_LoadFileWindow_NonCancellable_CleansUpSidecarsOnFailure()
     {
-        // Tests lines 88-111 in ZipArchiveSink: the load-file emission phase uses CancellationToken.None
-        // and cleans up sidecars if an error occurs
+        // Tests the non-cancellable load-file window in ZipArchiveSink: the DAT sidecar is
+        // created first, then the audit write fails, and the catch block must delete the
+        // already-created sidecar instead of leaving a partial load file behind.
         var tempDir = Path.Combine(TempDir, Guid.NewGuid().ToString());
         Directory.CreateDirectory(tempDir);
         try
@@ -1017,42 +1018,24 @@ public class ZipArchiveServiceTests : TempDirectoryTestBase
                     Concurrency = 1,
                     IncludeLoadFile = false, // Load files written to disk as sidecars
                 },
-                LoadFile = new LoadFileConfig { Formats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt } },
+                LoadFile = new LoadFileConfig { Formats = new List<LoadFileFormat> { LoadFileFormat.Dat } },
             };
 
             var channel = Channel.CreateUnbounded<FileData>();
             await channel.Writer.WriteAsync(this.CreateZipTestFileData(1));
             channel.Writer.Complete();
 
-            // Use a materializer that fails on audit file write
-            var innerMaterializer = new ProductionFileMaterializer();
-            var decorator = new FaultingMaterializerDecorator(innerMaterializer)
-            {
-                OnOpenWriteStream = (path) =>
-                {
-                    // Fail when trying to write audit file (sidecar)
-                    if (path.EndsWith("_properties.json", StringComparison.Ordinal))
-                    {
-                        throw new IOException("Simulated audit file write failure");
-                    }
-                    return innerMaterializer.OpenWriteStream(path);
-                }
-            };
+            // DAT writes load.dat, then the audit target load.dat_properties.json. Make that
+            // audit target a directory so opening it as a file fails after load.dat exists.
+            var datSidecar = Path.Combine(tempDir, "load.dat");
+            var auditTarget = Path.Combine(tempDir, "load.dat_properties.json");
+            Directory.CreateDirectory(auditTarget);
 
-            // The CreateArchiveAsync uses its own materializer for the ZIP, but load files use the provided openTarget
-            // We need to test the sidecar cleanup directly by causing a failure in load file emission
-            // This is tested at the ZipArchiveSink level by the catch block at lines 119-139
-
-            var ex = await Assert.ThrowsAsync<IOException>(() =>
+            await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
                 new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader));
 
-            Assert.Contains("audit file write failure", ex.Message, StringComparison.OrdinalIgnoreCase);
-
-            // Verify sidecars were cleaned up
-            var datSidecar = Path.Combine(tempDir, "load.dat_properties.json");
-            var optSidecar = Path.Combine(tempDir, "load.opt_properties.json");
-            Assert.False(File.Exists(datSidecar), "DAT audit sidecar must be cleaned up on failure.");
-            Assert.False(File.Exists(optSidecar), "OPT audit sidecar must be cleaned up on failure.");
+            Assert.False(File.Exists(datSidecar), "DAT sidecar must be cleaned up on failure.");
+            Assert.True(Directory.Exists(auditTarget), "The pre-created audit directory should be untouched.");
         }
         finally
         {

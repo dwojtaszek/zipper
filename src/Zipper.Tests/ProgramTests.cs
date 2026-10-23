@@ -266,24 +266,33 @@ public class ProgramTests : WorkingDirectoryTestBase
     public async Task Main_WithUnknownFlag_ReturnsErrorCode()
     {
         string[] args = { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--unknown-flag" };
-        int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+
+        var (exitCode, _, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => Program.Main(args));
+
         Assert.Equal(1, exitCode);
+        Assert.Contains("Error: Unknown argument or unconsumed value '--unknown-flag'", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task Main_WithUnknownPositionalValue_ReturnsErrorCode()
     {
         string[] args = { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "extra_value" };
-        int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+
+        var (exitCode, _, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => Program.Main(args));
+
         Assert.Equal(1, exitCode);
+        Assert.Contains("Error: Unknown argument or unconsumed value 'extra_value'", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task Main_WithUnknownFlagInValuePosition_ReturnsErrorCode()
     {
         string[] args = { "--type", "pdf", "--count", "10", "--output-path", "--unknown-flag" };
-        int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+
+        var (exitCode, _, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => Program.Main(args));
+
         Assert.Equal(1, exitCode);
+        Assert.Contains("Error: --output-path requires a value.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -320,8 +329,11 @@ public class ProgramTests : WorkingDirectoryTestBase
     public async Task Main_WithVersionAndUnknownFlag_ReturnsErrorCode()
     {
         string[] args = { "--version", "--unknown-flag" };
-        int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+
+        var (exitCode, _, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => Program.Main(args));
+
         Assert.Equal(1, exitCode);
+        Assert.Contains("Error: Unknown argument or unconsumed value '--version'", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -577,8 +589,10 @@ public class ProgramTests : WorkingDirectoryTestBase
     {
         string[] args = { "--archive-test-suite", "smoke", "--folders", "1", "--output-path", Path.Combine(Directory.GetCurrentDirectory(), $"zipper_{Guid.NewGuid():N}") };
 
-        int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+        var (exitCode, _, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => Program.Main(args));
+
         Assert.Equal(1, exitCode);
+        Assert.Contains("--archive-test-suite accepts only --archive-test-suite, --archive-test-cases, --seed, and --output-path. Disallowed flag: --folders.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -586,8 +600,10 @@ public class ProgramTests : WorkingDirectoryTestBase
     {
         string[] args = { "--archive-test-suite", "smoke", "--benchmark" };
 
-        int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+        var (exitCode, _, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => Program.Main(args));
+
         Assert.Equal(1, exitCode);
+        Assert.Contains("--archive-test-suite cannot be combined with --benchmark or --chaos-list.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -597,8 +613,10 @@ public class ProgramTests : WorkingDirectoryTestBase
         // Archive Test workflow it is an unowned flag and the closed set rejects it.
         string[] args = { "--archive-test-suite", "smoke", "--version" };
 
-        int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+        var (exitCode, _, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => Program.Main(args));
+
         Assert.Equal(1, exitCode);
+        Assert.Contains("Error: Unknown argument or unconsumed value '--version'", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -606,8 +624,10 @@ public class ProgramTests : WorkingDirectoryTestBase
     {
         string[] args = { "--archive-test-suite", "smoke", "--chaos-list" };
 
-        int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+        var (exitCode, _, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => Program.Main(args));
+
         Assert.Equal(1, exitCode);
+        Assert.Contains("--archive-test-suite cannot be combined with --benchmark or --chaos-list.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -615,8 +635,10 @@ public class ProgramTests : WorkingDirectoryTestBase
     {
         string[] args = { "--archive-test-cases", "valid-empty", "--output-path", Path.Combine(Directory.GetCurrentDirectory(), $"zipper_{Guid.NewGuid():N}") };
 
-        int exitCode = await RunWithRedirectedConsole(() => Program.Main(args));
+        var (exitCode, _, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => Program.Main(args));
+
         Assert.Equal(1, exitCode);
+        Assert.Contains("Error: --archive-test-cases requires --archive-test-suite.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]

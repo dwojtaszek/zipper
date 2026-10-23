@@ -561,4 +561,58 @@ public class GoldenBaselineHarnessTests
             }
         }
     }
+
+    [Fact]
+    public void Harness_MatchesCheckedInGoldenManifest_ForLoadfileOnlyFixture()
+    {
+        var repoRoot = FindRepositoryRoot();
+        Skip.If(repoRoot is null, "Repository root containing tests/goldens was not found.");
+
+        var fixtureDir = Path.Combine(repoRoot!, "tests", "goldens", "fixtures", "loadfile-only-dat");
+        var expectedManifestPath = Path.Combine(fixtureDir, "sha-manifest.txt");
+        Skip.If(!File.Exists(expectedManifestPath), $"Golden manifest not found at {expectedManifestPath}.");
+
+        var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "GoldenFixture_" + Guid.NewGuid().ToString("N")));
+        try
+        {
+            foreach (var sourceFile in Directory.EnumerateFiles(fixtureDir))
+            {
+                var fileName = Path.GetFileName(sourceFile);
+                if (fileName is "tree.txt" or "sha-manifest.txt")
+                {
+                    continue;
+                }
+
+                File.Copy(sourceFile, Path.Combine(tempDir.FullName, fileName));
+            }
+
+            string actual = GoldenBaselineHarness.GenerateRawSha256Manifest(tempDir.FullName);
+            string expected = File.ReadAllText(expectedManifestPath).Replace("\r\n", "\n", StringComparison.Ordinal).TrimEnd('\n');
+
+            Assert.Equal(expected, actual);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir.FullName))
+            {
+                Directory.Delete(tempDir.FullName, true);
+            }
+        }
+    }
+
+    private static string? FindRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "tests", "goldens", "scenarios.tsv")))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        return null;
+    }
 }

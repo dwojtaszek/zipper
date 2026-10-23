@@ -1014,8 +1014,9 @@ public class ProductionManifestComparerTests
             Directory.CreateDirectory(dataDir);
 
             var datPath = Path.Combine(dataDir, "loadfile.dat");
-            // Use null char as delimiter (no delimiter - single field)
-            File.WriteAllText(datPath, "BATES_NUMBER\nABC00000001\n", Encoding.UTF8);
+            // With "none" the entire row is a single field even though it contains the
+            // default DAT column delimiter (ASCII 20), which must not split it.
+            File.WriteAllText(datPath, "BATES_NUMBER\nABC00000001\u0014EXTRA\n", Encoding.UTF8);
 
             var manifestData = new
             {
@@ -1033,6 +1034,9 @@ public class ProductionManifestComparerTests
             var success = await ProductionManifestComparer.CompareAndReportAsync($"{manifestPath},{manifestPath}", "replacement", outputPath);
 
             Assert.True(success);
+            using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(outputPath));
+            var record = doc.RootElement.GetProperty("details").GetProperty("unchanged")[0];
+            Assert.Equal("ABC00000001\u0014EXTRA", record.GetProperty("batesNumber").GetString());
         }
         finally
         {
@@ -1073,6 +1077,12 @@ public class ProductionManifestComparerTests
             var success = await ProductionManifestComparer.CompareAndReportAsync($"{manifestPath},{manifestPath}", "replacement", outputPath);
 
             Assert.True(success);
+            using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(outputPath));
+            var record = doc.RootElement.GetProperty("details").GetProperty("unchanged")[0];
+            Assert.Equal("ABC00000001", record.GetProperty("batesNumber").GetString());
+            Assert.Equal("IMAGES/001.tif", record.GetProperty("filePath").GetString());
+            Assert.Equal("VOL001", record.GetProperty("volume").GetString());
+            Assert.Equal("d41d8cd98f00b204e9800998ecf8427e", record.GetProperty("hash").GetString());
         }
         finally
         {
@@ -1112,6 +1122,12 @@ public class ProductionManifestComparerTests
             var success = await ProductionManifestComparer.CompareAndReportAsync($"{manifestPath},{manifestPath}", "replacement", outputPath);
 
             Assert.True(success);
+            using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(outputPath));
+            var record = doc.RootElement.GetProperty("details").GetProperty("unchanged")[0];
+            Assert.Equal("ABC00000001", record.GetProperty("batesNumber").GetString());
+            Assert.Equal("IMAGES/001.tif", record.GetProperty("filePath").GetString());
+            Assert.Equal("VOL001", record.GetProperty("volume").GetString());
+            Assert.Equal("d41d8cd98f00b204e9800998ecf8427e", record.GetProperty("hash").GetString());
         }
         finally
         {
