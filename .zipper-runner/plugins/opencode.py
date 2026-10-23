@@ -14,11 +14,14 @@ import json
 import os
 from pathlib import Path
 import re
+import signal
 import sqlite3
 import subprocess
 import shutil
 import tempfile
 import time
+
+MISSION_TIMEOUT = 2700
 
 _CONTEXT_LENGTH_KEYWORDS = (
     "maximum context length",
@@ -37,6 +40,36 @@ def _with_cwd_env(cwd: str) -> dict[str, str]:
     return env
 
 
+def _state_dir() -> str:
+    runner_base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.environ.get("STATE_DIR", os.path.join(runner_base, "state"))
+
+
+def _poison_marker_path(session_id: str) -> str:
+    safe_id = re.sub(r"[^A-Za-z0-9_.-]", "-", session_id)
+    return os.path.join(_state_dir(), f"opencode-poisoned-{safe_id}.json")
+
+
+def _mark_session_poisoned(session_id: str, reason: str) -> None:
+    """Persistently flag a session that must never be resumed.
+
+    If an overflowed session cannot be archived (DB locked by the opencode
+    server), the in-memory retry chain would replay it every runner cycle
+    forever. The marker makes _find_latest_session_for_cwd skip it until the
+    state sweep removes it."""
+    try:
+        os.makedirs(_state_dir(), exist_ok=True)
+        with open(_poison_marker_path(session_id), "w") as f:
+            json.dump({"session": session_id, "reason": reason, "at": time.time()}, f)
+        print(f"[opencode] Marked session {session_id} as poisoned ({reason}).")
+    except OSError as e:
+        print(f"[opencode] Could not write poison marker for {session_id}: {e}")
+
+
+def _session_is_poisoned(session_id: str) -> bool:
+    return os.path.exists(_poison_marker_path(session_id))
+
+
 def _db_path() -> str:
     return os.environ.get(
         "OPENCODE_DB_PATH",
@@ -44,9 +77,19 @@ def _db_path() -> str:
     )
 
 
-def _is_context_length_error(stderr: str) -> bool:
+def _is_context_length_error(stderr: str, stdout: str = "") -> bool:
+    """Matches the overflow text on either stream.
+
+    The runner's quota detection reads stdout+stderr symmetrically; opencode
+    can print CLI errors on either stream, so a stderr-only check would miss
+    the overflow and the retry/archive chain would never engage. Only the
+    stdout *tail* is scanned to avoid matching file content the agent printed
+    mid-transcript."""
     lowered = stderr.lower()
-    return any(kw in lowered for kw in _CONTEXT_LENGTH_KEYWORDS)
+    if any(kw in lowered for kw in _CONTEXT_LENGTH_KEYWORDS):
+        return True
+    tail = stdout[-4000:].lower()
+    return any(kw in tail for kw in _CONTEXT_LENGTH_KEYWORDS)
 
 
 def _find_latest_session_for_cwd(cwd: str) -> str | None:
@@ -55,6 +98,8 @@ def _find_latest_session_for_cwd(cwd: str) -> str | None:
     Returns None if no session exists for cwd or if the OpenCode SQLite DB
     is unavailable, allowing run_mission to fall back gracefully to starting
     a fresh session in cwd instead of resuming an unrelated worktree/main session.
+    Sessions flagged as poisoned (unarchivable overflow) are skipped so a
+    known-bad session is never resumed across cycles.
     """
     db_path = _db_path()
     if not os.path.isfile(db_path):
@@ -65,13 +110,16 @@ def _find_latest_session_for_cwd(cwd: str) -> str | None:
         db_uri = f"{Path(os.path.abspath(db_path)).as_uri()}?mode=ro"
         conn = sqlite3.connect(db_uri, uri=True, timeout=2.0)
         try:
-            row = conn.execute(
+            rows = conn.execute(
                 "SELECT id FROM session_v2 "
                 "WHERE directory IN (?, ?) AND parent_id IS NULL AND time_archived IS NULL "
-                "ORDER BY time_updated DESC LIMIT 1",
+                "ORDER BY time_updated DESC LIMIT 10",
                 (abs_cwd, real_cwd),
-            ).fetchone()
-            return str(row[0]) if row and row[0] else None
+            ).fetchall()
+            for (session_id,) in rows:
+                if session_id and not _session_is_poisoned(str(session_id)):
+                    return str(session_id)
+            return None
         finally:
             conn.close()
     except Exception:
@@ -193,6 +241,7 @@ def _archive_session(session_id: str) -> bool:
     """Marks an overflowed session as archived in session_v2."""
     db_path = _db_path()
     if not os.path.isfile(db_path):
+        print(f"[opencode] Cannot archive session {session_id}: DB not found at {db_path}.")
         return False
     try:
         conn = sqlite3.connect(db_path, timeout=5.0)
@@ -206,7 +255,8 @@ def _archive_session(session_id: str) -> bool:
             return True
         finally:
             conn.close()
-    except Exception:
+    except Exception as e:
+        print(f"[opencode] Failed to archive session {session_id}: {e}")
         return False
 
 
@@ -302,9 +352,10 @@ def _invoke_opencode(cmd: list[str], abs_cwd: str) -> tuple[int, str, str]:
             text=True,
             cwd=abs_cwd,
             env=_with_cwd_env(abs_cwd),
+            start_new_session=True,
         )
         # 45-minute hard timeout to prevent indefinite lockups
-        stdout, stderr = p.communicate(timeout=2700)
+        stdout, stderr = p.communicate(timeout=MISSION_TIMEOUT)
         print(f"--- [opencode stdout] ---\n{stdout}")
         if stderr:
             print(f"--- [opencode stderr] ---\n{stderr}")
@@ -315,7 +366,17 @@ def _invoke_opencode(cmd: list[str], abs_cwd: str) -> tuple[int, str, str]:
     except subprocess.TimeoutExpired:
         print("[opencode] CRITICAL: Agent process hung for over 45 minutes! Forcefully killing it.")
         if p:
-            p.kill()
+            # Kill the whole process group: p.kill() alone leaves the CLI's
+            # children (LSP servers, dotnet/MSBuild nodes) alive holding the
+            # stdout/stderr pipes, and communicate() below would then block on
+            # them forever — freezing the locked runner (see run_cmd's pattern).
+            # start_new_session=True made the child the group leader, so p.pid
+            # is the pgid; using os.getpgid() here can fail on an already-reaped
+            # child while its group descendants still hold the output pipes.
+            try:
+                os.killpg(p.pid, signal.SIGKILL)
+            except OSError:
+                p.kill()
             stdout, stderr = p.communicate()
             print(f"--- [opencode stdout (partial)] ---\n{stdout}")
             if stderr:
@@ -360,7 +421,7 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
     code, stdout, stderr = _invoke_opencode(_build_cmd(session_id, model), abs_cwd)
     if session_id and code != 0:
         _prune_failed_trailing_turns(session_id)
-        if _is_context_length_error(stderr):
+        if _is_context_length_error(stderr, stdout):
             orig_code, orig_stdout, orig_stderr = code, stdout, stderr
             session_model = _get_session_assistant_model(session_id)
             if session_model and session_model != model:
@@ -371,12 +432,16 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
                 code, stdout, stderr = _invoke_opencode(_build_cmd(session_id, session_model), abs_cwd)
                 if code != 0:
                     _prune_failed_trailing_turns(session_id)
-            if code != 0 and _is_context_length_error(stderr):
+            if code != 0 and _is_context_length_error(stderr, stdout):
                 print(
                     f"[opencode] Session {session_id} could not be resumed within context limits; "
                     f"archiving session and starting fresh session in {abs_cwd}."
                 )
-                _archive_session(session_id)
+                if not _archive_session(session_id):
+                    # Archiving failed (DB locked/unavailable): without the
+                    # marker the next runner cycle would resume this same
+                    # overflowed session and replay the whole failing chain.
+                    _mark_session_poisoned(session_id, "context overflow; archive failed")
                 code, stdout, stderr = _invoke_opencode(_build_cmd(None, model), abs_cwd)
             elif code != 0:
                 code, stdout, stderr = orig_code, orig_stdout, orig_stderr
