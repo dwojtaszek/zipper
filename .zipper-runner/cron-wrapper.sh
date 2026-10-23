@@ -15,14 +15,15 @@ mkdir -p "$LOGS_DIR"
 find "$LOGS_DIR" -type f -name "run_*.log" -mtime +7 -delete 2>/dev/null || true
 
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-# The intake and babysit timers both fire at minute :05, so a name built from
-# the timestamp alone makes two processes append to one file: interleaved
+# The intake and babysit timers can fire in the same minute, so a name built
+# from the timestamp alone makes two processes append to one file: interleaved
 # output, duplicated banners, and an exit line that reports the other run's
 # duration. Mode and PID keep every invocation's log distinct.
 MODE="intake"
 for arg in "$@"; do
     case "$arg" in
         --babysit-only) MODE="babysit" ;;
+        *) ;;  # any other flag leaves the mode alone
     esac
 done
 LOG_FILE="$LOGS_DIR/run_${TIMESTAMP}_${MODE}_$$.log"
