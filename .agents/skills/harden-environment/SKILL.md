@@ -33,11 +33,16 @@ python3 .agents/skills/mine-agent-transcripts/scan.py --days 30
 bash tests/run-mutation-smoke.sh
 
 # Review bots post to three separate endpoints; read all three.
+# Set PR to the number you are inspecting, from the list above.
 REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
-for ep in "pulls/$N/comments" "pulls/$N/reviews" "issues/$N/comments"; do
+for ep in "pulls/$PR/comments" "pulls/$PR/reviews" "issues/$PR/comments"; do
   gh api "repos/$REPO/$ep" --paginate --jq '.[].body'
 done
 ```
+
+Every variable above is assigned in the snippet. A command that reads a name
+nothing sets sends a request for a different URL than you think and reports
+success, so it fails silently rather than loudly.
 
 Write one line per occurrence: PR, file, what the agent did. Keep the queue in a
 `quality` issue or a PR comment, not as TODOs in source.
