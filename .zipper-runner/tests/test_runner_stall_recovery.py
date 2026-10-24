@@ -550,6 +550,24 @@ class TreeIdenticalHeadAdoptionTests(unittest.TestCase):
         self.assertIsNone(self.runner._authorized_pr(99, "42"))
         self.assertEqual(self._recorded_head(), self.fixture.old_head)
 
+    def test_dryRun_reportsAdoptionWithoutPersistingIt(self):
+        """A diagnostic run must not advance provenance or swallow the adoption
+        email: recording the head here would make the next real run take the
+        exact-head path, so the operator would never learn about the adoption."""
+        with patch.object(self.runner, "DRY_RUN", True):
+            self._write_pr(self.fixture.same_tree_head)
+            self.assertIsNotNone(self.runner._authorized_pr(99, "42"),
+                                 "a dry run should still report the PR as authorized")
+        self.assertEqual(self._recorded_head(), self.fixture.old_head,
+                         "a dry run must not advance the recorded head")
+        self.assertEqual(self.fixture.emails.subjects(), [],
+                         "a dry run must not send the adoption email")
+        # A later real run still adopts and still notifies.
+        self._write_pr(self.fixture.same_tree_head)
+        self.assertIsNotNone(self.runner._authorized_pr(99, "42"))
+        self.assertEqual(self._recorded_head(), self.fixture.same_tree_head)
+        self.assertEqual(len(self.fixture.emails.subjects()), 1)
+
     def test_bothTreesUnreadable_isNotAdopted(self):
         """An API outage resolves no identity for either side. Two unreadable
         commits are not evidence of equality, so this must never authorize."""

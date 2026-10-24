@@ -411,6 +411,28 @@ class MissingConfiguredModelTests(unittest.TestCase):
         self.assertEqual(len(self.sent), 3)
 
 
+class DryRunRateLimitTests(unittest.TestCase):
+    """A dry run must never record a send. send_email already suppresses delivery
+    under --dry-run, so a recorded mark would spend the budget on an email nobody
+    received and hide the real alert for a cooldown window afterwards."""
+
+    def setUp(self):
+        _clear_rate_state()
+
+    def tearDown(self):
+        _clear_rate_state()
+
+    def test_dryRun_neverRecordsASend(self):
+        subject = "[Runner] Dry Run Probe"
+        with patch.object(runner, "DRY_RUN", True):
+            self.assertEqual([runner._should_send_rate_limited(subject) for _ in range(5)],
+                             [False] * 5)
+        with patch.object(runner, "DRY_RUN", False):
+            self.assertEqual([runner._should_send_rate_limited(subject) for _ in range(4)],
+                             [True, True, True, False],
+                             "the budget must be intact after any number of dry runs")
+
+
 if __name__ == "__main__":
     unittest.main()
 

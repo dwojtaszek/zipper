@@ -407,7 +407,15 @@ def _prunable_state_file(name: str, protected: set[str]) -> bool:
 
 def _should_send_rate_limited(subject: str, *, min_consecutive: int = 3, cooldown_hours: int = 24) -> bool:
     """Rate-limit repeated emails. First min_consecutive always send.
-    After that, only one per cooldown_hours window."""
+    After that, only one per cooldown_hours window.
+
+    A dry run never mails, so it must never record a send either. send_email
+    suppresses delivery under --dry-run, and a recorded mark would spend the
+    budget on an email nobody received, hiding the real alert for a cooldown
+    window afterwards. Guarding here covers every caller at once.
+    """
+    if DRY_RUN:
+        return False
     os.makedirs(STATE_DIR, exist_ok=True)
     _prune_rate_files(cooldown_hours)
     key = _rate_key(subject)
@@ -828,6 +836,7 @@ def _report_missing_configured_models(missing: list[tuple[str, str]]) -> None:
     subject = "[Runner] Configured Models No Longer Exist"
     # A read-only --status run reports on the console but must not consume the
     # rate-limit budget or mail, exactly like the 'All Agents Unhealthy' alert.
+    # --dry-run is already handled inside _should_send_rate_limited.
     if STATUS_ONLY or not _should_send_rate_limited(subject):
         return
     rows = "".join(
@@ -1462,7 +1471,8 @@ def _adopt_tree_identical_head(pr_number, issue_number, branch, current_sha) -> 
     equal tree hung off a different parent, which would delete whatever that
     parent gained.
 
-    Returns True when the recorded head was advanced to ``current_sha``.
+    Returns True when the recorded head was advanced to ``current_sha``, or when a
+    dry run would advance it without persisting anything.
     """
     state = _load_pr_state(str(issue_number))
     if not _pr_state_matches(state, pr_number, branch):
@@ -1474,6 +1484,13 @@ def _adopt_tree_identical_head(pr_number, issue_number, branch, current_sha) -> 
     if not recorded_identity or recorded_identity != _commit_identity(current_sha):
         return False
     recorded_tree = recorded_identity[0]
+    if DRY_RUN:
+        # Read-only: report what a real run would do, but persist nothing and send
+        # nothing. Recording the head here would take the exact-head path on the
+        # next real run, so the operator would never learn about the adoption.
+        print(f"[authorization] PR #{pr_number}: head {current_sha[:8]} has the recorded tree and parent "
+              f"({recorded_tree[:8]}); a real run would adopt it as provenance.")
+        return True
     print(f"[authorization] PR #{pr_number}: head {current_sha[:8]} carries the same tree and parent as the "
           f"recorded {recorded[:8]} ({recorded_tree[:8]}); adopting it as provenance.")
     _save_pr_state(str(issue_number), str(pr_number), branch, current_sha)
