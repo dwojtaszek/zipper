@@ -257,9 +257,7 @@ jobs:
             --results-directory ./TestResults
           dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj \
             -c Release --no-build \
-            --logger "console;verbosity=normal" \
-            --logger "junit;LogFilePath=TestResults/analyzer-test-results.xml" \
-            --results-directory ./TestResults
+            --logger "console;verbosity=normal"
 
       - name: Check for deprecated/vulnerable NuGet packages (Linux)
         if: matrix.coverage == true
@@ -371,13 +369,7 @@ jobs:
 
       - name: Analyzer unit tests (non-Linux)
         if: matrix.coverage != true
-        shell: bash
-        run: |
-          dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj \
-            -c Release --no-build \
-            --logger "console;verbosity=normal" \
-            --logger "junit;LogFilePath=TestResults/analyzer-test-results.xml" \
-            --results-directory ./TestResults
+        run: dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj -c Release --no-build --logger "console;verbosity=normal"
 
       # Full E2E suite runs on every OS (no shortcuts). Each leg gets the native
       # shell for its runner: a .bat executed from Git Bash is a silent no-op,
