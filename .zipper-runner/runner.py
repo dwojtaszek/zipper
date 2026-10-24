@@ -798,10 +798,20 @@ def _remove_worktree(wt_path: str, branch: str = "", *, is_merged: bool = False,
 
 
 _repo_mutation_lock_depth = 0
+_repo_mutation_lock_token = ""
+
+
+def _repo_mutation_lock_owner_file() -> str:
+    return os.path.join(REPO_MUTATION_LOCK_PATH, "owner")
 
 
 def _steal_stale_repo_mutation_lock() -> bool:
-    """Remove the main-checkout lock when its holder is provably gone or wedged."""
+    """Remove the main-checkout lock when its holder is provably gone or wedged.
+
+    A holder only ever mutates under a bounded command (DEFAULT_CMD_TIMEOUT), so
+    the stale bound is set above that and an over-age lock cannot belong to a
+    process still legitimately working.
+    """
     try:
         age = time.time() - os.path.getmtime(REPO_MUTATION_LOCK_PATH)
     except OSError:
@@ -811,6 +821,51 @@ def _steal_stale_repo_mutation_lock() -> bool:
     print(f"REPO LOCK: stealing a stale main-checkout lock (age {int(age)}s).")
     shutil.rmtree(REPO_MUTATION_LOCK_PATH, ignore_errors=True)
     return True
+
+
+def _write_repo_mutation_lock_metadata(token: str) -> bool:
+    """Record the holder's token and timestamp inside the lock directory.
+
+    `created` is what deploy-main.sh reads to report the holder's age, so the two
+    sides must both write it: the shell cannot judge staleness from a directory
+    that only the runner creates. Returns False when the metadata could not be
+    written, which the caller treats as having no verifiable identity.
+    """
+    try:
+        with open(os.path.join(REPO_MUTATION_LOCK_PATH, "created"), "w") as handle:
+            handle.write(str(int(time.time())))
+        with open(_repo_mutation_lock_owner_file(), "w") as handle:
+            handle.write(token)
+    except OSError as e:
+        print(f"REPO LOCK: could not record lock metadata: {e}")
+        return False
+    return True
+
+
+def _release_repo_mutation_lock() -> None:
+    """Remove the lock only while this process is still its recorded owner.
+
+    After a stale steal the lock belongs to another process, and removing it here
+    would delete a live holder's lock and let a third process in. When the token
+    cannot be confirmed, the lock is left alone: a stuck lock is recoverable by the
+    stale bound, a deleted live one is the hazard this lock exists to prevent.
+
+    An empty token means no identity was ever recorded, so there is nothing to
+    confirm against and the lock is removed: a steal requires the holder to exceed
+    the stale bound, which a holder whose every command is bounded cannot do.
+    """
+    global _repo_mutation_lock_token
+    token, _repo_mutation_lock_token = _repo_mutation_lock_token, ""
+    if token:
+        try:
+            with open(_repo_mutation_lock_owner_file()) as handle:
+                owner = handle.read().strip()
+        except OSError:
+            owner = ""
+        if owner != token:
+            print("REPO LOCK: lock was reclaimed by another process; leaving it alone.")
+            return
+    shutil.rmtree(REPO_MUTATION_LOCK_PATH, ignore_errors=True)
 
 
 @contextlib.contextmanager
@@ -833,7 +888,7 @@ def _repo_mutation_lock(timeout: int | None = None):
     The lock is a directory, because the shell side must take it too and `flock` is
     absent on macOS, where this repository's runner suite runs in CI.
     """
-    global _repo_mutation_lock_depth
+    global _repo_mutation_lock_depth, _repo_mutation_lock_token
     if _repo_mutation_lock_depth > 0:
         _repo_mutation_lock_depth += 1
         try:
@@ -866,11 +921,16 @@ def _repo_mutation_lock(timeout: int | None = None):
         return
 
     _repo_mutation_lock_depth = 1
+    token = f"{os.getpid()}-{time.time_ns()}"
+    # Claim only an identity that was actually recorded: with no token on disk
+    # there is nothing to compare against on release, and an unverifiable owner
+    # must not block the release of a lock this process just created.
+    _repo_mutation_lock_token = token if _write_repo_mutation_lock_metadata(token) else ""
     try:
         yield True
     finally:
         _repo_mutation_lock_depth = 0
-        shutil.rmtree(REPO_MUTATION_LOCK_PATH, ignore_errors=True)
+        _release_repo_mutation_lock()
 
 
 def _cleanup_git_state():
@@ -3163,8 +3223,16 @@ def _recreate_worktree_for_pr(issue_number: str, branch: str, pr_number, expecte
     if os.path.exists(wt_path):
         return True
     print(f"Recreating worktree for orphan PR on branch '{branch}' at {wt_path}...")
-    fetch_code, _, _ = run_cmd(["git", "fetch", "origin", f"refs/heads/{branch}"], cwd=REPO_PATH, timeout=NETWORK_GIT_TIMEOUT)
-    head_code, head_out, _ = run_cmd(["git", "rev-parse", "FETCH_HEAD"], cwd=REPO_PATH)
+    # Fetch into an explicit remote-tracking ref and do not write FETCH_HEAD:
+    # FETCH_HEAD is a single per-repository file that any concurrent fetch
+    # overwrites, and the deploy timer fetches origin/main on its own schedule, so
+    # reading it here could validate against another fetch's head and refuse a
+    # worktree for a branch that was fetched correctly.
+    remote_ref = f"refs/remotes/origin/{branch}"
+    fetch_code, _, _ = run_cmd(
+        ["git", "fetch", "--no-write-fetch-head", "origin", f"refs/heads/{branch}:{remote_ref}"],
+        cwd=REPO_PATH, timeout=NETWORK_GIT_TIMEOUT)
+    head_code, head_out, _ = run_cmd(["git", "rev-parse", remote_ref], cwd=REPO_PATH)
     if fetch_code != 0 or head_code != 0 or head_out.strip() != expected_head:
         return False
     # Do not replace any existing local branch with externally fetched content.
@@ -4163,6 +4231,15 @@ def sync_main_repo():
 
 
 def _sync_main_repo_locked():
+    # `verify_repo_on_main` normally recovers a checkout left on another branch
+    # before this runs, but it defers when the main-checkout lock is busy. Rebasing
+    # a feature branch onto origin/main would rewrite that branch's shape, so this
+    # fails closed instead of relying on the ordering of an earlier step.
+    code, branch, _ = run_cmd(["git", "branch", "--show-current"], cwd=REPO_PATH)
+    if code != 0 or branch.strip() != "main":
+        print(f"Main sync deferred: checkout is on '{branch.strip()}', not main.")
+        return False
+
     _fetch_origin_or_abort()
     _check_ignored_file_collisions()
 
@@ -4174,6 +4251,7 @@ def _sync_main_repo_locked():
             _recover_clean_main_repo(rebase_err)
         else:
             _recover_dirty_main_repo(rebase_err)
+    return True
 
 
 def show_status():

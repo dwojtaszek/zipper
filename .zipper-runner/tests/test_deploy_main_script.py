@@ -63,10 +63,19 @@ class _Repo:
     def head(self) -> str:
         return self._git("rev-parse", "HEAD").stdout.strip()
 
-    def hold_lock(self, age_seconds: int = 0) -> None:
-        """Take the shared main-checkout lock, as the runner or a peer deploy does."""
+    def hold_lock(self, age_seconds: int = 0, with_created: bool = True) -> None:
+        """Take the shared main-checkout lock, as the runner or a peer deploy does.
+
+        `with_created=False` models a holder that died between `mkdir` and writing
+        its timestamp, which is the only case where the age has to come from the
+        directory mtime.
+        """
         self.lock_path.mkdir(exist_ok=True)
-        (self.lock_path / "created").write_text(str(int(time.time()) - age_seconds))
+        if with_created:
+            (self.lock_path / "created").write_text(str(int(time.time()) - age_seconds))
+        (self.lock_path / "owner").write_text("someone-else")
+        stamp = time.time() - age_seconds
+        os.utime(self.lock_path, (stamp, stamp))
 
     def push_upstream_commit(self, content: str, message: str) -> str:
         pusher = self.root / f"pusher-{message}"
@@ -244,6 +253,53 @@ class DeployMainScriptTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertEqual(self.repo.head(), new_upstream, "a stale lock must not block the deploy")
         self.assertIn("stealing a stale main-checkout lock", self.repo.logs())
+
+    def test_deploy_whenStaleHolderWroteNoTimestamp_shouldStillReclaimIt(self):
+        """The runner creates the lock with mkdir; a crash before it records its
+        timestamp would otherwise leave a lock the shell can never judge stale,
+        wedging every later deploy while the runner is down."""
+        new_upstream = self.repo.push_upstream_commit("two\n", "c2")
+        self.repo.hold_lock(age_seconds=3600, with_created=False)
+
+        result = self.repo.run_script()
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(self.repo.head(), new_upstream, "the mtime fallback must reclaim it")
+        self.assertIn("stealing a stale main-checkout lock", self.repo.logs())
+
+    def test_deploy_whenTheLockIsStolenMidRun_shouldNotDeleteTheNewOwnersLock(self):
+        """A steal can only happen after the stale bound, but the release must still
+        verify ownership: removing a lock another process now holds would let a third
+        process mutate the checkout alongside it."""
+        self.repo.push_upstream_commit("two\n", "c2")
+
+        # A git that simulates a concurrent steal on its first invocation, which is
+        # after this deploy acquired the lock and before it releases it.
+        fake_bin = self.repo.root / "fakebin-steal"
+        fake_bin.mkdir(exist_ok=True)
+        real_git = shutil.which("git")
+        (fake_bin / "git").write_text(
+            "#!/bin/bash\n"
+            f'if [ -d "{self.repo.lock_path}" ] && [ ! -e "{self.repo.root}/stolen" ]; then\n'
+            f'  : > "{self.repo.root}/stolen"\n'
+            f'  echo "a-different-holder" > "{self.repo.lock_path}/owner"\n'
+            "fi\n"
+            f'exec "{real_git}" "$@"\n'
+        )
+        (fake_bin / "git").chmod(0o755)
+
+        env = dict(os.environ)
+        env["REPO_PATH"] = str(self.repo.checkout)
+        env["DEPLOY_LOGS_DIR"] = str(self.repo.root / "logs")
+        env["REPO_MUTATION_LOCK_PATH"] = str(self.repo.lock_path)
+        env["PATH"] = f"{fake_bin}:{env['PATH']}"
+
+        result = subprocess.run([str(self.repo.installed)], capture_output=True, text=True, env=env)
+
+        self.assertEqual(result.returncode, 0)
+        self.assertTrue(self.repo.lock_path.exists(),
+                        "a lock reclaimed by another process must not be deleted")
+        self.assertIn("reclaimed by another process", self.repo.logs())
 
     def test_deploy_whenLockIsFreshButTheRunnerIsWorking_shouldNotStealIt(self):
         """The stale bound must exceed the runner's slowest mutation, or a slow

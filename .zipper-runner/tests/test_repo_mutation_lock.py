@@ -111,6 +111,45 @@ class RepoMutationLockTests(unittest.TestCase):
         with runner._repo_mutation_lock() as locked:
             self.assertFalse(locked, "a live holder must not be stolen from")
 
+    def test_lock_whenAcquired_shouldRecordMetadataTheShellCanRead(self):
+        """deploy-main.sh reports the holder's age from `created`. If the runner did
+        not write it, the shell could never judge a runner-created lock stale and
+        every deploy would skip while the runner was down."""
+        with runner._repo_mutation_lock() as locked:
+            self.assertTrue(locked)
+            created = int((self.lock_path / "created").read_text())
+            self.assertLess(abs(time.time() - created), 60)
+            self.assertEqual((self.lock_path / "owner").read_text(),
+                             runner._repo_mutation_lock_token)
+            self.assertTrue(runner._repo_mutation_lock_token)
+
+    def test_lock_whenAnotherProcessStoleIt_shouldNotDeleteTheThiefsLock(self):
+        """A stale steal leaves the lock to another process. Removing it on release
+        would let a third process in while the thief is mid-merge."""
+        with runner._repo_mutation_lock():
+            (self.lock_path / "owner").write_text("a-different-holder")
+
+        self.assertTrue(self.lock_path.exists(), "the new owner's lock must survive")
+
+    def test_lock_whenOwnTokenIsStillRecorded_shouldDeleteTheLock(self):
+        """The token check must not stop a holder from releasing its own lock."""
+        with runner._repo_mutation_lock():
+            pass
+
+        self.assertFalse(self.lock_path.exists())
+
+    def test_lock_whenMetadataCannotBeWritten_shouldStillAcquireAndRelease(self):
+        """The mkdir is the lock; a failed metadata write must not break acquisition
+        or leave the lock behind."""
+        with patch.object(runner, "_write_repo_mutation_lock_metadata", return_value=False):
+            with runner._repo_mutation_lock() as locked:
+                self.assertTrue(locked)
+                self.assertTrue(self.lock_path.is_dir())
+                self.assertEqual(runner._repo_mutation_lock_token, "",
+                                 "no recorded identity means nothing to verify on release")
+
+        self.assertFalse(self.lock_path.exists())
+
     def test_cleanupGitState_whenLockUnavailable_shouldNotRemoveTheIndexLock(self):
         """This is the exact hazard the lock exists for: removing a live index.lock
         would let two processes mutate the same index."""
@@ -155,6 +194,23 @@ class RepoMutationLockTests(unittest.TestCase):
 
         self.assertFalse(result)
         fetch.assert_not_called()
+
+    def test_syncMainRepo_whenCheckoutIsNotOnMain_shouldDeferInsteadOfRebasing(self):
+        """`verify_repo_on_main` recovers a stray branch, but it defers when the
+        lock is busy. Rebasing a feature branch onto origin/main would rewrite that
+        branch, so the sync itself must refuse rather than trust the ordering."""
+        repo = self._git_repo()
+        subprocess.run(["git", "-C", str(repo), "checkout", "--quiet", "-b", "feat/x"], check=True)
+        runner.REPO_PATH = str(repo)
+
+        with patch.object(runner, "_fetch_origin_or_abort") as fetch, \
+                patch.object(runner, "run_cmd", wraps=runner.run_cmd) as run_cmd:
+            result = runner.sync_main_repo()
+
+        self.assertFalse(result)
+        fetch.assert_not_called()
+        rebase_calls = [c for c in run_cmd.call_args_list if "rebase" in " ".join(c.args[0])]
+        self.assertEqual(rebase_calls, [], "a non-main checkout must never be rebased")
 
     def test_syncMainAfterMerge_whenLockUnavailable_shouldDeferWithoutMutating(self):
         self.hold_lock_asAnotherProcess()

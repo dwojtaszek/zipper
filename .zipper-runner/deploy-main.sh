@@ -50,13 +50,22 @@ LOGS_DIR="${DEPLOY_LOGS_DIR:-$REPO_PATH/.zipper-runner/logs}"
 # runner's own lock already lives. It is gitignored for the same reason
 # `runner.lock` is: `_repo_is_clean()` counts untracked files as dirt, so an
 # unignored lock here would make the runner believe its own checkout is dirty.
+#
+# This default must resolve to the same path as the runner's
+# `REPO_MUTATION_LOCK_PATH`, whose default is `$RUNNER_BASE/repo-mutation.lock`
+# (RUNNER_BASE being the directory holding runner.py). The two agree while the
+# runner runs from `<checkout>/.zipper-runner`. An installation that overrides
+# RUNNER_BASE to a directory outside the checkout must set
+# REPO_MUTATION_LOCK_PATH on both sides, or the two stop sharing a lock and the
+# protection disappears with no error.
 REPO_LOCK="${REPO_MUTATION_LOCK_PATH:-$REPO_PATH/.zipper-runner/repo-mutation.lock}"
 REMOTE_REF="${MAIN_REMOTE_REF:-origin/main}"
 # Shorter than the tick interval would be pointless (nothing would retry sooner);
 # long enough to survive a slow handshake, short enough to not stall the timer.
 FETCH_TIMEOUT="${DEPLOY_FETCH_TIMEOUT:-45}"
-# Longer than the runner's own slowest single mutation (its network git timeout),
-# so a legitimately slow fetch is never mistaken for a crashed one and stolen.
+# Longer than the runner's own slowest single mutation (DEFAULT_CMD_TIMEOUT, 300s,
+# which bounds every locked command), so a legitimately slow mutation is never
+# mistaken for a crashed one and stolen.
 LOCK_STALE_SECONDS="${DEPLOY_LOCK_STALE_SECONDS:-1200}"
 
 mkdir -p "$LOGS_DIR"
@@ -73,6 +82,24 @@ now_epoch() { date +%s; }
 # exists to leave it alone. That would hand the lock to the next tick while the
 # runner is still mid-mutation, which is the hazard the lock was added to remove.
 HOLDS_LOCK=0
+# Unique per process, so a release can tell "still mine" from "someone stole it".
+LOCK_TOKEN="$$-$RANDOM-$RANDOM"
+
+# Seconds the current holder has held the lock, or empty when that cannot be told.
+# The holder's own `created` file is authoritative; the directory mtime is the
+# fallback for a lock whose holder died between mkdir and writing it — without
+# that fallback the runner's own lock could never be reclaimed by the shell.
+lock_age_seconds() {
+    local created mtime
+    created="$(cat "$REPO_LOCK/created" 2>/dev/null || true)"
+    if [ -n "$created" ]; then
+        echo "$(( $(now_epoch) - created ))"
+        return 0
+    fi
+    # stat -c is GNU, stat -f is BSD/macOS; both are exercised by the runner suite.
+    mtime="$(stat -c %Y "$REPO_LOCK" 2>/dev/null || stat -f %m "$REPO_LOCK" 2>/dev/null || true)"
+    [ -n "$mtime" ] && echo "$(( $(now_epoch) - mtime ))"
+}
 
 # Take the shared main-checkout lock, or report why not. Non-blocking on purpose:
 # waiting would hold this unit open behind a runner mutation, and the next tick
@@ -80,16 +107,17 @@ HOLDS_LOCK=0
 acquire_repo_lock() {
     if mkdir "$REPO_LOCK" 2>/dev/null; then
         now_epoch > "$REPO_LOCK/created"
+        echo "$LOCK_TOKEN" > "$REPO_LOCK/owner"
         HOLDS_LOCK=1
         return 0
     fi
-    created="$(cat "$REPO_LOCK/created" 2>/dev/null || true)"
-    now="$(now_epoch)"
-    if [ -n "$created" ] && [ "$((now - created))" -gt "$LOCK_STALE_SECONDS" ]; then
-        log "WARN: stealing a stale main-checkout lock (age $((now - created))s)."
+    age="$(lock_age_seconds)"
+    if [ -n "$age" ] && [ "$age" -gt "$LOCK_STALE_SECONDS" ]; then
+        log "WARN: stealing a stale main-checkout lock (age ${age}s)."
         rm -rf "$REPO_LOCK"
         if mkdir "$REPO_LOCK" 2>/dev/null; then
             now_epoch > "$REPO_LOCK/created"
+            echo "$LOCK_TOKEN" > "$REPO_LOCK/owner"
             HOLDS_LOCK=1
             return 0
         fi
@@ -99,6 +127,13 @@ acquire_repo_lock() {
 
 release_repo_lock() {
     [ "$HOLDS_LOCK" = 1 ] || return 0
+    # Only remove the lock while this process is still its recorded owner. After a
+    # stale steal the lock belongs to another process, and removing it here would
+    # let a third one in while the thief is mid-merge.
+    if [ "$(cat "$REPO_LOCK/owner" 2>/dev/null || true)" != "$LOCK_TOKEN" ]; then
+        log "WARN: lock was reclaimed by another process; leaving it alone."
+        return 0
+    fi
     rm -rf "$REPO_LOCK" 2>/dev/null || true
 }
 trap release_repo_lock EXIT
@@ -147,11 +182,13 @@ fi
 
 before="$(git rev-parse HEAD 2>/dev/null)"
 
-# Bounded twice over, and both bounds are portable. `timeout`/`gtimeout` is the
-# hard cap when the host has one; git's own low-speed abort covers the measured
-# failure (a stalled transfer, ~300s) everywhere else, including macOS, which
-# ships neither binary. This runs once a minute, so a fetch that blocks for
-# minutes is worse than a fetch that fails: the next tick retries.
+# Bounded on every host, and by three mechanisms because no single one covers
+# them all. `timeout`/`gtimeout` is the hard cap where it exists; `perl` gives the
+# same hard cap on macOS, which ships neither binary; and git's own low-speed abort
+# covers the measured failure (a stalled transfer, ~300s) but only for HTTP(S)
+# remotes, so it is the backstop rather than the bound. This runs once a minute, so
+# a fetch that blocks for minutes is worse than a fetch that fails: the next tick
+# retries.
 FETCH_CMD=(git -c "http.lowSpeedLimit=1" -c "http.lowSpeedTime=$FETCH_TIMEOUT" fetch origin main)
 for candidate in timeout gtimeout; do
     if command -v "$candidate" >/dev/null 2>&1; then
@@ -159,6 +196,9 @@ for candidate in timeout gtimeout; do
         break
     fi
 done
+if [ "${FETCH_CMD[0]}" = "git" ] && command -v perl >/dev/null 2>&1; then
+    FETCH_CMD=(perl -e 'alarm shift; exec @ARGV' "$FETCH_TIMEOUT" "${FETCH_CMD[@]}")
+fi
 
 if ! fetch_out="$("${FETCH_CMD[@]}" 2>&1)"; then
     log "SKIP: git fetch failed or exceeded ${FETCH_TIMEOUT}s: $fetch_out"
