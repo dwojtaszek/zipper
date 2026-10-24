@@ -184,6 +184,8 @@ Rationale: new package releases occasionally introduce breaking changes or regre
 Implementation:
 - Dependabot configuration enforces cooldown where supported (`cooldown.default-days: 3` in `.github/dependabot.yml`).
 - `.zipper-runner` deterministically verifies upstream publication age (NuGet package registration timestamp; GitHub Actions release `published_at` timestamp) and blocks auto-merge until at least 3 days old. Grouped updates are checked individually — a newly published member blocks the group. Unverifiable upstream releases (e.g. actions without releases) fail closed.
-- Security updates may bypass the 3-day cooldown only via explicit, auditable recorded authorization (e.g. `pr-<N>-security-exception.json` in state or merge maintainer approval review with `authorize-security` marker).
+- Security updates may bypass the 3-day cooldown only via explicit, auditable recorded authorization (e.g. `pr-<N>-security-exception.json` in state or merge maintainer approval review with an `authorize-security` directive).
+  - The bypass requires an `APPROVED` review from a merge maintainer on the exact current head. The `security` label does **not** authorize it: GitHub applies that label automatically to Dependabot security-update PRs, so it cannot state intent.
+  - The directive must be a line of its own: `authorize-security`, or `authorize-security:` followed by a reason (`authorize-security: CVE-2026-0001`). The token must be the first thing on the line and only a colon may follow it, so a sentence that mentions, quotes, or negates the token does not authorize the bypass — including `authorize-security should not be used here`, which a start-of-line check alone would accept. Write the reason above the directive if you need to explain it.
 - Reviewers should verify the NuGet/GitHub release date before approving a dependency PR.
 

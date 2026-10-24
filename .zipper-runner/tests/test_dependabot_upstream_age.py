@@ -414,7 +414,7 @@ updated-dependencies:
                 "user": {"login": "dwojtaszek"},
                 "state": "APPROVED",
                 "commit_id": "sha106",
-                "body": "Approved with authorize-security for zero-day patch",
+                "body": "Approved for the zero-day patch.\nauthorize-security: CVE-2026-0001",
             }],
         )
         # In dry run, records exception in memory/bypass without disk pollution
@@ -425,7 +425,7 @@ updated-dependencies:
         # Check that dry run did not write the file
         self.assertFalse(os.path.exists(runner._security_exception_path(106)))
 
-        # Incidental mention of "security" without authorize-security marker or security label does NOT bypass
+        # Incidental mention of "security" without the authorize-security marker does NOT bypass
         pr_incidental = self._create_dependabot_pr(
             number=107, name="lib", version="2.0.1",
             reviews=[{
@@ -440,6 +440,174 @@ updated-dependencies:
         self.assertIn("too new", msg_inc.lower())
 
     @patch("runner._fetch_upstream_publish_timestamp")
+    def test_securityLabel_alone_doesNotBypassTheCooldown(self, mock_fetch):
+        """GitHub applies the `security` label automatically to Dependabot
+        security-update PRs, so it cannot express intent. Accepting it let an
+        approval given for any other reason silently become a cooldown bypass the
+        maintainer never asked for. Only the written marker authorizes."""
+        mock_fetch.return_value = self.now - timedelta(hours=12)
+        pr = self._create_dependabot_pr(
+            number=112, name="vulnerable-lib", version="2.0.1",
+            reviews=[{
+                "user": {"login": "dwojtaszek"},
+                "state": "APPROVED",
+                "commit_id": "sha112",
+                "body": "Looks good, I'll merge once the cooldown expires",
+            }],
+        )
+        pr["labels"] = [{"name": "security"}, {"name": "dependencies"}]
+        runner.DRY_RUN = False
+        eligible, msg = runner._check_dependabot_upstream_age(pr, "sha112", now=self.now)
+        self.assertFalse(eligible, "the security label must not authorize a cooldown bypass")
+        self.assertIn("too new", msg.lower())
+        self.assertFalse(os.path.exists(runner._security_exception_path(112)),
+                         "no exception may be recorded from a label alone")
+
+    @patch("runner._fetch_upstream_publish_timestamp")
+    def test_securityLabel_withTheMarker_stillBypasses(self, mock_fetch):
+        """The label is not a reason to refuse either: with the written marker the
+        bypass still applies, so removing the label path cannot strand a real
+        security update."""
+        mock_fetch.return_value = self.now - timedelta(hours=12)
+        pr = self._create_dependabot_pr(
+            number=113, name="vulnerable-lib", version="2.0.1",
+            reviews=[{
+                "user": {"login": "dwojtaszek"},
+                "state": "APPROVED",
+                "commit_id": "sha113",
+                "body": "authorize-security: zero-day patch",
+            }],
+        )
+        pr["labels"] = [{"name": "security"}]
+        runner.DRY_RUN = True
+        eligible, msg = runner._check_dependabot_upstream_age(pr, "sha113", now=self.now)
+        self.assertTrue(eligible)
+        self.assertIn("security update approved by maintainer dwojtaszek", msg.lower())
+
+    @patch("runner._fetch_upstream_publish_timestamp")
+    def test_securityMarker_withoutAnyLabel_stillBypasses(self, mock_fetch):
+        """The marker alone is sufficient, which is what makes the label path
+        removable: a maintainer-authored dependency bump needs no bot label."""
+        mock_fetch.return_value = self.now - timedelta(hours=12)
+        pr = self._create_dependabot_pr(
+            number=114, name="vulnerable-lib", version="2.0.1",
+            reviews=[{
+                "user": {"login": "dwojtaszek"},
+                "state": "APPROVED",
+                "commit_id": "sha114",
+                "body": "authorize-security: CVE-2026-0001",
+            }],
+        )
+        pr["labels"] = []
+        runner.DRY_RUN = True
+        eligible, msg = runner._check_dependabot_upstream_age(pr, "sha114", now=self.now)
+        self.assertTrue(eligible)
+        self.assertIn("security update approved by maintainer dwojtaszek", msg.lower())
+
+    @patch("runner._fetch_upstream_publish_timestamp")
+    def test_securityMarker_mentionedButNotDirected_doesNotBypass(self, mock_fetch):
+        """The token is a directive, not a keyword. A bare substring match
+        authorized a body that says the opposite of intent, and the token is now
+        the only way to state intent, so the ambiguity has to be closed rather
+        than assumed away.
+
+        The last four bodies put the token at the start of a line, which is where
+        an anchor alone still let them through. Only the token on its own line,
+        optionally followed by a colon and a reason, is a directive.
+        """
+        mock_fetch.return_value = self.now - timedelta(hours=12)
+        bodies = [
+            "I am NOT authorizing this; do not authorize-security here.",
+            "Quoting CI.md: bypass is allowed with `authorize-security` marker. I do not approve.",
+            "LGTM but authorize-security should not be used for this one",
+            "See the authorize-security policy before approving",
+            "authorize-security should not be used for this one",
+            "authorize-security is NOT granted for this bump",
+            "authorize-security, but I do not approve this one",
+            "authorize-security - do not merge early",
+            "> authorize-security: not approved",
+            "- authorize-security: not approved",
+            "**authorize-security**: not approved",
+        ]
+        for index, body in enumerate(bodies):
+            with self.subTest(body=body):
+                number = 120 + index
+                pr = self._create_dependabot_pr(
+                    number=number, name="vulnerable-lib", version="2.0.1",
+                    reviews=[{
+                        "user": {"login": "dwojtaszek"},
+                        "state": "APPROVED",
+                        "commit_id": f"sha{number}",
+                        "body": body,
+                    }],
+                )
+                runner.DRY_RUN = False
+                eligible, msg = runner._check_dependabot_upstream_age(pr, f"sha{number}", now=self.now)
+                self.assertFalse(eligible, f"a non-directive mention must not authorize: {body!r}")
+                self.assertIn("too new", msg.lower())
+                self.assertFalse(os.path.exists(runner._security_exception_path(number)),
+                                 f"no exception may be recorded for {body!r}")
+
+    @patch("runner._fetch_upstream_publish_timestamp")
+    def test_securityMarker_formsThatAreDirectives_stillBypass(self, mock_fetch):
+        """The accepted grammar: the token alone on a line, or the token followed
+        by a colon and a reason. Anything else is a mention, not a decision.
+
+        The CRLF bodies are here because GitHub's web UI sends ``\\r\\n``. With a
+        ``$`` that only looks for ``\\n``, the bare form matched a ``\\n`` body but
+        not a ``\\r\\n`` one, so the documented form would have been silently
+        unusable for the maintainer it exists for.
+        """
+        mock_fetch.return_value = self.now - timedelta(hours=12)
+        bodies = [
+            "authorize-security",
+            "authorize-security:",
+            "authorize-security: CVE-2026-0001",
+            "authorize-security:no space after the colon",
+            "  \tauthorize-security\t",
+            "Rationale first.\nauthorize-security: CVE-2026-0001\n\nMore rationale.",
+            "authorize-security\r\n",
+            "authorize-security\r\nMore rationale.",
+            "authorize-security: CVE-2026-0001\r\nMore rationale.",
+            "  authorize-security  \r\n",
+        ]
+        for index, body in enumerate(bodies):
+            with self.subTest(body=body):
+                number = 140 + index
+                pr = self._create_dependabot_pr(
+                    number=number, name="vulnerable-lib", version="2.0.1",
+                    reviews=[{
+                        "user": {"login": "dwojtaszek"},
+                        "state": "APPROVED",
+                        "commit_id": f"sha{number}",
+                        "body": body,
+                    }],
+                )
+                runner.DRY_RUN = True
+                eligible, msg = runner._check_dependabot_upstream_age(pr, f"sha{number}", now=self.now)
+                self.assertTrue(eligible, f"a well-formed directive must authorize: {body!r}")
+                self.assertIn("security update approved by maintainer dwojtaszek", msg.lower())
+
+    @patch("runner._fetch_upstream_publish_timestamp")
+    def test_securityMarker_onItsOwnLineAfterOtherText_stillBypasses(self, mock_fetch):
+        """The directive does not have to be the first line, only its own line, so
+        a maintainer can write a rationale above it."""
+        mock_fetch.return_value = self.now - timedelta(hours=12)
+        pr = self._create_dependabot_pr(
+            number=130, name="vulnerable-lib", version="2.0.1",
+            reviews=[{
+                "user": {"login": "dwojtaszek"},
+                "state": "APPROVED",
+                "commit_id": "sha130",
+                "body": "Zero-day in the XML parser, patched upstream today.\n\n  authorize-security: CVE-2026-0003",
+            }],
+        )
+        runner.DRY_RUN = True
+        eligible, msg = runner._check_dependabot_upstream_age(pr, "sha130", now=self.now)
+        self.assertTrue(eligible)
+        self.assertIn("security update approved by maintainer dwojtaszek", msg.lower())
+
+    @patch("runner._fetch_upstream_publish_timestamp")
     def test_security_exception_revoked_maintainer_approval_does_not_bypass(self, mock_fetch):
         mock_fetch.return_value = self.now - timedelta(hours=12)
         pr = self._create_dependabot_pr(
@@ -449,7 +617,7 @@ updated-dependencies:
                     "user": {"login": "dwojtaszek"},
                     "state": "APPROVED",
                     "commit_id": "sha108",
-                    "body": "authorize-security",
+                    "body": "authorize-security: CVE-2026-0002",
                 },
                 {
                     "user": {"login": "dwojtaszek"},
@@ -494,6 +662,8 @@ updated-dependencies:
 
     @patch("runner._fetch_upstream_publish_timestamp")
     def test_security_exception_unauthorized_user_review_does_not_bypass(self, mock_fetch):
+        # The body is a well-formed directive so this fails on the reviewer's
+        # identity alone. A malformed directive would pass for the wrong reason.
         mock_fetch.return_value = self.now - timedelta(hours=12)
         pr = self._create_dependabot_pr(
             number=109, name="vulnerable-lib", version="2.0.1",
@@ -501,7 +671,7 @@ updated-dependencies:
                 "user": {"login": "unauthorized-contributor"},
                 "state": "APPROVED",
                 "commit_id": "sha109",
-                "body": "authorize-security - verified safe",
+                "body": "authorize-security: verified safe",
             }],
         )
         eligible, msg = runner._check_dependabot_upstream_age(pr, "sha109", now=self.now)

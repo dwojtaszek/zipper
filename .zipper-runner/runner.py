@@ -3510,6 +3510,27 @@ def _gh_api_paginate_slurp(endpoint: str) -> list | None:
     return [item for p in pages for item in (p if isinstance(p, list) else [p])]
 
 
+# The cooldown bypass is granted by a *directive*, not by a mention: the review
+# body must carry a line that is this token and nothing else, optionally followed
+# by a colon and a reason. A bare substring match authorized a body reading "do
+# not authorize-security here", or one quoting the policy text, which is the
+# opposite of intent. Anchoring to the start of a line alone still authorized
+# "authorize-security should not be used for this one", so the grammar is closed
+# too: after the token only whitespace, end of line, or a colon may follow. The
+# distinction matters more now that this token is the only way to state intent,
+# because the bot-applied `security` label is no longer consulted.
+#
+# The optional ``\r`` is not cosmetic. In MULTILINE mode ``$`` matches before a
+# ``\n`` only, and ``[ \t]`` does not consume a carriage return, so on a
+# ``\r\n`` body the bare form failed to match while the colon form matched by
+# accident (``.`` consumes ``\r``). GitHub's web UI sends ``\r\n``, so the
+# documented bare form would have been silently unavailable to exactly the
+# person expected to use it.
+_SECURITY_BYPASS_DIRECTIVE_RE = re.compile(
+    r"^[ \t]*authorize-security[ \t]*(?::.*)?\r?$", re.MULTILINE
+)
+
+
 def _check_dependabot_upstream_age(pr: dict, reviewed_head: str, now: datetime | None = None) -> tuple[bool, str]:
     """Enforce the 3-day minimum upstream age policy before Dependabot PR auto-merge.
 
@@ -3575,13 +3596,20 @@ def _check_dependabot_upstream_age(pr: dict, reviewed_head: str, now: datetime |
             commit_id = r.get("commit_id")
             review_body = (r.get("body") or "").lower()
             if state == "APPROVED" and commit_id == reviewed_head:
-                labels = [lbl.get("name", "").lower() for lbl in (pr.get("labels") or [])]
-                is_sec_pr = "security" in labels
-                if "authorize-security" in review_body or is_sec_pr:
+                # The marker is the whole authorization. The `security` label is
+                # deliberately not consulted: GitHub applies it automatically to
+                # Dependabot security-update PRs, so accepting it would let an
+                # approval given for any other reason — including "merge it once
+                # the cooldown expires" — silently become a cooldown bypass the
+                # maintainer never asked for. CI.md requires "explicit, auditable"
+                # authorization, and a bot-applied label cannot state intent. The
+                # marker must be a directive on its own line, so a negated or
+                # quoted mention of it does not authorize anything.
+                if _SECURITY_BYPASS_DIRECTIVE_RE.search(review_body):
                     if not DRY_RUN:
                         _record_dependabot_security_exception(
                             pr_num, reviewed_head, login,
-                            f"Maintainer approval review (security update): {review_body or 'approved'}"
+                            f"Maintainer approval review (security update): {review_body}"
                         )
                         print(f"[dependabot] PR #{pr_num} maintainer {login} approved security update for head {reviewed_head}. Exception recorded.")
                     else:
@@ -3633,7 +3661,7 @@ def _check_dependabot_upstream_age(pr: dict, reviewed_head: str, now: datetime |
 def babysit_dependabot_prs():
     """Scans open Dependabot PRs on GitHub, checks CI and review gates, and auto-merges when green."""
     print("Scanning for open Dependabot PRs...")
-    code, out, _ = run_cmd(["gh", "pr", "list", "--state", "open", "--json", "number,title,author,headRefName,statusCheckRollup,url,updatedAt,body,labels,isDraft"], cwd=REPO_PATH)
+    code, out, _ = run_cmd(["gh", "pr", "list", "--state", "open", "--json", "number,title,author,headRefName,statusCheckRollup,url,updatedAt,body,isDraft"], cwd=REPO_PATH)
     if code != 0 or not out.strip():
         return
 
