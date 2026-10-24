@@ -327,7 +327,7 @@ class GitHooksBehavioralTests(unittest.TestCase):
         mock_cmd.write_text("#!/bin/bash\necho \"Simulated cmd.exe failure\" >&2\nexit 1\n", encoding="utf-8")
         mock_cmd.chmod(0o755)
 
-        env = dict(os.environ)
+        env = dict(self.env)
         env["PATH"] = f"{mock_bin_dir}:{env.get('PATH', '')}"
 
         stdin_input = f"refs/heads/main {new_commit} refs/heads/main 0000000000000000000000000000000000000000\n"
