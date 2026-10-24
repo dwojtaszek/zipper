@@ -30,7 +30,7 @@ jobs:
         run: |
           mkdir -p results
           for i in $(seq 1 5); do
-            ./tests/perf/measure.sh ./publish-bin/Zipper > "results/run_${i}.json"
+            ./tests/perf/measure.sh ./publish-bin/Zipper --seed 42 > "results/run_${i}.json"
           done
 
       - name: Compare against baselines (advisory)

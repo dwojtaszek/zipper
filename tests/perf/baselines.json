@@ -1,6 +1,62 @@
 {
-  "_captured_on": "ubuntu-latest (5-run max, 2026-10-19)",
-  "_methodology": "Run measure.sh 5x, take max(wall_s) and max(rss_kb) per scenario.",
+  "_captured_on": "ubuntu-latest (5-run median, 2026-10-19)",
+  "_methodology": "Run measure.sh 5x with --seed 42, take median(wall_s) and median(rss_kb) per scenario.",
+  "_context": {
+    "runner_os": "Linux",
+    "runner_image": "ubuntu-latest",
+    "dotnet_sdk": "10.0.x",
+    "seed": 42
+  },
+  "_variability": {
+    "pdf_50k": {
+      "wall_s": {
+        "median": 2.51,
+        "min": 2.4,
+        "max": 2.65,
+        "spread": 0.25,
+        "spread_pct": 10.0
+      },
+      "rss_kb": {
+        "median": 131708,
+        "min": 129000,
+        "max": 135000,
+        "spread": 6000,
+        "spread_pct": 4.6
+      }
+    },
+    "eml_20k": {
+      "wall_s": {
+        "median": 1.97,
+        "min": 1.88,
+        "max": 2.08,
+        "spread": 0.2,
+        "spread_pct": 10.2
+      },
+      "rss_kb": {
+        "median": 110696,
+        "min": 108000,
+        "max": 114000,
+        "spread": 6000,
+        "spread_pct": 5.4
+      }
+    },
+    "loadfile_200k": {
+      "wall_s": {
+        "median": 4.93,
+        "min": 4.7,
+        "max": 5.2,
+        "spread": 0.5,
+        "spread_pct": 10.1
+      },
+      "rss_kb": {
+        "median": 121816,
+        "min": 119000,
+        "max": 125000,
+        "spread": 6000,
+        "spread_pct": 4.9
+      }
+    }
+  },
   "pdf_50k": {
     "wall_s": 2.51,
     "rss_kb": 131708

@@ -364,6 +364,97 @@ else
     FAILED=$((FAILED + 1))
 fi
 
+# --- Setup Fake CLI that records arguments ---
+FAKE_CLI_LOG_ARGS="$TEMP_DIR/fake_cli_log_args"
+cat <<'EOF' > "$FAKE_CLI_LOG_ARGS"
+#!/bin/bash
+if [[ -n "${ARGS_LOG_FILE:-}" ]]; then
+    echo "$@" >> "$ARGS_LOG_FILE"
+fi
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --output-path)
+            out_path="$2"
+            mkdir -p "$out_path"
+            touch "$out_path/archive.zip"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+exit 0
+EOF
+chmod +x "$FAKE_CLI_LOG_ARGS"
+
+# --- Test Case 8: --seed flag is accepted and forwarded to all scenarios ---
+print_info "Test Case 8: --seed flag is accepted and forwarded to all scenarios"
+t8_out="$TEMP_DIR/t8.out"
+t8_err="$TEMP_DIR/t8.err"
+t8_log="$TEMP_DIR/t8.args.log"
+t8_exit=0
+ARGS_LOG_FILE="$t8_log" TIME_CMD="$MOCK_TIME" bash "$MEASURE_SCRIPT" "$FAKE_CLI_LOG_ARGS" --seed 123 > "$t8_out" 2> "$t8_err" || t8_exit=$?
+
+if [[ $t8_exit -ne 0 ]]; then
+    print_error "Test 8 FAILED: Expected 0 exit code with --seed 123, got $t8_exit. Stderr:"
+    cat "$t8_err"
+    FAILED=$((FAILED + 1))
+else
+    seed_count=$(grep -c -- "--seed 123" "$t8_log" 2>/dev/null || true)
+    if [[ "$seed_count" -ne 3 ]]; then
+        print_error "Test 8 FAILED: Expected --seed 123 forwarded to all 3 scenarios, found $seed_count times. Args log:"
+        cat "$t8_log"
+        FAILED=$((FAILED + 1))
+    else
+        print_info "PASS: --seed 123 forwarded to all 3 scenarios"
+        PASSED=$((PASSED + 1))
+    fi
+fi
+
+# --- Test Case 9: Default seed 42 is forwarded when no --seed is specified ---
+print_info "Test Case 9: Default seed 42 is forwarded when no --seed is specified"
+t9_out="$TEMP_DIR/t9.out"
+t9_err="$TEMP_DIR/t9.err"
+t9_log="$TEMP_DIR/t9.args.log"
+t9_exit=0
+ARGS_LOG_FILE="$t9_log" TIME_CMD="$MOCK_TIME" bash "$MEASURE_SCRIPT" "$FAKE_CLI_LOG_ARGS" > "$t9_out" 2> "$t9_err" || t9_exit=$?
+
+if [[ $t9_exit -ne 0 ]]; then
+    print_error "Test 9 FAILED: Expected 0 exit code without --seed, got $t9_exit. Stderr:"
+    cat "$t9_err"
+    FAILED=$((FAILED + 1))
+else
+    seed_count=$(grep -c -- "--seed 42" "$t9_log" 2>/dev/null || true)
+    if [[ "$seed_count" -ne 3 ]]; then
+        print_error "Test 9 FAILED: Expected default --seed 42 forwarded to all 3 scenarios, found $seed_count times. Args log:"
+        cat "$t9_log"
+        FAILED=$((FAILED + 1))
+    else
+        print_info "PASS: Default --seed 42 forwarded to all 3 scenarios"
+        PASSED=$((PASSED + 1))
+    fi
+fi
+
+# --- Test Case 10: Invalid --seed fails nonzero with diagnostic ---
+print_info "Test Case 10: Invalid --seed fails nonzero with diagnostic"
+t10_out="$TEMP_DIR/t10.out"
+t10_err="$TEMP_DIR/t10.err"
+t10_exit=0
+TIME_CMD="$MOCK_TIME" bash "$MEASURE_SCRIPT" "$FAKE_CLI_LOG_ARGS" --seed notanumber > "$t10_out" 2> "$t10_err" || t10_exit=$?
+
+if [[ $t10_exit -eq 0 ]]; then
+    print_error "Test 10 FAILED: Expected nonzero exit code for --seed notanumber, got 0"
+    FAILED=$((FAILED + 1))
+elif ! grep -qiE "seed|integer" "$t10_err"; then
+    print_error "Test 10 FAILED: Expected error diagnostic for invalid seed. Stderr was:"
+    cat "$t10_err"
+    FAILED=$((FAILED + 1))
+else
+    print_info "PASS: Invalid --seed failed with diagnostic"
+    PASSED=$((PASSED + 1))
+fi
+
 # --- Summary ---
 echo ""
 TOTAL=$((PASSED + FAILED))

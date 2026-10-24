@@ -9,19 +9,20 @@ Automated performance regression detection for Zipper.
 3. **RSS is advisory:** if peak RSS exceeds 1.20× baseline, the check posts a warning and comparison table. It does not fail for a threshold exceedance; measurement or comparison errors still fail.
 4. **Wall time is informational only.** Shared GitHub runners vary 15–40% run-to-run with no code change, and baselines are captured on a different runner than each PR is measured on, so the wall ratio mixes hardware delta with code delta. It is reported (1.25× reference line) but never fails the job.
 
-> **Why median for reports, max for baselines?** Baselines are captured using the
-> maximum of 5 runs (see Capturing New Baselines below), which sets a conservative
-> ceiling. The PR check then compares the median of 5 runs against that ceiling,
-> absorbing single-run noise. Host-to-host RSS varies enough that the
-> 1.20× threshold cannot reliably block merges.
+> **Statistic parity:** Both the PR check and the baseline refresh workflow use the
+> **median of 5 runs** (per scenario, using `--seed 42`). This eliminates the mismatch
+> where a median-of-5 was compared against a max-of-5 (which masked regressions up to the
+> run-to-run spread and biased baselines toward worst-run outliers). Run-to-run variability
+> and runtime context (runner image, .NET SDK version, seed) are recorded with the baselines
+> and reported in the guard comment.
 
 ## Scenarios
 
 | Scenario | Command | Purpose |
 |----------|---------|---------|
-| `pdf_50k` | `--type pdf --count 50000 --folders 4 --with-metadata` | Standard mode throughput |
-| `eml_20k` | `--type eml --count 20000 --attachment-rate 30` | Email + attachment pipeline |
-| `loadfile_200k` | `--loadfile-only --count 200000 --column-profile standard` | Loadfile-only throughput |
+| `pdf_50k` | `--type pdf --count 50000 --folders 4 --with-metadata --seed 42` | Standard mode throughput |
+| `eml_20k` | `--type eml --count 20000 --attachment-rate 30 --seed 42` | Email + attachment pipeline |
+| `loadfile_200k` | `--loadfile-only --count 200000 --column-profile standard --seed 42` | Loadfile-only throughput |
 
 ## Capturing New Baselines
 
@@ -29,17 +30,19 @@ When a legitimate performance change occurs (new feature, algorithm change):
 
 ```bash
 # Build release binary
-dotnet publish src/Zipper.csproj -c Release
+dotnet publish src/Zipper.csproj -c Release -o publish-bin
 
-# Run 5 times, take max per scenario
+# Run 5 times with --seed 42
+mkdir -p results
 for i in $(seq 1 5); do
-  ./tests/perf/measure.sh
+  ./tests/perf/measure.sh ./publish-bin/Zipper --seed 42 > "results/run_${i}.json"
 done
 
-# Update baselines.json with the max values observed
+# Run baseline refresh script (computes medians and updates baselines.json)
+python3 .github/scripts/perf-baseline-refresh.py results tests/perf/baselines.json --seed 42
 ```
 
-On CI, the `perf-baseline-refresh.yml` workflow runs weekly (Monday 04:00 UTC) and auto-proposes a PR if drift exceeds 5%.
+On CI, the `perf-baseline-refresh.yml` workflow runs weekly (Monday 04:00 UTC) and auto-proposes a PR if drift exceeds 5%. Baseline increases require recorded justification before merge, and raw measurement runs (`run_1..run_5.json`) are attached to the refresh PR.
 
 ## Reading the PR Comment
 
