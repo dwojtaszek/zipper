@@ -101,6 +101,28 @@ JSON
 
 Note: `gh pr checks --watch` exits 0 even when checks fail — always pass `--exit-status` (or verify every check's conclusion explicitly) before merging. PR #968–#972 merged with red ubuntu/macos E2E jobs because no checks were required and the watch exit code was trusted without it.
 
+### Issue creation and merge access
+
+Two access rules are repository settings rather than files, so a settings change is invisible in review. Both are recorded here so they can be verified and restored.
+
+**Only `dwojtaszek` may open issues.** This repository is public, so without the setting anyone with a GitHub account could open an issue and inject text into the runner's intake queue. The repository setting `issueCreationPolicy` is `COLLABORATORS_ONLY`, and `dwojtaszek` is the only collaborator:
+
+```bash
+gh api graphql -f query='{ repository(owner:"dwojtaszek", name:"zipper"){ issueCreationPolicy } }'
+```
+
+The setting blocks issue creation through every entry point (Issues, comments, Discussions, Projects, Copilot) for accounts without write access. It does **not** apply to the workflow token: a GitHub Actions run with `issues: write` can still create issues as `github-actions[bot]`, which is required by the Zip64 nightly and weekly QA reporters. Those are the only two `gh issue create` callers; adding another is a deliberate widening of issue authorship.
+
+**Only `dwojtaszek` may merge to `main`.** `dwojtaszek` is the sole collaborator, holding `admin`, so no other account can push or merge. Branch protection enforces the same rule for the owner's own account: `enforce_admins` is on, so `main` cannot be force-pushed, deleted, or merged red even by an administrator, and required conversation resolution blocks a merge while any review thread is open.
+
+```bash
+gh api repos/dwojtaszek/zipper/collaborators --jq '.[] | "\(.login) \(.role_name)"'
+```
+
+`restrictions` is `null` in the branch protection payload, so "restrict who can push" is not configured. That is not a gap: it is unavailable on a user-owned repository, and with a single collaborator and `enforce_admins` on, there is no second account it could constrain.
+
+That unavailability is the constraint to respect, not a setting to add later. The push-restrictions API only accepts user restrictions for organization-owned repositories — on this repository it returns `404 Not Found` — so **there is no way to keep the owner-only merge rule while granting a second account write access.** Adding a collaborator therefore ends the rule: the new collaborator could merge any PR once `ci-gate` passes and the threads are resolved, and no branch protection setting can prevent it. Keeping merges owner-only means not adding a second collaborator with write access; if one is needed, the repository must first be transferred to an organization, where `restrictions` becomes available and must name `dwojtaszek`.
+
 ## CodeRabbit
 
 Address blocking issues (required). Nitpicks are optional.
