@@ -1,4 +1,6 @@
 """Tests for quota exhaustion detection, model switching, and fallback per harness."""
+import contextlib
+import io
 import sys
 from pathlib import Path
 import unittest
@@ -271,6 +273,142 @@ class ProbeAndSelectAgentsModelSwitchingTests(unittest.TestCase):
     def test_is_quota_exhausted_detects_opencode_free_usage_limit(self):
         stderr = "\x1b[91m\x1b[1mError: \x1b[0mFree usage limit reached. Subscribe to OpenCode Go to keep going: https://opencode.ai/go"
         self.assertTrue(runner.is_quota_exhausted("", stderr))
+
+
+def _clear_rate_state() -> None:
+    """Remove persisted rate-limit marks so one test's send cannot suppress the
+    next test's expected email (they share STATE_DIR in this process)."""
+    import glob
+    for path in glob.glob(os.path.join(runner.STATE_DIR, "rate-*.json")):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+class MissingConfiguredModelTests(unittest.TestCase):
+    """A model configured at a non-zero priority that the agent no longer offers
+    must be reported, because the runner otherwise queues it, selects it, and
+    fails the mission at runtime."""
+
+    def setUp(self):
+        runner.EXHAUSTED_MODELS.clear()
+        _clear_rate_state()
+        self.sent = []
+        self._send = runner.send_email
+        runner.send_email = lambda subject, body: self.sent.append((subject, body))
+        self.orig_active_agent = runner.ACTIVE_AGENT
+        self.orig_active_model = runner.ACTIVE_MODEL
+        runner.ACTIVE_AGENT = None
+        runner.ACTIVE_MODEL = None
+
+    def tearDown(self):
+        runner.send_email = self._send
+        runner.EXHAUSTED_MODELS.clear()
+        _clear_rate_state()
+        runner.ACTIVE_AGENT = self.orig_active_agent
+        runner.ACTIVE_MODEL = self.orig_active_model
+
+    def _plugin(self, models):
+        mock = MagicMock()
+        mock.check_installation.return_value = True
+        mock.check_token_health.return_value = True
+        mock.list_models.return_value = list(models)
+        return mock
+
+    def test_configuredModelAbsentFromDiscovery_isReported(self):
+        """exo-free was configured at priority 3 but opencode no longer offers it."""
+        plugin = self._plugin(["opencode/big-pickle"])
+        prefs = {("opencode", "opencode/big-pickle"): 1, ("opencode", "opencode/exo-free"): 3}
+        with patch.dict(runner.AGENT_PLUGINS, {"opencode": plugin}, clear=True):
+            with patch.object(runner, "load_preferences", return_value=prefs):
+                runner.probe_and_select_agents()
+        subjects = [s for s, _ in self.sent]
+        self.assertIn("[Runner] Configured Models No Longer Exist", subjects)
+        body = [b for s, b in self.sent if "No Longer Exist" in s][0]
+        self.assertIn("opencode/exo-free", body)
+        self.assertNotIn("opencode/big-pickle", body)
+
+    def test_configuredModelPresentInDiscovery_staysQuiet(self):
+        plugin = self._plugin(["opencode/big-pickle", "opencode/glm-5.3-flash-free"])
+        prefs = {("opencode", "opencode/big-pickle"): 1, ("opencode", "opencode/glm-5.3-flash-free"): 2}
+        with patch.dict(runner.AGENT_PLUGINS, {"opencode": plugin}, clear=True):
+            with patch.object(runner, "load_preferences", return_value=prefs):
+                runner.probe_and_select_agents()
+        self.assertEqual(self.sent, [])
+
+    def test_suffixMatch_countsAsPresent(self):
+        """The preference may be prefixed while discovery is bare, so matching
+        must be suffix-based, or every prefixed row would look missing."""
+        plugin = self._plugin(["glm-5.3-flash-free"])
+        prefs = {("opencode", "opencode/glm-5.3-flash-free"): 2}
+        with patch.dict(runner.AGENT_PLUGINS, {"opencode": plugin}, clear=True):
+            with patch.object(runner, "load_preferences", return_value=prefs):
+                runner.probe_and_select_agents()
+        self.assertEqual(self.sent, [])
+
+    def test_discoveryFallbackToDefault_staysQuiet(self):
+        """A provider outage that falls back to 'default' must not mark every
+        configured model as missing."""
+        plugin = self._plugin(["default"])
+        prefs = {("opencode", "opencode/exo-free"): 3, ("opencode", "opencode/glm-5.3-flash-free"): 2}
+        with patch.dict(runner.AGENT_PLUGINS, {"opencode": plugin}, clear=True):
+            with patch.object(runner, "load_preferences", return_value=prefs):
+                runner.probe_and_select_agents()
+        self.assertEqual(self.sent, [])
+
+    def test_defaultPlaceholder_isNotReported(self):
+        """'default' names the agent's own default model, not a model discovery
+        can return, so real discovery must not report it as gone. The shipped
+        preferences carry claude/default and agy/default at priority 1."""
+        plugin = self._plugin(["opencode/big-pickle"])
+        prefs = {("opencode", "default"): 1, ("opencode", "opencode/big-pickle"): 1}
+        with patch.dict(runner.AGENT_PLUGINS, {"opencode": plugin}, clear=True):
+            with patch.object(runner, "load_preferences", return_value=prefs):
+                runner.probe_and_select_agents()
+        self.assertEqual(self.sent, [])
+
+    def test_statusOnlyRun_warnsOnConsoleButDoesNotMail(self):
+        """--status is read-only: it must not consume the rate-limit budget or
+        send mail, matching the 'All Agents Unhealthy' alert. The console
+        warning is the point of running status, so it must survive."""
+        plugin = self._plugin(["opencode/big-pickle"])
+        prefs = {("opencode", "opencode/big-pickle"): 1, ("opencode", "opencode/exo-free"): 3}
+        buf = io.StringIO()
+        with patch.dict(runner.AGENT_PLUGINS, {"opencode": plugin}, clear=True):
+            with patch.object(runner, "load_preferences", return_value=prefs):
+                with patch.object(runner, "STATUS_ONLY", True):
+                    with contextlib.redirect_stdout(buf):
+                        runner.probe_and_select_agents()
+        self.assertEqual(self.sent, [], "a status-only run must not send mail")
+        self.assertIn("no longer offered", buf.getvalue(),
+                      "the console warning must survive a status-only run")
+        # The budget must be intact: a real run still gets all its immediate sends.
+        with patch.dict(runner.AGENT_PLUGINS, {"opencode": plugin}, clear=True):
+            with patch.object(runner, "load_preferences", return_value=prefs):
+                for _ in range(3):
+                    runner.probe_and_select_agents()
+        self.assertEqual(len(self.sent), 3,
+                         "a status-only run must not consume the rate-limit budget")
+
+    def test_disabledConfiguredModel_isNotReported(self):
+        """Priority 0 means deliberately disabled, not gone."""
+        plugin = self._plugin(["opencode/big-pickle"])
+        prefs = {("opencode", "opencode/big-pickle"): 1, ("opencode", "opencode/exo-free"): 0}
+        with patch.dict(runner.AGENT_PLUGINS, {"opencode": plugin}, clear=True):
+            with patch.object(runner, "load_preferences", return_value=prefs):
+                runner.probe_and_select_agents()
+        self.assertEqual(self.sent, [])
+
+    def test_missingModelReport_isRateLimited(self):
+        """A persistent configuration mistake must not mail on every cycle."""
+        plugin = self._plugin(["opencode/big-pickle"])
+        prefs = {("opencode", "opencode/big-pickle"): 1, ("opencode", "opencode/exo-free"): 3}
+        with patch.dict(runner.AGENT_PLUGINS, {"opencode": plugin}, clear=True):
+            with patch.object(runner, "load_preferences", return_value=prefs):
+                for _ in range(5):
+                    runner.probe_and_select_agents()
+        self.assertEqual(len(self.sent), 3)
 
 
 if __name__ == "__main__":

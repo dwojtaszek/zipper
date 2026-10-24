@@ -811,6 +811,39 @@ def get_model_priority(prefs: dict[tuple[str, str], int], agent: str, model: str
     return 0, clean
 
 
+def _report_missing_configured_models(missing: list[tuple[str, str]]) -> None:
+    """Email when a model configured in AGENT_PREFERENCES.md no longer exists.
+
+    Discovery is authoritative for what an agent offers. A model that is
+    configured at a non-zero priority but no longer listed is still queued as a
+    candidate, so the runner selects it and then fails the mission at runtime,
+    silently burning cycles on a dead model. Only agents whose discovery returned
+    real models are reported, so a provider outage that falls back to 'default'
+    cannot raise a false alarm naming every configured model.
+    """
+    if not missing:
+        return
+    for agent, model in sorted(missing):
+        print(f"[select] WARNING: {agent}/{model} is configured but no longer offered by the agent.")
+    subject = "[Runner] Configured Models No Longer Exist"
+    # A read-only --status run reports on the console but must not consume the
+    # rate-limit budget or mail, exactly like the 'All Agents Unhealthy' alert.
+    if STATUS_ONLY or not _should_send_rate_limited(subject):
+        return
+    rows = "".join(
+        f"<li><code>{html.escape(agent)}/{html.escape(model)}</code></li>"
+        for agent, model in sorted(missing)
+    )
+    send_email(
+        subject,
+        f"<h3>Configured models are no longer offered by their agent</h3>"
+        f"<p>These still carry a non-zero priority in <code>AGENT_PREFERENCES.md</code>, but the agent no "
+        f"longer lists them. The runner queues them as candidates and then fails on them at runtime, so "
+        f"remove or reprioritize them.</p>"
+        f"<ul>{rows}</ul>"
+    )
+
+
 def probe_and_select_agents() -> list[tuple[str, str | None]]:
     """Probes all plugins and returns sorted list of healthy (agent, model) candidates.
 
@@ -825,6 +858,7 @@ def probe_and_select_agents() -> list[tuple[str, str | None]]:
             sys.exit(1)
 
     candidates: list[tuple[int, str, str | None]] = []
+    missing_configured: list[tuple[str, str]] = []
     for name, module in AGENT_PLUGINS.items():
         if not module.check_installation():
             print(f"[select] {name!r}: not installed, skipping")
@@ -851,6 +885,19 @@ def probe_and_select_agents() -> list[tuple[str, str | None]]:
 
         known_models = list(models)
         if prefs:
+            # Discovery is authoritative for what this agent offers. A configured
+            # model that discovery does not list is gone, so record it for the
+            # report below rather than quietly queueing a candidate that can only
+            # fail at runtime. Guarded on real discovery so an outage that fell
+            # back to 'default' cannot mark every configured model as missing.
+            # 'default' is a placeholder for the agent's own default model, not a
+            # name discovery can ever return, so it is never missing.
+            if models != ["default"]:
+                discovered_suffixes = {_model_key(m).split("/")[-1] for m in models}
+                for (ag, pref_model), prio in prefs.items():
+                    if (ag == name and prio > 0 and pref_model != "default"
+                            and pref_model.split("/")[-1] not in discovered_suffixes):
+                        missing_configured.append((name, pref_model))
             for (ag, pref_model), prio in prefs.items():
                 if ag == name and prio > 0:
                     pref_suffix = pref_model.split("/")[-1]
@@ -867,6 +914,8 @@ def probe_and_select_agents() -> list[tuple[str, str | None]]:
                 continue
             candidates.append((prio, name, model))
             print(f"[select] {name}/{model}: priority {prio}, queued")
+
+    _report_missing_configured_models(missing_configured)
 
     if not candidates:
         print("[select] No healthy candidates found. Exiting.")
