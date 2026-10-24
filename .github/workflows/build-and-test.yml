@@ -208,18 +208,6 @@ jobs:
             Commits:
             ${{ steps.pr_notes.outputs.commit_log }}
 
-      - name: Verify and complete reserved release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_ID: ${{ needs.prepare.outputs.release_id }}
-          ARTIFACT_RUN: ${{ needs.prepare.outputs.artifact_run || github.run_id }}
-          RELEASE_NOTES: ${{ steps.pr_notes.outputs.body || (steps.ai_notes.outcome == 'success' && steps.ai_notes.outputs.response) || 'See commit history for changes in this release.' }}
-        run: |
-          printf '%s\n' "$RELEASE_NOTES" > release-notes.txt
-          python3 .controller/.github/scripts/release.py publish --release-id "$RELEASE_ID" \
-            --run-id "$ARTIFACT_RUN" --artifacts artifacts --notes release-notes.txt
-
       - name: Generate build provenance attestation
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
@@ -262,6 +250,18 @@ jobs:
           Path("SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
           '
           cat SHA256SUMS
+
+      - name: Verify and complete reserved release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.prepare.outputs.release_id }}
+          ARTIFACT_RUN: ${{ needs.prepare.outputs.artifact_run || github.run_id }}
+          RELEASE_NOTES: ${{ steps.pr_notes.outputs.body || (steps.ai_notes.outcome == 'success' && steps.ai_notes.outputs.response) || 'See commit history for changes in this release.' }}
+        run: |
+          printf '%s\n' "$RELEASE_NOTES" > release-notes.txt
+          python3 .controller/.github/scripts/release.py publish --release-id "$RELEASE_ID" \
+            --run-id "$ARTIFACT_RUN" --artifacts artifacts --notes release-notes.txt
 
       - name: Attach provenance assets to release
         shell: bash
