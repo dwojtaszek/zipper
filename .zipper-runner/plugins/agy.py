@@ -128,7 +128,10 @@ def check_token_health(model: str | None = None) -> bool:
     """
     if model and model != "default":
         return _probe_model(model)
-    candidates = ["gemini-3.8-flash-high", "claude-sonnet-4-6", "claude-opus-4-6-thinking", "gemini-3.7-flash-high"]
+    # Fallback probe order when no model is pinned. Kept to models agy actually
+    # offers: gemini-3.7-flash-high was removed upstream, and probing a dead
+    # model only burns a subprocess before falling through.
+    candidates = ["gemini-3.8-flash-high", "claude-sonnet-4-6", "claude-opus-4-6-thinking"]
     for m in candidates:
         if _probe_model(m):
             return True
@@ -154,7 +157,11 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
         base += ["--continue"]
     if model and model != "default":
         base += ["--model", model]
-    base += ["--prompt", prompt, "--print-timeout", "30m", "--dangerously-skip-permissions"]
+    # agy's own print timeout must fire before the 45-minute (2700s) kill below,
+    # so the agent gets to flush its partial output instead of being SIGKILLed
+    # mid-turn. 30m truncated long missions routinely; 40m leaves 5 minutes of
+    # slack for the process to exit and report what it finished.
+    base += ["--prompt", prompt, "--print-timeout", "40m", "--dangerously-skip-permissions"]
 
     abs_cwd = os.path.abspath(cwd)
     env = os.environ.copy()

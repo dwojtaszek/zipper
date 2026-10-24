@@ -153,6 +153,215 @@ class StaleLockWatchdogTests(unittest.TestCase):
         self.assertFalse(runner._reclaim_stale_lock())
 
 
+class QuotaResetHintTests(unittest.TestCase):
+    """A provider that states its reset window must not be retried inside it.
+
+    agy embeds "Resets in 85h0m6s" in its 429 payload. The flat
+    QUOTA_COOLDOWN_MINUTES fallback (60) re-selected, re-launched, and re-failed
+    those models every hour for the whole 85-hour window, burning a mission
+    launch per cycle instead of handing off to a working model.
+    """
+    def setUp(self):
+        runner.EXHAUSTED_MODELS.clear()
+        _clear_quota_state()
+
+    def tearDown(self):
+        runner.EXHAUSTED_MODELS.clear()
+        _clear_quota_state()
+
+    def _rewind_marks(self, prefix: str, minutes: int) -> None:
+        """Push the ``at`` stamp past the flat cooldown, leaving ``resets_at`` intact.
+
+        Load-bearing: without rewinding, the flat fallback alone would satisfy an
+        "is exhausted" assertion, so the test would pass even if the stated
+        window were ignored entirely.
+        """
+        stale = (datetime.now(timezone.utc) - timedelta(minutes=minutes)).isoformat()
+        for name in os.listdir(runner.STATE_DIR):
+            if not name.startswith(prefix):
+                continue
+            path = os.path.join(runner.STATE_DIR, name)
+            with open(path) as f:
+                state = json.load(f)
+            state["at"] = stale
+            with open(path, "w") as f:
+                json.dump(state, f)
+
+    def test_statedReset_isHonoredPastTheFlatCooldown(self):
+        runner.mark_model_exhausted(
+            "agy", "agy/claude-sonnet-4-6",
+            stderr="error: Individual quota reached. Resets in 85h0m6s.",
+        )
+        # Simulate a fresh cron spawn: in-memory state wiped.
+        runner.EXHAUSTED_MODELS.clear()
+        self.assertGreater(runner.QUOTA_COOLDOWN_MINUTES, 0)
+        self._rewind_marks("quota-agy-", runner.QUOTA_COOLDOWN_MINUTES + 5)
+        # Only the provider-stated window can still hold the model here.
+        self.assertTrue(runner.is_model_exhausted("agy", "agy/claude-sonnet-4-6"))
+
+    def test_statedReset_expiresAfterItsOwnWindow(self):
+        runner.mark_model_exhausted("agy", "agy/claude-sonnet-4-6", stderr="Resets in 2h0m0s.")
+        runner.EXHAUSTED_MODELS.clear()
+        past = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
+        for name in os.listdir(runner.STATE_DIR):
+            if not name.startswith("quota-agy-"):
+                continue
+            path = os.path.join(runner.STATE_DIR, name)
+            with open(path) as f:
+                state = json.load(f)
+            state["resets_at"] = past
+            with open(path, "w") as f:
+                json.dump(state, f)
+        self.assertFalse(runner.is_model_exhausted("agy", "agy/claude-sonnet-4-6"))
+
+    def test_withoutResetHint_theFlatCooldownStillGoverns(self):
+        # A provider that states no window must keep the existing behavior.
+        runner.mark_model_exhausted("opencode", "opencode/big-pickle")
+        runner.EXHAUSTED_MODELS.clear()
+        self.assertTrue(runner.is_model_exhausted("opencode", "opencode/big-pickle"))
+        with open(runner._quota_state_path("opencode", "opencode/big-pickle")) as f:
+            self.assertNotIn("resets_at", json.load(f))
+
+    def test_resetHint_isCappedSoItCannotParkAModelIndefinitely(self):
+        runner.mark_model_exhausted("agy", "agy/claude-opus-4-6-thinking", stderr="Resets in 9999h0m0s.")
+        with open(runner._quota_state_path("agy", "agy/claude-opus-4-6-thinking")) as f:
+            resets_at = datetime.fromisoformat(json.load(f)["resets_at"])
+        ceiling = datetime.now(timezone.utc) + timedelta(hours=runner.QUOTA_RESET_MAX_HOURS)
+        self.assertLessEqual(resets_at, ceiling + timedelta(minutes=1))
+
+    def test_resetHint_isPersistedOnEveryLookupVariant(self):
+        runner.mark_model_exhausted("agy", "agy/claude-sonnet-4-6", stderr="Resets in 5h0m0s.")
+        runner.EXHAUSTED_MODELS.clear()
+        self._rewind_marks("quota-agy-", runner.QUOTA_COOLDOWN_MINUTES + 5)
+        # Suffix-tolerant lookup must see the stated window, not just the clean key.
+        self.assertTrue(runner.is_model_exhausted("agy", "claude-sonnet-4-6"))
+
+    def test_nonObjectQuotaState_isIgnoredRatherThanCrashing(self):
+        # A malformed or truncated state file must not crash every cycle: this
+        # runs during candidate selection, so an uncaught shape error here is a
+        # crash loop, not a skipped mark.
+        path = runner._quota_state_path("agy", "agy/claude-sonnet-4-6")
+        for content in ["null", "[]", '"text"', "5"]:
+            with self.subTest(content=content):
+                with open(path, "w") as f:
+                    f.write(content)
+                self.assertFalse(runner.is_model_exhausted("agy", "agy/claude-sonnet-4-6"))
+
+    def test_timezoneFreeResetStamp_fallsBackToTheFlatCooldown(self):
+        # A hand-edited or corrupt state file can hold a stamp with no offset,
+        # which cannot be compared against an aware "now". Treating it as
+        # unusable keeps the flat fallback; guessing an offset would park the
+        # model for an arbitrary span.
+        runner.mark_model_exhausted("agy", "agy/claude-sonnet-4-6")
+        runner.EXHAUSTED_MODELS.clear()
+        path = runner._quota_state_path("agy", "agy/claude-sonnet-4-6")
+        for stamp in ["2026-01-01T00:00:00", "2026-01-01T00:00:00.123456", "not-a-timestamp"]:
+            with self.subTest(stamp=stamp):
+                with open(path) as f:
+                    state = json.load(f)
+                state["resets_at"] = stamp
+                with open(path, "w") as f:
+                    json.dump(state, f)
+                # The mark is minutes old, so the flat cooldown still governs.
+                self.assertTrue(runner.is_model_exhausted("agy", "agy/claude-sonnet-4-6"))
+
+    def test_timezoneAwareResetStamp_isStillHonored(self):
+        # Guards the fallback above from swallowing the real feature: an offset
+        # stamp in the future must still hold the model past the flat cooldown.
+        runner.mark_model_exhausted("agy", "agy/claude-sonnet-4-6", stderr="Resets in 5h0m0s.")
+        runner.EXHAUSTED_MODELS.clear()
+        self._rewind_marks("quota-agy-", runner.QUOTA_COOLDOWN_MINUTES + 5)
+        self.assertTrue(runner.is_model_exhausted("agy", "agy/claude-sonnet-4-6"))
+
+    def test_resetHint_skipsUnusablePhraseForLaterValidOne(self):
+        # An unusable phrase with no duration must not shadow a later valid one,
+        # or the provider's real window is discarded and retried inside.
+        self.assertEqual(
+            runner._quota_reset_seconds(
+                "Retrying shortly. Resets in 5 minutes.\n"
+                'AGY_ERROR: {"status":"RESOURCE_EXHAUSTED","error_code":429} Resets in 85h0m6s.'
+            ),
+            85 * 3600 + 6,
+        )
+
+    def test_resetHint_comesFromTheErrorChannelOnly(self):
+        # stdout is assistant text (including partial text from an interrupted
+        # mission) and is deliberately not parsed: a quoted or unrelated reset
+        # there would shorten or lengthen the real window. With no window in the
+        # error text, the flat fallback governs.
+        runner.mark_model_exhausted(
+            "agy", "agy/claude-sonnet-4-6",
+            stderr="429 quota exhausted; no reset window stated.",
+        )
+        with open(runner._quota_state_path("agy", "agy/claude-sonnet-4-6")) as f:
+            self.assertNotIn("resets_at", json.load(f))
+
+    def test_unparseableOrZeroReset_yieldsNoWindow(self):
+        # "500ms" must not be read as 500 minutes: that would park a model for
+        # 8h20m past its actual reset.
+        for text in ["", "rate limit exceeded", "Resets in 0m0s", "Resets in 0h0m0s", "Resets in 500ms"]:
+            with self.subTest(text=text):
+                self.assertIsNone(runner._quota_reset_seconds(text))
+
+    def test_resetHint_parsesEachComponentForm(self):
+        cases = {
+            "error: Individual quota reached. Resets in 85h0m6s.": 85 * 3600 + 6,
+            "resets in 2h30m": 2 * 3600 + 30 * 60,
+            "Resets in 45m": 45 * 60,
+            "Resets in 90s": 90,
+        }
+        for text, expected in cases.items():
+            with self.subTest(text=text):
+                self.assertEqual(runner._quota_reset_seconds(text), expected)
+
+
+class QuotaResetChannelTests(unittest.TestCase):
+    """The runner must record the window from the provider's error channel.
+
+    The channel choice lives at the call site, so this drives a real quota
+    failure through the babysit fallback and asserts the persisted window. A
+    decoy reset in assistant output must not become the recorded duration, or the
+    model is parked for the wrong span.
+    """
+    def setUp(self):
+        runner.EXHAUSTED_MODELS.clear()
+        _clear_quota_state()
+        self._candidates = list(runner.AGENT_CANDIDATES)
+        self._plugins = dict(runner.AGENT_PLUGINS)
+
+    def tearDown(self):
+        runner.EXHAUSTED_MODELS.clear()
+        _clear_quota_state()
+        runner.AGENT_CANDIDATES[:] = self._candidates
+        runner.AGENT_PLUGINS.clear()
+        runner.AGENT_PLUGINS.update(self._plugins)
+
+    def test_quotaFailure_recordsTheErrorChannelWindowNotAssistantOutput(self):
+        plugin = MagicMock()
+        plugin.run_mission.return_value = (
+            1,
+            "Earlier I hit a limit. Resets in 5m.",                 # assistant output decoy
+            "error: Individual quota reached. Resets in 85h0m6s.",  # provider payload
+        )
+        runner.AGENT_PLUGINS.clear()
+        runner.AGENT_PLUGINS["stub"] = plugin
+        runner.AGENT_CANDIDATES[:] = [("stub", "stub/model-a")]
+
+        with patch.object(runner, "_worktree_backoff_should_skip", return_value=False), \
+             patch.object(runner, "_babysit_snapshot", return_value=("", -1, "")), \
+             patch.object(runner, "is_model_exhausted", return_value=False), \
+             patch.object(runner, "_record_worktree_failure"), \
+             patch.object(runner, "_should_send_rate_limited", return_value=False):
+            runner._babysit_with_fallback("prompt", "/tmp/wt", "branch", 1)
+
+        with open(runner._quota_state_path("stub", "stub/model-a")) as f:
+            state = json.load(f)
+        self.assertIn("resets_at", state)
+        expected = datetime.now(timezone.utc) + timedelta(hours=85, seconds=6)
+        actual = datetime.fromisoformat(state["resets_at"])
+        self.assertLess(abs((actual - expected).total_seconds()), 120)
+
+
 class QuotaPersistenceTests(unittest.TestCase):
     def setUp(self):
         runner.EXHAUSTED_MODELS.clear()

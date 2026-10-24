@@ -15,7 +15,7 @@ import fcntl
 import re
 import subprocess
 import signal
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 # Configuration
 # Environment fallback for container execution
@@ -210,6 +210,45 @@ def is_quota_exhausted(output: str, stderr: str = "") -> bool:
         return True
     return False
 
+# Some providers state their own reset window; agy embeds "Resets in 85h0m6s" in
+# its 429 payload. Retrying inside that window can only fail, so the stated
+# window is authoritative and QUOTA_COOLDOWN_MINUTES becomes the fallback for
+# providers that say nothing. QUOTA_RESET_MAX_HOURS bounds an implausible or
+# garbled hint so it can never park a model indefinitely.
+QUOTA_RESET_MAX_HOURS = int(os.environ.get("RUNNER_QUOTA_RESET_MAX_HOURS", "168"))
+
+_QUOTA_RESET_RE = re.compile(
+    # The trailing \b is load-bearing: without it "500ms" matches as 500 minutes
+    # and parks a model for 8h20m past its reset. A unit followed by another
+    # letter is not a unit, so the match must end at a token boundary.
+    r"resets?\s+in\s+(?:(\d+)h)?\s*(?:(\d+)m)?\s*(?:(\d+)s)?\b",
+    re.IGNORECASE,
+)
+
+def _quota_reset_seconds(stderr: str) -> int | None:
+    """Provider-stated seconds until the quota resets, or None when it states none.
+
+    Only the error channel is read. agy reports its 429 payload on stderr with
+    stdout empty, and stdout is assistant text -- including partial text from an
+    interrupted mission -- that can mention a reset unrelated to this failure.
+    Accepting such a phrase either shortens the window below the real one
+    (retrying inside it) or lengthens it on a quoted value, so a provider that
+    states its window only on stdout falls back to the flat
+    QUOTA_COOLDOWN_MINUTES, which is the pre-existing behavior.
+
+    Within the error text every hint is considered, so an unusable phrase with no
+    duration ("Resets in 5 minutes") does not shadow a later valid one. Returns
+    None unless some hint carried a duration, so an unrelated "resets in" phrase
+    cannot invent a window, and a sub-second hint is rejected rather than misread
+    as minutes.
+    """
+    for match in _QUOTA_RESET_RE.finditer(stderr):
+        hours, minutes, seconds = (int(g) if g else 0 for g in match.groups())
+        total = hours * 3600 + minutes * 60 + seconds
+        if total > 0:
+            return min(total, QUOTA_RESET_MAX_HOURS * 3600)
+    return None
+
 def _quota_state_path(agent_name: str, model_name: str | None) -> str:
     key = _model_key(model_name) if model_name else "default"
     return os.path.join(STATE_DIR, f"quota-{slugify(agent_name)}-{slugify(key)}.json")
@@ -219,25 +258,53 @@ def _quota_cooldown_active(agent_name: str, model_name: str | None) -> bool:
 
     Cron respawns the runner every few minutes, so in-memory exhaustion alone
     would relaunch failing missions every cycle during a multi-hour quota
-    window. The mark expires after QUOTA_COOLDOWN_MINUTES so quotas that reset
-    (daily windows, provider rollover) are retried automatically."""
+    window. A provider-stated reset ("Resets in 85h0m6s") takes precedence over
+    the flat QUOTA_COOLDOWN_MINUTES fallback, because retrying before the
+    provider reopens the window only burns a mission launch. Marks without a
+    hint still expire after QUOTA_COOLDOWN_MINUTES so quotas that reset silently
+    are retried automatically."""
     if QUOTA_COOLDOWN_MINUTES <= 0:
         return False
     try:
         with open(_quota_state_path(agent_name, model_name)) as f:
             data = json.load(f)
-        marked_at = datetime.fromisoformat(data["at"])
-    except (OSError, ValueError, KeyError, TypeError):
+    except (OSError, ValueError, TypeError):
         return False
-    return (datetime.now(timezone.utc) - marked_at).total_seconds() < QUOTA_COOLDOWN_MINUTES * 60
+    # A truncated or hand-edited file can hold valid JSON that is not an object
+    # (null, [], a string). This runs during candidate selection, so an uncaught
+    # shape error here would crash every cycle rather than skip one mark.
+    if not isinstance(data, dict):
+        return False
+    now = datetime.now(timezone.utc)
+    resets_at = data.get("resets_at")
+    if resets_at:
+        try:
+            reset_dt = datetime.fromisoformat(resets_at)
+        except (ValueError, TypeError):
+            reset_dt = None
+        # A timezone-free stamp cannot be compared with an aware "now" (it raises
+        # TypeError), and guessing an offset from a hand-edited file would park
+        # the model for an arbitrary span. Treat it as unusable so the flat
+        # fallback governs instead.
+        if reset_dt is not None and reset_dt.tzinfo is not None:
+            return now < reset_dt
+    try:
+        marked_at = datetime.fromisoformat(data["at"])
+    except (ValueError, KeyError, TypeError):
+        return False
+    return (now - marked_at).total_seconds() < QUOTA_COOLDOWN_MINUTES * 60
 
-def mark_model_exhausted(agent_name: str, model_name: str | None, persist: bool = True) -> None:
+def mark_model_exhausted(agent_name: str, model_name: str | None, persist: bool = True,
+                         stderr: str = "") -> None:
     """Marks a specific (agent, model) as exhausted for the current run cycle.
 
     persist=False keeps the mark in-memory only: used for health-probe
     failures, which may be transient (server error, network blip) and must
     not lock the model out of the next cron cycle. Confirmed quota exhaustion
-    (mission output matched quota keywords) persists across cycles."""
+    (mission output matched quota keywords) persists across cycles.
+
+    stderr carries the failing mission's error text so a provider-stated reset
+    window is recorded and honored instead of the flat fallback."""
     EXHAUSTED_MODELS.add((agent_name, model_name))
     if model_name:
         clean = _model_key(model_name)
@@ -250,7 +317,13 @@ def mark_model_exhausted(agent_name: str, model_name: str | None, persist: bool 
         return
     try:
         os.makedirs(STATE_DIR, exist_ok=True)
-        now_iso = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(timezone.utc)
+        state = {"agent": agent_name, "model": model_name, "at": now.isoformat()}
+        reset_seconds = _quota_reset_seconds(stderr)
+        if reset_seconds is not None:
+            state["resets_at"] = (now + timedelta(seconds=reset_seconds)).isoformat()
+            print(f"[quota] {agent_name}/{model_name or 'default'} reports a reset in "
+                  f"{reset_seconds // 3600}h{(reset_seconds % 3600) // 60}m; honoring it.")
         # Persist every lookup variant (clean key and suffix) so cross-cycle
         # checks match the in-memory suffix-tolerant semantics.
         keys: list[str | None] = [model_name if not model_name else _model_key(model_name)]
@@ -260,7 +333,7 @@ def mark_model_exhausted(agent_name: str, model_name: str | None, persist: bool 
                 keys.append(suffix)
         for key in keys:
             with open(_quota_state_path(agent_name, key), "w") as f:
-                json.dump({"agent": agent_name, "model": model_name, "at": now_iso}, f)
+                json.dump(state, f)
     except OSError as e:
         print(f"[quota] Could not persist exhaustion mark: {e}")
 
@@ -2101,7 +2174,7 @@ def _babysit_with_fallback(
         code, out, err = plugin.run_mission(prompt, wt_path, is_continue=True, model=model_name)
 
         if code != 0 and is_quota_exhausted(out, err):
-            mark_model_exhausted(agent_name, model_name)
+            mark_model_exhausted(agent_name, model_name, stderr=err)
             print(f"[babysit] {agent_name}/{model_name} exhausted quota. Trying next candidate...")
             continue
 
@@ -2672,7 +2745,7 @@ def babysit_active_worktrees():
                     _record_worktree_progress(branch)
                     if agy_code != 0:
                         if is_quota_exhausted(agy_out, agy_err):
-                            mark_model_exhausted(agent_name, model_name)
+                            mark_model_exhausted(agent_name, model_name, stderr=agy_err)
                             _fallback()
                         _record_coderabbit_gate_failure(int(pr_num_val), branch, "Initial mission interrupted before completion", False)
                         break
@@ -2691,7 +2764,7 @@ def babysit_active_worktrees():
                     print(f"PR creation failed: {pr_create_err}")
                     break
                 elif agy_code != 0 and is_quota_exhausted(agy_out, agy_err):
-                    mark_model_exhausted(agent_name, model_name)
+                    mark_model_exhausted(agent_name, model_name, stderr=agy_err)
                     print(f"Agent {agent_name}/{model_name} exhausted quota on orphaned issue #{issue_number}.")
                     if not _fallback():
                         if made_any_progress:
@@ -3928,7 +4001,7 @@ def main():
                         )
                     break
                 elif agy_code != 0 and is_quota_exhausted(agy_out, agy_err):
-                    mark_model_exhausted(agent_name, model_name)
+                    mark_model_exhausted(agent_name, model_name, stderr=agy_err)
                     print(f"Agent {agent_name}/{model_name} exhausted quota on issue #{num}.")
                     if not _fallback():
                         print(f"All agents/models exhausted for issue #{num}. Removing worktree if safe.")
