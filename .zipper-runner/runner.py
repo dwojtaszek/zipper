@@ -1366,6 +1366,13 @@ def _authorized_pr(pr_number, issue_number=None, expected_head=None):
                 and str(state.get("pr_number")) == str(pr_number)
                 and state.get("branch") == branch and state.get("authorized_head") == sha):
             return pr
+        # A rewrite that leaves the tree untouched changed no content, so it can
+        # be adopted. This is the only recovery when the sole merge maintainer is
+        # also the PR author, because GitHub forbids approving your own PR, so the
+        # APPROVED-review path can never be satisfied on the maintainer's PRs.
+        if (user.get("login") in TRUSTED_AUTHORS and issue_number is not None
+                and _adopt_tree_identical_head(pr_number, issue_number, branch, sha)):
+            return pr
         # Unknown/legacy origins need a maintainer's explicit approval of this SHA.
         code, out, _ = run_cmd(
             ["gh", "api", f"repos/{GITHUB_REPOSITORY}/pulls/{pr_number}/reviews", "--paginate", "--slurp"],
@@ -1398,6 +1405,92 @@ def _pr_state_matches(state, pr_number, branch) -> bool:
         and str(state.get("pr_number")) == str(pr_number)
         and state.get("branch") == branch
     )
+
+
+# Emits "<tree> <parent>" for a single-parent commit and nothing otherwise. A
+# merge commit is refused because its extra parents can move the merge base,
+# which changes what a squash merge deletes; a root commit has no parent to pin.
+_COMMIT_IDENTITY_JQ = r'if (.parents | length) == 1 then "\(.commit.tree.sha) \(.parents[0].sha)" else "" end'
+
+
+def _commit_identity(sha) -> tuple[str, str] | None:
+    """The ``(tree, first parent)`` a commit points at, or None when unusable.
+
+    A tree SHA is a Merkle hash of the whole directory content, so two commits
+    that share a tree are byte-identical in content. GitHub keeps unreachable
+    commits readable through the API, so a force-pushed-away head still resolves.
+
+    The parent comes back with the tree because an equal tree alone does not pin
+    what a commit changes: a head parented on a newer ``main`` can carry the
+    recorded tree while dropping the files ``main`` added in between, and merging
+    it would delete them. Equal tree *and* parent means the two commits differ
+    only in message, author, and dates, so merging either has the same effect —
+    but only for a single-parent commit, so a merge commit and a root commit are
+    both refused.
+    """
+    if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha):
+        return None
+    code, out, _ = run_cmd(
+        ["gh", "api", f"repos/{GITHUB_REPOSITORY}/commits/{sha}", "--jq", _COMMIT_IDENTITY_JQ],
+        cwd=REPO_PATH,
+    )
+    if code != 0:
+        return None
+    parts = out.split()
+    if len(parts) != 2:
+        return None
+    tree, parent = parts
+    if not re.fullmatch(r"[0-9a-f]{40}", tree) or not re.fullmatch(r"[0-9a-f]{40}", parent):
+        return None
+    return tree, parent
+
+
+def _adopt_tree_identical_head(pr_number, issue_number, branch, current_sha) -> bool:
+    """Re-authorize a moved head whose tree is unchanged, and record it.
+
+    A repair mission that rewrites history only to relabel a checkpoint
+    (``wip:`` -> ``feat:``) leaves the tree byte-identical: no content changed, so
+    adopting the new head cannot smuggle in unreviewed work. This matters because
+    GitHub forbids approving your own pull request, so when the sole merge
+    maintainer is also the PR author the APPROVED-review path is unreachable and
+    the runner would otherwise stall that PR forever.
+
+    Every guard is a hard requirement, and any failure leaves the head
+    unauthorized: the recorded state must name this exact PR and branch, and both
+    commits must resolve to the same tree *and* the same parent. An unreadable
+    commit (API failure, expired token) can never authorize, and neither can an
+    equal tree hung off a different parent, which would delete whatever that
+    parent gained.
+
+    Returns True when the recorded head was advanced to ``current_sha``.
+    """
+    state = _load_pr_state(str(issue_number))
+    if not _pr_state_matches(state, pr_number, branch):
+        return False
+    recorded = state.get("authorized_head") or ""
+    if recorded == current_sha:
+        return False
+    recorded_identity = _commit_identity(recorded)
+    if not recorded_identity or recorded_identity != _commit_identity(current_sha):
+        return False
+    recorded_tree = recorded_identity[0]
+    print(f"[authorization] PR #{pr_number}: head {current_sha[:8]} carries the same tree and parent as the "
+          f"recorded {recorded[:8]} ({recorded_tree[:8]}); adopting it as provenance.")
+    _save_pr_state(str(issue_number), str(pr_number), branch, current_sha)
+    if _should_send_rate_limited(f"[Runner] PR #{pr_number} Head Re-adopted"):
+        send_email(
+            f"[Runner] PR #{pr_number} Head Re-adopted",
+            f"<h3>PR <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">#{pr_number}</a> "
+            f"head re-adopted</h3>"
+            f"<p><b>Recorded head:</b> <code>{html.escape(recorded)}</code><br>"
+            f"<b>Adopted head:</b> <code>{html.escape(str(current_sha))}</code><br>"
+            f"<b>Tree:</b> <code>{html.escape(recorded_tree)}</code><br>"
+            f"<b>Parent:</b> <code>{html.escape(recorded_identity[1])}</code></p>"
+            f"<p>Both commits point at the same tree and the same parent, so the rewrite changed no content — "
+            f"only the commit message or metadata. The runner has adopted the new head as provenance and "
+            f"continues its normal review and merge for it.</p>"
+        )
+    return True
 
 
 def _parse_gh_timestamp(value):
@@ -1440,6 +1533,16 @@ def _pr_head_ref(pr: dict) -> str:
     return (head.get("ref") or "") if isinstance(head, dict) else ""
 
 
+# GitHub refuses a review on your own pull request ("Can not approve your own
+# pull request"), so an APPROVED review is only reachable when a maintainer other
+# than the PR author is configured. A rewrite whose tree is unchanged is adopted
+# automatically, so this remediation applies only to a real content change.
+_APPROVE_REMEDIATION = (
+    "add an APPROVED review from a merge maintainer on the current head — or, if you authored the PR, "
+    "merge it directly, because GitHub blocks self-approval"
+)
+
+
 def _authorization_refusal(pr: dict, branch, recorded_head):
     """Explain why _authorized_pr refuses this open PR, and what fixes it.
 
@@ -1471,11 +1574,9 @@ def _authorization_refusal(pr: dict, branch, recorded_head):
         return (f"its head branch is now '{head.get('ref')}', not the recorded '{branch}'",
                 "restore the recorded branch name")
     if not recorded_head:
-        return ("the runner has no recorded head for this PR",
-                "add an APPROVED review from a merge maintainer on the current head")
+        return ("the runner has no recorded head for this PR", _APPROVE_REMEDIATION)
     if sha != recorded_head:
-        return (f"its head moved from the recorded {recorded_head[:8]} to {sha[:8]}",
-                "add an APPROVED review from a merge maintainer on the current head")
+        return (f"its head moved from the recorded {recorded_head[:8]} to {sha[:8]}", _APPROVE_REMEDIATION)
     return None
 
 
@@ -2933,7 +3034,7 @@ def _escalate_unrecorded_pr(pr: dict, *, require_green_and_stale: bool = True) -
         f"and will not merge it automatically. That happens when the branch, title, and body carry no issue "
         f"reference, or when they name an issue the runner never recorded work for.{waited}</p>"
         f"<p><b>To unblock:</b> name the issue the PR serves in its body or branch if it does not already, "
-        f"and add an <code>APPROVED</code> review from a merge maintainer on the current head.</p>"
+        f"and {html.escape(_APPROVE_REMEDIATION)}.</p>"
     )
 
 
