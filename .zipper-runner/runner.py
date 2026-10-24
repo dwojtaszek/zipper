@@ -1375,6 +1375,14 @@ def _coderabbit_rate_limited(out: str, err: str, code: int) -> tuple[bool, int, 
     all three are checked: an `error` record on stdout, a non-zero exit with a
     `Rate limit exceeded` message on stderr, and a plain-text mention in either.
     Returns (limited, wait_seconds, evidence).
+
+    The plain-text scan is confined to a non-zero exit. On exit 0 the CLI produced
+    a review, and its finding and completion records are authoritative: a finding
+    quotes the code under review, so a finding body can legitimately discuss a
+    "review limit" while the review itself succeeded. Reading that as a refusal
+    would skip the gate and let unresolved findings through. A structured
+    `error`/`rate_limit` record is an explicit refusal and is honoured on either
+    exit code.
     """
     evidence = ""
     wait_seconds = None
@@ -1397,7 +1405,7 @@ def _coderabbit_rate_limited(out: str, err: str, code: int) -> tuple[bool, int, 
             wait_seconds = _coderabbit_wait_seconds(f"{wait_time} {message}")
             break
 
-    if not evidence:
+    if not evidence and code != 0:
         combined = f"{err}\n{out}".lower()
         if any(phrase in combined for phrase in _CODERABBIT_LIMIT_PHRASES):
             evidence = (err or out).strip()

@@ -435,9 +435,85 @@ class CodeRabbitRateLimitTests(unittest.TestCase):
 
         gate = runner._run_coderabbit_pre_pr_check(self.temp_dir)
 
+        self.assertFalse(gate.ok)
+        self.assertIn("failed (exit 1)", gate.detail)
+
+    def test_whenASuccessfulReviewMentionsALimit_theFindingIsStillEnforced(self):
+        """A review that ran and found something must not be read as a refusal.
+
+        Finding bodies quote the code under review, so a finding can legitimately
+        discuss a "review limit" or "usage limit" while the review itself
+        succeeded. Reading that as a refusal would skip the gate and let
+        unresolved findings through."""
+        self._create_fake_cr(
+            'echo \'{"type":"finding","severity":"major","body":"the review limit check never fires"}\'\n'
+            'echo \'{"type":"complete","status":"review_completed","findings":1}\'',
+            exit_code=0,
+        )
+
+        gate = runner._run_coderabbit_pre_pr_check(self.temp_dir)
+
+        self.assertFalse(gate.ok, "an unresolved finding must still fail the gate")
+        self.assertFalse(gate.skipped)
+        self.assertIn("unresolved finding(s)", gate.detail)
+
+    def test_whenTheReviewSucceedsAndOnlyStdoutMentionsALimit_itIsNotARefusal(self):
+        """A clean, successful review whose prose mentions a limit is not a refusal."""
+        self._create_fake_cr(
+            'echo \'{"type":"complete","status":"review_completed","findings":0}\'\n'
+            'echo "checked against the review limit policy"',
+            exit_code=0,
+        )
+
+        gate = runner._run_coderabbit_pre_pr_check(self.temp_dir)
+
+        self.assertTrue(gate.ok)
+        self.assertFalse(gate.skipped, "a successful review is not a skip")
+        self.assertFalse(Path(runner._coderabbit_rate_limit_path()).exists(),
+                         "no window may be recorded for a review that ran")
+
+    def test_whenTheCliFailsForAnotherReason_noWindowIsRecorded(self):
+        self._create_fake_cr('echo "authentication failed" >&2', exit_code=1)
+
+        gate = runner._run_coderabbit_pre_pr_check(self.temp_dir)
+
         self.assertFalse(gate.ok, "a genuine CLI failure must still block")
         self.assertFalse(gate.skipped)
         self.assertFalse(Path(runner._coderabbit_rate_limit_path()).exists())
+
+    def test_whenTheStructuredRecordNamesTheRefusal_theMessageWordingDoesNotMatter(self):
+        """The record is machine-readable, so `errorType` decides — not the prose.
+
+        The CLI's message is not guaranteed to contain the phrase "rate limit"
+        (observed: "Too many requests"), and the text scan cannot see a refusal the
+        message does not name."""
+        payload = json.dumps({
+            "type": "error", "errorType": "rate_limit", "message": "Too many requests",
+            "recoverable": True, "details": {}, "metadata": {"waitTime": "11 minutes"},
+        })
+        self._create_fake_cr(f"echo '{payload}'", exit_code=1)
+
+        gate = runner._run_coderabbit_pre_pr_check(self.temp_dir)
+
+        self.assertTrue(gate.ok)
+        self.assertTrue(gate.skipped)
+        state = json.loads(Path(runner._coderabbit_rate_limit_path()).read_text())
+        self.assertEqual(state["wait_seconds"], 11 * 60)
+
+    def test_whenTheStructuredRecordAppearsOnASuccessfulExit_itIsStillARefusal(self):
+        """An explicit refusal record is honoured on either exit code, because it is
+        the CLI stating the outcome rather than the runner inferring one."""
+        payload = json.dumps({
+            "type": "error", "errorType": "rate_limit", "message": "Rate limit exceeded",
+            "recoverable": True, "details": {}, "metadata": {"waitTime": "7 minutes"},
+        })
+        self._create_fake_cr(f"echo '{payload}'", exit_code=0)
+
+        gate = runner._run_coderabbit_pre_pr_check(self.temp_dir)
+
+        self.assertTrue(gate.ok)
+        self.assertTrue(gate.skipped)
+        self.assertTrue(Path(runner._coderabbit_rate_limit_path()).exists())
 
     def test_waitTimeForms_areAllParsed(self):
         for wait_time, expected in (("19 minutes", 19 * 60), ("37m", 37 * 60),
