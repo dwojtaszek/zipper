@@ -3406,7 +3406,9 @@ def _fetch_upstream_publish_timestamp(name: str, version: str, ecosystem: str) -
             if code == 0 and out.strip():
                 try:
                     rel = json.loads(out)
-                    pub = rel.get("published_at") or rel.get("created_at")
+                    if rel.get("draft"):
+                        continue
+                    pub = rel.get("published_at")
                     if pub:
                         return datetime.fromisoformat(pub.replace("Z", "+00:00"))
                 except Exception:
@@ -3498,15 +3500,7 @@ def _check_dependabot_upstream_age(pr: dict, reviewed_head: str, now: datetime |
     head_branch = pr.get("headRefName", "")
     now_utc = now or datetime.now(timezone.utc)
 
-    # 1. Check for explicit recorded security exception
-    sec_record = _load_dependabot_security_exception(pr_num, reviewed_head)
-    if sec_record:
-        auth_by = sec_record.get("authorized_by")
-        reason = sec_record.get("reason", "security patch")
-        print(f"[dependabot] PR #{pr_num} has explicit auditable security exception authorized by {auth_by} (reason: {reason}). Bypassing 3-day upstream age rule.")
-        return True, f"Security exception authorized by {auth_by} ({reason})"
-
-    # 2. Check if a trusted maintainer approved the PR on GitHub with an explicit security rationale
+    # 1. Fetch current PR reviews to validate maintainer review state
     reviews = pr.get("reviews")
     if reviews is None:
         reviews = _gh_api_paginate_slurp(f"repos/{GITHUB_REPOSITORY}/pulls/{pr_num}/reviews")
@@ -3517,23 +3511,53 @@ def _check_dependabot_upstream_age(pr: dict, reviewed_head: str, now: datetime |
         if login in MERGE_MAINTAINERS and r.get("state") != "COMMENTED":
             latest[login] = r
 
-    for login, r in latest.items():
-        state = r.get("state")
-        commit_id = r.get("commit_id")
-        review_body = (r.get("body") or "").lower()
-        if state == "APPROVED" and commit_id == reviewed_head:
-            labels = [lbl.get("name", "").lower() for lbl in (pr.get("labels") or [])]
-            is_sec_pr = "security" in labels
-            if "authorize-security" in review_body or is_sec_pr:
-                if not DRY_RUN:
-                    _record_dependabot_security_exception(
-                        pr_num, reviewed_head, login,
-                        f"Maintainer approval review (security update): {review_body or 'approved'}"
-                    )
-                    print(f"[dependabot] PR #{pr_num} maintainer {login} approved security update for head {reviewed_head}. Exception recorded.")
-                else:
-                    print(f"[dependabot] PR #{pr_num} maintainer {login} approved security update for head {reviewed_head}. [DRY RUN] Exception recording bypassed.")
-                return True, f"Security update approved by maintainer {login}"
+    # 2. Check for explicit recorded security exception (and revalidate against current reviews)
+    sec_record = _load_dependabot_security_exception(pr_num, reviewed_head)
+    if sec_record:
+        auth_by = sec_record.get("authorized_by")
+        reason = sec_record.get("reason", "security patch")
+
+        revoked = False
+        if auth_by in latest:
+            r = latest[auth_by]
+            if r.get("state") != "APPROVED" or r.get("commit_id") != reviewed_head:
+                revoked = True
+        for login, r in latest.items():
+            if r.get("state") == "CHANGES_REQUESTED":
+                revoked = True
+                break
+
+        if revoked:
+            print(f"[dependabot] PR #{pr_num} persisted security exception by {auth_by} is revoked by current maintainer reviews -> INVALIDATED.")
+            if not DRY_RUN:
+                try:
+                    os.unlink(_security_exception_path(pr_num))
+                except OSError:
+                    pass
+        else:
+            print(f"[dependabot] PR #{pr_num} has explicit auditable security exception authorized by {auth_by} (reason: {reason}). Bypassing 3-day upstream age rule.")
+            return True, f"Security exception authorized by {auth_by} ({reason})"
+
+    # 3. Check if a trusted maintainer approved the PR on GitHub with an explicit security rationale
+    has_changes_requested = any(r.get("state") == "CHANGES_REQUESTED" for r in latest.values())
+    if not has_changes_requested:
+        for login, r in latest.items():
+            state = r.get("state")
+            commit_id = r.get("commit_id")
+            review_body = (r.get("body") or "").lower()
+            if state == "APPROVED" and commit_id == reviewed_head:
+                labels = [lbl.get("name", "").lower() for lbl in (pr.get("labels") or [])]
+                is_sec_pr = "security" in labels
+                if "authorize-security" in review_body or is_sec_pr:
+                    if not DRY_RUN:
+                        _record_dependabot_security_exception(
+                            pr_num, reviewed_head, login,
+                            f"Maintainer approval review (security update): {review_body or 'approved'}"
+                        )
+                        print(f"[dependabot] PR #{pr_num} maintainer {login} approved security update for head {reviewed_head}. Exception recorded.")
+                    else:
+                        print(f"[dependabot] PR #{pr_num} maintainer {login} approved security update for head {reviewed_head}. [DRY RUN] Exception recording bypassed.")
+                    return True, f"Security update approved by maintainer {login}"
 
     # 3. Extract updated dependencies
     commits = pr.get("commits")

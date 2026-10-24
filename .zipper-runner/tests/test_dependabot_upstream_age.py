@@ -200,6 +200,14 @@ updated-dependencies:
         ts_none = runner._fetch_upstream_publish_timestamp("actions/checkout", "4", "github-actions")
         self.assertIsNone(ts_none)
 
+        # Draft release or missing published_at -> None (fail closed, no created_at fallback)
+        mock_run_cmd.side_effect = [
+            (0, json.dumps({"draft": True, "created_at": "2026-10-10T12:00:00Z", "published_at": None}), ""),
+            (0, json.dumps({"draft": False, "created_at": "2026-10-10T12:00:00Z"}), ""),
+        ]
+        ts_draft = runner._fetch_upstream_publish_timestamp("actions/checkout", "4.2.0", "github-actions")
+        self.assertIsNone(ts_draft)
+
     @patch("runner._fetch_upstream_publish_timestamp")
     def test_check_upstream_age_single_eligible_and_blocked(self, mock_fetch):
         # Older than 3 days -> eligible
@@ -383,9 +391,17 @@ updated-dependencies:
                 },
             ],
         )
+
+        # Pre-record persisted exception (as if approved in earlier scan)
+        runner.DRY_RUN = False
+        runner._record_dependabot_security_exception(108, "sha108", "dwojtaszek", "CVE patch")
+        self.assertTrue(os.path.exists(runner._security_exception_path(108)))
+
+        # When evaluated with revoked review, persisted exception is invalidated/unlinked
         eligible, msg = runner._check_dependabot_upstream_age(pr, "sha108", now=self.now)
         self.assertFalse(eligible)
         self.assertIn("too new", msg.lower())
+        self.assertFalse(os.path.exists(runner._security_exception_path(108)))
 
     @patch("runner._fetch_upstream_publish_timestamp")
     def test_security_exception_unauthorized_user_review_does_not_bypass(self, mock_fetch):
