@@ -1,10 +1,11 @@
 """Tests for the systemd timer units that drive the runner.
 
-The deploy timer exists to make a merged change live within about a minute. That
-promise is a property of the unit file, not of the script it runs, so it is
-guarded here: systemd's default `AccuracySec=1min` lets a `*:0/1` timer slip to
-113 seconds, which skips a whole minute of deploys — measured on the live host as
-5.7% of ticks. A one-minute cadence cannot tolerate a one-minute slack.
+The deploy timer exists to make a merged change live within about a minute. Part
+of that promise is a property of the unit file rather than of the script it runs:
+systemd's default `AccuracySec` is one minute, which is this timer's entire
+cadence, so a tick may fire up to 60 seconds after its scheduled elapse. A
+one-minute cadence cannot tolerate a one-minute slack, so the accuracy is pinned
+here and guarded below.
 
 Run from the .zipper-runner directory:
     python3 -m unittest discover -s tests
@@ -55,8 +56,9 @@ def _accuracy_seconds(path: Path) -> int | None:
 
 class DeployTimerAccuracyTests(unittest.TestCase):
     def test_deployTimer_setsAnAccuracyBelowItsCadence(self):
-        """A one-minute cadence with the default one-minute slack skips whole
-        minutes. The deploy timer must be tighter than the interval it promises."""
+        """The default accuracy equals this timer's whole cadence, so a tick may
+        fire up to 60s late. The timer must be tighter than the interval it
+        promises."""
         unit = _SYSTEMD_DIR / "zipper-deploy.timer"
         self.assertTrue(unit.exists(), "the deploy timer unit must be installed from the repo")
         self.assertEqual(_effective_on_calendar(unit), "*:0/1")
@@ -65,7 +67,7 @@ class DeployTimerAccuracyTests(unittest.TestCase):
 
         self.assertIsNotNone(
             accuracy, "the deploy timer must set AccuracySec explicitly: the 1min default "
-                      "equals its whole cadence and skips ticks")
+                      "equals its whole cadence")
         self.assertLess(accuracy, 60,
                         f"AccuracySec={accuracy}s is not tighter than the 1-minute cadence")
 
