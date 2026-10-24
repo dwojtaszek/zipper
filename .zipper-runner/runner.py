@@ -51,6 +51,17 @@ REPO_PATH = os.environ.get("REPO_PATH", os.path.abspath(os.path.join(RUNNER_BASE
 WORKTREES_BASE = os.environ.get("WORKTREES_BASE", os.path.join(REPO_PATH, ".worktrees"))
 PLUGINS_DIR = os.environ.get("PLUGINS_DIR", os.path.join(RUNNER_BASE, "plugins"))
 LOCK_FILE_PATH = os.environ.get("LOCK_FILE_PATH", os.path.join(RUNNER_BASE, "runner.lock"))
+# The babysit timer fires every 5 minutes while an intake run holds LOCK_FILE_PATH
+# for the whole of a 20-42 minute agent mission, so most babysit firings used to
+# exit at the lock having done nothing (67% of the last 60). Babysitting is
+# bounded work on an existing PR and does not need the intake lock, so it takes
+# this one instead, and an intake run takes it only around its own babysit pass.
+# The two processes are still serialized against each other's git mutations by
+# REPO_MUTATION_LOCK_PATH, which is what actually protects the checkout.
+BABYSIT_LOCK_PATH = os.environ.get("BABYSIT_LOCK_PATH", os.path.join(RUNNER_BASE, "babysit.lock"))
+# Non-blocking by default: both callers have a timer behind them, and waiting
+# inside a firing only delays the next one.
+BABYSIT_LOCK_TIMEOUT = int(os.environ.get("BABYSIT_LOCK_TIMEOUT", "0"))
 # Shared with .zipper-runner/deploy-main.sh, which fast-forwards this checkout from
 # outside the runner. The runner's own lock cannot serve this purpose: it is held
 # for a whole agent mission, so sharing it would stall every deploy for the 20-42
@@ -4254,17 +4265,28 @@ def _sync_main_repo_locked():
     return True
 
 
-def show_status():
-    print("=== Zipper Runner Diagnostics ===")
-    locked = False
+def _lock_is_held(lock_path: str) -> bool:
     try:
-        test_lock = open(LOCK_FILE_PATH, "a")
+        test_lock = open(lock_path, "a")
+    except OSError:
+        return False
+    try:
         fcntl.flock(test_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         fcntl.flock(test_lock, fcntl.LOCK_UN)
-        test_lock.close()
+        return False
     except (IOError, OSError):
-        locked = True
-    print(f"Runner Lock Status: {'ACTIVE / LOCKED' if locked else 'IDLE / UNLOCKED'}")
+        return True
+    finally:
+        test_lock.close()
+
+
+def show_status():
+    print("=== Zipper Runner Diagnostics ===")
+    for label, path in (("Runner", LOCK_FILE_PATH), ("Babysit", BABYSIT_LOCK_PATH),
+                        ("Main checkout", REPO_MUTATION_LOCK_PATH)):
+        state = "ACTIVE / LOCKED" if _lock_is_held(path) else "IDLE / UNLOCKED"
+        print(f"{label} Lock Status: {state}")
+    print(f"Main checkout lock path: {REPO_MUTATION_LOCK_PATH}")
 
     code, branch, _ = run_cmd(["git", "branch", "--show-current"], cwd=REPO_PATH)
     branch = branch.strip()
@@ -4315,15 +4337,21 @@ def show_status():
     sys.exit(0)
 
 
-def _heartbeat_path() -> str:
-    return os.path.join(STATE_DIR, "runner-heartbeat.json")
+def _heartbeat_path(kind: str = "runner") -> str:
+    """Path of the heartbeat for one lock kind ("runner" or "babysit").
+
+    Per-lock, not global: a babysit run no longer holds the intake lock, so a
+    shared heartbeat would let one kind's reclaim logic judge the other kind's
+    holder and kill a healthy process.
+    """
+    return os.path.join(STATE_DIR, f"{kind}-heartbeat.json")
 
 
-def _write_heartbeat() -> None:
+def _write_heartbeat(kind: str = "runner") -> None:
     """Record the lock holder's pid/pgid/start so a later cycle can reclaim a hung run."""
     try:
         os.makedirs(STATE_DIR, exist_ok=True)
-        with open(_heartbeat_path(), "w") as f:
+        with open(_heartbeat_path(kind), "w") as f:
             json.dump(
                 {"pid": os.getpid(), "pgid": os.getpgid(0), "started": datetime.now(timezone.utc).isoformat()},
                 f,
@@ -4332,7 +4360,7 @@ def _write_heartbeat() -> None:
         print(f"[watchdog] Could not write heartbeat: {e}")
 
 
-def _reclaim_stale_lock() -> bool:
+def _reclaim_stale_lock(kind: str = "runner") -> bool:
     """True when the lock holder has run past MAX_RUN_SECONDS and was killed.
 
     flock is released by the kernel when the holder dies, so a held lock always
@@ -4342,7 +4370,7 @@ def _reclaim_stale_lock() -> bool:
     Without a usable heartbeat nothing can be proven about the holder, so the
     takeover fails closed (returns False) and the caller exits normally."""
     try:
-        with open(_heartbeat_path()) as f:
+        with open(_heartbeat_path(kind)) as f:
             heartbeat = json.load(f)
         started = datetime.fromisoformat(heartbeat["started"])
         pid = int(heartbeat["pid"])
@@ -4379,42 +4407,72 @@ def _reclaim_stale_lock() -> bool:
     return True
 
 
+def _acquire_lock(lock_path: str, timeout_sec: int, kind: str):
+    """Take an exclusive lock, reclaiming a wedged holder. Returns the open file, or None.
+
+    The file must stay open for as long as the lock is held: flock is released when
+    the descriptor closes, and the kernel releases it if the holder dies, which is
+    what makes a crash recoverable without a stale-lock file convention.
+    """
+    lock_file = open(lock_path, "a")
+    start = time.time()
+    first_attempt = True
+    while True:
+        try:
+            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return lock_file
+        except (IOError, BlockingIOError):
+            if first_attempt:
+                if timeout_sec > 0:
+                    print(f"{kind} lock held by another instance. Waiting up to {timeout_sec}s...")
+                first_attempt = False
+            if time.time() - start >= timeout_sec:
+                break
+            time.sleep(5)
+
+    if _reclaim_stale_lock(kind):
+        try:
+            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return lock_file
+        except (IOError, BlockingIOError):
+            pass
+    lock_file.close()
+    return None
+
+
+def _release_lock(lock_file) -> None:
+    if lock_file is None:
+        return
+    try:
+        fcntl.flock(lock_file, fcntl.LOCK_UN)
+    except (IOError, OSError):
+        pass
+    try:
+        lock_file.close()
+    except OSError:
+        pass
+
+
 def main():
     global AGENT_CANDIDATES
 
     if STATUS_ONLY:
         show_status()
 
-    lock_file = open(LOCK_FILE_PATH, "a")
-    lock_timeout_sec = int(os.environ.get("RUNNER_LOCK_TIMEOUT", "120"))
-    start_lock = time.time()
-    acquired = False
-    first_attempt = True
-    while True:
-        try:
-            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            acquired = True
-            break
-        except (IOError, BlockingIOError):
-            if first_attempt:
-                print(f"Runner lock held by another instance. Waiting up to {lock_timeout_sec}s...")
-                first_attempt = False
-            if time.time() - start_lock >= lock_timeout_sec:
-                break
-            time.sleep(5)
+    if BABYSIT_ONLY:
+        # A babysit firing does not pick up new issues, so it must not contend with
+        # the intake lock: that lock is held for a whole agent mission, which is why
+        # most babysit firings used to exit having done nothing.
+        lock_file = _acquire_lock(BABYSIT_LOCK_PATH, BABYSIT_LOCK_TIMEOUT, "Babysit")
+    else:
+        lock_file = _acquire_lock(
+            LOCK_FILE_PATH, int(os.environ.get("RUNNER_LOCK_TIMEOUT", "120")), "Runner")
 
-    if not acquired and _reclaim_stale_lock():
-        try:
-            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            acquired = True
-        except (IOError, BlockingIOError):
-            acquired = False
-
-    if not acquired:
+    if lock_file is None:
         print("Another instance of the runner is active. Exiting.")
         sys.exit(0)
 
-    _write_heartbeat()
+    _write_heartbeat("babysit" if BABYSIT_ONLY else "runner")
     _prune_stale_state_files()
 
     print("Autonomous Runner Wakeup")
@@ -4427,7 +4485,25 @@ def main():
         refresh_models_table()
         sys.exit(0)
 
-    babysit_active_worktrees()
+    if BABYSIT_ONLY:
+        # This run holds the babysit lock already, so the pass runs directly.
+        try:
+            babysit_active_worktrees()
+        finally:
+            _release_lock(lock_file)
+    else:
+        # An intake run also babysits, but a dedicated babysit firing may hold the
+        # lock right now. Skipping is correct and costs nothing: the timer retries
+        # in minutes, and the intake run's remaining job is the mission, not this.
+        babysit_lock = _acquire_lock(BABYSIT_LOCK_PATH, BABYSIT_LOCK_TIMEOUT, "Babysit")
+        if babysit_lock is None:
+            print("Babysit pass skipped: another babysit is active.")
+        else:
+            _write_heartbeat("babysit")
+            try:
+                babysit_active_worktrees()
+            finally:
+                _release_lock(babysit_lock)
 
     # Recalculate after babysit — merged/closed PRs may have been cleaned up
     active_count = _active_worktree_count()
@@ -4692,6 +4768,12 @@ def main():
         print(f"Babysit-only: new issue pickup disabled ({active_count}/{MAX_ACTIVE_WORKTREES} active worktrees).")
     else:
         print(f"At capacity ({active_count}/{MAX_ACTIVE_WORKTREES} active worktrees). Skipping new issue pickup.")
+
+    # Explicit rather than relying on process exit, so a caller that runs main()
+    # in-process does not keep the lock after it returns.
+    if not BABYSIT_ONLY:
+        _release_lock(lock_file)
+
 
 if __name__ == "__main__":
     main()
