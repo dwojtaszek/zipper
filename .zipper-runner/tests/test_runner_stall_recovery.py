@@ -28,6 +28,7 @@ Run from the .zipper-runner directory:
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -111,6 +112,23 @@ class _RunnerFixture:
         git("commit", "-m", "feat: rewritten work")
         self.new_head = git("rev-parse", "HEAD")
 
+        # A rewrite that only relabels a checkpoint: a different commit SHA over
+        # the byte-identical tree of the recorded head, with the same parent.
+        self.old_tree = git("rev-parse", f"{self.old_head}^{{tree}}")
+        self.old_parent = git("rev-parse", f"{self.old_head}^")
+        self.same_tree_head = subprocess.check_output(
+            ["git", "-C", str(self.repo), "commit-tree", self.old_tree, "-p", self.old_parent,
+             "-m", "feat: relabelled checkpoint"],
+            text=True).strip()
+        # The recorded tree hung off a newer main instead. Same content, but it
+        # drops whatever main gained in between, so merging it would delete
+        # main2.txt. An equal tree alone must never authorize this.
+        self.retargeted_head = subprocess.check_output(
+            ["git", "-C", str(self.repo), "commit-tree", self.old_tree, "-p", self.main_head,
+             "-m", "feat: relabelled onto newer main"],
+            text=True).strip()
+        self.new_tree = git("rev-parse", f"{self.new_head}^{{tree}}")
+
         subprocess.run(["git", "clone", "--bare", str(self.repo), str(root / "origin")],
                        check=True, capture_output=True)
         git("remote", "add", "origin", str(root / "origin"))
@@ -129,6 +147,15 @@ class _RunnerFixture:
         (root / "pr.json").write_text(json.dumps(self.pr))
         (root / "reviews.json").write_text(json.dumps([]))
         (root / "pr_list.json").write_text(json.dumps(pr_list if pr_list is not None else []))
+        # Commit -> "tree parent" map the stub gh serves for the commits API. A
+        # SHA absent from this map resolves to no identity, so adoption cannot
+        # happen for it.
+        (root / "identities.json").write_text(json.dumps({
+            self.old_head: f"{self.old_tree} {self.old_parent}",
+            self.new_head: f"{self.new_tree} {self.main_head}",
+            self.same_tree_head: f"{self.old_tree} {self.old_parent}",
+            self.retargeted_head: f"{self.old_tree} {self.main_head}",
+        }))
 
         self._write_stub_gh()
         for name, body in (("coderabbit", '#!/bin/sh\necho \'{"type":"complete","status":"review_completed","findings":0}\'\n'),
@@ -185,6 +212,11 @@ class _RunnerFixture:
             "elif args[0] == 'api':\n"
             "    if args[1].endswith('/reviews'):\n"
             "        print(json.dumps([load('reviews.json', [])]))\n"
+            "    elif '/commits/' in args[1]:\n"
+            "        identities = load('identities.json', {})\n"
+            "        print(identities.get(args[1].split('/commits/')[-1], ''))\n"
+            "        if (root / 'commits-fail').exists():\n"
+            "            sys.exit(1)\n"
             "    else:\n"
             "        specific = root / ('pr-%s.json' % args[1].split('/')[-1])\n"
             "        print(specific.read_text() if specific.exists() else (root / 'pr.json').read_text())\n"
@@ -418,6 +450,207 @@ class BlockedWorktreeEscalationTests(unittest.TestCase):
         self.assertEqual(len(self.fixture.emails.messages), 3)
 
 
+class TreeIdenticalHeadAdoptionTests(unittest.TestCase):
+    """A force-push that leaves the tree and parent untouched changed no content,
+    so the runner adopts the new head. This is the only recovery when the sole
+    merge maintainer is also the PR author, because GitHub forbids self-approval."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.fixture = _RunnerFixture(self.root)
+        self.runner = self.fixture.runner
+
+    def tearDown(self):
+        self.fixture.close()
+        self.tmp.cleanup()
+
+    def _write_pr(self, sha, **overrides):
+        pr = dict(self.fixture.pr)
+        pr["head"] = dict(pr["head"], sha=sha)
+        pr.update(overrides)
+        (self.root / "pr.json").write_text(json.dumps(pr))
+        return pr
+
+    def _recorded_head(self):
+        return json.loads((self.root / "state" / "issue-42.json").read_text())["authorized_head"]
+
+    def test_sameTreeHead_isAdoptedAndRecorded(self):
+        """A different commit over the byte-identical tree of the recorded head."""
+        self.assertNotEqual(self.fixture.same_tree_head, self.fixture.old_head)
+        self._write_pr(self.fixture.same_tree_head)
+        authorized = self.runner._authorized_pr(99, "42")
+        self.assertIsNotNone(authorized, "a tree-identical head must be adopted")
+        self.assertEqual(self._recorded_head(), self.fixture.same_tree_head,
+                         "adoption must persist the new head as provenance")
+
+    def test_differentTreeHead_isNotAdopted(self):
+        """new_head carries different content, so it must stay unauthorized."""
+        self._write_pr(self.fixture.new_head)
+        self.assertIsNone(self.runner._authorized_pr(99, "42"))
+        self.assertEqual(self._recorded_head(), self.fixture.old_head,
+                         "an unadopted head must not change the record")
+
+    def test_sameTreeOnADifferentParent_isNotAdopted(self):
+        """The recorded tree hung off a newer main instead. The content is the
+        same, but merging it would delete what main gained in between, so an
+        equal tree alone must not authorize it."""
+        self.assertNotEqual(self.fixture.retargeted_head, self.fixture.old_head)
+        self.assertEqual(
+            subprocess.check_output(
+                ["git", "-C", str(self.fixture.repo), "rev-parse",
+                 f"{self.fixture.retargeted_head}^{{tree}}"], text=True).strip(),
+            self.fixture.old_tree,
+            "the fixture must give this head the recorded tree for the test to mean anything",
+        )
+        self.assertNotEqual(
+            subprocess.check_output(
+                ["git", "-C", str(self.fixture.repo), "rev-parse",
+                 f"{self.fixture.retargeted_head}^"], text=True).strip(),
+            self.fixture.old_parent,
+            "the fixture must give this head a different parent for the test to mean anything",
+        )
+        self._write_pr(self.fixture.retargeted_head)
+        self.assertIsNone(self.runner._authorized_pr(99, "42"))
+        self.assertEqual(self._recorded_head(), self.fixture.old_head,
+                         "an unadopted head must not change the record")
+
+    def test_malformedCommitIdentity_isNotAdopted(self):
+        """A malformed API response must not be read as an identity match."""
+        (self.root / "identities.json").write_text(json.dumps({
+            self.fixture.old_head: f"{self.fixture.old_tree} {self.fixture.old_parent}",
+            self.fixture.same_tree_head: f"{self.fixture.old_tree} not-a-sha",
+        }))
+        self._write_pr(self.fixture.same_tree_head)
+        self.assertIsNone(self.runner._authorized_pr(99, "42"))
+        self.assertEqual(self._recorded_head(), self.fixture.old_head)
+
+    def test_missingParent_isNotAdopted(self):
+        """A root commit has no parent, so the API emits only a tree. A one-field
+        response is not an identity match either."""
+        (self.root / "identities.json").write_text(json.dumps({
+            self.fixture.old_head: f"{self.fixture.old_tree} {self.fixture.old_parent}",
+            self.fixture.same_tree_head: self.fixture.old_tree,
+        }))
+        self._write_pr(self.fixture.same_tree_head)
+        self.assertIsNone(self.runner._authorized_pr(99, "42"))
+        self.assertEqual(self._recorded_head(), self.fixture.old_head)
+
+    def test_failedCommitLookup_isNotAdopted(self):
+        """A failed lookup is not evidence of anything, even when the command
+        still printed a usable identity before failing."""
+        (self.root / "commits-fail").write_text("1")
+        self._write_pr(self.fixture.same_tree_head)
+        self.assertIsNone(self.runner._authorized_pr(99, "42"))
+        self.assertEqual(self._recorded_head(), self.fixture.old_head)
+
+    def test_unreadableTree_isNotAdopted(self):
+        """An unknown SHA resolves to no commit identity, which must never authorize."""
+        self._write_pr("b" * 40)
+        self.assertIsNone(self.runner._authorized_pr(99, "42"))
+        self.assertEqual(self._recorded_head(), self.fixture.old_head)
+
+    def test_dryRun_reportsAdoptionWithoutPersistingIt(self):
+        """A diagnostic run must not advance provenance or swallow the adoption
+        email: recording the head here would make the next real run take the
+        exact-head path, so the operator would never learn about the adoption."""
+        with patch.object(self.runner, "DRY_RUN", True):
+            self._write_pr(self.fixture.same_tree_head)
+            self.assertIsNotNone(self.runner._authorized_pr(99, "42"),
+                                 "a dry run should still report the PR as authorized")
+        self.assertEqual(self._recorded_head(), self.fixture.old_head,
+                         "a dry run must not advance the recorded head")
+        self.assertEqual(self.fixture.emails.subjects(), [],
+                         "a dry run must not send the adoption email")
+        # A later real run still adopts and still notifies.
+        self._write_pr(self.fixture.same_tree_head)
+        self.assertIsNotNone(self.runner._authorized_pr(99, "42"))
+        self.assertEqual(self._recorded_head(), self.fixture.same_tree_head)
+        self.assertEqual(len(self.fixture.emails.subjects()), 1)
+
+    def test_bothTreesUnreadable_isNotAdopted(self):
+        """An API outage resolves no identity for either side. Two unreadable
+        commits are not evidence of equality, so this must never authorize."""
+        (self.root / "state" / "issue-42.json").write_text(json.dumps({
+            "pr_number": "99", "branch": "fix/ISSUE-42-proof", "authorized_head": "d" * 40,
+        }))
+        self._write_pr("b" * 40)
+        self.assertIsNone(self.runner._authorized_pr(99, "42"))
+        self.assertEqual(self._recorded_head(), "d" * 40)
+
+    def test_adoption_requiresTheRecordToNameThisPr(self):
+        (self.root / "state" / "issue-42.json").write_text(json.dumps({
+            "pr_number": "77", "branch": "fix/ISSUE-42-proof", "authorized_head": self.fixture.old_head,
+        }))
+        self._write_pr(self.fixture.same_tree_head)
+        self.assertIsNone(self.runner._authorized_pr(99, "42"))
+
+    def test_adoption_requiresTheRecordedBranch(self):
+        (self.root / "state" / "issue-42.json").write_text(json.dumps({
+            "pr_number": "99", "branch": "fix/ISSUE-42-other", "authorized_head": self.fixture.old_head,
+        }))
+        self._write_pr(self.fixture.same_tree_head)
+        self.assertIsNone(self.runner._authorized_pr(99, "42"))
+
+    def test_adoption_requiresATrustedAuthor(self):
+        self._write_pr(self.fixture.same_tree_head, user={"login": "outsider", "type": "User", "id": 7})
+        self.assertIsNone(self.runner._authorized_pr(99, "42"))
+        self.assertEqual(self._recorded_head(), self.fixture.old_head)
+
+    def test_adoption_sendsOneEmailAndIsIdempotent(self):
+        """The first call adopts and records; later calls take the exact-head
+        provenance path, so the operator gets one notification, not one per cycle."""
+        self._write_pr(self.fixture.same_tree_head)
+        for _ in range(5):
+            self.assertIsNotNone(self.runner._authorized_pr(99, "42"))
+        subjects = self.fixture.emails.subjects()
+        self.assertEqual(len(subjects), 1, f"expected one adoption email, got {subjects}")
+        self.assertIn("Head Re-adopted", subjects[0])
+        _subject, body = self.fixture.emails.messages[0]
+        self.assertIn(self.fixture.old_head, body)
+        self.assertIn(self.fixture.same_tree_head, body)
+
+    def test_adoption_isRefusedWhenExpectedHeadIsPassed(self):
+        """A caller that demands a specific head (the merge path) must never get
+        a different one back, even when the tree matches."""
+        self._write_pr(self.fixture.same_tree_head)
+        self.assertIsNone(self.runner._authorized_pr(99, "42", self.fixture.old_head))
+        self.assertEqual(self._recorded_head(), self.fixture.old_head)
+
+
+@unittest.skipUnless(shutil.which("jq"), "the real jq program is what these tests pin")
+class CommitIdentityQueryTests(unittest.TestCase):
+    """The identity query decides what adoption sees, so run the runner's real
+    jq program over real GitHub commit payloads instead of trusting a stub's
+    imitation of it. `gh api --jq` uses the same program language."""
+
+    def setUp(self):
+        spec = importlib.util.spec_from_file_location("jq_runner", BASE / "runner.py")
+        self.runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.runner)
+
+    def _query(self, payload):
+        proc = subprocess.run(["jq", "-r", self.runner._COMMIT_IDENTITY_JQ],
+                              input=json.dumps(payload), capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        return proc.stdout.strip()
+
+    def test_singleParentCommit_yieldsTreeAndParent(self):
+        out = self._query({"commit": {"tree": {"sha": "a" * 40}}, "parents": [{"sha": "b" * 40}]})
+        self.assertEqual(out, f"{'a' * 40} {'b' * 40}")
+
+    def test_mergeCommit_yieldsNothing(self):
+        """A second parent can move the merge base, which changes what a squash
+        merge deletes, so a merge commit must never resolve to an identity."""
+        out = self._query({"commit": {"tree": {"sha": "a" * 40}},
+                           "parents": [{"sha": "b" * 40}, {"sha": "c" * 40}]})
+        self.assertEqual(out, "")
+
+    def test_rootCommit_yieldsNothing(self):
+        out = self._query({"commit": {"tree": {"sha": "a" * 40}}, "parents": []})
+        self.assertEqual(out, "")
+
+
 class StateHardeningTests(unittest.TestCase):
     """A damaged state file must not crash the cycle every five minutes."""
 
@@ -442,6 +675,37 @@ class StateHardeningTests(unittest.TestCase):
         (self.root / "state" / "issue-42.json").write_text('"not a mapping"')
         self.runner._escalate_blocked_worktree(99, "42", "fix/ISSUE-42-proof")
         self.assertEqual(self.fixture.emails.messages, [])
+
+    def test_savePrState_writesOnlyTheProvenanceKeys(self):
+        """_save_pr_state rebuilds the file, so it is only safe while this file
+        holds nothing else. Every reader reads at most these four keys; an
+        unfinished mission's local_head/completion_ready/blocker live in
+        pr-<N>-coderabbit-gate.json instead."""
+        self.runner._save_pr_state("42", "99", "fix/ISSUE-42-proof", "a" * 40)
+        state = json.loads((self.root / "state" / "issue-42.json").read_text())
+        self.assertEqual(set(state), {"pr_number", "branch", "created_at", "authorized_head"})
+        self.assertEqual(state["authorized_head"], "a" * 40)
+
+    def test_savePrState_omitsAHeadThatDoesNotResolve(self):
+        """A record is provenance. Storing a head that is not a real commit would
+        hand every later authorization check a value it can never match."""
+        for bogus in ("not-a-sha", "", "a" * 39, "a" * 41):
+            with self.subTest(head=bogus):
+                self.runner._save_pr_state("42", "99", "no/such/branch", bogus)
+                state = json.loads((self.root / "state" / "issue-42.json").read_text())
+                self.assertNotIn("authorized_head", state,
+                                 "an unresolvable head must never be recorded as provenance")
+
+    def test_savePrState_preservesTheSeparateGateRecord(self):
+        """The gate record carries the pending-retry fields, so a provenance save
+        for the same PR must leave it intact."""
+        self.runner._record_coderabbit_gate_failure(99, "fix/ISSUE-42-proof", "boom", completion_ready=False)
+        gate_path = self.root / "state" / "pr-99-coderabbit-gate.json"
+        before = json.loads(gate_path.read_text())
+        self.runner._save_pr_state("42", "99", "fix/ISSUE-42-proof", "a" * 40)
+        self.assertEqual(json.loads(gate_path.read_text()), before,
+                         "a provenance save must not touch the gate record")
+        self.assertIs(self.runner._is_coderabbit_gate_failed(99), True)
 
     def test_ciStatus_malformedRollup_isPendingNotACrash(self):
         """A null or malformed rollup must not raise: the cycle repeats every
