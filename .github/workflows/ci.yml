@@ -359,7 +359,13 @@ jobs:
       # 1060 real failures were reported as a green leg).
       - name: Unit tests (non-Linux)
         if: matrix.coverage != true
-        run: dotnet test src/Zipper.Tests/Zipper.Tests.csproj -c Release --no-build --logger "console;verbosity=normal"
+        shell: bash
+        run: |
+          dotnet test src/Zipper.Tests/Zipper.Tests.csproj \
+            -c Release --no-build \
+            --logger "console;verbosity=normal" \
+            --logger "junit;LogFilePath=TestResults/test-results.xml" \
+            --results-directory ./TestResults
 
       - name: Analyzer unit tests (non-Linux)
         if: matrix.coverage != true
@@ -447,6 +453,7 @@ jobs:
         with:
           name: zipper-${{ matrix.platform }}
           path: publish/${{ matrix.platform }}
+          if-no-files-found: error
           retention-days: 30
 
       - name: Record immutable uploaded artifact identity
@@ -465,6 +472,7 @@ jobs:
         with:
           name: zipper-receipt-${{ matrix.platform }}
           path: artifact-identity-${{ matrix.platform }}.json
+          if-no-files-found: error
           retention-days: 30
 
       # Hand the caller's `goldens` job the accepted Linux candidate. The
@@ -487,4 +495,17 @@ jobs:
         with:
           name: zipper-cli-linux
           path: publish-bin/
+          if-no-files-found: error
           retention-days: 1
+
+      - name: Upload failure diagnostics (TestResults and E2E)
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: test-diagnostics-${{ matrix.platform }}
+          path: |
+            TestResults
+            test_output
+            results
+          if-no-files-found: ignore
+          retention-days: 30

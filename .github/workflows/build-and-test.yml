@@ -100,6 +100,8 @@ jobs:
       actions: read
       pull-requests: read
       models: read
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -206,6 +208,49 @@ jobs:
             Commits:
             ${{ steps.pr_notes.outputs.commit_log }}
 
+      - name: Generate build provenance attestation
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-path: |
+            artifacts/zipper-linux-x64/zipper-linux-x64
+            artifacts/zipper-win-x64/zipper-win-x64.exe
+            artifacts/zipper-osx-arm64/zipper-osx-arm64
+
+      - name: Generate SBOM (Syft)
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: artifacts
+          format: spdx-json
+          output-file: zipper.spdx.json
+          upload-release-assets: false
+
+      - name: Generate SHA-256 checksum manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c '
+          import hashlib
+          from pathlib import Path
+
+          # Mirror of release.py:ASSETS plus the generated SBOM
+          files = [
+              ("artifacts/zipper-linux-x64/zipper-linux-x64", "zipper-linux-x64"),
+              ("artifacts/zipper-osx-arm64/zipper-osx-arm64", "zipper-osx-arm64"),
+              ("artifacts/zipper-win-x64/zipper-win-x64.exe", "zipper-win-x64.exe"),
+              ("zipper.spdx.json", "zipper.spdx.json"),
+          ]
+          lines = []
+          for src, name in files:
+              p = Path(src)
+              if not p.is_file():
+                  raise FileNotFoundError(f"Missing required release artifact for manifest: {src}")
+              digest = hashlib.sha256(p.read_bytes()).hexdigest()
+              lines.append(f"{digest}  {name}")
+          lines.sort(key=lambda l: l.split()[1])
+          Path("SHA256SUMS").write_text("\n".join(lines) + "\n", encoding="utf-8")
+          '
+          cat SHA256SUMS
+
       - name: Verify and complete reserved release
         shell: bash
         env:
@@ -217,3 +262,13 @@ jobs:
           printf '%s\n' "$RELEASE_NOTES" > release-notes.txt
           python3 .controller/.github/scripts/release.py publish --release-id "$RELEASE_ID" \
             --run-id "$ARTIFACT_RUN" --artifacts artifacts --notes release-notes.txt
+
+      - name: Attach provenance assets to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" SHA256SUMS zipper.spdx.json --clobber --repo "$REPO"
