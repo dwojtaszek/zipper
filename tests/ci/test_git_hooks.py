@@ -336,6 +336,44 @@ class GitHooksBehavioralTests(unittest.TestCase):
         res = self._run_pre_push(self._main_ref_stdin(head_commit), env=self._env_with_logging_dotnet())
         self._assert_dotnet_called(res)
 
+    def test_multi_ref_push_where_one_ref_unverified_runs_unit_tests(self):
+        """When pushing multiple refs and one does not match pre-commit.ok, unit tests run."""
+        commit1 = self._commit_readme(msg="commit 1")
+        self._git("commit", "--allow-empty", "-m", "commit 2")
+        commit2 = self._git("rev-parse", "HEAD")
+
+        self._write_pre_commit_ok(commit1)
+        stdin_input = (
+            f"refs/heads/main {commit1} refs/heads/main 0000000000000000000000000000000000000000\n"
+            f"refs/heads/other {commit2} refs/heads/other 0000000000000000000000000000000000000000\n"
+        )
+        res = self._run_pre_push(stdin_input, env=self._env_with_logging_dotnet())
+        self._assert_dotnet_called(res)
+
+    def test_annotated_tag_with_cli_changes_executes_e2e(self):
+        """Pushing an annotated tag with CLI changes correctly identifies diff and executes E2E."""
+        commit = self._commit_readme(msg="commit 1")
+        self._git("update-ref", "refs/remotes/origin/main", commit)
+
+        (self.repo_dir / "src").mkdir(parents=True, exist_ok=True)
+        (self.repo_dir / "src/File.cs").write_text("// change", encoding="utf-8")
+        self._git("add", "src/File.cs")
+        self._git("commit", "-m", "add src")
+        new_commit = self._git("rev-parse", "HEAD")
+        self._write_pre_commit_ok(new_commit)
+        self._mock_mutation_smoke()
+
+        self._git("tag", "-a", "v2.0.0", "-m", "release v2.0.0", new_commit)
+        tag_sha = self._git("rev-parse", "refs/tags/v2.0.0")
+
+        (self.repo_dir / "tests/run-e2e-basic.sh").write_text("#!/bin/bash\necho \"MOCK_E2E_CALLED\"\nexit 0\n", encoding="utf-8")
+        (self.repo_dir / "tests/run-e2e-basic.sh").chmod(0o755)
+
+        stdin_input = f"refs/tags/v2.0.0 {tag_sha} refs/tags/v2.0.0 0000000000000000000000000000000000000000\n"
+        res = self._run_pre_push(stdin_input)
+        self.assertEqual(res.returncode, 0)
+        self.assertIn("MOCK_E2E_CALLED", res.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
