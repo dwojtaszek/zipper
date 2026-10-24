@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -192,9 +193,15 @@ class CodeRabbitPrePrCheckTests(unittest.TestCase):
         self.temp_dir = tempfile.mkdtemp(prefix="fake-cr-")
         self.orig_path = os.environ.get("PATH", "")
         os.environ["PATH"] = f"{self.temp_dir}:{self.orig_path}"
+        # The rate-limit window is persisted, so it must not leak between tests or
+        # into the real state directory.
+        self.orig_state_dir = runner.STATE_DIR
+        runner.STATE_DIR = os.path.join(self.temp_dir, "state")
+        os.makedirs(runner.STATE_DIR, exist_ok=True)
 
     def tearDown(self):
         os.environ["PATH"] = self.orig_path
+        runner.STATE_DIR = self.orig_state_dir
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def _create_fake_cr(self, script_body: str, exit_code: int = 0) -> str:
@@ -210,16 +217,18 @@ class CodeRabbitPrePrCheckTests(unittest.TestCase):
         fake_home = os.path.join(self.temp_dir, "fake_home")
         os.makedirs(fake_home, exist_ok=True)
         with patch.dict(os.environ, {"PATH": empty_dir, "HOME": fake_home}):
-            ok, err = runner._run_coderabbit_pre_pr_check("/fake/path")
-            self.assertFalse(ok)
-            self.assertIn("not found", err)
+            gate = runner._run_coderabbit_pre_pr_check("/fake/path")
+            self.assertFalse(gate.ok)
+            self.assertFalse(gate.skipped)
+            self.assertIn("not found", gate.detail)
 
     def test_whenCoderabbitZeroFindings_returnsTrue(self):
         output = 'echo \'{"type":"complete","status":"review_completed","findings":0}\''
         self._create_fake_cr(output, exit_code=0)
-        ok, err = runner._run_coderabbit_pre_pr_check(self.temp_dir)
-        self.assertTrue(ok)
-        self.assertEqual(err, "")
+        gate = runner._run_coderabbit_pre_pr_check(self.temp_dir)
+        self.assertTrue(gate.ok)
+        self.assertFalse(gate.skipped, "a real review is not a skip")
+        self.assertEqual(gate.detail, "")
 
     def test_sameReviewedCommits_reusesReview_untilHeadOrBaseChanges(self):
         repo = os.path.join(self.temp_dir, "repo")
@@ -231,19 +240,19 @@ class CodeRabbitPrePrCheckTests(unittest.TestCase):
         git("switch", "-c", "fix/review")
         calls = os.path.join(self.temp_dir, "calls")
         self._create_fake_cr(f"echo call >> '{calls}'\necho '{{\"type\":\"complete\",\"status\":\"review_completed\",\"findings\":0}}'")
-        self.assertTrue(runner._run_coderabbit_pre_pr_check(repo)[0])
-        self.assertTrue(runner._run_coderabbit_pre_pr_check(repo)[0])
+        self.assertTrue(runner._run_coderabbit_pre_pr_check(repo).ok)
+        self.assertTrue(runner._run_coderabbit_pre_pr_check(repo).ok)
         self.assertEqual(Path(calls).read_text().splitlines(), ["call"])
         git("commit", "--allow-empty", "-m", "test: changed head")
-        self.assertTrue(runner._run_coderabbit_pre_pr_check(repo)[0])
+        self.assertTrue(runner._run_coderabbit_pre_pr_check(repo).ok)
         git("branch", "-f", "main", "HEAD")
-        self.assertTrue(runner._run_coderabbit_pre_pr_check(repo)[0])
+        self.assertTrue(runner._run_coderabbit_pre_pr_check(repo).ok)
         self.assertEqual(len(Path(calls).read_text().splitlines()), 3)
         dirty = Path(repo) / "uncommitted"
         dirty.write_text("pending change")
-        ok, err = runner._run_coderabbit_pre_pr_check(repo)
-        self.assertFalse(ok)
-        self.assertIn("Commit all changes", err)
+        gate = runner._run_coderabbit_pre_pr_check(repo)
+        self.assertFalse(gate.ok)
+        self.assertIn("Commit all changes", gate.detail)
         self.assertEqual(len(Path(calls).read_text().splitlines()), 3)
         dirty.unlink()
         git("commit", "--allow-empty", "-m", "test: next head")
@@ -251,16 +260,16 @@ class CodeRabbitPrePrCheckTests(unittest.TestCase):
             "git commit --allow-empty -m 'test: changed during review' >/dev/null\n"
             "echo '{\"type\":\"complete\",\"status\":\"review_completed\",\"findings\":0}'"
         )
-        ok, err = runner._run_coderabbit_pre_pr_check(repo)
-        self.assertFalse(ok)
-        self.assertIn("changed during", err)
+        gate = runner._run_coderabbit_pre_pr_check(repo)
+        self.assertFalse(gate.ok)
+        self.assertIn("changed during", gate.detail)
 
     def test_whenCoderabbitReviewSkipped_returnsFalse(self):
         output = 'echo \'{"type":"complete","status":"review_skipped","findings":0}\''
         self._create_fake_cr(output, exit_code=0)
-        ok, err = runner._run_coderabbit_pre_pr_check(self.temp_dir)
-        self.assertFalse(ok)
-        self.assertIn("review_skipped", err)
+        gate = runner._run_coderabbit_pre_pr_check(self.temp_dir)
+        self.assertFalse(gate.ok)
+        self.assertIn("review_skipped", gate.detail)
 
     def test_whenCoderabbitHasFindings_returnsFalse(self):
         output = (
@@ -268,9 +277,9 @@ class CodeRabbitPrePrCheckTests(unittest.TestCase):
             'echo \'{"type":"complete","status":"review_completed","findings":1}\''
         )
         self._create_fake_cr(output, exit_code=0)
-        ok, err = runner._run_coderabbit_pre_pr_check(self.temp_dir)
-        self.assertFalse(ok)
-        self.assertIn("unresolved", err)
+        gate = runner._run_coderabbit_pre_pr_check(self.temp_dir)
+        self.assertFalse(gate.ok)
+        self.assertIn("unresolved", gate.detail)
 
     def test_whenCoderabbitHasMultipleFindings_aggregatesAllFindings(self):
         output = (
@@ -279,25 +288,314 @@ class CodeRabbitPrePrCheckTests(unittest.TestCase):
             'echo \'{"type":"complete","status":"review_completed","findings":2}\''
         )
         self._create_fake_cr(output, exit_code=0)
-        ok, err = runner._run_coderabbit_pre_pr_check(self.temp_dir)
-        self.assertFalse(ok)
-        self.assertIn("2 unresolved finding(s)", err)
-        self.assertIn("bug1", err)
-        self.assertIn("bug2", err)
+        gate = runner._run_coderabbit_pre_pr_check(self.temp_dir)
+        self.assertFalse(gate.ok)
+        self.assertIn("2 unresolved finding(s)", gate.detail)
+        self.assertIn("bug1", gate.detail)
+        self.assertIn("bug2", gate.detail)
 
     def test_whenCoderabbitMissingCompleteRecord_returnsFalse(self):
         output = 'echo \'{"type":"review_context","reviewType":"committed"}\''
         self._create_fake_cr(output, exit_code=0)
-        ok, err = runner._run_coderabbit_pre_pr_check(self.temp_dir)
-        self.assertFalse(ok)
-        self.assertIn("completion record", err)
+        gate = runner._run_coderabbit_pre_pr_check(self.temp_dir)
+        self.assertFalse(gate.ok)
+        self.assertIn("completion record", gate.detail)
 
     def test_whenCoderabbitFails_returnsFalse(self):
         output = 'echo "auth failure" >&2'
         self._create_fake_cr(output, exit_code=1)
-        ok, err = runner._run_coderabbit_pre_pr_check(self.temp_dir)
-        self.assertFalse(ok)
-        self.assertIn("failed (exit 1)", err)
+        gate = runner._run_coderabbit_pre_pr_check(self.temp_dir)
+        self.assertFalse(gate.ok)
+        self.assertIn("failed (exit 1)", gate.detail)
+
+
+class CodeRabbitRateLimitTests(unittest.TestCase):
+    """A rate-limit refusal is a skip, never a gate failure.
+
+    Reading it as a failure blocked PR creation and merging on a review that never
+    ran and dispatched a babysit mission to fix it: 34 runs were blocked this way,
+    25 naming a rate or usage limit.
+    """
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp(prefix="fake-cr-limit-")
+        self.orig_path = os.environ.get("PATH", "")
+        os.environ["PATH"] = f"{self.temp_dir}:{self.orig_path}"
+        self.orig_state_dir = runner.STATE_DIR
+        runner.STATE_DIR = os.path.join(self.temp_dir, "state")
+        os.makedirs(runner.STATE_DIR, exist_ok=True)
+        runner._CODERABBIT_REVIEW_CACHE.clear()
+
+    def tearDown(self):
+        os.environ["PATH"] = self.orig_path
+        runner.STATE_DIR = self.orig_state_dir
+        runner._CODERABBIT_REVIEW_CACHE.clear()
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def _create_fake_cr(self, script_body: str, exit_code: int = 0) -> str:
+        path = os.path.join(self.temp_dir, "coderabbit")
+        with open(path, "w") as f:
+            f.write(f"#!/bin/sh\n{script_body}\nexit {exit_code}\n")
+        os.chmod(path, 0o755)
+        return path
+
+    def _rate_limit_record(self, wait_time: str) -> str:
+        payload = json.dumps({
+            "type": "error", "errorType": "rate_limit", "message": "Rate limit exceeded",
+            "recoverable": True, "details": {}, "metadata": {"isProUser": False, "waitTime": wait_time},
+        })
+        return f"echo '{payload}'"
+
+    def test_whenCoderabbitIsRateLimited_theGateIsSkippedNotFailed(self):
+        """This is the defect: `{"type":"error","errorType":"rate_limit"}` was parsed
+        as neither a finding nor a completion, so it fell through to a gate failure."""
+        self._create_fake_cr(self._rate_limit_record("19 minutes"), exit_code=1)
+
+        gate = runner._run_coderabbit_pre_pr_check(self.temp_dir)
+
+        self.assertTrue(gate.ok, "a rate limit must not block the pipeline")
+        self.assertTrue(gate.skipped, "it must be reported as a skip, not as evidence")
+
+    def test_whenCoderabbitIsRateLimited_theWindowIsPersisted(self):
+        self._create_fake_cr(self._rate_limit_record("19 minutes"), exit_code=1)
+
+        runner._run_coderabbit_pre_pr_check(self.temp_dir)
+
+        state = json.loads(Path(runner._coderabbit_rate_limit_path()).read_text())
+        self.assertEqual(state["wait_seconds"], 19 * 60)
+        self.assertIn("Rate limit exceeded", state["detail"])
+
+    def test_whenInsideTheWindow_theCliIsNotInvokedAgain(self):
+        """The persisted backoff is the point: the CLI call costs a 10-minute timeout
+        and can only fail again."""
+        calls = os.path.join(self.temp_dir, "calls")
+        self._create_fake_cr(f"echo call >> '{calls}'\n{self._rate_limit_record('19 minutes')}", exit_code=1)
+        runner._run_coderabbit_pre_pr_check(self.temp_dir)
+        self.assertEqual(len(Path(calls).read_text().splitlines()), 1)
+
+        gate = runner._run_coderabbit_pre_pr_check(self.temp_dir)
+
+        self.assertTrue(gate.ok)
+        self.assertTrue(gate.skipped)
+        self.assertEqual(len(Path(calls).read_text().splitlines()), 1,
+                         "the CLI must not be called while the window is open")
+
+    def test_whenTheWindowHasPassed_theCliIsInvokedAgain(self):
+        """The skip must expire, or one refusal would disable the gate forever."""
+        calls = os.path.join(self.temp_dir, "calls")
+        self._create_fake_cr(f"echo call >> '{calls}'\n{self._rate_limit_record('19 minutes')}", exit_code=1)
+        runner._run_coderabbit_pre_pr_check(self.temp_dir)
+        Path(runner._coderabbit_rate_limit_path()).write_text(json.dumps({
+            "resume_at": (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat(),
+        }))
+
+        runner._run_coderabbit_pre_pr_check(self.temp_dir)
+
+        self.assertEqual(len(Path(calls).read_text().splitlines()), 2)
+
+    def test_whenAReviewSucceeds_anyRecordedWindowIsCleared(self):
+        """Otherwise a stale window would keep skipping a gate that now works."""
+        self._create_fake_cr(self._rate_limit_record("19 minutes"), exit_code=1)
+        runner._run_coderabbit_pre_pr_check(self.temp_dir)
+        self.assertTrue(Path(runner._coderabbit_rate_limit_path()).exists())
+        # Expire the window, as waiting it out does, then let the review succeed.
+        Path(runner._coderabbit_rate_limit_path()).write_text(json.dumps({
+            "resume_at": (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat(),
+        }))
+        self._create_fake_cr('echo \'{"type":"complete","status":"review_completed","findings":0}\'')
+
+        gate = runner._run_coderabbit_pre_pr_check(self.temp_dir)
+
+        self.assertTrue(gate.ok)
+        self.assertFalse(gate.skipped)
+        self.assertFalse(Path(runner._coderabbit_rate_limit_path()).exists(),
+                         "a completed review must clear the recorded window")
+
+    def test_rateLimitOnStderrWithNonZeroExit_isSkipped(self):
+        """The refusal is reported on stderr with an exit code when the CLI fails
+        before it can emit a record."""
+        self._create_fake_cr('echo "Error: Rate limit exceeded" >&2', exit_code=1)
+
+        gate = runner._run_coderabbit_pre_pr_check(self.temp_dir)
+
+        self.assertTrue(gate.ok)
+        self.assertTrue(gate.skipped)
+
+    def test_usageLimitWording_isAlsoSkipped(self):
+        self._create_fake_cr('echo "You have used all 3 included reviews" >&2', exit_code=1)
+
+        gate = runner._run_coderabbit_pre_pr_check(self.temp_dir)
+
+        self.assertTrue(gate.ok)
+        self.assertTrue(gate.skipped, "a usage-limit refusal is the same refusal")
+
+    def test_nonRateLimitFailure_isStillAGateFailure(self):
+        """The skip must not swallow real failures: an auth error is not a rate limit."""
+        self._create_fake_cr('echo "authentication failed" >&2', exit_code=1)
+
+        gate = runner._run_coderabbit_pre_pr_check(self.temp_dir)
+
+        self.assertFalse(gate.ok)
+        self.assertIn("failed (exit 1)", gate.detail)
+
+    def test_whenASuccessfulReviewMentionsALimit_theFindingIsStillEnforced(self):
+        """A review that ran and found something must not be read as a refusal.
+
+        Finding bodies quote the code under review, so a finding can legitimately
+        discuss a "review limit" or "usage limit" while the review itself
+        succeeded. Reading that as a refusal would skip the gate and let
+        unresolved findings through."""
+        self._create_fake_cr(
+            'echo \'{"type":"finding","severity":"major","body":"the review limit check never fires"}\'\n'
+            'echo \'{"type":"complete","status":"review_completed","findings":1}\'',
+            exit_code=0,
+        )
+
+        gate = runner._run_coderabbit_pre_pr_check(self.temp_dir)
+
+        self.assertFalse(gate.ok, "an unresolved finding must still fail the gate")
+        self.assertFalse(gate.skipped)
+        self.assertIn("unresolved finding(s)", gate.detail)
+
+    def test_whenTheReviewSucceedsAndOnlyStdoutMentionsALimit_itIsNotARefusal(self):
+        """A clean, successful review whose prose mentions a limit is not a refusal."""
+        self._create_fake_cr(
+            'echo \'{"type":"complete","status":"review_completed","findings":0}\'\n'
+            'echo "checked against the review limit policy"',
+            exit_code=0,
+        )
+
+        gate = runner._run_coderabbit_pre_pr_check(self.temp_dir)
+
+        self.assertTrue(gate.ok)
+        self.assertFalse(gate.skipped, "a successful review is not a skip")
+        self.assertFalse(Path(runner._coderabbit_rate_limit_path()).exists(),
+                         "no window may be recorded for a review that ran")
+
+    def test_whenTheCliFailsForAnotherReason_noWindowIsRecorded(self):
+        self._create_fake_cr('echo "authentication failed" >&2', exit_code=1)
+
+        gate = runner._run_coderabbit_pre_pr_check(self.temp_dir)
+
+        self.assertFalse(gate.ok, "a genuine CLI failure must still block")
+        self.assertFalse(gate.skipped)
+        self.assertFalse(Path(runner._coderabbit_rate_limit_path()).exists())
+
+    def test_whenTheStructuredRecordNamesTheRefusal_theMessageWordingDoesNotMatter(self):
+        """The record is machine-readable, so `errorType` decides — not the prose.
+
+        The CLI's message is not guaranteed to contain the phrase "rate limit"
+        (observed: "Too many requests"), and the text scan cannot see a refusal the
+        message does not name."""
+        payload = json.dumps({
+            "type": "error", "errorType": "rate_limit", "message": "Too many requests",
+            "recoverable": True, "details": {}, "metadata": {"waitTime": "11 minutes"},
+        })
+        self._create_fake_cr(f"echo '{payload}'", exit_code=1)
+
+        gate = runner._run_coderabbit_pre_pr_check(self.temp_dir)
+
+        self.assertTrue(gate.ok)
+        self.assertTrue(gate.skipped)
+        state = json.loads(Path(runner._coderabbit_rate_limit_path()).read_text())
+        self.assertEqual(state["wait_seconds"], 11 * 60)
+
+    def test_whenTheStructuredRecordAppearsOnASuccessfulExit_itIsStillARefusal(self):
+        """An explicit refusal record is honoured on either exit code, because it is
+        the CLI stating the outcome rather than the runner inferring one."""
+        payload = json.dumps({
+            "type": "error", "errorType": "rate_limit", "message": "Rate limit exceeded",
+            "recoverable": True, "details": {}, "metadata": {"waitTime": "7 minutes"},
+        })
+        self._create_fake_cr(f"echo '{payload}'", exit_code=0)
+
+        gate = runner._run_coderabbit_pre_pr_check(self.temp_dir)
+
+        self.assertTrue(gate.ok)
+        self.assertTrue(gate.skipped)
+        self.assertTrue(Path(runner._coderabbit_rate_limit_path()).exists())
+
+    def test_waitTimeForms_areAllParsed(self):
+        for wait_time, expected in (("19 minutes", 19 * 60), ("37m", 37 * 60),
+                                    ("1h", 3600), ("2s", 2), ("5 mins", 300)):
+            with self.subTest(wait_time=wait_time):
+                self.assertEqual(runner._coderabbit_wait_seconds(wait_time), expected)
+
+    def test_whenWaitTimeIsAbsentOrGarbled_theDefaultWindowIsUsed(self):
+        for wait_time in ("", "soon", "a while"):
+            with self.subTest(wait_time=wait_time):
+                self.assertIsNone(runner._coderabbit_wait_seconds(wait_time))
+        self._create_fake_cr(self._rate_limit_record("soon"), exit_code=1)
+
+        runner._run_coderabbit_pre_pr_check(self.temp_dir)
+
+        state = json.loads(Path(runner._coderabbit_rate_limit_path()).read_text())
+        self.assertEqual(state["wait_seconds"], runner.CODERABBIT_RATE_LIMIT_MINUTES * 60)
+
+    def test_anImplausibleWaitTime_isCapped(self):
+        """A garbled hint must not park the gate for days."""
+        self.assertEqual(runner._coderabbit_wait_seconds("99999 hours"),
+                         runner.CODERABBIT_RATE_LIMIT_MAX_MINUTES * 60)
+
+    def test_aBareNumberWithNoUnit_isNotADuration(self):
+        """A count in the message text must not be read as a wait."""
+        self.assertIsNone(runner._coderabbit_wait_seconds("3 reviews used, retry later"))
+
+    def test_whenTheStateFileIsCorrupt_theGateIsNotSkipped(self):
+        """Fail open on a damaged window: skipping forever would disable the gate."""
+        Path(runner._coderabbit_rate_limit_path()).write_text("{not json")
+        self._create_fake_cr('echo \'{"type":"complete","status":"review_completed","findings":0}\'')
+
+        gate = runner._run_coderabbit_pre_pr_check(self.temp_dir)
+
+        self.assertTrue(gate.ok)
+        self.assertFalse(gate.skipped)
+
+
+class CodeRabbitSkipCallSiteTests(unittest.TestCase):
+    """A skip must let the caller proceed, and must not be recorded as a failure."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp(prefix="fake-cr-site-")
+        self.orig_state_dir = runner.STATE_DIR
+        runner.STATE_DIR = os.path.join(self.temp_dir, "state")
+        os.makedirs(runner.STATE_DIR, exist_ok=True)
+
+    def tearDown(self):
+        runner.STATE_DIR = self.orig_state_dir
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def test_createPrForBranch_whenTheGateIsSkipped_stillCreatesThePR(self):
+        """Blocking here is what left finished work unpublished for up to an hour."""
+        calls = []
+
+        def fake_run_cmd(args, cwd=None, timeout=None):
+            calls.append(args)
+            if args[:2] == ["gh", "pr"]:
+                return 0, "https://example.test/99\n", ""
+            return 0, "", ""
+
+        skipped = runner.CodeRabbitGate(True, True, "skipped: rate limited for 19m")
+        with patch.object(runner, "_run_coderabbit_pre_pr_check", return_value=skipped), \
+                patch.object(runner, "_check_pr", return_value=("99", "https://example.test/99")), \
+                patch.object(runner, "_save_pr_state"), \
+                patch.object(runner, "run_cmd", side_effect=fake_run_cmd):
+            pr_num, url, error = runner._create_pr_for_branch("fix/ISSUE-1-x", "1", "Title")
+
+        self.assertEqual(error, "", "a rate-limited review must not fail PR creation")
+        self.assertEqual(pr_num, "99")
+        self.assertEqual(url, "https://example.test/99")
+        self.assertTrue(any(c[:2] == ["gh", "pr"] for c in calls), "the PR must actually be created")
+
+    def test_createPrForBranch_whenTheGateFailed_stillBlocksThePR(self):
+        """The skip must not weaken the gate for a real failure."""
+        failed = runner.CodeRabbitGate(False, False, "coderabbit review failed (exit 1)")
+        with patch.object(runner, "_run_coderabbit_pre_pr_check", return_value=failed), \
+                patch.object(runner, "run_cmd") as run_cmd:
+            _, _, error = runner._create_pr_for_branch("fix/ISSUE-1-x", "1", "Title")
+
+        self.assertIn("CodeRabbit review failed", error)
+        run_cmd.assert_not_called()
 
 
 class CodeRabbitGateStateTests(unittest.TestCase):
