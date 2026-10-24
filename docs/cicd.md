@@ -66,9 +66,9 @@ For interactive local verification before committing, `./dev.sh` (`dev.bat` on W
 
 | Hook | Trigger | Does |
 |------|---------|------|
-| `pre-commit` | `git commit` | Short-circuits full build/test if every staged file is docs (`*.md`, `docs/`), running only `DocsDriftTests`. Else stashes unstaged changes (and untracked files under `src/`), runs `dotnet format` on staged `*.cs`, runs all unit tests, and records the staged tree hash in `pre-commit.pending`. |
+| `pre-commit` | `git commit` | Short-circuits full build/test if every staged file is docs (`*.md`, `docs/`), running only `DocsDriftTests`. Else stashes unstaged changes (and untracked files under `src/`), runs `dotnet format` on staged `*.cs`, runs all unit tests, and records the staged tree hash in `pre-commit.pending`. Fails (exit 1) if `dotnet` is missing. |
 | `post-commit` | after commit object exists | Verifies `HEAD^{tree}` matches `pre-commit.pending` and writes `pre-commit.ok` marker (timestamp + new HEAD) so pre-push can skip redundant unit tests. |
-| `pre-push` | `git push` | Unit tests (skipped if marker is <10 min old on current HEAD) + mutation smoke on changed `.cs` source files (`tests/run-mutation-smoke.sh` with `MUTATION_SMOKE_SKIP_BASELINE=1`, targeted `*Tests` fast-path, and SHA-256 content-hash mutant result caching under `.git/zipper-hooks/mutation-cache/`; hard gate: all mutants must be killed) + basic E2E smoke (`tests/run-e2e-basic.sh` / `.bat`, skipped when no CLI source or basic E2E script files changed). |
+| `pre-push` | `git push` | Ref verification (stdin refs must match working tree) + unit tests (skipped if marker is <10 min old on outgoing commits) + mutation smoke on changed `.cs` source files (`tests/run-mutation-smoke.sh` with `MUTATION_SMOKE_SKIP_BASELINE=1`, targeted `*Tests` fast-path, and SHA-256 content-hash mutant result caching under `.git/zipper-hooks/mutation-cache/`; hard gate: all mutants must be killed) + basic E2E smoke (`tests/run-e2e-basic.sh` / `.bat` via `cmd.exe`, skipped when no CLI source or basic E2E script files changed). Fails (exit 1) if `dotnet` is missing. |
 
 Bypass (not recommended): `git commit --no-verify`, `git push --no-verify`. Mutation smoke is a hard pre-push gate (surviving mutants must be killed by adding unit tests). Full E2E + coverage checks run in CI; full mutation analysis runs weekly.
 
