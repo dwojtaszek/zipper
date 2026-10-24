@@ -19,6 +19,64 @@ import gitenv  # noqa: F401  # Git identity for fixture repositories
 BASE = Path(__file__).resolve().parents[1]
 
 
+class EmailDeliveryGuardTests(unittest.TestCase):
+    """Importing runner.py must never be enough to mail a human.
+
+    The test suite imports the module, so a test that exercises an email path used
+    to deliver real mail to the maintainer on every run — issue #1218's new
+    Dependabot test did exactly that, repeatedly, because it set DRY_RUN = False and
+    did not stub delivery. Production runs the file as a script, so __main__ is the
+    normal case; importers must opt in."""
+
+    def _stub_mailer(self, root: Path) -> Path:
+        marker = root / "sent.txt"
+        mail = root / "msmtp"
+        mail.write_text(f"#!/bin/sh\ncat >> '{marker}'\nexit 0\n")
+        mail.chmod(0o755)
+        return marker
+
+    def _load(self, name: str):
+        spec = importlib.util.spec_from_file_location(name, BASE / "runner.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.DRY_RUN = False
+        return module
+
+    def test_importedRunner_doesNotDeliverMail(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            marker = self._stub_mailer(root)
+            module = self._load("guard_runner")
+            self.assertFalse(module.EMAIL_DELIVERY_ENABLED,
+                             "delivery must be opt-in, so a new test cannot leak mail by default")
+            with patch.dict(os.environ, {"PATH": directory + os.pathsep + os.environ["PATH"]}):
+                module.send_email("[Runner] Guard Probe", "<p>probe</p>")
+            self.assertFalse(marker.exists(), "an imported runner must never deliver mail")
+
+    def test_optIn_deliversMail(self):
+        """The guard must not be so blunt that a test asserting delivery breaks."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            marker = self._stub_mailer(root)
+            module = self._load("guard_runner_optin")
+            module.EMAIL_DELIVERY_ENABLED = True
+            with patch.dict(os.environ, {"PATH": directory + os.pathsep + os.environ["PATH"]}):
+                module.send_email("[Runner] Guard Probe", "<p>probe</p>")
+            self.assertTrue(marker.exists(), "the opt-in must actually deliver")
+            self.assertIn("Guard Probe", marker.read_text())
+
+    def test_dryRun_stillSuppressesEvenWithOptIn(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            marker = self._stub_mailer(root)
+            module = self._load("guard_runner_dry")
+            module.EMAIL_DELIVERY_ENABLED = True
+            module.DRY_RUN = True
+            with patch.dict(os.environ, {"PATH": directory + os.pathsep + os.environ["PATH"]}):
+                module.send_email("[Runner] Guard Probe", "<p>probe</p>")
+            self.assertFalse(marker.exists(), "a dry run must suppress even with the opt-in")
+
+
 class AgentOverrideTests(unittest.TestCase):
     def test_status_explicitAgentBeatsEnvDefaults_withoutChangingPreferences(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -562,6 +620,9 @@ class WorktreeResilienceTests(unittest.TestCase):
             module.WORKTREES_BASE = str(root / "worktrees")
             module.STATE_DIR = str(root / "state")
             module.DRY_RUN = False
+            # This fixture asserts delivery through the stub msmtp below, which
+            # requires opting in: importing the module never sends mail on its own.
+            module.EMAIL_DELIVERY_ENABLED = True
 
             gh = root / "gh"
             gh.write_text(gh_script)
@@ -1092,6 +1153,9 @@ class MainRepoRecoveryTests(unittest.TestCase):
             state_dir = root / "state"
             state_dir.mkdir()
             module.STATE_DIR = str(state_dir)
+            # This fixture asserts delivery through the stub msmtp below, which
+            # requires opting in: importing the module never sends mail on its own.
+            module.EMAIL_DELIVERY_ENABLED = True
 
             emails_file = root / "emails.txt"
             mail = root / "msmtp"
