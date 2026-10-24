@@ -13,6 +13,7 @@ Tests:
    - Unrecorded security updates do not accidentally bypass.
 5. Integration with babysit_dependabot_prs auto-merge decision flow and logging.
 6. Publication timestamp parsing tolerates the fractional-second forms providers emit.
+7. NuGet registration index pages referenced by @id are followed, not just inlined ones.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -491,8 +492,6 @@ updated-dependencies:
         mock_merge.assert_called_once_with(99, None, "sha99", delete_branch=True)
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class PublishTimestampParsingTests(unittest.TestCase):
@@ -540,3 +539,56 @@ class PublishTimestampParsingTests(unittest.TestCase):
 
         ts = runner._fetch_upstream_publish_timestamp("Newtonsoft.Json", "13.0.3", "nuget")
         self.assertEqual(ts, datetime(2026, 10, 20, 10, 30, 0, 123456, tzinfo=timezone.utc))
+
+
+class NugetIndexPagingTests(unittest.TestCase):
+    """The registration index fallback must follow referenced pages.
+
+    NuGet inlines a page only while it stays small. A larger package returns
+    pages that carry an @id and no items (Serilog: 10 of 10 pages), so a lookup
+    that reads only inline entries finds nothing and fails the age check closed
+    forever.
+    """
+
+    @patch("urllib.request.urlopen")
+    def test_fetch_nuget_publish_timestamp_referencedIndexPage_IsFollowed(self, mock_urlopen):
+        import urllib.error
+
+        index = {"items": [{"@id": "https://api.nuget.org/v3/registration5-semver1/lib/page/1.json"}]}
+        page = {"items": [{"catalogEntry": {"version": "2.0.1", "published": "2026-10-19T08:00:00Z"}}]}
+        mock_urlopen.side_effect = [
+            urllib.error.HTTPError("https://api.nuget.org", 404, "Not Found", {}, None),
+            MagicMock(__enter__=lambda s: MagicMock(read=lambda: json.dumps(index).encode())),
+            MagicMock(__enter__=lambda s: MagicMock(read=lambda: json.dumps(page).encode())),
+        ]
+
+        ts = runner._fetch_upstream_publish_timestamp("Lib", "2.0.1", "nuget")
+        self.assertEqual(ts, datetime(2026, 10, 19, 8, 0, 0, tzinfo=timezone.utc))
+
+    def test_iter_nuget_index_entries_inlinePage_YieldsWithoutFetching(self):
+        # An inline page must not trigger a network call; only referenced pages do.
+        index = {
+            "items": [{"items": [{"catalogEntry": {"version": "1.0.0"}}]},
+                      {"@id": "https://api.nuget.org/v3/registration5-semver1/lib/page/1.json"}],
+        }
+        with patch("urllib.request.urlopen", side_effect=AssertionError("should not fetch")) as mocked:
+            entries = list(runner._iter_nuget_index_entries({"items": [index["items"][0]]}))
+            self.assertEqual([e["catalogEntry"]["version"] for e in entries], ["1.0.0"])
+            mocked.assert_not_called()
+
+    @patch("urllib.request.urlopen")
+    def test_iter_nuget_index_entries_bomPrefixedPage_IsStillParsed(self, mock_urlopen):
+        # NuGet serves a UTF-8 BOM on some registration responses; a plain
+        # decode would raise and fail the age check closed for every version.
+        index = {"items": [{"@id": "https://api.nuget.org/v3/registration5-semver1/lib/page/1.json"}]}
+        payload = b"\xef\xbb\xbf" + json.dumps({"items": [{"catalogEntry": {"version": "2.0.1"}}]}).encode()
+        mock_urlopen.return_value = MagicMock(__enter__=lambda s: MagicMock(read=lambda: payload))
+        entries = list(runner._iter_nuget_index_entries(index))
+        self.assertEqual([e["catalogEntry"]["version"] for e in entries], ["2.0.1"])
+
+    def test_iter_nuget_index_entries_noIdAndNoItems_IsSkipped(self):
+        self.assertEqual(list(runner._iter_nuget_index_entries({"items": [{}]})), [])
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -3375,6 +3375,28 @@ def _parse_publish_timestamp(pub: str) -> datetime:
     return datetime.fromisoformat(text)
 
 
+def _iter_nuget_index_entries(index: dict):
+    """Yield every catalog entry in a NuGet registration index.
+
+    NuGet inlines a page's entries only while the page stays small; larger
+    pages are referenced by ``@id`` instead of inlined. Reading only inline
+    entries therefore finds nothing for such a package (Serilog's index is 10
+    referenced pages and 0 inline), which makes the version lookup fail closed
+    and blocks the PR indefinitely. Fetched pages are decoded with
+    ``utf-8-sig`` because a BOM is legal here and would break ``json.loads``.
+    """
+    for page in index.get("items", []):
+        page_items = page.get("items")
+        if not page_items:
+            page_url = page.get("@id")
+            if not page_url:
+                continue
+            req = urllib.request.Request(page_url, headers={"User-Agent": "zipper-runner"})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                page_items = json.loads(resp.read().decode("utf-8-sig")).get("items", [])
+        for item in page_items:
+            yield item
+
 def _fetch_upstream_publish_timestamp(name: str, version: str, ecosystem: str) -> datetime | None:
     """Fetch upstream release publication date in UTC for a package or action."""
     if ecosystem == "nuget":
@@ -3384,7 +3406,7 @@ def _fetch_upstream_publish_timestamp(name: str, version: str, ecosystem: str) -
         req = urllib.request.Request(direct_url, headers={"User-Agent": "zipper-runner"})
         try:
             with urllib.request.urlopen(req, timeout=15) as resp:
-                data = json.loads(resp.read().decode())
+                data = json.loads(resp.read().decode("utf-8-sig"))
                 pub = data.get("published")
                 if pub:
                     return _parse_publish_timestamp(pub)
@@ -3400,14 +3422,13 @@ def _fetch_upstream_publish_timestamp(name: str, version: str, ecosystem: str) -
         req_idx = urllib.request.Request(index_url, headers={"User-Agent": "zipper-runner"})
         try:
             with urllib.request.urlopen(req_idx, timeout=15) as resp:
-                data = json.loads(resp.read().decode())
-                for page in data.get("items", []):
-                    for item in page.get("items", []):
-                        entry = item.get("catalogEntry", {})
-                        if entry.get("version", "").lower() == version.lower():
-                            pub = entry.get("published")
-                            if pub:
-                                return _parse_publish_timestamp(pub)
+                data = json.loads(resp.read().decode("utf-8-sig"))
+                for item in _iter_nuget_index_entries(data):
+                    entry = item.get("catalogEntry", {})
+                    if entry.get("version", "").lower() == version.lower():
+                        pub = entry.get("published")
+                        if pub:
+                            return _parse_publish_timestamp(pub)
         except Exception as e:
             print(f"[dependabot] NuGet index request error for {name} {version}: {e}")
             return None
@@ -3440,7 +3461,7 @@ def _fetch_upstream_publish_timestamp(name: str, version: str, ecosystem: str) -
         req = urllib.request.Request(npm_url, headers={"User-Agent": "zipper-runner"})
         try:
             with urllib.request.urlopen(req, timeout=15) as resp:
-                data = json.loads(resp.read().decode())
+                data = json.loads(resp.read().decode("utf-8-sig"))
                 time_map = data.get("time", {})
                 pub = time_map.get(version)
                 if pub:
