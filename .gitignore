@@ -80,6 +80,12 @@ graphify_audit/
 .zipper-runner/logs/
 .zipper-runner/state/
 .zipper-runner/runner.lock
+# A lock left here by an in-repo copy of deploy-main.sh would otherwise count as
+# untracked dirt in the runner's own checkout (`_repo_is_clean` counts untracked
+# files). The supported install puts the lock outside the checkout; this is the
+# safety net for running the copy that lives in the tree.
+.zipper-runner/.deploy.lock
+.zipper-runner/deploy.lock
 .zipper-runner/**/__pycache__/
 __pycache__/
 *.pyc

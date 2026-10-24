@@ -60,6 +60,47 @@ systemctl --user list-timers zipper-intake.timer zipper-babysit.timer --no-pager
 
 A 15-minute intake answers a structural gap rather than load: each intake firing is a single instant, so one long mission occupying the only worktree slot at that instant costs the whole interval until the next firing. Frequent firing lets the existing lock and worktree limit decide, instead of the schedule.
 
+### Deploying merged changes
+
+The runner syncs its own checkout (`sync_main_repo`) only while it holds the lock, and it holds the lock for the whole of a long agent mission. A merged change therefore waited for the next lock-winning run before it went live, which is tens of minutes when intake is busy. Deploy is a fast-forward of a checkout that is supposed to sit on `main` and stay clean, so it does not need to wait for a run; it only needs to not collide with one.
+
+`deploy-main.sh` runs on its own one-minute timer, outside the runner lock:
+
+```bash
+install -Dm755 .zipper-runner/deploy-main.sh "$HOME/.local/bin/zipper-deploy-main.sh"
+install -Dm644 .zipper-runner/systemd/zipper-deploy.service .zipper-runner/systemd/zipper-deploy.timer \
+    "$HOME/.config/systemd/user/"
+systemctl --user daemon-reload
+systemctl --user enable --now zipper-deploy.timer
+systemctl --user list-timers zipper-deploy.timer --no-pager
+```
+
+Install the script **outside** the checkout, as above. A copy inside the tree is an untracked file in the very commit that adds it, so the first fast-forward carrying it would refuse to run and deploy nothing. `REPO_PATH` in the service unit points at the checkout; the script derives nothing from its own location when `REPO_PATH` is set.
+
+The script never discards work: no `reset`, no `checkout`, no `stash`, no `clean`. It does nothing and logs why when the checkout is on another branch, has modifications to tracked files, is mid-rebase/merge/cherry-pick, holds an `index.lock`, or is not a fast-forward. Two of those refusals exist because a merge is not as harmless as it looks: `--ff-only` refuses a diverged checkout instead of creating a merge commit, and `--no-overwrite-ignore` refuses when the incoming commit would overwrite an ignored local file — the tracked-file check cannot see ignored files, and git overwrites them by default, which is how a deploy could destroy the runner's own ignored `runner.lock` or logs. Outcomes land in `.zipper-runner/logs/deploy_*.log`; the already-current case is silent. The runner reads `runner.py` once at process start, so a deploy during a run cannot affect that run.
+
+To verify it end to end, rewind the checkout and watch the timer restore it. The guard below is deliberately strict, because `git reset --hard` destroys work that a bare `HEAD == origin/main` check does not see: local edits to tracked files (the commit matches, the working tree does not), and any branch that happens to point at `origin/main` (the reset would rewind that branch instead of `main`). A checkout *ahead* of the remote is a state the script deliberately tolerates, so "it looked clean" is not enough to make a reset safe.
+
+```bash
+cd ~/repos/zipper
+if [ "$(git branch --show-current)" != "main" ]; then
+    echo "not on main; refusing to rewind. Use a disposable clone instead."
+elif [ -n "$(git status --porcelain)" ]; then
+    echo "checkout has local changes; refusing to rewind. Commit or stash them first."
+elif [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+    echo "HEAD is not exactly origin/main; refusing to rewind."
+else
+    git reset --hard HEAD~1
+    for _ in $(seq 1 20); do                      # a timer may fire up to a minute late
+        [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] && break
+        sleep 5
+    done
+    [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] \
+        && echo "deployed" || echo "TIMED OUT: deploy did not run"
+    tail -1 .zipper-runner/logs/deploy_*.log
+fi
+```
+
 ### Harness limits
 
 `AGENTS.md` documents bounded tool discovery, native subagent schema mapping, valid GitHub CLI examples, and focused iteration with unchanged final review/test gates. The runner cannot repair Factory's tool catalog, search relevance, or Loop availability. Missing capabilities must be reported rather than retried indefinitely or bypassed against harness policy.
