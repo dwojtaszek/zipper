@@ -62,7 +62,9 @@ fi
 CURRENT_HEAD=$(git rev-parse HEAD 2>/dev/null || echo "")
 CURRENT_TREE=$(git rev-parse 'HEAD^{tree}' 2>/dev/null || echo "")
 
-# Helper to compute all files changed for an outgoing ref compared to merge-base
+# Helper to compute all files changed for an outgoing ref compared to merge-base.
+# Returns 0 on success.
+# Returns 2 if the commit has parents but no merge-base could be resolved against origin/main or main.
 get_changes_for_ref() {
     local ref="$1"
     local sha="$2"
@@ -74,6 +76,10 @@ get_changes_for_ref() {
         if [[ "$ref" != "refs/heads/main" && "$ref" != "main" && "$ref" != "HEAD" ]]; then
             merge_base=$(git merge-base "$commit" main 2>/dev/null || echo "")
         fi
+    fi
+    if [[ -z "$merge_base" ]] && git rev-parse --verify -q "${commit}^" >/dev/null 2>&1; then
+        # Range cannot be determined for a non-root commit; fail-safe
+        return 2
     fi
     local changed_since_base
     if [[ -n "$merge_base" && "$merge_base" != "$commit" ]]; then
@@ -160,7 +166,10 @@ if [[ "$RUN_UNIT_TESTS" == "true" ]]; then
     for entry in "${REFS_TO_CHECK[@]}"; do
         local_ref="${entry%% *}"
         local_sha="${entry##* }"
-        ALL_BRANCH_CHANGES=$(get_changes_for_ref "$local_ref" "$local_sha")
+        if ! ALL_BRANCH_CHANGES=$(get_changes_for_ref "$local_ref" "$local_sha"); then
+            ALL_REFS_DOCS_ONLY=false
+            break
+        fi
         TOTAL_CHANGED=$(printf '%s\n' "$ALL_BRANCH_CHANGES" | grep -c . || true)
         DOCS_CHANGED=$(printf '%s\n' "$ALL_BRANCH_CHANGES" | grep -c -E '(^|/)(docs/|CHANGELOG(\.md)?$|.*\.(md|markdown)$)' || true)
         if [[ "$TOTAL_CHANGED" -eq 0 || "$DOCS_CHANGED" -ne "$TOTAL_CHANGED" ]]; then
@@ -246,8 +255,12 @@ RUN_E2E=false
 for entry in "${REFS_TO_CHECK[@]}"; do
     local_ref="${entry%% *}"
     local_sha="${entry##* }"
+    if ! CHANGES=$(get_changes_for_ref "$local_ref" "$local_sha"); then
+        RUN_E2E=true
+        break
+    fi
     CLI_OR_E2E_CHANGES=$(
-        get_changes_for_ref "$local_ref" "$local_sha" |
+        printf '%s\n' "$CHANGES" |
         grep -E '(^|/)(src/|Directory\.Build\.props$|Directory\.Packages\.props$|global\.json$|zipper\.sln$|tests/run-e2e-basic\.(sh|bat)$|tests/_zipper-cli\.(sh|bat)$)' |
         grep -v -E '^src/Zipper\.Tests/|^src/Zipper\.Analyzers(\.Tests)?/' || true
     )

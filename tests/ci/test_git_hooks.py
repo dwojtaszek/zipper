@@ -374,6 +374,27 @@ class GitHooksBehavioralTests(unittest.TestCase):
         self.assertEqual(res.returncode, 0)
         self.assertIn("MOCK_E2E_CALLED", res.stdout)
 
+    def test_unresolvable_merge_base_on_multi_commit_branch_fails_safe_to_e2e(self):
+        """When merge-base cannot be resolved for a non-root commit, hook fails safe to running E2E."""
+        (self.repo_dir / "src").mkdir(parents=True, exist_ok=True)
+        (self.repo_dir / "src/File.cs").write_text("// change", encoding="utf-8")
+        self._git("add", "src/File.cs")
+        self._git("commit", "-m", "commit 1")
+        commit2 = self._commit_readme(msg="commit 2")
+        self._write_pre_commit_ok(commit2)
+        self._mock_mutation_smoke()
+
+        self._git("checkout", "-b", "feature")
+        self._git("branch", "-D", "main")
+
+        (self.repo_dir / "tests/run-e2e-basic.sh").write_text("#!/bin/bash\necho \"MOCK_E2E_CALLED\"\nexit 0\n", encoding="utf-8")
+        (self.repo_dir / "tests/run-e2e-basic.sh").chmod(0o755)
+
+        stdin_input = f"refs/heads/feature {commit2} refs/heads/feature 0000000000000000000000000000000000000000\n"
+        res = self._run_pre_push(stdin_input)
+        self.assertEqual(res.returncode, 0)
+        self.assertIn("MOCK_E2E_CALLED", res.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
