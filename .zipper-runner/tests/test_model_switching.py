@@ -1,6 +1,7 @@
 """Tests for quota exhaustion detection, model switching, and fallback per harness."""
 import contextlib
 import io
+import shutil
 import sys
 from pathlib import Path
 import unittest
@@ -277,9 +278,21 @@ class ProbeAndSelectAgentsModelSwitchingTests(unittest.TestCase):
 
 def _clear_rate_state() -> None:
     """Remove persisted rate-limit marks so one test's send cannot suppress the
-    next test's expected email (they share STATE_DIR in this process)."""
+    next test's expected email (they share STATE_DIR in this process).
+
+    This deletes files, so it refuses to run outside the system temp directory.
+    Discovery imports every test module before running any test, and several
+    modules pin the shared ``runner.STATE_DIR`` to their own temp dir, so the
+    guard cannot name a single directory. The invariant that matters is that the
+    target is never the live state directory the unattended runner uses: those
+    hold the real email rate-limit budgets, and sweeping them would let the next
+    cycle send up to three more emails per persistent alert."""
+    state_dir = os.path.realpath(runner.STATE_DIR)
+    if not state_dir.startswith(os.path.realpath(tempfile.gettempdir()) + os.sep):
+        raise AssertionError(
+            f"refusing to clear rate state outside the temp directory: {runner.STATE_DIR!r}")
     import glob
-    for path in glob.glob(os.path.join(runner.STATE_DIR, "rate-*.json")):
+    for path in glob.glob(os.path.join(state_dir, "rate-*.json")):
         try:
             os.remove(path)
         except OSError:
@@ -409,6 +422,72 @@ class MissingConfiguredModelTests(unittest.TestCase):
                 for _ in range(5):
                     runner.probe_and_select_agents()
         self.assertEqual(len(self.sent), 3)
+
+
+class RateStateIsolationTests(unittest.TestCase):
+    """_clear_rate_state deletes files, so it must refuse to touch a state
+    directory outside the system temp directory, which is where the live
+    .zipper-runner/state the unattended runner uses lives."""
+
+    def test_clearRateState_refusesANonTempStateDir(self):
+        """The probe directory sits under .zipper-runner/, the same place the live
+        state directory does, so a run that slipped past the guard would sweep the
+        real rate-limit marks. Only this test's own sentinel can be deleted."""
+        foreign = Path(BASE) / "_rate_state_guard_probe"
+        foreign.mkdir(exist_ok=True)
+        victim = foreign / "rate--guard-probe.json"
+        victim.write_text("{}")
+        try:
+            with patch.object(runner, "STATE_DIR", str(foreign)):
+                with self.assertRaises(AssertionError):
+                    _clear_rate_state()
+            self.assertTrue(victim.exists(), "a non-temp state dir must not be cleaned")
+        finally:
+            shutil.rmtree(foreign, ignore_errors=True)
+
+    def test_clearRateState_refusesASymlinkOutOfTheTempDir(self):
+        """A symlink whose own path looks temporary but resolves into the repo
+        must be judged by its target, not by its name."""
+        target = Path(BASE) / "_rate_state_symlink_probe"
+        target.mkdir(exist_ok=True)
+        victim = target / "rate--probe.json"
+        victim.write_text("{}")
+        link_dir = Path(tempfile.mkdtemp(prefix="zipper-symlink-"))
+        link = link_dir / "state"
+        os.symlink(target, link)
+        try:
+            with patch.object(runner, "STATE_DIR", str(link)):
+                with self.assertRaises(AssertionError):
+                    _clear_rate_state()
+            self.assertTrue(victim.exists(), "a symlink out of the temp dir must not be followed")
+        finally:
+            shutil.rmtree(target, ignore_errors=True)
+            shutil.rmtree(link_dir, ignore_errors=True)
+
+    def test_clearRateState_refusesASiblingOfTheTempDir(self):
+        """A path that merely shares the temp dir's name prefix, such as /tmpfoo
+        beside /tmp, is not inside it."""
+        root = Path(BASE) / "_rate_state_prefix_probe"
+        fake_temp = root / "tmp"
+        fake_temp.mkdir(parents=True, exist_ok=True)
+        sibling = root / "tmpfoo"
+        sibling.mkdir(exist_ok=True)
+        victim = sibling / "rate--probe.json"
+        victim.write_text("{}")
+        try:
+            with patch.object(tempfile, "gettempdir", return_value=str(fake_temp)):
+                with patch.object(runner, "STATE_DIR", str(sibling)):
+                    with self.assertRaises(AssertionError):
+                        _clear_rate_state()
+            self.assertTrue(victim.exists(), "a sibling of the temp dir must not be cleaned")
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_clearRateState_removesMarksInTheTestDir(self):
+        mark = Path(runner.STATE_DIR) / "rate--isolation-probe.json"
+        mark.write_text("{}")
+        _clear_rate_state()
+        self.assertFalse(mark.exists(), "the test directory's own marks must be cleared")
 
 
 class DryRunRateLimitTests(unittest.TestCase):
