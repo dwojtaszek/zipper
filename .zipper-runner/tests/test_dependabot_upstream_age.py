@@ -121,6 +121,22 @@ updated-dependencies:
         self.assertEqual(fallback[0]["name"], "Foo.Bar")
         self.assertEqual(fallback[0]["version"], "1.2.0")
 
+        # Fallback from body with markdown link and trailing period
+        body_linked = "Bumps [actions/checkout](https://github.com/actions/checkout) from 3 to 4.2.0."
+        fallback_linked = runner._parse_dependabot_updated_dependencies(body_linked)
+        self.assertEqual(len(fallback_linked), 1)
+        self.assertEqual(fallback_linked[0]["name"], "actions/checkout")
+        self.assertEqual(fallback_linked[0]["version"], "4.2.0")
+
+        # Changelog / release note lines in body do not get falsely extracted
+        body_release_notes = """
+Release Notes:
+- Included commit: bump legacy-pkg from 0.1 to 0.2
+- Notes: We decided to bump older-lib from 1.0 to 2.0 in last sprint.
+"""
+        fallback_notes = runner._parse_dependabot_updated_dependencies(body_release_notes)
+        self.assertEqual(len(fallback_notes), 0)
+
     def test_parse_updated_dependencies_unquoted_version_scalar_preserved(self):
         body = """
 ---

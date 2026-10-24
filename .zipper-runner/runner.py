@@ -3326,14 +3326,15 @@ def _parse_dependabot_updated_dependencies(body: str = "", commits: list[dict] |
         if results:
             return results
 
-    all_text = f"{title}\n{body}"
-    patterns = [
-        r"Bumps\s+\[?([a-zA-Z0-9_./-]+)\]?\s+from\s+[^\s]+\s+to\s+([a-zA-Z0-9_.-]+)",
-        r"Updates\s+`([a-zA-Z0-9_./-]+)`\s+from\s+[^\s]+\s+to\s+([a-zA-Z0-9_.-]+)",
-        r"bump\s+([a-zA-Z0-9_./-]+)\s+from\s+[^\s]+\s+to\s+([a-zA-Z0-9_.-]+)",
+    fallbacks = [
+        (title or "", r"\bbump\s+([a-zA-Z0-9_./-]+)\s+from\s+\S+\s+to\s+([a-zA-Z0-9_.-]+)", re.IGNORECASE),
+        (title or "", r"\bBumps\s+\[?([a-zA-Z0-9_./-]+)\]?(?:\([^)]*\))?\s+from\s+\S+\s+to\s+([a-zA-Z0-9_.-]+)", re.IGNORECASE),
+        (body or "", r"^Bumps\s+\[?([a-zA-Z0-9_./-]+)\]?(?:\([^)]*\))?\s+from\s+\S+\s+to\s+([a-zA-Z0-9_.-]+)", re.MULTILINE),
+        (body or "", r"^Updates\s+`?([a-zA-Z0-9_./-]+)`?\s+from\s+\S+\s+to\s+([a-zA-Z0-9_.-]+)", re.MULTILINE),
     ]
-    for pat in patterns:
-        for name, ver in re.findall(pat, all_text, re.IGNORECASE):
+    for text, pat, flags in fallbacks:
+        for name, ver in re.findall(pat, text, flags):
+            ver = ver.rstrip(".")
             if (name, ver) not in seen:
                 seen.add((name, ver))
                 results.append({"name": name, "version": ver})
