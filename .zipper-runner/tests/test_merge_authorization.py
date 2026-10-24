@@ -18,13 +18,24 @@ BASE = Path(__file__).resolve().parents[1]
 
 class MergeAuthorizationTests(unittest.TestCase):
     def test_merge_untrustedForkWrongBaseAndSpoofedBot_doNotMutateRefs(self):
-        for mutation in ("untrusted", "fork", "base", "spoof", "spoof-id", "spoof-type", "missing", "no-state", "legacy",
+        for mutation in ("untrusted", "fork", "base", "spoof", "spoof-id", "spoof-type", "missing", "no-state",
                          "bot-mixed", "bot-unsigned", "bot-drift", "stale-approval", "revoked-approval", "dismissed-approval"):
             with self.subTest(mutation=mutation):
                 self._exercise(mutation)
 
     def test_merge_runnerProvenance_mergesExactReviewedHead(self):
         self._exercise("runner", expected=True)
+
+    def test_merge_movedHeadOnARecordedPr_mergesTheCurrentHead(self):
+        """A record names the PR and branch, not a frozen SHA. The maintainer is the
+        sole merge maintainer and GitHub forbids approving your own pull request, so
+        refusing a moved head stranded their own PRs after any rebase."""
+        self._exercise("moved", expected=True)
+
+    def test_merge_recordWithoutHead_stillAuthorizesTheCurrentHead(self):
+        """A record written before authorized_head existed is provenance too, so it
+        must authorize rather than dead-end the PR."""
+        self._exercise("legacy", expected=True)
 
     def test_merge_authenticatedDependabot_mergesExactReviewedHead(self):
         self._exercise("bot", expected=True)
@@ -40,7 +51,7 @@ class MergeAuthorizationTests(unittest.TestCase):
 
     def test_scanners_rejectUnauthorizedOrigins_beforeReviewMergeOrRecovery(self):
         for scanner in ("active", "orphan", "dependabot"):
-            for scenario in ("untrusted", "fork", "base", "no-state", "legacy", "spoof-id", "spoof-type",
+            for scenario in ("untrusted", "fork", "base", "no-state", "spoof-id", "spoof-type",
                              "bot-mixed", "bot-unsigned", "bot-drift", "stale-approval", "revoked-approval", "dismissed-approval"):
                 with self.subTest(scanner=scanner, scenario=scenario):
                     self._exercise(scenario, scanner=scanner)
@@ -48,6 +59,14 @@ class MergeAuthorizationTests(unittest.TestCase):
     def test_scanners_authorizedRunnerAndGenuineBot_mergeNormally(self):
         for scanner, scenario in (("active", "runner"), ("orphan", "runner"), ("dependabot", "bot")):
             with self.subTest(scanner=scanner):
+                self._exercise(scenario, expected=True, scanner=scanner)
+
+    def test_scanners_movedOrHeadlessRecord_stillMergeNormally(self):
+        """The active and orphan scanners share the merge guard, so the relaxed rule
+        has to hold on both paths, not only on a direct merge."""
+        for scanner, scenario in (("active", "moved"), ("orphan", "moved"),
+                                  ("active", "legacy"), ("orphan", "legacy")):
+            with self.subTest(scanner=scanner, scenario=scenario):
                 self._exercise(scenario, expected=True, scanner=scanner)
 
     def test_recovery_trustedProvenance_createsExactHeadWorktree(self):
@@ -160,6 +179,9 @@ class MergeAuthorizationTests(unittest.TestCase):
             }
             if scenario == "legacy":
                 state.pop("authorized_head")
+            if scenario == "moved":
+                # The record still points at the pre-PR commit on main.
+                state["authorized_head"] = initial
             if scenario != "no-state":
                 (root / "state" / "issue-42.json").write_text(json.dumps(state))
             if scenario == "failed-review":
@@ -337,7 +359,12 @@ class WorktreeReconciliationTests(unittest.TestCase):
         return subprocess.check_output(["git", "-C", str(repo), "rev-parse", backup_branches[0]], text=True).strip()
 
     def _rewrite_and_authorize_remote_head(self, root, repo, parent=None):
-        """Point origin's PR branch at a new commit (child of parent when given) and authorize it."""
+        """Point origin's PR branch at a new commit (child of parent when given) and authorize it.
+
+        The APPROVED review written here predates the trusted-head rule: those tests
+        now authorize through the issue record instead, so the review is only there
+        for the headless-record and approval scenarios that still need it.
+        """
         tree = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "main^{tree}"], text=True).strip()
         args = ["git", "-C", str(repo), "commit-tree", tree]
         if parent:
@@ -559,6 +586,77 @@ class WorktreeReconciliationTests(unittest.TestCase):
                 ["git", "--git-dir", str(root / "origin"), "rev-parse", "refs/heads/main"], text=True
             ).strip()
             self.assertEqual(origin_main, rewritten_sha)
+
+    def _revertPrBranchAndBabysit(self, root, repo, runner, directory, *, strip_recorded_head=False):
+        """Publish a completion, force the branch back to its start, then babysit.
+
+        Returns (initial, completion, worktree_head, origin_branch). CI is left
+        pending so the cycle stops at reconciliation, before the merge that would
+        delete the remote branch and hide what was republished.
+        """
+        initial = subprocess.check_output(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+        wt_path, completion = self._create_tracked_pr_worktree(
+            root, repo, remote_files={"completion.txt": "runner completion"})
+        if strip_recorded_head:
+            state_path = root / "state" / "issue-42.json"
+            state = json.loads(state_path.read_text())
+            state.pop("authorized_head")
+            state_path.write_text(json.dumps(state))
+        # The maintainer reverts the branch to the commit it started from.
+        subprocess.run(["git", "-C", str(repo), "push", "--force", "origin",
+                        f"{initial}:refs/heads/fix/ISSUE-42-proof"],
+                       check=True, capture_output=True)
+        pr_path = root / "pr.json"
+        pr = json.loads(pr_path.read_text())
+        pr["head"]["sha"] = initial
+        pr_path.write_text(json.dumps(pr))
+        (root / "rollup.json").write_text(json.dumps({
+            "__typename": "CheckRun", "name": "ci-gate", "status": "IN_PROGRESS", "conclusion": None,
+        }))
+
+        with self._fixture_env(directory):
+            runner.babysit_active_worktrees()
+
+        worktree_head = subprocess.check_output(
+            ["git", "-C", str(wt_path), "rev-parse", "HEAD"], text=True).strip()
+        origin_branch = subprocess.check_output(
+            ["git", "--git-dir", str(root / "origin"), "rev-parse",
+             "refs/heads/fix/ISSUE-42-proof"], text=True).strip()
+        return initial, completion, worktree_head, origin_branch
+
+    def test_babysit_activeWorktree_backwardForcePush_doesNotRepublishTheRevertedCompletion(self):
+        """A maintainer who force-pushes the branch back past the runner's published
+        completion has decided that content should go. Authorization no longer
+        compares the head, so the runner must not read its own local copy as
+        unpublished work and push the rejected content straight back: the recorded
+        head is still the local tip, so this is a rewrite in the backwards
+        direction, not a completion waiting to be published."""
+        with self._setup_fixture() as (root, repo, runner, directory):
+            initial, completion, worktree_head, origin_branch = self._revertPrBranchAndBabysit(
+                root, repo, runner, directory)
+            self.assertNotEqual(completion, initial)
+            self.assertFalse((root / "merged").exists())
+            self.assertNotEqual(origin_branch, completion,
+                                "the reverted completion must not be republished")
+            self.assertEqual(origin_branch, initial)
+            self.assertEqual(worktree_head, initial,
+                             "the worktree must follow the maintainer's rewrite")
+
+    def test_babysit_activeWorktree_headlessRecordBackwardRewrite_doesNotRepublish(self):
+        """A record with no head cannot tell an unpublished completion from a head a
+        rewrite abandoned, so the runner must not guess in the publishing direction.
+        With no gate record either, there is no evidence any completion is pending,
+        so the worktree resumes through the agent and the reverted content stays
+        reverted. The ambiguity is resolved toward inaction, not toward overwriting
+        a force-push."""
+        with self._setup_fixture() as (root, repo, runner, directory):
+            initial, completion, _worktree_head, origin_branch = self._revertPrBranchAndBabysit(
+                root, repo, runner, directory, strip_recorded_head=True)
+            self.assertFalse((root / "merged").exists())
+            self.assertNotEqual(origin_branch, completion,
+                                "the reverted completion must not be republished")
+            self.assertEqual(origin_branch, initial)
 
     def test_babysit_activeWorktree_advancedAuthorizedHead_rebasesLocalCommitsWithoutBackup(self):
         with self._setup_fixture() as (root, repo, runner, directory):

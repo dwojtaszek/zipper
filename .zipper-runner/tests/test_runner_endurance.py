@@ -466,6 +466,38 @@ class StateSweepTests(unittest.TestCase):
                 runner._prune_stale_state_files()
             self.assertTrue(os.path.exists(stale))
 
+    def test_pruneStaleStateFiles_protectsTheGateFileOfALiveWorktree(self):
+        """A gate file is named by PR number while its worktree is named by issue
+        number, so comparing it against live issue numbers never protected it and
+        the sweep deleted a live worktree's pending-completion state."""
+        with tempfile.TemporaryDirectory() as wt_base:
+            os.makedirs(os.path.join(wt_base, "issue-777"))
+            issue = os.path.join(runner.STATE_DIR, "issue-777.json")
+            with open(issue, "w") as stream:
+                json.dump({"pr_number": "4242", "branch": "fix/ISSUE-777-proof",
+                           "authorized_head": "a" * 40}, stream)
+            old = time.time() - (runner.STATE_MAX_AGE_DAYS + 5) * 86400
+            os.utime(issue, (old, old))
+            protected = self._touch("pr-4242-coderabbit-gate.json", runner.STATE_MAX_AGE_DAYS + 5)
+            orphaned = self._touch("pr-4243-coderabbit-gate.json", runner.STATE_MAX_AGE_DAYS + 5)
+            with patch.object(runner, "WORKTREES_BASE", wt_base):
+                runner._prune_stale_state_files()
+            self.assertTrue(os.path.exists(protected),
+                            "a live worktree's gate file must survive the sweep")
+            self.assertFalse(os.path.exists(orphaned),
+                             "an orphaned gate file must still be pruned")
+
+    def test_pruneStaleStateFiles_protectsAPrStateForALiveIssueNumber(self):
+        """A pr-<N> file whose number happens to match a live worktree's issue
+        number stays protected, so a coincidental numeric match never deletes
+        state a live worktree might depend on."""
+        with tempfile.TemporaryDirectory() as wt_base:
+            os.makedirs(os.path.join(wt_base, "issue-4242"))
+            coincidental = self._touch("pr-4242-rerun.json", runner.STATE_MAX_AGE_DAYS + 5)
+            with patch.object(runner, "WORKTREES_BASE", wt_base):
+                runner._prune_stale_state_files()
+            self.assertTrue(os.path.exists(coincidental))
+
     def test_pruneStaleStateFiles_ignoresRateAndHeartbeatFiles(self):
         kept = self._touch("rate-anything.json", runner.STATE_MAX_AGE_DAYS + 5)
         runner._prune_stale_state_files()
