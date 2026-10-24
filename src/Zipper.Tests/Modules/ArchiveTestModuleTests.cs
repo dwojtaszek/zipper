@@ -131,9 +131,11 @@ public class ArchiveTestModuleTests : WorkingDirectoryTestBase
     [Fact]
     public async Task RunAsync_SuiteNamesAreCaseInsensitive()
     {
-        var exitCode = await RunAsync("--archive-test-suite", "SMOKE", "--output-path", Path.Combine(TempDir, "upper"));
+        var destination = Path.Combine(TempDir, "upper");
+        var exitCode = await RunAsync("--archive-test-suite", "SMOKE", "--output-path", destination);
 
         Assert.Equal(0, exitCode);
+        Assert.Equal(SuiteKeys(ArchiveTestCatalog.SmokeSuite).Count * 2, Directory.GetFiles(destination).Length);
     }
 
     [Fact]

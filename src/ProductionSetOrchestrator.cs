@@ -656,7 +656,7 @@ internal static class ProductionSetOrchestrator
         IFileMaterializer materializer,
         CancellationToken cancellationToken)
     {
-        if (materializer is ProductionFileMaterializer)
+        if (materializer.ShouldValidate)
         {
             var report = Validation.ProductionSetPostValidator.Validate(productionPath, request);
             var reportPath = Path.Combine(productionPath, "_validation_report.json");

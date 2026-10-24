@@ -55,4 +55,14 @@ public class MinimalMaterializerTests
 
         Assert.False(await materializer.FileExistsAsync(Path.Combine(Path.GetTempPath(), "missing-file.bin")));
     }
+
+    [Fact]
+    public void ShouldValidate_Always_ReturnsFalse()
+    {
+        // MinimalMaterializer is the no-op test/in-memory seam; post-generation
+        // validation must only run for the filesystem-backed materializer.
+        var materializer = new MinimalMaterializer();
+
+        Assert.False(materializer.ShouldValidate);
+    }
 }

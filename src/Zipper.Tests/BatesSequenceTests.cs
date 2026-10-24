@@ -84,6 +84,53 @@ public class BatesSequenceTests
         Assert.Contains("Index must be non-negative.", ex.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Next_SequentialCalls_ReturnsSequentialAndUniqueNumbers()
+    {
+        var sequence = BatesSequence.FromConfig(new BatesNumberConfig
+        {
+            Prefix = "DOC",
+            Start = 100L,
+            Digits = 6,
+            Increment = 2L,
+        });
+
+        var numbers = Enumerable.Range(0, 100).Select(_ => sequence.Next().ToString()).ToArray();
+
+        Assert.Equal("DOC000100", numbers[0]);
+        Assert.Equal("DOC000102", numbers[1]);
+        Assert.Equal("DOC000298", numbers[99]);
+        Assert.Equal(numbers.Length, numbers.Distinct(StringComparer.Ordinal).Count());
+    }
+
+    [Fact]
+    public void Next_ConcurrentCallers_ReturnUniqueNumbers()
+    {
+        var sequence = BatesSequence.FromConfig(new BatesNumberConfig { Start = 1L, Digits = 8, Increment = 1L });
+
+        var numbers = new string[64];
+        Parallel.For(0, numbers.Length, i => numbers[i] = sequence.Next().WithoutPrefix());
+
+        Assert.Equal(numbers.Length, numbers.Distinct(StringComparer.Ordinal).Count());
+    }
+
+    [Fact]
+    public void Format_OverflowingStartPlusIncrement_ThrowsOverflowException()
+    {
+        // Tests the checked arithmetic on line 112 in BatesSequence.cs.
+        var sequence = BatesSequence.FromConfig(new BatesNumberConfig
+        {
+            Start = long.MaxValue,
+            Digits = 20,
+            Increment = 1L,
+        });
+
+        Assert.Throws<OverflowException>(() => sequence.Format(1));
+
+        Assert.Equal(long.MaxValue.ToString("D20", System.Globalization.CultureInfo.InvariantCulture), sequence.Next().WithoutPrefix());
+        Assert.Throws<OverflowException>(() => sequence.Next());
+    }
+
     [Theory]
     [InlineData("NullConfig", "Config cannot be null.")]
     [InlineData("NegativeStart", "Bates start number must be non-negative.")]

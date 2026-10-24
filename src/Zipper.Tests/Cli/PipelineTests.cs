@@ -171,4 +171,105 @@ public class PipelineTests : WorkingDirectoryTestBase
             }
         }
     }
+
+    [Fact]
+    public void Build_ImageTypeWithExplicitLoadFileFormats_RespectsExplicitFormats()
+    {
+        // Tests lines 67-74 in Pipeline.cs: image type × explicit --load-file-format(s)
+        // When --load-file-formats is explicitly provided, it should NOT be overridden by image type logic
+        var (ok, modules) = PipelineTestHelper.Parse(new[]
+        {
+            "--type", "tiff",
+            "--count", "10",
+            "--output-path", Directory.GetCurrentDirectory(),
+            "--load-file-formats", "csv" // Explicitly only CSV, not DAT+OPT
+        });
+        Assert.True(ok);
+        var result = PipelineTestHelper.Build(modules: modules);
+        Assert.NotNull(result);
+        Assert.Single(result!.LoadFile.Formats);
+        Assert.Equal(LoadFileFormat.Csv, result!.LoadFile.Formats[0]);
+    }
+
+    [Fact]
+    public void Build_ImageTypeWithoutExplicitLoadFileFormats_AddsDatAndOpt()
+    {
+        // Tests lines 67-74: when image type (tiff/jpg) and NO explicit --load-file-formats,
+        // DAT and OPT are automatically added
+        var (ok, modules) = PipelineTestHelper.Parse(new[]
+        {
+            "--type", "tiff",
+            "--count", "10",
+            "--output-path", Directory.GetCurrentDirectory()
+            // No --load-file-formats
+        });
+        Assert.True(ok);
+        var result = PipelineTestHelper.Build(modules: modules);
+        Assert.NotNull(result);
+        Assert.Equal(2, result!.LoadFile.Formats.Count);
+        Assert.Contains(LoadFileFormat.Dat, result!.LoadFile.Formats);
+        Assert.Contains(LoadFileFormat.Opt, result!.LoadFile.Formats);
+    }
+
+    [Fact]
+    public void Build_JpgTypeWithoutExplicitLoadFileFormats_AddsDatAndOpt()
+    {
+        // Tests lines 67-74: jpg image type without explicit --load-file-formats
+        var (ok, modules) = PipelineTestHelper.Parse(new[]
+        {
+            "--type", "jpg",
+            "--count", "10",
+            "--output-path", Directory.GetCurrentDirectory()
+        });
+        Assert.True(ok);
+        var result = PipelineTestHelper.Build(modules: modules);
+        Assert.NotNull(result);
+        Assert.Equal(2, result!.LoadFile.Formats.Count);
+        Assert.Contains(LoadFileFormat.Dat, result!.LoadFile.Formats);
+        Assert.Contains(LoadFileFormat.Opt, result!.LoadFile.Formats);
+    }
+
+    [Fact]
+    public void Build_JpgTypeWithExplicitLoadFileFormats_RespectsExplicitFormats()
+    {
+        // Tests lines 67-74: jpg image type with explicit --load-file-formats
+        var (ok, modules) = PipelineTestHelper.Parse(new[]
+        {
+            "--type", "jpg",
+            "--count", "10",
+            "--output-path", Directory.GetCurrentDirectory(),
+            "--load-file-formats", "csv"
+        });
+        Assert.True(ok);
+        var result = PipelineTestHelper.Build(modules: modules);
+        Assert.NotNull(result);
+        Assert.Single(result!.LoadFile.Formats);
+        Assert.Equal(LoadFileFormat.Csv, result!.LoadFile.Formats[0]);
+    }
+
+    [Fact]
+    public void Build_SourceInputWithImageTypeWithoutExplicitFormats_AddsDatAndOpt()
+    {
+        // Tests lines 67-74: source input with image type (tiff/jpg) without explicit --load-file-formats
+        var tempCsv = Path.Combine(Directory.GetCurrentDirectory(), "source_" + Guid.NewGuid().ToString("N") + ".csv");
+        try
+        {
+            File.WriteAllText(tempCsv, "FilePath,FileType\nfolder/doc1.tiff,tiff\n");
+            var (ok, modules) = PipelineTestHelper.Parse(new[]
+            {
+                "--input-csv", tempCsv,
+                "--output-path", Directory.GetCurrentDirectory()
+            });
+            Assert.True(ok);
+            var result = PipelineTestHelper.Build(modules: modules);
+            Assert.NotNull(result);
+            Assert.Equal(2, result!.LoadFile.Formats.Count);
+            Assert.Contains(LoadFileFormat.Dat, result!.LoadFile.Formats);
+            Assert.Contains(LoadFileFormat.Opt, result!.LoadFile.Formats);
+        }
+        finally
+        {
+            if (File.Exists(tempCsv)) File.Delete(tempCsv);
+        }
+    }
 }

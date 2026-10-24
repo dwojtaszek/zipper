@@ -114,6 +114,38 @@ public class DistributionsTests
     }
 
     [Fact]
+    public void Gaussian_WithSingleFolder_AlwaysReturnsFirstFolder()
+    {
+        Assert.Equal(1, Distributions.Gaussian(1, 100, 1));
+        Assert.Equal(1, Distributions.Gaussian(100, 100, 1));
+    }
+
+    [Fact]
+    public void Gaussian_FirstAndLastFile_ReturnEndpointFolders()
+    {
+        const int totalFolders = 20;
+        const int totalFiles = 1000;
+
+        Assert.Equal(1, Distributions.Gaussian(1, totalFiles, totalFolders));
+        Assert.Equal(totalFolders, Distributions.Gaussian(totalFiles, totalFiles, totalFolders));
+    }
+
+    [Fact]
+    public void Gaussian_AsFileIndexIncreases_FolderIsMonotonicallyNonDecreasing()
+    {
+        const int totalFolders = 20;
+        const int totalFiles = 1000;
+
+        int previous = Distributions.Gaussian(1, totalFiles, totalFolders);
+        for (int i = 2; i <= totalFiles; i++)
+        {
+            int current = Distributions.Gaussian(i, totalFiles, totalFolders);
+            Assert.True(current >= previous, $"Folder regressed at file {i}: {previous} -> {current}");
+            previous = current;
+        }
+    }
+
+    [Fact]
     public void Exponential_FirstQuarterFolders_ReceivesExpectedShareOfFiles()
     {
         Assert.Equal(1, Distributions.Exponential(1, 1, 10));

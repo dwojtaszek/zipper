@@ -45,4 +45,7 @@ internal interface IFileMaterializer
 
     /// <summary>Creates a ZIP archive from a directory tree using the specified compression method.</summary>
     Task CreateZipAsync(string sourceDir, string zipPath, Config.ZipCompressionMethod method, CancellationToken cancellationToken = default);
+
+    /// <summary>Gets a value indicating whether post-generation validation should run for this materializer.</summary>
+    bool ShouldValidate { get; }
 }

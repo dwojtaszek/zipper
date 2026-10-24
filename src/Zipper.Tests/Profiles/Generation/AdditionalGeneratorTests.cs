@@ -317,4 +317,54 @@ public class AdditionalGeneratorTests
 
         Assert.StartsWith("2023-05-17 ", value, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void LongTextGenerator_MalformedMinParam_NonNumeric_ThrowsFormatException()
+    {
+        // Tests line 20 in LongTextGenerator.cs: Convert.ToInt32(minObj) throws if min is non-numeric
+        var col = new ColumnDefinition
+        {
+            GeneratorParams = new Dictionary<string, object>(StringComparer.Ordinal) { { "min", "x" } }
+        };
+
+        Assert.Throws<FormatException>(() => new LongTextGenerator(col));
+    }
+
+    [Fact]
+    public void LongTextGenerator_MalformedMaxParam_NonNumeric_ThrowsFormatException()
+    {
+        // Tests line 25 in LongTextGenerator.cs: Convert.ToInt32(maxObj) throws if max is non-numeric
+        var col = new ColumnDefinition
+        {
+            GeneratorParams = new Dictionary<string, object>(StringComparer.Ordinal) { { "max", "y" } }
+        };
+
+        Assert.Throws<FormatException>(() => new LongTextGenerator(col));
+    }
+
+    [Fact]
+    public void LongTextGenerator_MinGreaterThanMax_ThrowsArgumentOutOfRangeException()
+    {
+        // Tests line 37 in LongTextGenerator.cs: Seeded.Next(min, max+1) throws if min > max
+        var col = new ColumnDefinition
+        {
+            GeneratorParams = new Dictionary<string, object>(StringComparer.Ordinal) { { "min", 10 }, { "max", 5 } }
+        };
+        var generator = new LongTextGenerator(col);
+        var context = this.CreateContext();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => generator.Generate(context));
+    }
+
+    [Fact]
+    public void LongTextGenerator_MissingParams_UsesDefaults()
+    {
+        // Tests that missing min/max params default to 1 and 3 paragraphs
+        var col = new ColumnDefinition { GeneratorParams = null };
+        var generator = new LongTextGenerator(col);
+        var context = this.CreateContext();
+
+        var text = generator.Generate(context);
+        Assert.NotEmpty(text);
+    }
 }

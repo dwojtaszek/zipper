@@ -119,7 +119,7 @@ public static class GoldenBaselineHarness
             using var zip = new ZipArchive(fileStream, ZipArchiveMode.Read);
             foreach (var entry in zip.Entries.OrderBy(e => e.FullName, StringComparer.Ordinal))
             {
-                if (entry.FullName.EndsWith("/", StringComparison.Ordinal))
+                if (entry.FullName.EndsWith('/'))
                 {
                     if (normalizeTimestamps)
                     {

@@ -390,7 +390,7 @@ public class ProductionSetOrchestratorTests
                     {
                         throw new IOException("Simulated disk error writing set 2 native file");
                     }
-                    return Task.CompletedTask;
+                    return Task.FromResult(false);
                 },
             };
 
@@ -489,7 +489,7 @@ public class ProductionSetOrchestratorTests
             var innerMaterializer = new ProductionFileMaterializer();
             var decorator = new FaultingMaterializerDecorator(innerMaterializer)
             {
-                OnWriteBytesAsync = async (path, content, ct) =>
+                OnWriteBytesAsync = (path, content, ct) =>
                 {
                     if (path.Contains("PROD_2", StringComparison.Ordinal) && path.Contains("NATIVES", StringComparison.Ordinal))
                     {
@@ -500,7 +500,7 @@ public class ProductionSetOrchestratorTests
                         cts.Cancel();
                         throw new OperationCanceledException(cts.Token);
                     }
-                    await innerMaterializer.WriteBytesAsync(path, content, ct);
+                    return Task.FromResult(false);
                 },
             };
 
@@ -683,6 +683,140 @@ public class ProductionSetOrchestratorTests
         }
     }
 
+    [Fact]
+    public async Task GenerateAsync_ValidationFailure_ThrowsValidationFailedExceptionAndLeavesArtifactsForInspection()
+    {
+        // Tests lines 666-669: validation failure throws ValidationFailedException
+        // and leaves the production directory intact for inspection (no cleanup for ValidationFailedException, lines 159-192)
+        var tempDir = Path.Combine(Path.GetTempPath(), "ProdValidationFail_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var sentinelBytes = new byte[] { 0x11, 0x22, 0x33, 0x44 };
+            var sentinelPath = Path.Combine(tempDir, "unowned_sentinel.bin");
+            await File.WriteAllBytesAsync(sentinelPath, sentinelBytes);
+
+            var request = CreateRequest(count: 1, fileType: "pdf", outputPath: tempDir);
+            request.Production = request.Production with { ProductionZip = true, ProductionId = "PROD_VALIDATION" };
+
+            // Decorator that makes validation fail by not writing native files
+            // (DAT will reference them but they won't exist on disk)
+            var innerMaterializer = new ProductionFileMaterializer();
+            var decorator = new FaultingMaterializerDecorator(innerMaterializer)
+            {
+                OnWriteBytesAsync = (path, content, ct) =>
+                {
+                    // Skip writing native files (they're written to NATIVES/ directory)
+                    if (path.Contains("NATIVES", StringComparison.Ordinal) && path.EndsWith(".pdf", StringComparison.Ordinal))
+                    {
+                        // Don't write the native file - validation will fail because it's missing
+                        return Task.FromResult(true); // Handled - suppress inner call
+                    }
+                    return Task.FromResult(false); // Not handled - let decorator call inner
+                }
+            };
+
+            var ex = await Assert.ThrowsAsync<Validation.ValidationFailedException>(() =>
+                ProductionSetOrchestrator.GenerateAsync(request, decorator, new HashComputer()));
+
+            Assert.Contains("Production Set validation failed", ex.Message);
+
+            // ValidationFailedException does NOT trigger cleanup (line 159: ex is not ValidationFailedException)
+            // The production directory is left intact for inspection
+            // The zip is NOT created because validation runs before zip creation (line 266)
+            var prodDirPath = Path.Combine(tempDir, "PROD_VALIDATION");
+            var prodZipPath = Path.Combine(tempDir, "PROD_VALIDATION.zip");
+
+            Assert.True(Directory.Exists(prodDirPath), "Production directory must be left for inspection on validation failure.");
+            Assert.False(File.Exists(prodZipPath), "Production zip is not created when validation fails (validation runs before zip creation).");
+            Assert.True(File.Exists(sentinelPath), "Unowned sentinel file must be preserved.");
+
+            // Verify validation report exists
+            var reportPath = Path.Combine(prodDirPath, "_validation_report.json");
+            Assert.True(File.Exists(reportPath), "Validation report must exist.");
+            var reportJson = await File.ReadAllTextAsync(reportPath);
+            Assert.Contains("failed", reportJson, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("PathExistence", reportJson, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateAsync_RollingSetValidationFailureOnSecondSet_LeavesAllArtifactsForInspection()
+    {
+        // A ValidationFailedException is intentionally not cleaned up: both the completed
+        // first set and the partial failed set stay on disk for inspection.
+        var tempDir = Path.Combine(Path.GetTempPath(), "ProdRollingValidationFail_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var sentinelBytes = new byte[] { 0x55, 0x66, 0x77, 0x88 };
+            var sentinelPath = Path.Combine(tempDir, "unowned_sentinel.bin");
+            await File.WriteAllBytesAsync(sentinelPath, sentinelBytes);
+
+            var request = CreateRequest(count: 1, fileType: "pdf", outputPath: tempDir);
+            request.Production = request.Production with
+            {
+                ProductionZip = true,
+                ProductionId = "PROD_1,PROD_2",
+                RollingCount = 2,
+            };
+
+            var innerMaterializer = new ProductionFileMaterializer();
+            var decorator = new FaultingMaterializerDecorator(innerMaterializer)
+            {
+                OnWriteBytesAsync = (path, content, ct) =>
+                {
+                    // Skip writing native files for the second set only
+                    if (path.Contains("PROD_2", StringComparison.Ordinal) && path.Contains("NATIVES", StringComparison.Ordinal) && path.EndsWith(".pdf", StringComparison.Ordinal))
+                    {
+                        // Don't write the native file - validation will fail because it's missing
+                        return Task.FromResult(true); // Handled - suppress inner call
+                    }
+                    return Task.FromResult(false); // Not handled - let decorator call inner
+                }
+            };
+
+            var ex = await Assert.ThrowsAsync<Validation.ValidationFailedException>(() =>
+                ProductionSetOrchestrator.GenerateAsync(request, decorator, new HashComputer()));
+
+            Assert.Contains("Production Set validation failed", ex.Message);
+
+            // ValidationFailedException does NOT trigger cleanup (line 159)
+            // Both sets are left intact for inspection
+            var prod1DirPath = Path.Combine(tempDir, "PROD_1");
+            var prod1ZipPath = Path.Combine(tempDir, "PROD_1.zip");
+            var prod2DirPath = Path.Combine(tempDir, "PROD_2");
+            var prod2ZipPath = Path.Combine(tempDir, "PROD_2.zip");
+
+            Assert.True(Directory.Exists(prod1DirPath), "Completed set 1 directory must be left for inspection on validation failure.");
+            Assert.True(File.Exists(prod1ZipPath), "Completed set 1 zip must be left for inspection on validation failure.");
+            Assert.True(Directory.Exists(prod2DirPath), "Partial set 2 directory must be left for inspection on validation failure.");
+            Assert.False(File.Exists(prod2ZipPath), "Set 2 zip is not created when validation fails (validation runs before zip creation).");
+            Assert.True(File.Exists(sentinelPath), "Unowned sentinel file must be preserved.");
+
+            // Verify validation report exists for set 2
+            var reportPath = Path.Combine(prod2DirPath, "_validation_report.json");
+            Assert.True(File.Exists(reportPath), "Validation report must exist for failed set.");
+            var reportJson = await File.ReadAllTextAsync(reportPath);
+            Assert.Contains("failed", reportJson, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("PathExistence", reportJson, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
 
     private sealed class FakeMaterializer : IFileMaterializer
     {
@@ -751,6 +885,8 @@ public class ProductionSetOrchestratorTests
         {
             return Task.FromResult(this.FileExistsResult);
         }
+
+        public bool ShouldValidate => false;
 
         public Task CreateZipAsync(string sourceDir, string zipPath, Config.ZipCompressionMethod method, CancellationToken cancellationToken = default)
         {

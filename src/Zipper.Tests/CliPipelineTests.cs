@@ -76,10 +76,11 @@ public class CliPipelineTests : WorkingDirectoryTestBase
     public void ValidateAndParseArguments_WithNullArgs_ShouldReturnNull()
     {
         // Act
-        var result = Cli.Pipeline.Build((string[])null!);
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build((string[])null!));
 
         // Assert
         Assert.Null(result);
+        Assert.Contains("Usage:", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -89,10 +90,11 @@ public class CliPipelineTests : WorkingDirectoryTestBase
         var args = Array.Empty<string>();
 
         // Act
-        var result = Cli.Pipeline.Build(args);
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         // Assert
         Assert.Null(result);
+        Assert.Contains("Usage:", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -102,10 +104,11 @@ public class CliPipelineTests : WorkingDirectoryTestBase
         var args = new[] { "--count", "100", "--output-path", this.tempDir };
 
         // Act
-        var result = Cli.Pipeline.Build(args);
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         // Assert
         Assert.Null(result);
+        Assert.Contains("Error: --type is required.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -115,10 +118,11 @@ public class CliPipelineTests : WorkingDirectoryTestBase
         var args = new[] { "--type", "pdf", "--output-path", this.tempDir };
 
         // Act
-        var result = Cli.Pipeline.Build(args);
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         // Assert
         Assert.Null(result);
+        Assert.Contains("Error: --count is required.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -128,10 +132,11 @@ public class CliPipelineTests : WorkingDirectoryTestBase
         var args = new[] { "--type", "pdf", "--count", "100" };
 
         // Act
-        var result = Cli.Pipeline.Build(args);
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         // Assert
         Assert.Null(result);
+        Assert.Contains("Error: Output path is required.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -141,10 +146,11 @@ public class CliPipelineTests : WorkingDirectoryTestBase
         var args = new[] { "--type", "pdf", "--count", "100", "--output-path", string.Empty };
 
         // Act
-        var result = Cli.Pipeline.Build(args);
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         // Assert
         Assert.Null(result);
+        Assert.Contains("Error: Output path is required.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -155,10 +161,11 @@ public class CliPipelineTests : WorkingDirectoryTestBase
         var args = new[] { "--type", "pdf", "--count", "100", "--output-path", insecurePath };
 
         // Act
-        var result = Cli.Pipeline.Build(args);
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         // Assert
         Assert.Null(result);
+        Assert.Contains("Error: Path traversal detected.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -168,10 +175,11 @@ public class CliPipelineTests : WorkingDirectoryTestBase
         var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--folders", "0" };
 
         // Act
-        var result = Cli.Pipeline.Build(args);
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         // Assert
         Assert.Null(result);
+        Assert.Contains("Error: Number of folders must be between 1 and 100.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -181,10 +189,11 @@ public class CliPipelineTests : WorkingDirectoryTestBase
         var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--folders", "101" };
 
         // Act
-        var result = Cli.Pipeline.Build(args);
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         // Assert
         Assert.Null(result);
+        Assert.Contains("Error: Number of folders must be between 1 and 100.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -194,10 +203,11 @@ public class CliPipelineTests : WorkingDirectoryTestBase
         var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--attachment-rate", "-1" };
 
         // Act
-        var result = Cli.Pipeline.Build(args);
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         // Assert
         Assert.Null(result);
+        Assert.Contains("Error: Attachment rate must be between 0 and 100.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -207,10 +217,11 @@ public class CliPipelineTests : WorkingDirectoryTestBase
         var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--attachment-rate", "101" };
 
         // Act
-        var result = Cli.Pipeline.Build(args);
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         // Assert
         Assert.Null(result);
+        Assert.Contains("Error: Attachment rate must be between 0 and 100.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -220,10 +231,11 @@ public class CliPipelineTests : WorkingDirectoryTestBase
         var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--encoding", "INVALID" };
 
         // Act
-        var result = Cli.Pipeline.Build(args);
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         // Assert
         Assert.Null(result);
+        Assert.Contains("Error: Invalid encoding 'INVALID'. Supported values are UTF-8, UTF-16, ANSI.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -233,10 +245,11 @@ public class CliPipelineTests : WorkingDirectoryTestBase
         var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--distribution", "INVALID" };
 
         // Act
-        var result = Cli.Pipeline.Build(args);
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         // Assert
         Assert.Null(result);
+        Assert.Contains("Error: Invalid distribution 'INVALID'. Supported values are proportional, gaussian, exponential.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -246,10 +259,11 @@ public class CliPipelineTests : WorkingDirectoryTestBase
         var args = new[] { "--type", "pdf", "--count", "100", "--output-path", this.tempDir, "--target-zip-size", "INVALID" };
 
         // Act
-        var result = Cli.Pipeline.Build(args);
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         // Assert
         Assert.Null(result);
+        Assert.Contains("Error: Invalid format for --target-zip-size.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -259,10 +273,11 @@ public class CliPipelineTests : WorkingDirectoryTestBase
         var args = new[] { "--type", "pdf", "--output-path", this.tempDir, "--target-zip-size", "10MB" };
 
         // Act
-        var result = Cli.Pipeline.Build(args);
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         // Assert
         Assert.Null(result);
+        Assert.Contains("Error: --count is required.", stderr, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -520,9 +535,10 @@ public class CliPipelineTests : WorkingDirectoryTestBase
     {
         var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--chaos-mode" };
 
-        var result = Cli.Pipeline.Build(args);
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         Assert.Null(result);
+        Assert.Contains("Error: --chaos-mode requires --loadfile-only.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -530,9 +546,10 @@ public class CliPipelineTests : WorkingDirectoryTestBase
     {
         var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--chaos-amount", "5%" };
 
-        var result = Cli.Pipeline.Build(args);
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         Assert.Null(result);
+        Assert.Contains("Error: --chaos-amount requires --chaos-mode.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -540,9 +557,10 @@ public class CliPipelineTests : WorkingDirectoryTestBase
     {
         var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--chaos-types", "quotes" };
 
-        var result = Cli.Pipeline.Build(args);
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         Assert.Null(result);
+        Assert.Contains("Error: --chaos-types requires --chaos-mode.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -550,9 +568,10 @@ public class CliPipelineTests : WorkingDirectoryTestBase
     {
         var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--target-zip-size", "100MB" };
 
-        var result = Cli.Pipeline.Build(args);
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         Assert.Null(result);
+        Assert.Contains("Error: --loadfile-only conflicts with --target-zip-size.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -560,9 +579,10 @@ public class CliPipelineTests : WorkingDirectoryTestBase
     {
         var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--include-load-file" };
 
-        var result = Cli.Pipeline.Build(args);
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         Assert.Null(result);
+        Assert.Contains("Error: --loadfile-only conflicts with --include-load-file.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -584,9 +604,10 @@ public class CliPipelineTests : WorkingDirectoryTestBase
     {
         var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--eol", "LFCR" };
 
-        var result = Cli.Pipeline.Build(args);
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         Assert.Null(result);
+        Assert.Contains("Error: --eol must be CRLF, LF, or CR.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -594,9 +615,10 @@ public class CliPipelineTests : WorkingDirectoryTestBase
     {
         var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--col-delim", "20" };
 
-        var result = Cli.Pipeline.Build(args);
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         Assert.Null(result);
+        Assert.Contains("must use 'ascii:<N>' or 'char:<c>' prefix.", stderr, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -606,9 +628,10 @@ public class CliPipelineTests : WorkingDirectoryTestBase
     {
         var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--chaos-mode", "--chaos-amount", amount };
 
-        var result = Cli.Pipeline.Build(args);
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         Assert.Null(result);
+        Assert.Contains("Error: --chaos-amount must be a percentage (e.g., '1%') or an exact count (e.g., '500').", stderr, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -618,9 +641,10 @@ public class CliPipelineTests : WorkingDirectoryTestBase
     {
         var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--load-file-format", format, "--chaos-mode" };
 
-        var result = Cli.Pipeline.Build(args);
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         Assert.Null(result);
+        Assert.Contains("Error: --loadfile-only mode is only supported for 'dat' and 'opt' load file formats.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -675,12 +699,12 @@ public class CliPipelineTests : WorkingDirectoryTestBase
 
     // === B2: Bates prefix path traversal prevention ===
     [Theory]
-    [InlineData("../../../")]
-    [InlineData("..\\..\\")]
-    [InlineData("foo/bar")]
-    [InlineData("foo\\bar")]
-    [InlineData("evil/path")]
-    public void ValidateAndParseArguments_WithBatesPrefixContainingPathSeparator_ReturnsNull(string maliciousPrefix)
+    [InlineData("../../../", "Error: --bates-prefix must not contain directory traversal sequences.")]
+    [InlineData("..\\..\\", "Error: --bates-prefix must not contain directory traversal sequences.")]
+    [InlineData("foo/bar", "Error: --bates-prefix must not contain path separators.")]
+    [InlineData("foo\\bar", "Error: --bates-prefix must not contain path separators.")]
+    [InlineData("evil/path", "Error: --bates-prefix must not contain path separators.")]
+    public void ValidateAndParseArguments_WithBatesPrefixContainingPathSeparator_ReturnsNull(string maliciousPrefix, string expectedMessage)
     {
         var args = new[]
         {
@@ -688,9 +712,10 @@ public class CliPipelineTests : WorkingDirectoryTestBase
             "--count", "10", "--output-path", this.tempDir,
         };
 
-        var result = Cli.Pipeline.Build(args);
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         Assert.Null(result);
+        Assert.Contains(expectedMessage, stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -702,9 +727,10 @@ public class CliPipelineTests : WorkingDirectoryTestBase
             "--count", "10", "--output-path", this.tempDir,
         };
 
-        var result = Cli.Pipeline.Build(args);
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         Assert.Null(result);
+        Assert.Contains("Error: --bates-prefix must not contain directory traversal sequences.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -716,9 +742,10 @@ public class CliPipelineTests : WorkingDirectoryTestBase
             "--count", "10", "--output-path", this.tempDir,
         };
 
-        var result = Cli.Pipeline.Build(args);
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         Assert.Null(result);
+        Assert.Contains("Error: --bates-prefix must only contain letters, digits, underscores, and hyphens.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]

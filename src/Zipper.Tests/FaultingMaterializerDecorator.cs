@@ -17,7 +17,7 @@ internal sealed class FaultingMaterializerDecorator : IFileMaterializer
 
     public IFileMaterializer Inner => this._inner;
 
-    public Func<string, byte[], CancellationToken, Task>? OnWriteBytesAsync { get; set; }
+    public Func<string, byte[], CancellationToken, Task<bool>>? OnWriteBytesAsync { get; set; }
 
     public Func<string, string, Config.ZipCompressionMethod, CancellationToken, Task>? OnCreateZipAsync { get; set; }
 
@@ -28,7 +28,11 @@ internal sealed class FaultingMaterializerDecorator : IFileMaterializer
     {
         if (this.OnWriteBytesAsync is not null)
         {
-            await this.OnWriteBytesAsync(path, content, cancellationToken).ConfigureAwait(false);
+            var handled = await this.OnWriteBytesAsync(path, content, cancellationToken).ConfigureAwait(false);
+            if (handled)
+            {
+                return;
+            }
         }
 
         await this._inner.WriteBytesAsync(path, content, cancellationToken).ConfigureAwait(false);
@@ -57,6 +61,8 @@ internal sealed class FaultingMaterializerDecorator : IFileMaterializer
 
     public Task<bool> FileExistsAsync(string path, CancellationToken cancellationToken = default)
         => this._inner.FileExistsAsync(path, cancellationToken);
+
+    public bool ShouldValidate => this._inner.ShouldValidate;
 
     public Task CreateZipAsync(string sourceDir, string zipPath, CancellationToken cancellationToken = default)
         => this.CreateZipAsync(sourceDir, zipPath, Config.ZipCompressionMethod.Deflate, cancellationToken);

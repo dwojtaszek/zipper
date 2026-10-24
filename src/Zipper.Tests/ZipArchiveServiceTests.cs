@@ -910,6 +910,142 @@ public class ZipArchiveServiceTests : TempDirectoryTestBase
         public Memory<byte> Memory => _buffer;
         public void Dispose() { IsDisposed = true; }
     }
+
+    [Fact]
+    public async Task CreateArchiveAsync_EmlVsStandardTextContent_WritesCorrectPayloadBytes()
+    {
+        // Tests that EML and Standard file types write different extracted text payloads
+        // (swapping EmlTextContent ⇄ StandardTextContent would be caught)
+        var zipPath = this.GetTempFilePath();
+        var loadPath = this.GetTempFilePath();
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileType = "eml",
+                FileCount = 1,
+                Concurrency = 1,
+                WithText = true,
+            },
+        };
+
+        var testFile = this.CreateTestEmlFileData(1);
+
+        var channel = Channel.CreateUnbounded<FileData>();
+        await channel.Writer.WriteAsync(testFile);
+        channel.Writer.Complete();
+
+        await new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
+
+        // Assert - verify the EML text content was written (not standard text)
+        ZipAssert.AssertValidZip(zipPath, 4, archive =>
+        {
+            var emlEntry = archive.GetEntry("folder1/test1.eml");
+            Assert.NotNull(emlEntry);
+
+            var textEntry = archive.GetEntry("folder1/test1.txt");
+            Assert.NotNull(textEntry);
+
+            // Read the text content and verify it's EML-specific (exact byte match)
+            using var textStream = textEntry.Open();
+            using var reader = new StreamReader(textStream);
+            var textContent = reader.ReadToEnd();
+
+            // EML extracted text should match the production constant exactly
+            var expectedEmlText = System.Text.Encoding.UTF8.GetString(PlaceholderFiles.EmlExtractedText);
+            Assert.Equal(expectedEmlText, textContent);
+        });
+    }
+
+    [Fact]
+    public async Task CreateArchiveAsync_StandardTextContent_WritesPlaceholderExtractedText()
+    {
+        // Tests that standard file types (pdf, tiff, etc.) write placeholder extracted text
+        var zipPath = this.GetTempFilePath();
+        var loadPath = this.GetTempFilePath();
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileType = "pdf",
+                FileCount = 1,
+                Concurrency = 1,
+                WithText = true,
+            },
+        };
+
+        var testFile = this.CreateZipTestFileData(1);
+
+        var channel = Channel.CreateUnbounded<FileData>();
+        await channel.Writer.WriteAsync(testFile);
+        channel.Writer.Complete();
+
+        await new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
+
+        // Assert - verify the standard text content was written (exact byte match)
+        ZipAssert.AssertValidZip(zipPath, 2, archive =>
+        {
+            var textEntry = archive.GetEntry("folder1/test1.txt");
+            Assert.NotNull(textEntry);
+
+            using var textStream = textEntry.Open();
+            using var reader = new StreamReader(textStream);
+            var textContent = reader.ReadToEnd();
+
+            // Standard extracted text should match the production constant exactly
+            var expectedStandardText = System.Text.Encoding.UTF8.GetString(PlaceholderFiles.ExtractedText);
+            Assert.Equal(expectedStandardText, textContent);
+        });
+    }
+
+    [Fact]
+    public async Task CreateArchiveAsync_LoadFileWindow_NonCancellable_CleansUpSidecarsOnFailure()
+    {
+        // Tests the non-cancellable load-file window in ZipArchiveSink: the DAT sidecar is
+        // created first, then the audit write fails, and the catch block must delete the
+        // already-created sidecar instead of leaving a partial load file behind.
+        var tempDir = Path.Combine(TempDir, Guid.NewGuid().ToString());
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var zipPath = Path.Combine(tempDir, "test.zip");
+            var loadPath = Path.Combine(tempDir, "load.dat");
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    FileType = "pdf",
+                    FileCount = 1,
+                    Concurrency = 1,
+                    IncludeLoadFile = false, // Load files written to disk as sidecars
+                },
+                LoadFile = new LoadFileConfig { Formats = new List<LoadFileFormat> { LoadFileFormat.Dat } },
+            };
+
+            var channel = Channel.CreateUnbounded<FileData>();
+            await channel.Writer.WriteAsync(this.CreateZipTestFileData(1));
+            channel.Writer.Complete();
+
+            // DAT writes load.dat, then the audit target load.dat_properties.json. Make that
+            // audit target a directory so opening it as a file fails after load.dat exists.
+            var datSidecar = Path.Combine(tempDir, "load.dat");
+            var auditTarget = Path.Combine(tempDir, "load.dat_properties.json");
+            Directory.CreateDirectory(auditTarget);
+
+            await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+                new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader));
+
+            Assert.False(File.Exists(datSidecar), "DAT sidecar must be cleaned up on failure.");
+            Assert.True(Directory.Exists(auditTarget), "The pre-created audit directory should be untouched.");
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
 }
 
 

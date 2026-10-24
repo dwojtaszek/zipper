@@ -520,6 +520,95 @@ public class PostGenerationValidatorTests : TempDirectoryTestBase
         }
     }
 
+    [Fact]
+    public void Validate_ProductionSet_WithMismatchedLineEnding_ReportsLineEndingError()
+    {
+        var tempDir = Path.Combine(TempDir, $"validator_eol_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var dataDir = Path.Combine(tempDir, "DATA");
+            Directory.CreateDirectory(dataDir);
+            var nativesDir = Path.Combine(tempDir, "NATIVES");
+            Directory.CreateDirectory(nativesDir);
+
+            var datPath = Path.Combine(dataDir, "loadfile.dat");
+            File.WriteAllText(datPath, "DOCID\u0014BATES_NUMBER\u0014NATIVE_PATH\r\nDOC001\u0014TEST00000001\u0014NATIVES/file1.pdf\r\n");
+
+            var optPath = Path.Combine(dataDir, "loadfile.opt");
+            File.WriteAllText(optPath, "TEST00000001,1,NATIVES/file1.pdf,,,1,1\n");
+
+            File.WriteAllBytes(Path.Combine(nativesDir, "file1.pdf"), [0x25, 0x50, 0x44, 0x46]);
+
+            var request = new FileGenerationRequest
+            {
+                Bates = new Config.BatesNumberConfig { Prefix = "TEST", Start = 1, Digits = 8 },
+                Delimiters = new DelimiterConfig { EndOfLine = "LF" },
+            };
+            var ctx = new ValidationContext
+            {
+                ProductionSetPath = tempDir,
+                LoadFiles = new Dictionary<string, string> { ["dat"] = datPath },
+                Request = request,
+            };
+
+            var result = new PostGenerationValidator().Validate(ctx);
+
+            Assert.Contains(result.Findings, finding =>
+                finding.Severity == ValidationSeverity.Error
+                && finding.Category == "LineEnding"
+                && finding.FilePath == datPath);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
+    [Fact]
+    public void Validate_ProductionSet_WithMatchingLineEnding_NoLineEndingError()
+    {
+        var tempDir = Path.Combine(TempDir, $"validator_eol_ok_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var dataDir = Path.Combine(tempDir, "DATA");
+            Directory.CreateDirectory(dataDir);
+            var nativesDir = Path.Combine(tempDir, "NATIVES");
+            Directory.CreateDirectory(nativesDir);
+
+            var datPath = Path.Combine(dataDir, "loadfile.dat");
+            File.WriteAllText(datPath, "DOCID\u0014BATES_NUMBER\u0014NATIVE_PATH\nDOC001\u0014TEST00000001\u0014NATIVES/file1.pdf\n");
+
+            var optPath = Path.Combine(dataDir, "loadfile.opt");
+            File.WriteAllText(optPath, "TEST00000001,1,NATIVES/file1.pdf,,,1,1\n");
+
+            File.WriteAllBytes(Path.Combine(nativesDir, "file1.pdf"), [0x25, 0x50, 0x44, 0x46]);
+
+            var request = new FileGenerationRequest
+            {
+                Bates = new Config.BatesNumberConfig { Prefix = "TEST", Start = 1, Digits = 8 },
+                Delimiters = new DelimiterConfig { EndOfLine = "LF" },
+            };
+            var ctx = new ValidationContext
+            {
+                ProductionSetPath = tempDir,
+                LoadFiles = new Dictionary<string, string> { ["dat"] = datPath },
+                Request = request,
+            };
+
+            var result = new PostGenerationValidator().Validate(ctx);
+
+            Assert.DoesNotContain(result.Findings, finding => finding.Category == "LineEnding");
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, true);
+        }
+    }
+
     // ---- DatLineParser tests ----
 
     [Theory]
