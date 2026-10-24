@@ -430,24 +430,28 @@ class RateStateIsolationTests(unittest.TestCase):
     .zipper-runner/state the unattended runner uses lives."""
 
     def test_clearRateState_refusesANonTempStateDir(self):
-        """The probe directory sits under .zipper-runner/, the same place the live
-        state directory does, so a run that slipped past the guard would sweep the
-        real rate-limit marks. Only this test's own sentinel can be deleted."""
+        """The probe directory sits beside the repo's own files, not under the temp
+        root, so a run that slipped past the guard would sweep the live
+        .zipper-runner/state marks. The temp root is patched so the test does not
+        depend on where the checkout itself lives (a clone under /tmp would
+        otherwise make BASE look temporary)."""
         foreign = Path(BASE) / "_rate_state_guard_probe"
         foreign.mkdir(exist_ok=True)
         victim = foreign / "rate--guard-probe.json"
         victim.write_text("{}")
         try:
-            with patch.object(runner, "STATE_DIR", str(foreign)):
-                with self.assertRaises(AssertionError):
-                    _clear_rate_state()
+            with patch.object(tempfile, "gettempdir",
+                              return_value=str(Path(BASE) / "_rate_state_fake_temp")):
+                with patch.object(runner, "STATE_DIR", str(foreign)):
+                    with self.assertRaises(AssertionError):
+                        _clear_rate_state()
             self.assertTrue(victim.exists(), "a non-temp state dir must not be cleaned")
         finally:
             shutil.rmtree(foreign, ignore_errors=True)
 
     def test_clearRateState_refusesASymlinkOutOfTheTempDir(self):
-        """A symlink whose own path looks temporary but resolves into the repo
-        must be judged by its target, not by its name."""
+        """A symlink whose own path is inside the temp root but resolves into the
+        repo must be judged by its target, not by its name."""
         target = Path(BASE) / "_rate_state_symlink_probe"
         target.mkdir(exist_ok=True)
         victim = target / "rate--probe.json"
@@ -456,9 +460,10 @@ class RateStateIsolationTests(unittest.TestCase):
         link = link_dir / "state"
         os.symlink(target, link)
         try:
-            with patch.object(runner, "STATE_DIR", str(link)):
-                with self.assertRaises(AssertionError):
-                    _clear_rate_state()
+            with patch.object(tempfile, "gettempdir", return_value=str(link_dir)):
+                with patch.object(runner, "STATE_DIR", str(link)):
+                    with self.assertRaises(AssertionError):
+                        _clear_rate_state()
             self.assertTrue(victim.exists(), "a symlink out of the temp dir must not be followed")
         finally:
             shutil.rmtree(target, ignore_errors=True)
