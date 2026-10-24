@@ -45,6 +45,36 @@ class DependabotUpstreamAgeTests(unittest.TestCase):
         runner.DRY_RUN = self._orig_dry_run
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
+    def _create_dependabot_pr(self, number=101, name="Foo", version="1.1", title=None, reviews=None):
+        if title is None:
+            title = f"deps: bump {name} from 1.0 to {version}"
+        return {
+            "number": number,
+            "title": title,
+            "body": f"---\nupdated-dependencies:\n- dependency-name: {name}\n  dependency-version: {version}\n...",
+            "headRefName": f"dependabot/nuget/{name.lower()}-{version}",
+            "author": {"login": "dependabot[bot]"},
+            "statusCheckRollup": [{"__typename": "CheckRun", "name": "ci-gate", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+            "reviews": reviews if reviews is not None else [],
+            "commits": [],
+        }
+
+    def _setup_mock_bot_runner(self, pr, mock_auth, mock_run_cmd, mock_merge):
+        mock_auth.return_value = {
+            "number": pr["number"],
+            "user": {"login": "dependabot[bot]", "id": 49699333, "type": "Bot"},
+            "head": {"sha": f"sha{pr['number']}", "ref": pr["headRefName"]},
+        }
+        def fake_run_cmd(cmd, *args, **kwargs):
+            if cmd[:2] == ["gh", "pr"] and cmd[2] == "list":
+                return (0, json.dumps([pr]), "")
+            if cmd[0] == "bash":
+                return (0, "review passed", "")
+            return (0, "", "")
+
+        mock_run_cmd.side_effect = fake_run_cmd
+        mock_merge.return_value = (0, "merged", "")
+
     def test_parse_updated_dependencies_grouped_yaml(self):
         body = """
 Bumps the nuget-minor-patch group with 2 updates.
@@ -158,14 +188,7 @@ updated-dependencies:
     def test_check_upstream_age_single_eligible_and_blocked(self, mock_fetch):
         # Older than 3 days -> eligible
         mock_fetch.return_value = self.now - timedelta(days=4)
-        pr = {
-            "number": 101,
-            "title": "deps: bump Foo from 1.0 to 1.1",
-            "body": "---\nupdated-dependencies:\n- dependency-name: Foo\n  dependency-version: 1.1\n...",
-            "headRefName": "dependabot/nuget/foo-1.1",
-            "reviews": [],
-            "commits": [],
-        }
+        pr = self._create_dependabot_pr(number=101, name="Foo", version="1.1")
         eligible, msg = runner._check_dependabot_upstream_age(pr, "sha101", now=self.now)
         self.assertTrue(eligible)
         self.assertIn("eligible", msg.lower())
@@ -178,14 +201,7 @@ updated-dependencies:
 
     @patch("runner._fetch_upstream_publish_timestamp")
     def test_check_upstream_age_exact_boundary(self, mock_fetch):
-        pr = {
-            "number": 101,
-            "title": "deps: bump Foo from 1.0 to 1.1",
-            "body": "---\nupdated-dependencies:\n- dependency-name: Foo\n  dependency-version: 1.1\n...",
-            "headRefName": "dependabot/nuget/foo-1.1",
-            "reviews": [],
-            "commits": [],
-        }
+        pr = self._create_dependabot_pr(number=101, name="Foo", version="1.1")
         # Exact boundary: exactly 3.0 days (259200 seconds) -> eligible
         mock_fetch.return_value = self.now - timedelta(days=3.0)
         eligible, msg = runner._check_dependabot_upstream_age(pr, "sha101", now=self.now)
@@ -239,14 +255,10 @@ updated-dependencies:
     def test_security_exception_explicit_and_auditable(self, mock_fetch):
         # A freshly published package (< 3 days)
         mock_fetch.return_value = self.now - timedelta(hours=12)
-        pr = {
-            "number": 103,
-            "title": "deps: bump vulnerable-lib to fix CVE-2026-9999",
-            "body": "---\nupdated-dependencies:\n- dependency-name: vulnerable-lib\n  dependency-version: 2.0.1\n...",
-            "headRefName": "dependabot/nuget/vulnerable-lib-2.0.1",
-            "reviews": [],
-            "commits": [],
-        }
+        pr = self._create_dependabot_pr(
+            number=103, name="vulnerable-lib", version="2.0.1",
+            title="deps: bump vulnerable-lib to fix CVE-2026-9999",
+        )
 
         # Without recorded authorization, a security update does NOT accidentally bypass
         eligible, msg = runner._check_dependabot_upstream_age(pr, "sha103", now=self.now)
@@ -282,14 +294,7 @@ updated-dependencies:
     @patch("runner._fetch_upstream_publish_timestamp")
     def test_unreachable_registry_fails_closed(self, mock_fetch):
         mock_fetch.return_value = None  # Failed to fetch or network error
-        pr = {
-            "number": 104,
-            "title": "deps: bump Foo from 1.0 to 1.1",
-            "body": "---\nupdated-dependencies:\n- dependency-name: Foo\n  dependency-version: 1.1\n...",
-            "headRefName": "dependabot/nuget/foo-1.1",
-            "reviews": [],
-            "commits": [],
-        }
+        pr = self._create_dependabot_pr(number=104, name="Foo", version="1.1")
         eligible, msg = runner._check_dependabot_upstream_age(pr, "sha104", now=self.now)
         self.assertFalse(eligible)
         self.assertIn("could not verify", msg.lower())
@@ -311,21 +316,15 @@ updated-dependencies:
     def test_security_exception_maintainer_review_authorization(self, mock_fetch):
         # A freshly published package (< 3 days)
         mock_fetch.return_value = self.now - timedelta(hours=12)
-        pr = {
-            "number": 106,
-            "title": "deps: bump vulnerable-lib",
-            "body": "---\nupdated-dependencies:\n- dependency-name: vulnerable-lib\n  dependency-version: 2.0.1\n...",
-            "headRefName": "dependabot/nuget/vulnerable-lib-2.0.1",
-            "reviews": [
-                {
-                    "user": {"login": "dwojtaszek"},
-                    "state": "APPROVED",
-                    "commit_id": "sha106",
-                    "body": "Approved with authorize-security for zero-day patch",
-                }
-            ],
-            "commits": [],
-        }
+        pr = self._create_dependabot_pr(
+            number=106, name="vulnerable-lib", version="2.0.1",
+            reviews=[{
+                "user": {"login": "dwojtaszek"},
+                "state": "APPROVED",
+                "commit_id": "sha106",
+                "body": "Approved with authorize-security for zero-day patch",
+            }],
+        )
         # In dry run, records exception in memory/bypass without disk pollution
         runner.DRY_RUN = True
         eligible, msg = runner._check_dependabot_upstream_age(pr, "sha106", now=self.now)
@@ -335,21 +334,15 @@ updated-dependencies:
         self.assertFalse(os.path.exists(runner._security_exception_path(106)))
 
         # Incidental mention of "security" without authorize-security marker or security label does NOT bypass
-        pr_incidental = {
-            "number": 107,
-            "title": "deps: bump lib",
-            "body": "---\nupdated-dependencies:\n- dependency-name: lib\n  dependency-version: 2.0.1\n...",
-            "headRefName": "dependabot/nuget/lib-2.0.1",
-            "reviews": [
-                {
-                    "user": {"login": "dwojtaszek"},
-                    "state": "APPROVED",
-                    "commit_id": "sha107",
-                    "body": "LGTM, no security concerns here",
-                }
-            ],
-            "commits": [],
-        }
+        pr_incidental = self._create_dependabot_pr(
+            number=107, name="lib", version="2.0.1",
+            reviews=[{
+                "user": {"login": "dwojtaszek"},
+                "state": "APPROVED",
+                "commit_id": "sha107",
+                "body": "LGTM, no security concerns here",
+            }],
+        )
         eligible_inc, msg_inc = runner._check_dependabot_upstream_age(pr_incidental, "sha107", now=self.now)
         self.assertFalse(eligible_inc)
         self.assertIn("too new", msg_inc.lower())
@@ -357,12 +350,9 @@ updated-dependencies:
     @patch("runner._fetch_upstream_publish_timestamp")
     def test_security_exception_revoked_maintainer_approval_does_not_bypass(self, mock_fetch):
         mock_fetch.return_value = self.now - timedelta(hours=12)
-        pr = {
-            "number": 108,
-            "title": "deps: bump vulnerable-lib",
-            "body": "---\nupdated-dependencies:\n- dependency-name: vulnerable-lib\n  dependency-version: 2.0.1\n...",
-            "headRefName": "dependabot/nuget/vulnerable-lib-2.0.1",
-            "reviews": [
+        pr = self._create_dependabot_pr(
+            number=108, name="vulnerable-lib", version="2.0.1",
+            reviews=[
                 {
                     "user": {"login": "dwojtaszek"},
                     "state": "APPROVED",
@@ -376,8 +366,7 @@ updated-dependencies:
                     "body": "Hold on, need to verify patch",
                 },
             ],
-            "commits": [],
-        }
+        )
         eligible, msg = runner._check_dependabot_upstream_age(pr, "sha108", now=self.now)
         self.assertFalse(eligible)
         self.assertIn("too new", msg.lower())
@@ -385,21 +374,15 @@ updated-dependencies:
     @patch("runner._fetch_upstream_publish_timestamp")
     def test_security_exception_unauthorized_user_review_does_not_bypass(self, mock_fetch):
         mock_fetch.return_value = self.now - timedelta(hours=12)
-        pr = {
-            "number": 109,
-            "title": "deps: bump vulnerable-lib",
-            "body": "---\nupdated-dependencies:\n- dependency-name: vulnerable-lib\n  dependency-version: 2.0.1\n...",
-            "headRefName": "dependabot/nuget/vulnerable-lib-2.0.1",
-            "reviews": [
-                {
-                    "user": {"login": "unauthorized-contributor"},
-                    "state": "APPROVED",
-                    "commit_id": "sha109",
-                    "body": "authorize-security - verified safe",
-                }
-            ],
-            "commits": [],
-        }
+        pr = self._create_dependabot_pr(
+            number=109, name="vulnerable-lib", version="2.0.1",
+            reviews=[{
+                "user": {"login": "unauthorized-contributor"},
+                "state": "APPROVED",
+                "commit_id": "sha109",
+                "body": "authorize-security - verified safe",
+            }],
+        )
         eligible, msg = runner._check_dependabot_upstream_age(pr, "sha109", now=self.now)
         self.assertFalse(eligible)
         self.assertIn("too new", msg.lower())
@@ -414,31 +397,8 @@ updated-dependencies:
     def test_babysit_dependabot_prs_fresh_blocks_old_merges(
         self, mock_fetch, mock_auth, mock_run_cmd, mock_merge, mock_email, mock_sync
     ):
-        pr = {
-            "number": 99,
-            "title": "deps(nuget): bump Foo from 1.0.0 to 1.1.0",
-            "body": "---\nupdated-dependencies:\n- dependency-name: Foo\n  dependency-version: 1.1.0\n...",
-            "headRefName": "dependabot/nuget/foo-1.1.0",
-            "author": {"login": "dependabot[bot]"},
-            "statusCheckRollup": [{"__typename": "CheckRun", "name": "ci-gate", "status": "COMPLETED", "conclusion": "SUCCESS"}],
-            "reviews": [],
-            "commits": [],
-        }
-        mock_auth.return_value = {
-            "number": 99,
-            "user": {"login": "dependabot[bot]", "id": 49699333, "type": "Bot"},
-            "head": {"sha": "sha99", "ref": "dependabot/nuget/foo-1.1.0"},
-        }
-        # gh pr list returns pr
-        def fake_run_cmd(cmd, *args, **kwargs):
-            if cmd[:2] == ["gh", "pr"] and cmd[2] == "list":
-                return (0, json.dumps([pr]), "")
-            if cmd[0] == "bash":  # review gate script
-                return (0, "review passed", "")
-            return (0, "", "")
-
-        mock_run_cmd.side_effect = fake_run_cmd
-        mock_merge.return_value = (0, "merged", "")
+        pr = self._create_dependabot_pr(number=99, name="Foo", version="1.1.0")
+        self._setup_mock_bot_runner(pr, mock_auth, mock_run_cmd, mock_merge)
 
         # 1. Freshly published (< 3 days): auto-merge is blocked
         mock_fetch.return_value = datetime.now(timezone.utc) - timedelta(days=1)
@@ -460,30 +420,11 @@ updated-dependencies:
     def test_babysit_dependabot_prs_security_exception_merges_fresh(
         self, mock_fetch, mock_auth, mock_run_cmd, mock_merge, mock_email, mock_sync
     ):
-        pr = {
-            "number": 99,
-            "title": "deps(nuget): bump Foo to fix CVE-2026-0001",
-            "body": "---\nupdated-dependencies:\n- dependency-name: Foo\n  dependency-version: 1.1.0\n...",
-            "headRefName": "dependabot/nuget/foo-1.1.0",
-            "author": {"login": "dependabot[bot]"},
-            "statusCheckRollup": [{"__typename": "CheckRun", "name": "ci-gate", "status": "COMPLETED", "conclusion": "SUCCESS"}],
-            "reviews": [],
-            "commits": [],
-        }
-        mock_auth.return_value = {
-            "number": 99,
-            "user": {"login": "dependabot[bot]", "id": 49699333, "type": "Bot"},
-            "head": {"sha": "sha99", "ref": "dependabot/nuget/foo-1.1.0"},
-        }
-        def fake_run_cmd(cmd, *args, **kwargs):
-            if cmd[:2] == ["gh", "pr"] and cmd[2] == "list":
-                return (0, json.dumps([pr]), "")
-            if cmd[0] == "bash":
-                return (0, "review passed", "")
-            return (0, "", "")
-
-        mock_run_cmd.side_effect = fake_run_cmd
-        mock_merge.return_value = (0, "merged", "")
+        pr = self._create_dependabot_pr(
+            number=99, name="Foo", version="1.1.0",
+            title="deps(nuget): bump Foo to fix CVE-2026-0001",
+        )
+        self._setup_mock_bot_runner(pr, mock_auth, mock_run_cmd, mock_merge)
 
         # Fresh package (< 3 days)
         mock_fetch.return_value = datetime.now(timezone.utc) - timedelta(hours=6)

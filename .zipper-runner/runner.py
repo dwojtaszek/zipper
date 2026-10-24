@@ -3470,6 +3470,21 @@ def _load_dependabot_security_exception(pr_number: int, expected_head: str) -> d
         return None
 
 
+def _gh_api_paginate_slurp(endpoint: str) -> list:
+    """Query a paginated GitHub API endpoint with --slurp and return a flattened item list."""
+    code, out, _ = run_cmd(
+        ["gh", "api", endpoint, "--paginate", "--slurp"],
+        cwd=REPO_PATH,
+    )
+    pages = []
+    if code == 0 and out.strip():
+        try:
+            pages = json.loads(out)
+        except Exception:
+            pages = []
+    return [item for p in pages for item in (p if isinstance(p, list) else [p])]
+
+
 def _check_dependabot_upstream_age(pr: dict, reviewed_head: str, now: datetime | None = None) -> tuple[bool, str]:
     """Enforce the 3-day minimum upstream age policy before Dependabot PR auto-merge.
 
@@ -3493,17 +3508,7 @@ def _check_dependabot_upstream_age(pr: dict, reviewed_head: str, now: datetime |
     # 2. Check if a trusted maintainer approved the PR on GitHub with an explicit security rationale
     reviews = pr.get("reviews")
     if reviews is None:
-        code, out, _ = run_cmd(
-            ["gh", "api", f"repos/{GITHUB_REPOSITORY}/pulls/{pr_num}/reviews", "--paginate", "--slurp"],
-            cwd=REPO_PATH,
-        )
-        pages = []
-        if code == 0 and out.strip():
-            try:
-                pages = json.loads(out)
-            except Exception:
-                pages = []
-        reviews = [r for p in pages for r in (p if isinstance(p, list) else [p])]
+        reviews = _gh_api_paginate_slurp(f"repos/{GITHUB_REPOSITORY}/pulls/{pr_num}/reviews")
 
     latest = {}
     for r in reviews:
@@ -3532,17 +3537,7 @@ def _check_dependabot_upstream_age(pr: dict, reviewed_head: str, now: datetime |
     # 3. Extract updated dependencies
     commits = pr.get("commits")
     if commits is None:
-        code, out, _ = run_cmd(
-            ["gh", "api", f"repos/{GITHUB_REPOSITORY}/pulls/{pr_num}/commits", "--paginate", "--slurp"],
-            cwd=REPO_PATH,
-        )
-        commits_pages = []
-        if code == 0 and out.strip():
-            try:
-                commits_pages = json.loads(out)
-            except Exception:
-                commits_pages = []
-        commits = [c for p in commits_pages for c in (p if isinstance(p, list) else [p])]
+        commits = _gh_api_paginate_slurp(f"repos/{GITHUB_REPOSITORY}/pulls/{pr_num}/commits")
     deps = _parse_dependabot_updated_dependencies(body, commits=commits, title=title)
 
     if not deps:
