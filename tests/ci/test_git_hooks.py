@@ -51,13 +51,30 @@ class GitHooksContractTests(unittest.TestCase):
 
 @unittest.skipIf(os.name == "nt" or shutil.which("bash") is None, "POSIX bash execution boundary")
 class GitHooksBehavioralTests(unittest.TestCase):
+    @staticmethod
+    def _clean_env(base: dict[str, str] | None = None) -> dict[str, str]:
+        src = os.environ if base is None else base
+        return {k: v for k, v in src.items() if not k.startswith("GIT_") and k != "DOTNET_ROOT"}
+
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
         self.repo_dir = Path(self.tmpdir.name)
+
+        # Base mock environment cleaned of any outer GIT_* vars
+        self.bin_dir = self.repo_dir / "mock-bin"
+        self.bin_dir.mkdir(parents=True, exist_ok=True)
+        mock_dotnet = self.bin_dir / "dotnet"
+        mock_dotnet.write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
+        mock_dotnet.chmod(0o755)
+        self.env = self._clean_env()
+        self.env["PATH"] = f"{self.bin_dir}:{self.env.get('PATH', '')}"
+
         # Initialize test repo
         self._git("init", "-b", "main")
         self._git("config", "user.email", "test@example.com")
         self._git("config", "user.name", "Test User")
+        self._git("config", "commit.gpgsign", "false")
+        self._git("config", "tag.gpgsign", "false")
 
         # Copy hook scripts into the repo
         self.hooks_dir = self.repo_dir / ".github/hooks"
@@ -66,15 +83,6 @@ class GitHooksBehavioralTests(unittest.TestCase):
         shutil.copy2(ROOT / ".github/hooks/pre-push", self.hooks_dir / "pre-push")
         shutil.copy2(ROOT / ".github/hooks/post-commit", self.hooks_dir / "post-commit")
 
-        # Shared mock dotnet so behavioral tests do not depend on host toolchain
-        self.bin_dir = self.repo_dir / "mock-bin"
-        self.bin_dir.mkdir(parents=True, exist_ok=True)
-        mock_dotnet = self.bin_dir / "dotnet"
-        mock_dotnet.write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
-        mock_dotnet.chmod(0o755)
-        self.env = {k: v for k, v in os.environ.items() if k not in ("DOTNET_ROOT",)}
-        self.env["PATH"] = f"{self.bin_dir}:{self.env.get('PATH', '')}"
-
     def tearDown(self):
         self.tmpdir.cleanup()
 
@@ -82,6 +90,7 @@ class GitHooksBehavioralTests(unittest.TestCase):
         res = subprocess.run(
             ["git", *args],
             cwd=self.repo_dir,
+            env=self.env,
             capture_output=True,
             text=True,
             check=True,
@@ -114,7 +123,7 @@ class GitHooksBehavioralTests(unittest.TestCase):
         mock_dotnet.write_text("#!/bin/bash\necho \"MOCK_DOTNET_CALLED: $@\"\nexit 0\n", encoding="utf-8")
         mock_dotnet.chmod(0o755)
         self._mock_mutation_smoke()
-        env = {k: v for k, v in os.environ.items() if k not in ("DOTNET_ROOT",)}
+        env = self._clean_env()
         env["PATH"] = f"{mock_bin_dir}:{env.get('PATH', '')}"
         return env
 
@@ -128,7 +137,7 @@ class GitHooksBehavioralTests(unittest.TestCase):
             found = shutil.which(tool)
             if found and not (bin_dir / tool).exists():
                 (bin_dir / tool).symlink_to(found)
-        env = {k: v for k, v in os.environ.items() if k not in ("PATH", "DOTNET_ROOT")}
+        env = self._clean_env()
         env["PATH"] = str(bin_dir)
         return env
 
