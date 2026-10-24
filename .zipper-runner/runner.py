@@ -3410,20 +3410,6 @@ def _fetch_upstream_publish_timestamp(name: str, version: str, ecosystem: str) -
                         return datetime.fromisoformat(pub.replace("Z", "+00:00"))
                 except Exception:
                     pass
-
-        for tag in tag_candidates:
-            quoted_tag = urllib.parse.quote(tag, safe="")
-            code, out, _ = run_cmd(["gh", "api", f"repos/{name}/commits/{quoted_tag}"], cwd=REPO_PATH)
-            if code == 0 and out.strip():
-                try:
-                    commit_data = json.loads(out)
-                    committer = commit_data.get("commit", {}).get("committer", {})
-                    author = commit_data.get("commit", {}).get("author", {})
-                    dt_str = committer.get("date") or author.get("date")
-                    if dt_str:
-                        return datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
-                except Exception:
-                    pass
         return None
 
     elif ecosystem == "npm":
@@ -3474,7 +3460,7 @@ def _load_dependabot_security_exception(pr_number: int, expected_head: str) -> d
         if (
             record.get("pr_number") == pr_number
             and record.get("head_sha") == expected_head
-            and record.get("authorized_by") in (TRUSTED_AUTHORS | MERGE_MAINTAINERS)
+            and record.get("authorized_by") in MERGE_MAINTAINERS
         ):
             return record
         print(f"[security-exception] Invalid or unauthorized security exception record in {path}")
@@ -3519,12 +3505,17 @@ def _check_dependabot_upstream_age(pr: dict, reviewed_head: str, now: datetime |
                 pages = []
         reviews = [r for p in pages for r in (p if isinstance(p, list) else [p])]
 
+    latest = {}
     for r in reviews:
         login = (r.get("user") or {}).get("login")
+        if login in MERGE_MAINTAINERS and r.get("state") != "COMMENTED":
+            latest[login] = r
+
+    for login, r in latest.items():
         state = r.get("state")
         commit_id = r.get("commit_id")
         review_body = (r.get("body") or "").lower()
-        if login in (TRUSTED_AUTHORS | MERGE_MAINTAINERS) and state == "APPROVED" and commit_id == reviewed_head:
+        if state == "APPROVED" and commit_id == reviewed_head:
             labels = [lbl.get("name", "").lower() for lbl in (pr.get("labels") or [])]
             is_sec_pr = "security" in labels
             if "authorize-security" in review_body or is_sec_pr:

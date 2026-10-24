@@ -131,20 +131,19 @@ updated-dependencies:
         self.assertEqual(ts_fallback, datetime(2026, 10, 19, 8, 0, 0, tzinfo=timezone.utc))
 
     @patch("runner.run_cmd")
-    def test_fetch_github_actions_publish_timestamp_release_and_commit_fallback(self, mock_run_cmd):
+    def test_fetch_github_actions_publish_timestamp_release_hit_and_unverified_none(self, mock_run_cmd):
         # Hit on release tag
         mock_run_cmd.return_value = (0, json.dumps({"published_at": "2026-10-18T12:00:00Z"}), "")
         ts = runner._fetch_upstream_publish_timestamp("actions/checkout", "4.2.0", "github-actions")
         self.assertEqual(ts, datetime(2026, 10, 18, 12, 0, 0, tzinfo=timezone.utc))
 
-        # Tag without release (fallback to commit date)
+        # Tag without release -> None (fail closed)
         mock_run_cmd.side_effect = [
             (1, "", "Not Found"),  # v4 tag release 404
             (1, "", "Not Found"),  # 4 tag release 404
-            (0, json.dumps({"commit": {"committer": {"date": "2026-10-17T15:00:00Z"}}}), ""),  # commit hit
         ]
-        ts_commit = runner._fetch_upstream_publish_timestamp("actions/checkout", "4", "github-actions")
-        self.assertEqual(ts_commit, datetime(2026, 10, 17, 15, 0, 0, tzinfo=timezone.utc))
+        ts_none = runner._fetch_upstream_publish_timestamp("actions/checkout", "4", "github-actions")
+        self.assertIsNone(ts_none)
 
     @patch("runner._fetch_upstream_publish_timestamp")
     def test_check_upstream_age_single_eligible_and_blocked(self, mock_fetch):
@@ -324,6 +323,34 @@ updated-dependencies:
         eligible_inc, msg_inc = runner._check_dependabot_upstream_age(pr_incidental, "sha107", now=self.now)
         self.assertFalse(eligible_inc)
         self.assertIn("too new", msg_inc.lower())
+
+    @patch("runner._fetch_upstream_publish_timestamp")
+    def test_security_exception_revoked_maintainer_approval_does_not_bypass(self, mock_fetch):
+        mock_fetch.return_value = self.now - timedelta(hours=12)
+        pr = {
+            "number": 108,
+            "title": "deps: bump vulnerable-lib",
+            "body": "---\nupdated-dependencies:\n- dependency-name: vulnerable-lib\n  dependency-version: 2.0.1\n...",
+            "headRefName": "dependabot/nuget/vulnerable-lib-2.0.1",
+            "reviews": [
+                {
+                    "user": {"login": "dwojtaszek"},
+                    "state": "APPROVED",
+                    "commit_id": "sha108",
+                    "body": "authorize-security",
+                },
+                {
+                    "user": {"login": "dwojtaszek"},
+                    "state": "CHANGES_REQUESTED",
+                    "commit_id": "sha108",
+                    "body": "Hold on, need to verify patch",
+                },
+            ],
+            "commits": [],
+        }
+        eligible, msg = runner._check_dependabot_upstream_age(pr, "sha108", now=self.now)
+        self.assertFalse(eligible)
+        self.assertIn("too new", msg.lower())
 
 
     @patch("runner._sync_main_after_merge")

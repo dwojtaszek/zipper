@@ -183,7 +183,7 @@ Rationale: new package releases occasionally introduce breaking changes or regre
 
 Implementation:
 - Dependabot configuration enforces cooldown where supported (`cooldown.default-days: 3` in `.github/dependabot.yml`).
-- `.zipper-runner` deterministically verifies upstream publication age (NuGet package registration timestamp; GitHub Actions release `published_at` or commit date) and blocks auto-merge until at least 3 days old. Grouped updates are checked individually — a newly published member blocks the group.
-- Security updates may bypass the 3-day cooldown only via explicit, auditable recorded authorization (e.g. `pr-<N>-security-exception.json` in state or maintainer approval review).
+- `.zipper-runner` deterministically verifies upstream publication age (NuGet package registration timestamp; GitHub Actions release `published_at` timestamp) and blocks auto-merge until at least 3 days old. Grouped updates are checked individually — a newly published member blocks the group. Unverifiable upstream releases (e.g. actions without releases) fail closed.
+- Security updates may bypass the 3-day cooldown only via explicit, auditable recorded authorization (e.g. `pr-<N>-security-exception.json` in state or merge maintainer approval review with `authorize-security` marker).
 - Reviewers should verify the NuGet/GitHub release date before approving a dependency PR.
 
