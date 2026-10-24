@@ -53,6 +53,15 @@ systemctl --user restart zipper-intake.timer zipper-babysit.timer
 
 Use one scheduler, not both. Committing the drop-ins does not change live timers; installing them replaces the calendar cadence while preserving existing service paths and boot/persistence settings.
 
+Install **both** drop-ins together. The intake timer and the babysit timer are independent units, so installing one and forgetting the other leaves no error anywhere: the host keeps a working runner that simply loses new-issue pickup for the rest of each calendar window. Verify the live cadence after installing, and treat a stale intake interval as a deployment bug rather than a scheduler quirk:
+
+```bash
+systemctl --user show zipper-intake.timer -p TimersCalendar
+systemctl --user list-timers zipper-intake.timer zipper-babysit.timer --no-pager
+```
+
+A 15-minute intake answers a structural gap rather than load: each intake firing is a single instant, so one long mission occupying the only worktree slot at that instant costs the whole interval until the next firing. Frequent firing lets the existing lock and worktree limit decide, instead of the schedule.
+
 ### Harness limits
 
 `AGENTS.md` documents bounded tool discovery, native subagent schema mapping, valid GitHub CLI examples, and focused iteration with unchanged final review/test gates. The runner cannot repair Factory's tool catalog, search relevance, or Loop availability. Missing capabilities must be reported rather than retried indefinitely or bypassed against harness policy.
