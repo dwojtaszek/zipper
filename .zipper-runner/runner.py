@@ -3524,7 +3524,9 @@ def _check_dependabot_upstream_age(pr: dict, reviewed_head: str, now: datetime |
                         pr_num, reviewed_head, login,
                         f"Maintainer approval review (security update): {review_body or 'approved'}"
                     )
-                print(f"[dependabot] PR #{pr_num} maintainer {login} approved security update for head {reviewed_head}. Exception recorded.")
+                    print(f"[dependabot] PR #{pr_num} maintainer {login} approved security update for head {reviewed_head}. Exception recorded.")
+                else:
+                    print(f"[dependabot] PR #{pr_num} maintainer {login} approved security update for head {reviewed_head}. [DRY RUN] Exception recording bypassed.")
                 return True, f"Security update approved by maintainer {login}"
 
     # 3. Extract updated dependencies

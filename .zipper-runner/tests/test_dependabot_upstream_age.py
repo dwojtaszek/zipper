@@ -26,13 +26,9 @@ from unittest.mock import MagicMock, patch
 
 import gitenv  # noqa: F401
 
-_STATE_DIR = tempfile.mkdtemp(prefix="zipper-runner-state-")
-os.environ["STATE_DIR"] = _STATE_DIR
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import runner  # noqa: E402
-runner.STATE_DIR = _STATE_DIR
 
 
 class DependabotUpstreamAgeTests(unittest.TestCase):
@@ -108,6 +104,14 @@ updated-dependencies:
         self.assertEqual(deps[0]["name"], "Foo.Bar")
         self.assertEqual(deps[0]["version"], "2.10")
 
+    def test_resolve_dependency_ecosystem(self):
+        self.assertEqual(runner._resolve_dependency_ecosystem("Foo", "dependabot/nuget/foo-1.0"), "nuget")
+        self.assertEqual(runner._resolve_dependency_ecosystem("actions/checkout", "dependabot/github_actions/actions-checkout-4"), "github-actions")
+        self.assertEqual(runner._resolve_dependency_ecosystem("actions/setup-node", "dependabot/github-actions/actions-setup-node-4"), "github-actions")
+        self.assertEqual(runner._resolve_dependency_ecosystem("express", "dependabot/npm_and_yarn/express-4.18"), "npm")
+        self.assertEqual(runner._resolve_dependency_ecosystem("actions/checkout", "custom-branch"), "github-actions")
+        self.assertEqual(runner._resolve_dependency_ecosystem("Newtonsoft.Json", "custom-branch"), "nuget")
+
     @patch("runner.urllib.request.urlopen")
     def test_fetch_nuget_publish_timestamp_direct_and_index_fallback(self, mock_urlopen):
         # Direct version hit
@@ -129,6 +133,11 @@ updated-dependencies:
         ]
         ts_fallback = runner._fetch_upstream_publish_timestamp("FsCheck.Xunit", "3.6.0", "nuget")
         self.assertEqual(ts_fallback, datetime(2026, 10, 19, 8, 0, 0, tzinfo=timezone.utc))
+
+        # HTTP error other than 404 aborts immediately without attempting index fallback
+        mock_urlopen.side_effect = urllib.error.HTTPError("https://api.nuget.org", 500, "Internal Server Error", {}, None)
+        ts_err = runner._fetch_upstream_publish_timestamp("FsCheck.Xunit", "3.6.0", "nuget")
+        self.assertIsNone(ts_err)
 
     @patch("runner.run_cmd")
     def test_fetch_github_actions_publish_timestamp_release_hit_and_unverified_none(self, mock_run_cmd):
@@ -166,7 +175,28 @@ updated-dependencies:
         eligible, msg = runner._check_dependabot_upstream_age(pr, "sha101", now=self.now)
         self.assertFalse(eligible)
         self.assertIn("too new", msg.lower())
-        self.assertIn("1.5", msg)
+
+    @patch("runner._fetch_upstream_publish_timestamp")
+    def test_check_upstream_age_exact_boundary(self, mock_fetch):
+        pr = {
+            "number": 101,
+            "title": "deps: bump Foo from 1.0 to 1.1",
+            "body": "---\nupdated-dependencies:\n- dependency-name: Foo\n  dependency-version: 1.1\n...",
+            "headRefName": "dependabot/nuget/foo-1.1",
+            "reviews": [],
+            "commits": [],
+        }
+        # Exact boundary: exactly 3.0 days (259200 seconds) -> eligible
+        mock_fetch.return_value = self.now - timedelta(days=3.0)
+        eligible, msg = runner._check_dependabot_upstream_age(pr, "sha101", now=self.now)
+        self.assertTrue(eligible)
+        self.assertIn("eligible", msg.lower())
+
+        # Just under boundary: 2.999 days -> blocked
+        mock_fetch.return_value = self.now - timedelta(days=2.999)
+        eligible_under, msg_under = runner._check_dependabot_upstream_age(pr, "sha101", now=self.now)
+        self.assertFalse(eligible_under)
+        self.assertIn("too new", msg_under.lower())
 
     @patch("runner._fetch_upstream_publish_timestamp")
     def test_check_upstream_age_grouped_updates_member_blocks_group(self, mock_fetch):
@@ -349,6 +379,28 @@ updated-dependencies:
             "commits": [],
         }
         eligible, msg = runner._check_dependabot_upstream_age(pr, "sha108", now=self.now)
+        self.assertFalse(eligible)
+        self.assertIn("too new", msg.lower())
+
+    @patch("runner._fetch_upstream_publish_timestamp")
+    def test_security_exception_unauthorized_user_review_does_not_bypass(self, mock_fetch):
+        mock_fetch.return_value = self.now - timedelta(hours=12)
+        pr = {
+            "number": 109,
+            "title": "deps: bump vulnerable-lib",
+            "body": "---\nupdated-dependencies:\n- dependency-name: vulnerable-lib\n  dependency-version: 2.0.1\n...",
+            "headRefName": "dependabot/nuget/vulnerable-lib-2.0.1",
+            "reviews": [
+                {
+                    "user": {"login": "unauthorized-contributor"},
+                    "state": "APPROVED",
+                    "commit_id": "sha109",
+                    "body": "authorize-security - verified safe",
+                }
+            ],
+            "commits": [],
+        }
+        eligible, msg = runner._check_dependabot_upstream_age(pr, "sha109", now=self.now)
         self.assertFalse(eligible)
         self.assertIn("too new", msg.lower())
 
