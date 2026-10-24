@@ -461,15 +461,18 @@ def _prune_stale_state_files() -> None:
 
     Keeps STATE_DIR bounded over multi-week unattended runs. rate-* files have
     their own pruning, and a state file for an issue with a live worktree is
-    always preserved (it may hold the worktree's authorization head)."""
+    always preserved (it may hold the worktree's authorization head). A PR state
+    file is preserved through the PR numbers those issue states record, because a
+    gate file is named by PR number while its worktree is named by issue number."""
     cutoff = time.time() - STATE_MAX_AGE_DAYS * 86400
     protected = _live_worktree_issue_numbers()
+    protected_prs = _live_worktree_pr_numbers(protected)
     try:
         names = os.listdir(STATE_DIR)
     except OSError:
         return
     for name in names:
-        if not _prunable_state_file(name, protected):
+        if not _prunable_state_file(name, protected, protected_prs):
             continue
         path = os.path.join(STATE_DIR, name)
         try:
@@ -494,7 +497,24 @@ def _live_worktree_issue_numbers() -> set[str]:
     return protected
 
 
-def _prunable_state_file(name: str, protected: set[str]) -> bool:
+def _live_worktree_pr_numbers(protected_issues: set[str]) -> set[str]:
+    """PR numbers named by a live worktree's issue state.
+
+    Derived from the issue states rather than discovered, because that record is
+    the only place the issue-to-PR mapping exists. A ``pr-<N>-coderabbit-gate.json``
+    is named by PR number while the worktree that owns it is named by issue number,
+    so comparing it against live issue numbers never protected it and the age sweep
+    would delete a live worktree's gate file."""
+    pr_numbers: set[str] = set()
+    for issue_number in protected_issues:
+        state = _load_pr_state(issue_number)
+        if state and state.get("pr_number") is not None:
+            pr_numbers.add(str(state["pr_number"]))
+    return pr_numbers
+
+
+def _prunable_state_file(name: str, protected: set[str],
+                         protected_prs: set[str] | None = None) -> bool:
     if not name.startswith(("issue-", "pr-", "quota-", "worktree-", "opencode-poisoned-")):
         return False
     # Injection markers are sticky by design: pickup of a flagged issue is
@@ -502,7 +522,15 @@ def _prunable_state_file(name: str, protected: set[str]) -> bool:
     if name.endswith("-injection.json"):
         return False
     match = re.match(r"^(?:issue|pr)-(\d+)", name)
-    return not (match and match.group(1) in protected)
+    if not match:
+        return True
+    number = match.group(1)
+    # Each prefix is compared against the numbers of its own kind. The issue set is
+    # still consulted for a PR file so a coincidental numeric match never prunes a
+    # file that a live worktree might depend on.
+    if name.startswith("pr-"):
+        return number not in (protected_prs or set()) and number not in protected
+    return number not in protected
 
 
 def _should_send_rate_limited(subject: str, *, min_consecutive: int = 3, cooldown_hours: int = 24) -> bool:
@@ -1385,7 +1413,11 @@ def _save_pr_state(issue_number: str, pr_num: str, branch: str, authorized_head:
     """
     os.makedirs(STATE_DIR, exist_ok=True)
     state = {"pr_number": pr_num, "branch": branch, "created_at": datetime.now(timezone.utc).isoformat()}
-    # Local state is provenance, not a wildcard authorization for future heads.
+    # The head records where the runner last published, and is the baseline the
+    # force-push guard in _reconcile_active_worktree compares a worktree against.
+    # Authorization is the PR number and branch, so this value is not a second gate,
+    # but the guard is blind without it: a record that stores no head cannot tell a
+    # rewritten remote from an unpublished local completion.
     code, head = 0, authorized_head
     if head is None:
         code, head, _ = run_cmd(["git", "rev-parse", f"refs/heads/{branch}"], cwd=REPO_PATH)
@@ -1447,7 +1479,12 @@ def _clear_pr_state(issue_number: str) -> None:
 
 
 def _authorized_pr(pr_number, issue_number=None, expected_head=None):
-    """Fail closed on origin, base, provenance, and head-bound authorization."""
+    """Fail closed on origin, base, and provenance.
+
+    Authorization is bound to the PR, not to a frozen SHA: a recorded PR authored
+    by a trusted user is authorized on whatever head it currently has. expected_head
+    is the merge path's own pin, which is checked separately.
+    """
     code, out, _ = run_cmd(["gh", "api", f"repos/{GITHUB_REPOSITORY}/pulls/{pr_number}"], cwd=REPO_PATH)
     try:
         pr = json.loads(out) if code == 0 else {}
@@ -1480,16 +1517,15 @@ def _authorized_pr(pr_number, issue_number=None, expected_head=None):
                     for commit in commits)):
                 return pr
         state = _load_pr_state(str(issue_number)) if issue_number is not None else None
-        if (user.get("login") in TRUSTED_AUTHORS and state
-                and str(state.get("pr_number")) == str(pr_number)
-                and state.get("branch") == branch and state.get("authorized_head") == sha):
-            return pr
-        # A rewrite that leaves the tree untouched changed no content, so it can
-        # be adopted. This is the only recovery when the sole merge maintainer is
-        # also the PR author, because GitHub forbids approving your own PR, so the
-        # APPROVED-review path can never be satisfied on the maintainer's PRs.
-        if (user.get("login") in TRUSTED_AUTHORS and issue_number is not None
-                and _adopt_tree_identical_head(pr_number, issue_number, branch, sha)):
+        # The record proves the runner opened this PR for this branch; the author
+        # proves the work is the maintainer's. The head is deliberately not
+        # compared against the recorded one. The maintainer is the only merge
+        # maintainer and GitHub forbids approving your own pull request, so
+        # demanding a head that never moved would stall their own PRs after any
+        # rebase or force-push. The head that actually merges is pinned at merge
+        # time (--match-head-commit) and re-gated by CI and the robot reviews, so a
+        # moved head is re-verified rather than trusted on sight.
+        if user.get("login") in TRUSTED_AUTHORS and _pr_state_matches(state, pr_number, branch):
             return pr
         # Unknown/legacy origins need a maintainer's explicit approval of this SHA.
         code, out, _ = run_cmd(
@@ -1523,112 +1559,6 @@ def _pr_state_matches(state, pr_number, branch) -> bool:
         and str(state.get("pr_number")) == str(pr_number)
         and state.get("branch") == branch
     )
-
-
-# Emits "<tree> <parent>" for a single-parent commit and nothing otherwise. A
-# merge commit is refused because its extra parents can move the merge base,
-# which changes what a squash merge deletes; a root commit has no parent to pin.
-_COMMIT_IDENTITY_JQ = r'if (.parents | length) == 1 then "\(.commit.tree.sha) \(.parents[0].sha)" else "" end'
-
-
-def _commit_identity(sha) -> tuple[str, str] | None:
-    """The ``(tree, first parent)`` a commit points at, or None when unusable.
-
-    A tree SHA is a Merkle hash of the whole directory content, so two commits
-    that share a tree are byte-identical in content. GitHub keeps unreachable
-    commits readable through the API, so a force-pushed-away head still resolves.
-
-    The parent comes back with the tree because an equal tree alone does not pin
-    what a commit changes: a head parented on a newer ``main`` can carry the
-    recorded tree while dropping the files ``main`` added in between, and merging
-    it would delete them. Equal tree *and* parent means the two commits differ
-    only in message, author, and dates, so merging either has the same effect —
-    but only for a single-parent commit, so a merge commit and a root commit are
-    both refused.
-
-    The 40-hex validation on both fields is load-bearing, not defensive: jq
-    interpolates an absent field as the literal string ``null``, so a degraded
-    payload with no ``commit.tree`` still yields a well-formed two-field line.
-    Two commits both reading ``null`` would compare equal and authorize a head
-    whose tree was never checked.
-    """
-    if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha):
-        return None
-    code, out, _ = run_cmd(
-        ["gh", "api", f"repos/{GITHUB_REPOSITORY}/commits/{sha}", "--jq", _COMMIT_IDENTITY_JQ],
-        cwd=REPO_PATH,
-    )
-    if code != 0:
-        return None
-    parts = out.split()
-    if len(parts) != 2:
-        return None
-    tree, parent = parts
-    if not re.fullmatch(r"[0-9a-f]{40}", tree) or not re.fullmatch(r"[0-9a-f]{40}", parent):
-        return None
-    return tree, parent
-
-
-def _adopt_tree_identical_head(pr_number, issue_number, branch, current_sha) -> bool:
-    """Re-authorize a moved head whose tree is unchanged, and record it.
-
-    A repair mission that rewrites history only to relabel a checkpoint
-    (``wip:`` -> ``feat:``) leaves the tree byte-identical: no content changed, so
-    adopting the new head cannot smuggle in unreviewed work. This matters because
-    GitHub forbids approving your own pull request, so when the sole merge
-    maintainer is also the PR author the APPROVED-review path is unreachable and
-    the runner would otherwise stall that PR forever.
-
-    Every guard is a hard requirement, and any failure leaves the head
-    unauthorized: the recorded state must name this exact PR and branch, and both
-    commits must resolve to the same tree *and* the same parent, each a well-formed
-    40-hex SHA. An unreadable commit (API failure, expired token) can never
-    authorize, nor can a response jq degraded into the literal string ``null``, nor
-    an equal tree hung off a different parent, which would delete whatever that
-    parent gained.
-
-    A caller that passes ``expected_head`` is only reached when the PR head already
-    equals it, so adoption is free to run: the head it returns is the one the
-    caller demanded. The record is stale even though the head is not, which is
-    exactly what adoption repairs.
-
-    Returns True when the recorded head was advanced to ``current_sha``, or when a
-    dry run would advance it without persisting anything.
-    """
-    state = _load_pr_state(str(issue_number))
-    if not _pr_state_matches(state, pr_number, branch):
-        return False
-    recorded = state.get("authorized_head") or ""
-    if recorded == current_sha:
-        return False
-    recorded_identity = _commit_identity(recorded)
-    if not recorded_identity or recorded_identity != _commit_identity(current_sha):
-        return False
-    recorded_tree = recorded_identity[0]
-    if DRY_RUN:
-        # Read-only: report what a real run would do, but persist nothing and send
-        # nothing. Recording the head here would take the exact-head path on the
-        # next real run, so the operator would never learn about the adoption.
-        print(f"[authorization] PR #{pr_number}: head {current_sha[:8]} has the recorded tree and parent "
-              f"({recorded_tree[:8]}); a real run would adopt it as provenance.")
-        return True
-    print(f"[authorization] PR #{pr_number}: head {current_sha[:8]} carries the same tree and parent as the "
-          f"recorded {recorded[:8]} ({recorded_tree[:8]}); adopting it as provenance.")
-    _save_pr_state(str(issue_number), str(pr_number), branch, current_sha)
-    if _should_send_rate_limited(f"[Runner] PR #{pr_number} Head Re-adopted"):
-        send_email(
-            f"[Runner] PR #{pr_number} Head Re-adopted",
-            f"<h3>PR <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">#{pr_number}</a> "
-            f"head re-adopted</h3>"
-            f"<p><b>Recorded head:</b> <code>{html.escape(recorded)}</code><br>"
-            f"<b>Adopted head:</b> <code>{html.escape(str(current_sha))}</code><br>"
-            f"<b>Tree:</b> <code>{html.escape(recorded_tree)}</code><br>"
-            f"<b>Parent:</b> <code>{html.escape(recorded_identity[1])}</code></p>"
-            f"<p>Both commits point at the same tree and the same parent, so the rewrite changed no content — "
-            f"only the commit message or metadata. The runner has adopted the new head as provenance and "
-            f"continues its normal review and merge for it.</p>"
-        )
-    return True
 
 
 def _parse_gh_timestamp(value):
@@ -1673,15 +1603,16 @@ def _pr_head_ref(pr: dict) -> str:
 
 # GitHub refuses a review on your own pull request ("Can not approve your own
 # pull request"), so an APPROVED review is only reachable when a maintainer other
-# than the PR author is configured. A rewrite whose tree is unchanged is adopted
-# automatically, so this remediation applies only to a real content change.
+# than the PR author is configured. It is the recovery for a PR the runner holds
+# no record for: a recorded PR authored by the maintainer needs no review, and its
+# head is re-verified at merge time instead.
 _APPROVE_REMEDIATION = (
     "add an APPROVED review from a merge maintainer on the current head — or, if you authored the PR, "
     "merge it directly, because GitHub blocks self-approval"
 )
 
 
-def _authorization_refusal(pr: dict, branch, recorded_head):
+def _authorization_refusal(pr: dict, branch):
     """Explain why _authorized_pr refuses this open PR, and what fixes it.
 
     Returns (reason, remediation), or None when nothing visible here explains
@@ -1711,10 +1642,6 @@ def _authorization_refusal(pr: dict, branch, recorded_head):
     if branch and head.get("ref") != branch:
         return (f"its head branch is now '{head.get('ref')}', not the recorded '{branch}'",
                 "restore the recorded branch name")
-    if not recorded_head:
-        return ("the runner has no recorded head for this PR", _APPROVE_REMEDIATION)
-    if sha != recorded_head:
-        return (f"its head moved from the recorded {recorded_head[:8]} to {sha[:8]}", _APPROVE_REMEDIATION)
     return None
 
 
@@ -1755,7 +1682,7 @@ def _escalate_blocked_worktree(pr_number, issue_number, branch, *, require_green
         _escalate_unrecorded_pr(pr, require_green_and_stale=require_green_and_stale)
         return
     recorded = state.get("authorized_head") or ""
-    refusal = _authorization_refusal(pr, branch, recorded)
+    refusal = _authorization_refusal(pr, branch)
     if refusal is None:
         return
     reason, remediation = refusal
@@ -1771,10 +1698,10 @@ def _escalate_blocked_worktree(pr_number, issue_number, branch, *, require_green
         f"<b>Reason:</b> {html.escape(reason)}<br>"
         f"<b>Recorded head:</b> <code>{html.escape(recorded or '(none recorded)')}</code><br>"
         f"<b>Current head:</b> <code>{html.escape(current or '(unreadable)')}</code></p>"
-        f"<p>The runner never acts on a head or a PR state it cannot attribute to its own recorded work, so "
-        f"this PR keeps its worktree slot and no repair missions are dispatched for it.</p>"
-        f"<p><b>To unblock:</b> {html.escape(remediation)}. The runner re-checks the exact head and PR state "
-        f"and completes the merge once CI and the robot-review gate pass.</p>"
+        f"<p>The runner only acts on an open, non-draft PR in this repository whose record names this exact "
+        f"PR and branch, so this PR keeps its worktree slot and no repair missions are dispatched for it.</p>"
+        f"<p><b>To unblock:</b> {html.escape(remediation)}. The runner then re-checks the PR state, CI, and "
+        f"the robot-review gate, and pins the head it reviewed when it merges.</p>"
     )
 
 
@@ -2317,6 +2244,12 @@ def _reconcile_active_worktree(wt_path: str, branch: str, pr_number: int,
     Returns (local_code, local_head, ancestor_code).
     """
     short_head = reviewed_head[:8]
+    # A hand-edited or truncated record can hold a non-string, non-SHA head. Every
+    # use of it below slices or interpolates it, so a damaged value would raise and
+    # abort the whole cycle instead of skipping one worktree. Treat anything that is
+    # not a commit SHA as no recorded head at all.
+    if not isinstance(previous_head, str) or not re.fullmatch(r"[0-9a-f]{40}", previous_head):
+        previous_head = None
     local_code, local_head, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
     if local_code != 0:
         return local_code, local_head, 1
@@ -2336,8 +2269,13 @@ def _reconcile_active_worktree(wt_path: str, branch: str, pr_number: int,
         return 0, local_head, 0
 
     ancestor_code, _, _ = run_cmd(["git", "merge-base", "--is-ancestor", reviewed_head, "HEAD"], cwd=wt_path)
-    if ancestor_code == 0:
-        # Local HEAD is ahead of reviewed_head (recorded runner completion)
+    if ancestor_code == 0 and not (previous_head and previous_head != reviewed_head):
+        # Local HEAD is ahead of reviewed_head (recorded runner completion). Only
+        # while the record still names the reviewed head: if the record moved away
+        # from the remote, the remote was rewritten, and the local tip is the
+        # published head the rewrite abandoned rather than an unpublished
+        # completion. Reading it as unpublished would push the abandoned content
+        # straight back over a maintainer's force-push.
         return local_code, local_head, 0
 
     # A recorded head that is not an ancestor of the new authorized head means the PR
@@ -2880,10 +2818,19 @@ def babysit_active_worktrees():
             and pending.get("local_head") == local_head
             and pending.get("completion_ready") is False
         )
+        # A gate-state file is a *pending completion* marker, not a provenance
+        # record: its absence means no completion is pending, which is the ordinary
+        # "local work is unfinished" case that must resume. Only a record that
+        # exists and names a different branch or head is a real conflict. Treating
+        # absence as a conflict escalated every worktree whose gate file was missing
+        # or pruned as unrecoverable divergence, holding the only runner slot until
+        # a human intervened.
+        pending_conflict = bool(pending) and (
+            (pending.get("branch") is not None and pending.get("branch") != branch)
+            or (pending.get("local_head") is not None and pending.get("local_head") != local_head)
+        )
         if local_code != 0 or local_head != reviewed_head:
-            if (local_code != 0 or pending.get("branch") != branch
-                    or pending.get("local_head") != local_head
-                    or ancestor_code != 0):
+            if local_code != 0 or pending_conflict or ancestor_code != 0:
                 if _should_send_rate_limited(f"[Runner] Divergence Alert: PR #{pr_number}"):
                     send_email(
                         f"[Runner] Divergence Alert: PR #{pr_number}",
@@ -2892,7 +2839,13 @@ def babysit_active_worktrees():
                     )
                 print(f"[authorization] Local worktree does not match PR #{pr_number} head. Waiting.")
                 continue
-            if pending.get("completion_ready", True) and _worktree_is_clean(wt_path):
+            # A completion is published only when a gate record explicitly marks one
+            # as ready. The default used to be True, which was safe only while an
+            # absent record was read as divergence and never reached this line: now
+            # that absence is correctly "no completion pending", defaulting to True
+            # would let a lost marker authorize a publication the mission never
+            # declared finished. Absence falls through to the agent path below.
+            if pending.get("completion_ready") is True and _worktree_is_clean(wt_path):
                 if _publish_reviewed_completion(wt_path, branch, pr_number, str(issue_number), reviewed_head, local_head):
                     _save_pr_state(str(issue_number), str(pr_number), branch, local_head)
                     print(f"[babysit] Retained completion published for PR #{pr_number}; waiting for current CI.")
@@ -3223,8 +3176,8 @@ def babysit_orphaned_issue_prs():
         authorized = _authorized_pr(pr_num, issue_num_str)
         if not authorized or authorized["head"]["ref"] != head_branch:
             # A PR the runner is responsible for used to be skipped here every
-            # cycle with no signal: a recorded PR whose head moved, a draft, a
-            # retargeted base, or one whose issue state the runner never wrote.
+            # cycle with no signal: a draft, a retargeted base, a renamed head
+            # branch, or one whose issue state the runner never wrote.
             # Dispatch on whether the record names this exact PR, so the check
             # here and the escalation's own guard cannot disagree. The list entry
             # is passed to the unrecorded report because only it carries CI state
