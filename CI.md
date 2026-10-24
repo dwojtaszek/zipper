@@ -182,6 +182,8 @@ All dependency version bumps must observe a **minimum 3-day waiting period** aft
 Rationale: new package releases occasionally introduce breaking changes or regressions that are caught within the first few days. Delaying adoption by 3 days reduces the risk of integrating unstable dependencies.
 
 Implementation:
-- Dependabot PRs may be opened immediately (schedule-controlled) but must not be merged until 3 days after the release date of the target version.
+- Dependabot configuration enforces cooldown where supported (`cooldown.default-days: 3` in `.github/dependabot.yml`).
+- `.zipper-runner` deterministically verifies upstream publication age (NuGet package registration timestamp; GitHub Actions release `published_at` timestamp) and blocks auto-merge until at least 3 days old. Grouped updates are checked individually — a newly published member blocks the group. Unverifiable upstream releases (e.g. actions without releases) fail closed.
+- Security updates may bypass the 3-day cooldown only via explicit, auditable recorded authorization (e.g. `pr-<N>-security-exception.json` in state or merge maintainer approval review with `authorize-security` marker).
 - Reviewers should verify the NuGet/GitHub release date before approving a dependency PR.
 
