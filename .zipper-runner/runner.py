@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import contextlib
 import csv
 import argparse
 import gzip
@@ -50,6 +51,27 @@ REPO_PATH = os.environ.get("REPO_PATH", os.path.abspath(os.path.join(RUNNER_BASE
 WORKTREES_BASE = os.environ.get("WORKTREES_BASE", os.path.join(REPO_PATH, ".worktrees"))
 PLUGINS_DIR = os.environ.get("PLUGINS_DIR", os.path.join(RUNNER_BASE, "plugins"))
 LOCK_FILE_PATH = os.environ.get("LOCK_FILE_PATH", os.path.join(RUNNER_BASE, "runner.lock"))
+# The babysit timer fires every 5 minutes while an intake run holds LOCK_FILE_PATH
+# for the whole of a 20-42 minute agent mission, so most babysit firings used to
+# exit at the lock having done nothing (67% of the last 60). Babysitting is
+# bounded work on an existing PR and does not need the intake lock, so it takes
+# this one instead, and an intake run takes it only around its own babysit pass.
+# The two processes are still serialized against each other's git mutations by
+# REPO_MUTATION_LOCK_PATH, which is what actually protects the checkout.
+BABYSIT_LOCK_PATH = os.environ.get("BABYSIT_LOCK_PATH", os.path.join(RUNNER_BASE, "babysit.lock"))
+# Non-blocking by default: both callers have a timer behind them, and waiting
+# inside a firing only delays the next one.
+BABYSIT_LOCK_TIMEOUT = int(os.environ.get("BABYSIT_LOCK_TIMEOUT", "0"))
+# Shared with .zipper-runner/deploy-main.sh, which fast-forwards this checkout from
+# outside the runner. The runner's own lock cannot serve this purpose: it is held
+# for a whole agent mission, so sharing it would stall every deploy for the 20-42
+# minutes a mission takes. This one is held only around git mutations.
+REPO_MUTATION_LOCK_PATH = os.environ.get(
+    "REPO_MUTATION_LOCK_PATH", os.path.join(RUNNER_BASE, "repo-mutation.lock"))
+REPO_MUTATION_LOCK_TIMEOUT = int(os.environ.get("REPO_MUTATION_LOCK_TIMEOUT", "120"))
+# Must exceed the runner's own slowest single mutation (NETWORK_GIT_TIMEOUT), or a
+# legitimately slow fetch would be mistaken for a crashed holder and stolen.
+REPO_MUTATION_LOCK_STALE_SECONDS = int(os.environ.get("REPO_MUTATION_LOCK_STALE_SECONDS", "1200"))
 EMAIL_RECIPIENT = os.environ.get("EMAIL_RECIPIENT", "dwojtaszek@gmail.com")
 MAX_ACTIVE_WORKTREES = int(os.environ.get("MAX_ACTIVE_WORKTREES", "1"))
 ACTIVE_AGENT = os.environ.get("ACTIVE_AGENT", "")
@@ -786,8 +808,151 @@ def _remove_worktree(wt_path: str, branch: str = "", *, is_merged: bool = False,
     return True
 
 
+_repo_mutation_lock_depth = 0
+_repo_mutation_lock_token = ""
+
+
+def _repo_mutation_lock_owner_file() -> str:
+    return os.path.join(REPO_MUTATION_LOCK_PATH, "owner")
+
+
+def _steal_stale_repo_mutation_lock() -> bool:
+    """Remove the main-checkout lock when its holder is provably gone or wedged.
+
+    A holder only ever mutates under a bounded command (DEFAULT_CMD_TIMEOUT), so
+    the stale bound is set above that and an over-age lock cannot belong to a
+    process still legitimately working.
+    """
+    try:
+        age = time.time() - os.path.getmtime(REPO_MUTATION_LOCK_PATH)
+    except OSError:
+        return False
+    if age <= REPO_MUTATION_LOCK_STALE_SECONDS:
+        return False
+    print(f"REPO LOCK: stealing a stale main-checkout lock (age {int(age)}s).")
+    shutil.rmtree(REPO_MUTATION_LOCK_PATH, ignore_errors=True)
+    return True
+
+
+def _write_repo_mutation_lock_metadata(token: str) -> bool:
+    """Record the holder's token and timestamp inside the lock directory.
+
+    `created` is what deploy-main.sh reads to report the holder's age, so the two
+    sides must both write it: the shell cannot judge staleness from a directory
+    that only the runner creates. Returns False when the metadata could not be
+    written, which the caller treats as having no verifiable identity.
+    """
+    try:
+        with open(os.path.join(REPO_MUTATION_LOCK_PATH, "created"), "w") as handle:
+            handle.write(str(int(time.time())))
+        with open(_repo_mutation_lock_owner_file(), "w") as handle:
+            handle.write(token)
+    except OSError as e:
+        print(f"REPO LOCK: could not record lock metadata: {e}")
+        return False
+    return True
+
+
+def _release_repo_mutation_lock() -> None:
+    """Remove the lock only while this process is still its recorded owner.
+
+    After a stale steal the lock belongs to another process, and removing it here
+    would delete a live holder's lock and let a third process in. When the token
+    cannot be confirmed, the lock is left alone: a stuck lock is recoverable by the
+    stale bound, a deleted live one is the hazard this lock exists to prevent.
+
+    An empty token means no identity was ever recorded, so there is nothing to
+    confirm against and the lock is removed: a steal requires the holder to exceed
+    the stale bound, which a holder whose every command is bounded cannot do.
+    """
+    global _repo_mutation_lock_token
+    token, _repo_mutation_lock_token = _repo_mutation_lock_token, ""
+    if token:
+        try:
+            with open(_repo_mutation_lock_owner_file()) as handle:
+                owner = handle.read().strip()
+        except OSError:
+            owner = ""
+        if owner != token:
+            print("REPO LOCK: lock was reclaimed by another process; leaving it alone.")
+            return
+    shutil.rmtree(REPO_MUTATION_LOCK_PATH, ignore_errors=True)
+
+
+@contextlib.contextmanager
+def _repo_mutation_lock(timeout: int | None = None):
+    """Exclusive lock around git mutations of the main checkout.
+
+    The deploy timer fast-forwards this same checkout from outside the runner, and
+    `_cleanup_git_state` deletes `.git/index.lock` without checking its age, so a
+    run starting mid-deploy would remove the lock an active git process holds and
+    then run `git rebase --abort` on the same tree. Both sides take this lock; the
+    runner takes it only around mutations, never across an agent mission, so a
+    deploy waits at most one mutation instead of a whole run.
+
+    Yields True when the caller may mutate and False when it may not, in which case
+    the caller must skip its mutation rather than proceed: another process is
+    mid-operation on this checkout, and git's own index lock is not sufficient
+    protection while `_cleanup_git_state` can delete it.
+
+    Re-entrant within a process, so a locked helper may call another locked helper.
+    The lock is a directory, because the shell side must take it too and `flock` is
+    absent on macOS, where this repository's runner suite runs in CI.
+    """
+    global _repo_mutation_lock_depth, _repo_mutation_lock_token
+    if _repo_mutation_lock_depth > 0:
+        _repo_mutation_lock_depth += 1
+        try:
+            yield True
+        finally:
+            _repo_mutation_lock_depth -= 1
+        return
+
+    wait = REPO_MUTATION_LOCK_TIMEOUT if timeout is None else timeout
+    deadline = time.time() + wait
+    acquired = False
+    while True:
+        try:
+            os.mkdir(REPO_MUTATION_LOCK_PATH)
+            acquired = True
+            break
+        except FileExistsError:
+            if _steal_stale_repo_mutation_lock():
+                continue
+        except OSError as e:
+            print(f"REPO LOCK: cannot create {REPO_MUTATION_LOCK_PATH}: {e}")
+            break
+        if time.time() >= deadline:
+            break
+        time.sleep(1)
+
+    if not acquired:
+        print(f"REPO LOCK: main checkout busy for {wait}s; skipping this mutation.")
+        yield False
+        return
+
+    _repo_mutation_lock_depth = 1
+    token = f"{os.getpid()}-{time.time_ns()}"
+    # Claim only an identity that was actually recorded: with no token on disk
+    # there is nothing to compare against on release, and an unverifiable owner
+    # must not block the release of a lock this process just created.
+    _repo_mutation_lock_token = token if _write_repo_mutation_lock_metadata(token) else ""
+    try:
+        yield True
+    finally:
+        _repo_mutation_lock_depth = 0
+        _release_repo_mutation_lock()
+
+
 def _cleanup_git_state():
     """Cleans up stale git state: index lock, stuck rebase/merge/cherry-pick/etc."""
+    with _repo_mutation_lock() as locked:
+        if not locked:
+            return
+        _cleanup_git_state_locked()
+
+
+def _cleanup_git_state_locked():
     cwd = REPO_PATH
 
     index_lock = os.path.join(cwd, ".git", "index.lock")
@@ -2197,17 +2362,21 @@ def _active_worktree_count() -> int:
 
 
 def _sync_main_after_merge() -> bool:
-    code, branch, _ = run_cmd(["git", "branch", "--show-current"], cwd=REPO_PATH)
-    if code != 0 or branch.strip() != "main" or not _repo_is_clean(REPO_PATH):
-        print("Main sync deferred: repository is not clean on main. User work preserved.")
-        return False
-    for command in (["git", "fetch", "origin", "main"], ["git", "merge", "--ff-only", MAIN_REMOTE_REF]):
-        code, _, error = run_cmd(command, cwd=REPO_PATH, timeout=NETWORK_GIT_TIMEOUT if command[1] == "fetch" else None)
-        if code != 0:
-            print(f"Main sync deferred: {error.strip()}")
+    with _repo_mutation_lock() as locked:
+        if not locked:
+            print("Main sync deferred: main checkout is busy with another operation.")
             return False
-    print("Main synchronized after merge.")
-    return True
+        code, branch, _ = run_cmd(["git", "branch", "--show-current"], cwd=REPO_PATH)
+        if code != 0 or branch.strip() != "main" or not _repo_is_clean(REPO_PATH):
+            print("Main sync deferred: repository is not clean on main. User work preserved.")
+            return False
+        for command in (["git", "fetch", "origin", "main"], ["git", "merge", "--ff-only", MAIN_REMOTE_REF]):
+            code, _, error = run_cmd(command, cwd=REPO_PATH, timeout=NETWORK_GIT_TIMEOUT if command[1] == "fetch" else None)
+            if code != 0:
+                print(f"Main sync deferred: {error.strip()}")
+                return False
+        print("Main synchronized after merge.")
+        return True
 
 
 _WIP_CONTINUATIONS: set[str] = set()
@@ -3065,8 +3234,16 @@ def _recreate_worktree_for_pr(issue_number: str, branch: str, pr_number, expecte
     if os.path.exists(wt_path):
         return True
     print(f"Recreating worktree for orphan PR on branch '{branch}' at {wt_path}...")
-    fetch_code, _, _ = run_cmd(["git", "fetch", "origin", f"refs/heads/{branch}"], cwd=REPO_PATH, timeout=NETWORK_GIT_TIMEOUT)
-    head_code, head_out, _ = run_cmd(["git", "rev-parse", "FETCH_HEAD"], cwd=REPO_PATH)
+    # Fetch into an explicit remote-tracking ref and do not write FETCH_HEAD:
+    # FETCH_HEAD is a single per-repository file that any concurrent fetch
+    # overwrites, and the deploy timer fetches origin/main on its own schedule, so
+    # reading it here could validate against another fetch's head and refuse a
+    # worktree for a branch that was fetched correctly.
+    remote_ref = f"refs/remotes/origin/{branch}"
+    fetch_code, _, _ = run_cmd(
+        ["git", "fetch", "--no-write-fetch-head", "origin", f"refs/heads/{branch}:{remote_ref}"],
+        cwd=REPO_PATH, timeout=NETWORK_GIT_TIMEOUT)
+    head_code, head_out, _ = run_cmd(["git", "rev-parse", remote_ref], cwd=REPO_PATH)
     if fetch_code != 0 or head_code != 0 or head_out.strip() != expected_head:
         return False
     # Do not replace any existing local branch with externally fetched content.
@@ -3824,6 +4001,14 @@ def select_next_issue():
     return None
 
 def verify_repo_on_main():
+    with _repo_mutation_lock() as locked:
+        if not locked:
+            print("RECOVERY: main checkout is busy with another operation; deferring branch recovery.")
+            return False
+        return _verify_repo_on_main_locked()
+
+
+def _verify_repo_on_main_locked():
     _cleanup_git_state()
 
     code, out, err = run_cmd(["git", "branch", "--show-current"], cwd=REPO_PATH)
@@ -4049,6 +4234,23 @@ def _recover_dirty_main_repo(rebase_err: str):
 
 
 def sync_main_repo():
+    with _repo_mutation_lock() as locked:
+        if not locked:
+            print("Main sync deferred: main checkout is busy with another operation.")
+            return False
+        return _sync_main_repo_locked()
+
+
+def _sync_main_repo_locked():
+    # `verify_repo_on_main` normally recovers a checkout left on another branch
+    # before this runs, but it defers when the main-checkout lock is busy. Rebasing
+    # a feature branch onto origin/main would rewrite that branch's shape, so this
+    # fails closed instead of relying on the ordering of an earlier step.
+    code, branch, _ = run_cmd(["git", "branch", "--show-current"], cwd=REPO_PATH)
+    if code != 0 or branch.strip() != "main":
+        print(f"Main sync deferred: checkout is on '{branch.strip()}', not main.")
+        return False
+
     _fetch_origin_or_abort()
     _check_ignored_file_collisions()
 
@@ -4060,19 +4262,31 @@ def sync_main_repo():
             _recover_clean_main_repo(rebase_err)
         else:
             _recover_dirty_main_repo(rebase_err)
+    return True
+
+
+def _lock_is_held(lock_path: str) -> bool:
+    try:
+        test_lock = open(lock_path, "a")
+    except OSError:
+        return False
+    try:
+        fcntl.flock(test_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(test_lock, fcntl.LOCK_UN)
+        return False
+    except (IOError, OSError):
+        return True
+    finally:
+        test_lock.close()
 
 
 def show_status():
     print("=== Zipper Runner Diagnostics ===")
-    locked = False
-    try:
-        test_lock = open(LOCK_FILE_PATH, "a")
-        fcntl.flock(test_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        fcntl.flock(test_lock, fcntl.LOCK_UN)
-        test_lock.close()
-    except (IOError, OSError):
-        locked = True
-    print(f"Runner Lock Status: {'ACTIVE / LOCKED' if locked else 'IDLE / UNLOCKED'}")
+    for label, path in (("Runner", LOCK_FILE_PATH), ("Babysit", BABYSIT_LOCK_PATH),
+                        ("Main checkout", REPO_MUTATION_LOCK_PATH)):
+        state = "ACTIVE / LOCKED" if _lock_is_held(path) else "IDLE / UNLOCKED"
+        print(f"{label} Lock Status: {state}")
+    print(f"Main checkout lock path: {REPO_MUTATION_LOCK_PATH}")
 
     code, branch, _ = run_cmd(["git", "branch", "--show-current"], cwd=REPO_PATH)
     branch = branch.strip()
@@ -4123,15 +4337,21 @@ def show_status():
     sys.exit(0)
 
 
-def _heartbeat_path() -> str:
-    return os.path.join(STATE_DIR, "runner-heartbeat.json")
+def _heartbeat_path(kind: str = "runner") -> str:
+    """Path of the heartbeat for one lock kind ("runner" or "babysit").
+
+    Per-lock, not global: a babysit run no longer holds the intake lock, so a
+    shared heartbeat would let one kind's reclaim logic judge the other kind's
+    holder and kill a healthy process.
+    """
+    return os.path.join(STATE_DIR, f"{kind}-heartbeat.json")
 
 
-def _write_heartbeat() -> None:
+def _write_heartbeat(kind: str = "runner") -> None:
     """Record the lock holder's pid/pgid/start so a later cycle can reclaim a hung run."""
     try:
         os.makedirs(STATE_DIR, exist_ok=True)
-        with open(_heartbeat_path(), "w") as f:
+        with open(_heartbeat_path(kind), "w") as f:
             json.dump(
                 {"pid": os.getpid(), "pgid": os.getpgid(0), "started": datetime.now(timezone.utc).isoformat()},
                 f,
@@ -4140,7 +4360,7 @@ def _write_heartbeat() -> None:
         print(f"[watchdog] Could not write heartbeat: {e}")
 
 
-def _reclaim_stale_lock() -> bool:
+def _reclaim_stale_lock(kind: str = "runner") -> bool:
     """True when the lock holder has run past MAX_RUN_SECONDS and was killed.
 
     flock is released by the kernel when the holder dies, so a held lock always
@@ -4150,7 +4370,7 @@ def _reclaim_stale_lock() -> bool:
     Without a usable heartbeat nothing can be proven about the holder, so the
     takeover fails closed (returns False) and the caller exits normally."""
     try:
-        with open(_heartbeat_path()) as f:
+        with open(_heartbeat_path(kind)) as f:
             heartbeat = json.load(f)
         started = datetime.fromisoformat(heartbeat["started"])
         pid = int(heartbeat["pid"])
@@ -4187,42 +4407,72 @@ def _reclaim_stale_lock() -> bool:
     return True
 
 
+def _acquire_lock(lock_path: str, timeout_sec: int, kind: str):
+    """Take an exclusive lock, reclaiming a wedged holder. Returns the open file, or None.
+
+    The file must stay open for as long as the lock is held: flock is released when
+    the descriptor closes, and the kernel releases it if the holder dies, which is
+    what makes a crash recoverable without a stale-lock file convention.
+    """
+    lock_file = open(lock_path, "a")
+    start = time.time()
+    first_attempt = True
+    while True:
+        try:
+            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return lock_file
+        except (IOError, BlockingIOError):
+            if first_attempt:
+                if timeout_sec > 0:
+                    print(f"{kind} lock held by another instance. Waiting up to {timeout_sec}s...")
+                first_attempt = False
+            if time.time() - start >= timeout_sec:
+                break
+            time.sleep(5)
+
+    if _reclaim_stale_lock(kind):
+        try:
+            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return lock_file
+        except (IOError, BlockingIOError):
+            pass
+    lock_file.close()
+    return None
+
+
+def _release_lock(lock_file) -> None:
+    if lock_file is None:
+        return
+    try:
+        fcntl.flock(lock_file, fcntl.LOCK_UN)
+    except (IOError, OSError):
+        pass
+    try:
+        lock_file.close()
+    except OSError:
+        pass
+
+
 def main():
     global AGENT_CANDIDATES
 
     if STATUS_ONLY:
         show_status()
 
-    lock_file = open(LOCK_FILE_PATH, "a")
-    lock_timeout_sec = int(os.environ.get("RUNNER_LOCK_TIMEOUT", "120"))
-    start_lock = time.time()
-    acquired = False
-    first_attempt = True
-    while True:
-        try:
-            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            acquired = True
-            break
-        except (IOError, BlockingIOError):
-            if first_attempt:
-                print(f"Runner lock held by another instance. Waiting up to {lock_timeout_sec}s...")
-                first_attempt = False
-            if time.time() - start_lock >= lock_timeout_sec:
-                break
-            time.sleep(5)
+    if BABYSIT_ONLY:
+        # A babysit firing does not pick up new issues, so it must not contend with
+        # the intake lock: that lock is held for a whole agent mission, which is why
+        # most babysit firings used to exit having done nothing.
+        lock_file = _acquire_lock(BABYSIT_LOCK_PATH, BABYSIT_LOCK_TIMEOUT, "Babysit")
+    else:
+        lock_file = _acquire_lock(
+            LOCK_FILE_PATH, int(os.environ.get("RUNNER_LOCK_TIMEOUT", "120")), "Runner")
 
-    if not acquired and _reclaim_stale_lock():
-        try:
-            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            acquired = True
-        except (IOError, BlockingIOError):
-            acquired = False
-
-    if not acquired:
+    if lock_file is None:
         print("Another instance of the runner is active. Exiting.")
         sys.exit(0)
 
-    _write_heartbeat()
+    _write_heartbeat("babysit" if BABYSIT_ONLY else "runner")
     _prune_stale_state_files()
 
     print("Autonomous Runner Wakeup")
@@ -4235,7 +4485,25 @@ def main():
         refresh_models_table()
         sys.exit(0)
 
-    babysit_active_worktrees()
+    if BABYSIT_ONLY:
+        # This run holds the babysit lock already, so the pass runs directly.
+        try:
+            babysit_active_worktrees()
+        finally:
+            _release_lock(lock_file)
+    else:
+        # An intake run also babysits, but a dedicated babysit firing may hold the
+        # lock right now. Skipping is correct and costs nothing: the timer retries
+        # in minutes, and the intake run's remaining job is the mission, not this.
+        babysit_lock = _acquire_lock(BABYSIT_LOCK_PATH, BABYSIT_LOCK_TIMEOUT, "Babysit")
+        if babysit_lock is None:
+            print("Babysit pass skipped: another babysit is active.")
+        else:
+            _write_heartbeat("babysit")
+            try:
+                babysit_active_worktrees()
+            finally:
+                _release_lock(babysit_lock)
 
     # Recalculate after babysit — merged/closed PRs may have been cleaned up
     active_count = _active_worktree_count()
@@ -4500,6 +4768,12 @@ def main():
         print(f"Babysit-only: new issue pickup disabled ({active_count}/{MAX_ACTIVE_WORKTREES} active worktrees).")
     else:
         print(f"At capacity ({active_count}/{MAX_ACTIVE_WORKTREES} active worktrees). Skipping new issue pickup.")
+
+    # Explicit rather than relying on process exit, so a caller that runs main()
+    # in-process does not keep the lock after it returns.
+    if not BABYSIT_ONLY:
+        _release_lock(lock_file)
+
 
 if __name__ == "__main__":
     main()

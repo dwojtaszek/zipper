@@ -1,0 +1,14 @@
+[Unit]
+Description=Zipper Runner Deploy main
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/dom/repos/zipper
+# Installed outside the checkout on purpose: a copy inside the tree is an
+# untracked file in the commit that adds it, which blocks the fast-forward that
+# would deploy it. See .zipper-runner/deploy-main.sh.
+Environment=REPO_PATH=/home/dom/repos/zipper
+ExecStart=/home/dom/.local/bin/zipper-deploy-main.sh
+StandardOutput=journal
+StandardError=journal

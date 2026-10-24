@@ -60,18 +60,85 @@ systemctl --user list-timers zipper-intake.timer zipper-babysit.timer --no-pager
 
 A 15-minute intake answers a structural gap rather than load: each intake firing is a single instant, so one long mission occupying the only worktree slot at that instant costs the whole interval until the next firing. Frequent firing lets the existing lock and worktree limit decide, instead of the schedule.
 
+### Locks
+
+Three locks, each guarding a different thing. Confusing them is what starved babysitting.
+
+| Lock | Path (default) | Held by | Held for |
+|------|----------------|---------|----------|
+| Intake | `.zipper-runner/runner.lock` (`LOCK_FILE_PATH`) | an intake run | the whole run, including its agent mission |
+| Babysit | `.zipper-runner/babysit.lock` (`BABYSIT_LOCK_PATH`) | a babysit pass | that pass only |
+| Main checkout | `.zipper-runner/repo-mutation.lock` (`REPO_MUTATION_LOCK_PATH`) | either process | one git mutation of the main checkout |
+
+The babysit lock is separate from the intake lock on purpose. `zipper-babysit.timer` fires every 5 minutes, and an intake run holds the intake lock for the 20-42 minutes its mission takes, so while babysit shared that lock **67% of the last 60 babysit firings did nothing** (47 of 235 overall) — they waited out `RUNNER_LOCK_TIMEOUT` and exited. A babysit pass is bounded work on an existing PR, so it takes the babysit lock instead and runs alongside an in-flight mission. An intake run also babysits; it takes the babysit lock only around its own pass and releases it before it starts a mission, or every babysit firing during that mission would skip again.
+
+Both processes still take the main checkout lock around the git mutations that touch the shared checkout, and defer their mutation when they cannot get it. That is what protects the checkout; the intake and babysit locks only decide *who runs*, not *who may touch the tree*. Each lock has its own heartbeat (`<kind>-heartbeat.json`), so one kind's stale-lock watchdog can never judge, or kill, the other kind's holder. `runner.py --status` reports all three.
+
+Because the babysit lock is non-blocking (`BABYSIT_LOCK_TIMEOUT`, 0), a firing that finds another babysit already running exits immediately and the next firing retries in 5 minutes, rather than queueing behind it.
+
+### Deploying merged changes
+
+The runner syncs its own checkout (`sync_main_repo`) only while it holds the lock, and it holds the lock for the whole of a long agent mission. A merged change therefore waited for the next lock-winning run before it went live, which is tens of minutes when intake is busy. Deploy is a fast-forward of a checkout that is supposed to sit on `main` and stay clean, so it does not need to wait for a run; it only needs to not collide with one.
+
+`deploy-main.sh` runs on its own one-minute timer, outside the runner lock:
+
+```bash
+install -Dm755 .zipper-runner/deploy-main.sh "$HOME/.local/bin/zipper-deploy-main.sh"
+install -Dm644 .zipper-runner/systemd/zipper-deploy.service .zipper-runner/systemd/zipper-deploy.timer \
+    "$HOME/.config/systemd/user/"
+systemctl --user daemon-reload
+systemctl --user enable --now zipper-deploy.timer
+systemctl --user list-timers zipper-deploy.timer --no-pager
+```
+
+Install the script **outside** the checkout, as above. A copy inside the tree is an untracked file in the very commit that adds it, so the first fast-forward carrying it would refuse to run and deploy nothing. `REPO_PATH` in the service unit points at the checkout; the script derives nothing from its own location when `REPO_PATH` is set.
+
+The script never discards work: no `reset`, no `checkout`, no `stash`, no `clean`. It does nothing and logs why when the checkout is on another branch, has modifications to tracked files, is mid-rebase/merge/cherry-pick, holds an `index.lock`, or is not a fast-forward. Two of those refusals exist because a merge is not as harmless as it looks: `--ff-only` refuses a diverged checkout instead of creating a merge commit, and `--no-overwrite-ignore` refuses when the incoming commit would overwrite an ignored local file — the tracked-file check cannot see ignored files, and git overwrites them by default, which is how a deploy could destroy the runner's own ignored `runner.lock` or logs. Outcomes land in `.zipper-runner/logs/deploy_*.log`; the already-current case is silent. The runner reads `runner.py` once at process start, so a deploy during a run cannot affect that run.
+
+The script and the runner share one lock around the main checkout's git mutations, and that is what makes deploying safe rather than merely fast. The runner mutates the same checkout, and `_cleanup_git_state` deletes `.git/index.lock` without checking its age, so a run starting mid-deploy would remove the lock an active git process is holding and then run `git rebase --abort` on the same tree. Sharing the runner's own lock would not work: it is held for a whole agent mission, so every deploy would stall for the 20-42 minutes a mission takes. The shared lock is therefore taken only around mutations, never across a mission, so a deploy waits at most one mutation. On the runner side that means the whole-checkout operations — `_cleanup_git_state`, `verify_repo_on_main`, `sync_main_repo`, `_sync_main_after_merge` — take it, and each defers rather than proceeds when it cannot. Narrow ref and worktree operations (branch and worktree creation, the per-branch fetch for an orphan PR) do not take it: they are not the hazard above, and making the runner wait on a lock a shell timer holds would trade a real stall for a theoretical one. The orphan-PR fetch reads its own remote-tracking ref with `--no-write-fetch-head` instead of `FETCH_HEAD`, because `FETCH_HEAD` is a single per-repository file the deploy's fetch also overwrites.
+
+The lock is a directory rather than `flock` because `flock` and `timeout` are GNU utilities absent on macOS, where the runner suite runs in CI. It lives at `.zipper-runner/repo-mutation.lock` (`REPO_MUTATION_LOCK_PATH`) and is gitignored because `_repo_is_clean()` counts untracked files as dirt. Both sides write a `created` timestamp and an `owner` token inside it, and both judge staleness against the same bound (1200s default, `REPO_MUTATION_LOCK_STALE_SECONDS` / `DEPLOY_LOCK_STALE_SECONDS`), deliberately longer than any single locked command so a legitimately slow mutation is never mistaken for a crashed holder and stolen mid-write. The shell falls back to the directory's mtime when the `created` file is missing, so a holder that died between creating the lock and recording its timestamp is still reclaimable. On release both sides verify they are still the recorded owner, so a holder that lost its lock to a steal cannot delete the thief's lock and admit a third writer.
+
+The fetch is bounded on every host too. `timeout`/`gtimeout` is used where it exists; where neither does, the fetch runs in the background with a watchdog that kills it. The watchdog is used rather than the tempting `perl -e 'alarm shift; exec @ARGV'`, which is not equivalent: the alarm survives the exec only until the exec'd program is itself a shell script, after which the signal is deferred until that script's foreground child finishes, so the bound silently does nothing. Git's own low-speed abort is the third, weakest layer — it covers a stalled transfer but only for HTTP(S) remotes, so it is a backstop rather than the bound.
+
+To verify it end to end, rewind the checkout and watch the timer restore it. The guard below is deliberately strict, because `git reset --hard` destroys work that a bare `HEAD == origin/main` check does not see: local edits to tracked files (the commit matches, the working tree does not), and any branch that happens to point at `origin/main` (the reset would rewind that branch instead of `main`). A checkout *ahead* of the remote is a state the script deliberately tolerates, so "it looked clean" is not enough to make a reset safe.
+
+```bash
+cd ~/repos/zipper
+if [ "$(git branch --show-current)" != "main" ]; then
+    echo "not on main; refusing to rewind. Use a disposable clone instead."
+elif [ -n "$(git status --porcelain)" ]; then
+    echo "checkout has local changes; refusing to rewind. Commit or stash them first."
+elif [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+    echo "HEAD is not exactly origin/main; refusing to rewind."
+else
+    git reset --hard HEAD~1
+    for _ in $(seq 1 20); do                      # a timer may fire up to a minute late
+        [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] && break
+        sleep 5
+    done
+    [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] \
+        && echo "deployed" || echo "TIMED OUT: deploy did not run"
+    tail -1 .zipper-runner/logs/deploy_*.log
+fi
+```
+
 ### Harness limits
 
 `AGENTS.md` documents bounded tool discovery, native subagent schema mapping, valid GitHub CLI examples, and focused iteration with unchanged final review/test gates. The runner cannot repair Factory's tool catalog, search relevance, or Loop availability. Missing capabilities must be reported rather than retried indefinitely or bypassed against harness policy.
 
 Runner regressions: `cd .zipper-runner && python3 -m unittest discover -s tests`.
 
+### Known limitations
+
+- **`MAX_ACTIVE_WORKTREES` is fixed at 1.** The limit is deliberate: a second concurrent mission doubles the load on one host, and the failure modes of two agents writing the same repository are not yet measured. The friction it causes is real, though — a single long mission is the whole pipeline's throughput, and an unauthorized or stalled PR holds the only slot (see the escalation paths above). The intended next step is a *ramp*: allow a second slot only when the host is demonstrably idle, with a per-slot resource check, rather than raising the constant. Tracked as a future change; do not simply raise the number.
+
 ## Unattended endurance
 
 The runner is designed to run for days without human intervention. Every known freeze, crash-loop, flood, and churn path has a bound:
 
 - **Bounded commands:** every `run_cmd` call gets a default timeout (`RUNNER_CMD_TIMEOUT`, 300s; explicit values for longer gates — 25m for the full review-gate wait, 10m for CodeRabbit, and `RUNNER_GIT_NETWORK_TIMEOUT`, 15m, for push/fetch). Git HTTP I/O additionally aborts on stalled transfers (`GIT_HTTP_LOW_SPEED_LIMIT`/`GIT_HTTP_LOW_SPEED_TIME`); operator-configured values always win, and `GIT_SSH_COMMAND` is deliberately not injected so repository `core.sshCommand` stays authoritative. `tests/wait-for-reviews.sh` bounds each of its own `gh` calls (`timeout`/`gtimeout`) because its deadline only fires between polls.
-- **Stale-lock watchdog:** each invocation writes `state/runner-heartbeat.json` (pid, pgid, start time). A later cycle that cannot take the lock after `RUNNER_LOCK_TIMEOUT` reclaims it by killing the holder's process group once the holder exceeds `RUNNER_MAX_RUN_SECONDS` (12h default) — a wedged run can no longer freeze the pipeline silently. Fail-closed: no usable heartbeat, no takeover.
+- **Stale-lock watchdog:** each invocation writes a heartbeat for the lock it holds — `state/runner-heartbeat.json` or `state/babysit-heartbeat.json` (pid, pgid, start time). A later cycle that cannot take that lock after its timeout reclaims it by killing the holder's process group once the holder exceeds `RUNNER_MAX_RUN_SECONDS` (12h default) — a wedged run can no longer freeze the pipeline silently. Fail-closed: no usable heartbeat, no takeover. The heartbeat is per lock kind, so an intake run can never be killed on the strength of a stale babysit heartbeat, or the reverse.
 - **Process-group cleanup:** all agent plugins launch missions with `start_new_session=True` and kill the whole group on timeout, so orphaned LSP servers or build nodes cannot hold the output pipes (which would block `communicate()` forever while the lock is held).
 - **Nested mission timeouts:** an agent CLI with its own print timeout must be told to fire *before* the plugin's 45-minute (2700s) kill, or the agent is SIGKILLed mid-turn and its partial work is never reported. agy runs with `--print-timeout 40m`, leaving five minutes to flush output and exit; the earlier 30m value truncated long missions routinely, and a truncated mission still produces a PR that then needs repair cycles.
 - **gh outage guard:** before a failed `gh pr view` is interpreted as "no PR", the runner proves gh can reach the API (`gh api rate_limit`, free). During network/auth outages the worktree is skipped for the cycle instead of dispatching repair missions on a false premise; one rate-limited alert email is sent.
