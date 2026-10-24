@@ -14,9 +14,12 @@ Tests:
 5. Integration with babysit_dependabot_prs auto-merge decision flow and logging.
 6. Publication timestamp parsing tolerates the fractional-second forms providers emit.
 7. NuGet registration index pages referenced by @id are followed, not just inlined ones.
+8. The SemVer 2.0.0 registration hive is consulted and its gzip bodies inflated, so
+   SemVer 2.0.0 versions (dotted prereleases) are resolvable rather than blocked forever.
 """
 
 from datetime import datetime, timedelta, timezone
+import gzip
 import json
 import os
 from pathlib import Path
@@ -24,6 +27,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+import urllib.error
 from unittest.mock import MagicMock, patch
 
 import gitenv  # noqa: F401
@@ -31,6 +35,37 @@ import gitenv  # noqa: F401
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import runner  # noqa: E402
+
+
+def _fake_urlopen(routes, calls=None):
+    """A urlopen replacement that answers by URL rather than by call order.
+
+    An order-dependent side-effect list hides which hive a lookup actually
+    consulted: the same canned responses keep the test passing after the URL
+    sequence changes underneath it. Keying on the URL makes the hive explicit.
+
+    The raise on an unregistered URL is only a diagnostic. Production wraps both
+    the leaf and the index fetch in ``except Exception``, which swallows it, so a
+    test that relies on the raise alone still passes after the lookup starts
+    talking to an unexpected hive. Pass ``calls`` and assert the exact URL
+    sequence; that is the assertion that actually pins the hive order.
+    """
+    def _open(req, *args, **kwargs):
+        url = getattr(req, "full_url", str(req))
+        if calls is not None:
+            calls.append(url)
+        if url not in routes:
+            raise AssertionError(f"unexpected request: {url}")
+        status, body = routes[url]
+        if status != 200:
+            raise urllib.error.HTTPError(url, status, "error", {}, None)
+        payload = body if isinstance(body, bytes) else json.dumps(body).encode()
+        return MagicMock(__enter__=lambda s: MagicMock(read=lambda: payload))
+    return _open
+
+
+def _nuget_url(hive, name, tail):
+    return f"https://api.nuget.org/v3/{hive}/{name}/{tail}"
 
 
 class DependabotUpstreamAgeTests(unittest.TestCase):
@@ -161,31 +196,62 @@ updated-dependencies:
         self.assertEqual(runner._resolve_dependency_ecosystem("Newtonsoft.Json", "custom-branch"), "nuget")
 
     @patch("runner.urllib.request.urlopen")
-    def test_fetch_nuget_publish_timestamp_direct_and_index_fallback(self, mock_urlopen):
-        # Direct version hit
-        mock_resp = MagicMock()
-        mock_resp.read.return_value = json.dumps({"published": "2026-10-20T10:00:00Z"}).encode()
-        mock_resp.__enter__.return_value = mock_resp
-        mock_urlopen.return_value = mock_resp
+    def test_fetch_nuget_publish_timestamp_directAndIndexFallback(self, mock_urlopen):
+        leaf = _nuget_url("registration5-gz-semver2", "fscheck.xunit", "3.6.0.json")
+        index = _nuget_url("registration5-gz-semver2", "fscheck.xunit", "index.json")
 
+        # Direct version hit
+        calls = []
+        mock_urlopen.side_effect = _fake_urlopen(
+            {leaf: (200, {"published": "2026-10-20T10:00:00Z"})}, calls=calls)
         ts = runner._fetch_upstream_publish_timestamp("FsCheck.Xunit", "3.6.0", "nuget")
         self.assertEqual(ts, datetime(2026, 10, 20, 10, 0, 0, tzinfo=timezone.utc))
+        self.assertEqual(calls, [leaf], "a direct hit must not touch the index")
 
-        # Direct 404 falling back to index
-        import urllib.error
-        mock_urlopen.side_effect = [
-            urllib.error.HTTPError("https://api.nuget.org", 404, "Not Found", {}, None),
-            MagicMock(__enter__=lambda s: MagicMock(read=lambda: json.dumps({
-                "items": [{"items": [{"catalogEntry": {"version": "3.6.0", "published": "2026-10-19T08:00:00Z"}}]}]
-            }).encode()))
-        ]
+        # Direct 404 falling back to the index
+        calls = []
+        mock_urlopen.side_effect = _fake_urlopen({
+            leaf: (404, None),
+            index: (200, {"items": [{"items": [
+                {"catalogEntry": {"version": "3.6.0", "published": "2026-10-19T08:00:00Z"}}]}]}),
+        }, calls=calls)
         ts_fallback = runner._fetch_upstream_publish_timestamp("FsCheck.Xunit", "3.6.0", "nuget")
         self.assertEqual(ts_fallback, datetime(2026, 10, 19, 8, 0, 0, tzinfo=timezone.utc))
+        self.assertEqual(calls, [leaf, index], "the index fallback must stay on the same hive")
 
-        # HTTP error other than 404 aborts immediately without attempting index fallback
-        mock_urlopen.side_effect = urllib.error.HTTPError("https://api.nuget.org", 500, "Internal Server Error", {}, None)
-        ts_err = runner._fetch_upstream_publish_timestamp("FsCheck.Xunit", "3.6.0", "nuget")
-        self.assertIsNone(ts_err)
+    @patch("runner.urllib.request.urlopen")
+    def test_fetch_nuget_publish_timestamp_serverErrorOnOneHive_stillResolvesFromTheOther(self, mock_urlopen):
+        """A transient server error on one hive must not abort the whole lookup:
+        the other hive can still answer, and only a total miss returns None."""
+        gz_leaf = _nuget_url("registration5-gz-semver2", "fscheck.xunit", "3.6.0.json")
+        gz_index = _nuget_url("registration5-gz-semver2", "fscheck.xunit", "index.json")
+        v1_leaf = _nuget_url("registration5-semver1", "fscheck.xunit", "3.6.0.json")
+        calls = []
+        mock_urlopen.side_effect = _fake_urlopen({
+            gz_leaf: (500, None),
+            gz_index: (500, None),
+            v1_leaf: (200, {"published": "2026-10-18T08:00:00Z"}),
+        }, calls=calls)
+        ts = runner._fetch_upstream_publish_timestamp("FsCheck.Xunit", "3.6.0", "nuget")
+        self.assertEqual(ts, datetime(2026, 10, 18, 8, 0, 0, tzinfo=timezone.utc))
+        self.assertEqual(calls, [gz_leaf, gz_index, v1_leaf],
+                         "the gz hive must be tried first and its failure must fall through")
+
+    @patch("runner.urllib.request.urlopen")
+    def test_fetch_nuget_publish_timestamp_everyHiveMissing_failsClosed(self, mock_urlopen):
+        calls = []
+        mock_urlopen.side_effect = _fake_urlopen({
+            _nuget_url(hive, "fscheck.xunit", tail): (404, None)
+            for hive in ("registration5-gz-semver2", "registration5-semver1")
+            for tail in ("3.6.0.json", "index.json")
+        }, calls=calls)
+        self.assertIsNone(runner._fetch_upstream_publish_timestamp("FsCheck.Xunit", "3.6.0", "nuget"))
+        self.assertEqual(calls, [
+            _nuget_url("registration5-gz-semver2", "fscheck.xunit", "3.6.0.json"),
+            _nuget_url("registration5-gz-semver2", "fscheck.xunit", "index.json"),
+            _nuget_url("registration5-semver1", "fscheck.xunit", "3.6.0.json"),
+            _nuget_url("registration5-semver1", "fscheck.xunit", "index.json"),
+        ], "every hive must be exhausted before the lookup fails closed")
 
     @patch("runner.run_cmd")
     def test_fetch_github_actions_publish_timestamp_release_hit_and_unverified_none(self, mock_run_cmd):
@@ -541,6 +607,115 @@ class PublishTimestampParsingTests(unittest.TestCase):
         self.assertEqual(ts, datetime(2026, 10, 20, 10, 30, 0, 123456, tzinfo=timezone.utc))
 
 
+class NugetRegistrationHiveTests(unittest.TestCase):
+    """The SemVer 2.0.0 hive must be consulted, and its gzip bodies inflated.
+
+    NuGet publishes the same catalog under several registration hives, and they do
+    not hold the same versions: ``registration5-semver1`` omits every SemVer 2.0.0
+    version, which is what a dotted prerelease is. Measured on
+    microsoft.extensions.logging, the flat container lists 181 versions (79 dotted
+    prereleases), semver1 lists 102 (11 prereleases, none of them dotted), and the
+    gz-semver2 hive lists 181 (90 prereleases, the same 79 dotted). So a lookup that
+    reads semver1 only cannot resolve 11.0.0-rc.2.26504.105 at all, and the age
+    policy blocks that PR forever.
+    """
+
+    GZ_LEAF = "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.extensions.logging/11.0.0-rc.2.26504.105.json"
+    GZ_INDEX = "https://api.nuget.org/v3/registration5-gz-semver2/microsoft.extensions.logging/index.json"
+    V1_LEAF = "https://api.nuget.org/v3/registration5-semver1/microsoft.extensions.logging/11.0.0-rc.2.26504.105.json"
+    V1_INDEX = "https://api.nuget.org/v3/registration5-semver1/microsoft.extensions.logging/index.json"
+
+    @patch("urllib.request.urlopen")
+    def test_semver2DottedPrerelease_resolvesThroughTheGzHive(self, mock_urlopen):
+        """The bug this fix exists for. semver1 404s this exact version."""
+        calls = []
+        mock_urlopen.side_effect = _fake_urlopen({
+            self.GZ_LEAF: (200, {"published": "2026-10-13T00:00:00Z"}),
+            self.V1_LEAF: (404, None),
+        }, calls=calls)
+        ts = runner._fetch_upstream_publish_timestamp(
+            "microsoft.extensions.logging", "11.0.0-rc.2.26504.105", "nuget")
+        self.assertEqual(ts, datetime(2026, 10, 13, tzinfo=timezone.utc))
+        self.assertEqual(calls, [self.GZ_LEAF],
+                         "the gz-semver2 hive must answer without falling through to semver1")
+
+    @patch("urllib.request.urlopen")
+    def test_gzipEncodedLeaf_isInflated(self, mock_urlopen):
+        """The -gz- hives are served gzip-encoded even with no Accept-Encoding
+        header, so an uninflated body is not JSON and the lookup fails closed."""
+        payload = gzip.compress(json.dumps({"published": "2026-10-13T00:00:00Z"}).encode())
+        self.assertEqual(payload[:2], b"\x1f\x8b", "the fixture must actually be gzip")
+        calls = []
+        mock_urlopen.side_effect = _fake_urlopen({self.GZ_LEAF: (200, payload)}, calls=calls)
+        ts = runner._fetch_upstream_publish_timestamp(
+            "microsoft.extensions.logging", "11.0.0-rc.2.26504.105", "nuget")
+        self.assertEqual(ts, datetime(2026, 10, 13, tzinfo=timezone.utc))
+        self.assertEqual(calls, [self.GZ_LEAF], "the gzip leaf must answer on its own hive")
+
+    @patch("urllib.request.urlopen")
+    def test_semver2Miss_fallsBackToSemver1(self, mock_urlopen):
+        """semver1 stays as the fallback, so a version the gz hive does not serve
+        is still resolvable rather than newly blocked."""
+        version = "9.0.0"
+        gz_leaf = _nuget_url("registration5-gz-semver2", "microsoft.extensions.logging", f"{version}.json")
+        gz_index = _nuget_url("registration5-gz-semver2", "microsoft.extensions.logging", "index.json")
+        v1_leaf = _nuget_url("registration5-semver1", "microsoft.extensions.logging", f"{version}.json")
+        calls = []
+        mock_urlopen.side_effect = _fake_urlopen({
+            gz_leaf: (404, None),
+            gz_index: (404, None),
+            v1_leaf: (200, {"published": "2024-11-12T00:00:00Z"}),
+        }, calls=calls)
+        ts = runner._fetch_upstream_publish_timestamp(
+            "microsoft.extensions.logging", version, "nuget")
+        self.assertEqual(ts, datetime(2024, 11, 12, tzinfo=timezone.utc))
+        self.assertEqual(calls, [gz_leaf, gz_index, v1_leaf],
+                         "a version the gz hive lacks must still be reachable through semver1")
+
+    @patch("urllib.request.urlopen")
+    def test_gzipEncodedIndex_isInflatedAndMatched(self, mock_urlopen):
+        """The index path must inflate too: the gz hive serves its index gzipped."""
+        index = {"items": [{"items": [
+            {"catalogEntry": {"version": "11.0.0-rc.2.26504.105", "published": "2026-10-13T00:00:00Z"}},
+            {"catalogEntry": {"version": "9.0.0", "published": "2024-11-12T00:00:00Z"}},
+        ]}]}
+        calls = []
+        mock_urlopen.side_effect = _fake_urlopen({
+            self.GZ_LEAF: (404, None),
+            self.GZ_INDEX: (200, gzip.compress(json.dumps(index).encode())),
+        }, calls=calls)
+        ts = runner._fetch_upstream_publish_timestamp(
+            "microsoft.extensions.logging", "11.0.0-rc.2.26504.105", "nuget")
+        self.assertEqual(ts, datetime(2026, 10, 13, tzinfo=timezone.utc))
+        self.assertEqual(calls, [self.GZ_LEAF, self.GZ_INDEX],
+                         "a gzipped index must be inflated on the gz hive, not skipped")
+
+    @patch("urllib.request.urlopen")
+    def test_semver2NotFoundWhileSemver1HoldsTheVersion_resolvesFromSemver1(self, mock_urlopen):
+        """A SemVer 1.0 version the gz hive lacks must not become unresolvable."""
+        gz_leaf = _nuget_url("registration5-gz-semver2", "serilog", "4.0.2.json")
+        gz_index = _nuget_url("registration5-gz-semver2", "serilog", "index.json")
+        v1_leaf = _nuget_url("registration5-semver1", "serilog", "4.0.2.json")
+        calls = []
+        mock_urlopen.side_effect = _fake_urlopen({
+            gz_leaf: (404, None),
+            gz_index: (404, None),
+            v1_leaf: (200, {"published": "2024-09-28T00:00:00Z"}),
+        }, calls=calls)
+        ts = runner._fetch_upstream_publish_timestamp("Serilog", "4.0.2", "nuget")
+        self.assertEqual(ts, datetime(2024, 9, 28, tzinfo=timezone.utc))
+        self.assertEqual(calls, [gz_leaf, gz_index, v1_leaf])
+
+    def test_registrationHives_includeTheGzSemver2HiveAndNotTheUnservedOne(self):
+        """registration5-semver2 is not served at all: measured 404 for every
+        package tried, including ones semver1 serves, so a plain hive swap would
+        trade a missing version for a missing package. Only the gz variant may be
+        consulted. The order is asserted behaviorally by the call-sequence
+        assertions, so a deliberate reorder does not fail this test."""
+        self.assertIn("registration5-gz-semver2", runner._NUGET_REGISTRATION_HIVES)
+        self.assertNotIn("registration5-semver2", runner._NUGET_REGISTRATION_HIVES)
+
+
 class NugetIndexPagingTests(unittest.TestCase):
     """The registration index fallback must follow referenced pages.
 
@@ -552,18 +727,21 @@ class NugetIndexPagingTests(unittest.TestCase):
 
     @patch("urllib.request.urlopen")
     def test_fetch_nuget_publish_timestamp_referencedIndexPage_IsFollowed(self, mock_urlopen):
-        import urllib.error
-
-        index = {"items": [{"@id": "https://api.nuget.org/v3/registration5-semver1/lib/page/1.json"}]}
-        page = {"items": [{"catalogEntry": {"version": "2.0.1", "published": "2026-10-19T08:00:00Z"}}]}
-        mock_urlopen.side_effect = [
-            urllib.error.HTTPError("https://api.nuget.org", 404, "Not Found", {}, None),
-            MagicMock(__enter__=lambda s: MagicMock(read=lambda: json.dumps(index).encode())),
-            MagicMock(__enter__=lambda s: MagicMock(read=lambda: json.dumps(page).encode())),
-        ]
+        page_url = "https://api.nuget.org/v3/registration5-gz-semver2/lib/page/1.json"
+        leaf = _nuget_url("registration5-gz-semver2", "lib", "2.0.1.json")
+        index = _nuget_url("registration5-gz-semver2", "lib", "index.json")
+        calls = []
+        mock_urlopen.side_effect = _fake_urlopen({
+            leaf: (404, None),
+            index: (200, {"items": [{"@id": page_url}]}),
+            page_url: (200, {"items": [
+                {"catalogEntry": {"version": "2.0.1", "published": "2026-10-19T08:00:00Z"}}]}),
+        }, calls=calls)
 
         ts = runner._fetch_upstream_publish_timestamp("Lib", "2.0.1", "nuget")
         self.assertEqual(ts, datetime(2026, 10, 19, 8, 0, 0, tzinfo=timezone.utc))
+        self.assertEqual(calls, [leaf, index, page_url],
+                         "a referenced page must be fetched from the gz hive")
 
     def test_iter_nuget_index_entries_inlinePage_YieldsWithoutFetching(self):
         # An inline page must not trigger a network call; only referenced pages do.
@@ -580,11 +758,25 @@ class NugetIndexPagingTests(unittest.TestCase):
     def test_iter_nuget_index_entries_bomPrefixedPage_IsStillParsed(self, mock_urlopen):
         # NuGet serves a UTF-8 BOM on some registration responses; a plain
         # decode would raise and fail the age check closed for every version.
-        index = {"items": [{"@id": "https://api.nuget.org/v3/registration5-semver1/lib/page/1.json"}]}
+        page_url = "https://api.nuget.org/v3/registration5-gz-semver2/lib/page/1.json"
         payload = b"\xef\xbb\xbf" + json.dumps({"items": [{"catalogEntry": {"version": "2.0.1"}}]}).encode()
-        mock_urlopen.return_value = MagicMock(__enter__=lambda s: MagicMock(read=lambda: payload))
-        entries = list(runner._iter_nuget_index_entries(index))
+        calls = []
+        mock_urlopen.side_effect = _fake_urlopen({page_url: (200, payload)}, calls=calls)
+        entries = list(runner._iter_nuget_index_entries({"items": [{"@id": page_url}]}))
         self.assertEqual([e["catalogEntry"]["version"] for e in entries], ["2.0.1"])
+        self.assertEqual(calls, [page_url])
+
+    @patch("urllib.request.urlopen")
+    def test_iter_nuget_index_entries_gzipEncodedPage_IsInflated(self, mock_urlopen):
+        # A referenced page from a -gz- hive is gzip-encoded like the index, so the
+        # page fetch must inflate too or every paged package fails closed again.
+        page_url = "https://api.nuget.org/v3/registration5-gz-semver2/lib/page/1.json"
+        payload = gzip.compress(json.dumps({"items": [{"catalogEntry": {"version": "2.0.1"}}]}).encode())
+        calls = []
+        mock_urlopen.side_effect = _fake_urlopen({page_url: (200, payload)}, calls=calls)
+        entries = list(runner._iter_nuget_index_entries({"items": [{"@id": page_url}]}))
+        self.assertEqual([e["catalogEntry"]["version"] for e in entries], ["2.0.1"])
+        self.assertEqual(calls, [page_url], "an inflated page must not trigger a retry")
 
     def test_iter_nuget_index_entries_noIdAndNoItems_IsSkipped(self):
         self.assertEqual(list(runner._iter_nuget_index_entries({"items": [{}]})), [])
