@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import os
 import shutil
-import stat
 import subprocess
 import tempfile
 import time
@@ -67,6 +66,15 @@ class GitHooksBehavioralTests(unittest.TestCase):
         shutil.copy2(ROOT / ".github/hooks/pre-push", self.hooks_dir / "pre-push")
         shutil.copy2(ROOT / ".github/hooks/post-commit", self.hooks_dir / "post-commit")
 
+        # Shared mock dotnet so behavioral tests do not depend on host toolchain
+        self.bin_dir = self.repo_dir / "mock-bin"
+        self.bin_dir.mkdir(parents=True, exist_ok=True)
+        mock_dotnet = self.bin_dir / "dotnet"
+        mock_dotnet.write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
+        mock_dotnet.chmod(0o755)
+        self.env = {k: v for k, v in os.environ.items() if k not in ("DOTNET_ROOT",)}
+        self.env["PATH"] = f"{self.bin_dir}:{self.env.get('PATH', '')}"
+
     def tearDown(self):
         self.tmpdir.cleanup()
 
@@ -80,16 +88,28 @@ class GitHooksBehavioralTests(unittest.TestCase):
         )
         return res.stdout.strip()
 
+    def _env_without_dotnet(self) -> dict[str, str]:
+        bin_dir = self.repo_dir / "isolated-bin"
+        bin_dir.mkdir(exist_ok=True)
+        for tool in (
+            "bash", "git", "dirname", "basename", "cat", "grep", "sed",
+            "sort", "head", "tail", "tr", "cut", "date", "mktemp", "rm", "uname",
+        ):
+            found = shutil.which(tool)
+            if found and not (bin_dir / tool).exists():
+                (bin_dir / tool).symlink_to(found)
+        env = {k: v for k, v in os.environ.items() if k not in ("PATH", "DOTNET_ROOT")}
+        env["PATH"] = str(bin_dir)
+        return env
+
     def test_missing_dotnet_fails_pre_commit(self):
         """Pre-commit must fail (exit 1) if dotnet is missing when changes are staged."""
         (self.repo_dir / "README.md").write_text("Hello", encoding="utf-8")
         self._git("add", "README.md")
-        env = {k: v for k, v in os.environ.items() if k not in ("PATH", "DOTNET_ROOT")}
-        env["PATH"] = "/usr/bin:/bin"
         res = subprocess.run(
             ["bash", str(self.hooks_dir / "pre-commit")],
             cwd=self.repo_dir,
-            env=env,
+            env=self._env_without_dotnet(),
             capture_output=True,
             text=True,
             check=False,
@@ -107,12 +127,10 @@ class GitHooksBehavioralTests(unittest.TestCase):
         self._git("add", "README.md")
         self._git("commit", "-m", "init")
 
-        env = {k: v for k, v in os.environ.items() if k not in ("PATH", "DOTNET_ROOT")}
-        env["PATH"] = "/usr/bin:/bin"
         res = subprocess.run(
             ["bash", str(self.hooks_dir / "pre-push")],
             cwd=self.repo_dir,
-            env=env,
+            env=self._env_without_dotnet(),
             capture_output=True,
             text=True,
             check=False,
@@ -135,6 +153,7 @@ class GitHooksBehavioralTests(unittest.TestCase):
             ["bash", str(self.hooks_dir / "pre-push"), "origin", "git@github.com:example/repo.git"],
             cwd=self.repo_dir,
             input=stdin_input,
+            env=self.env,
             capture_output=True,
             text=True,
             check=False,
@@ -171,6 +190,7 @@ class GitHooksBehavioralTests(unittest.TestCase):
             ["bash", str(self.hooks_dir / "pre-push"), "origin", "git@github.com:example/repo.git"],
             cwd=self.repo_dir,
             input=stdin_input,
+            env=self.env,
             capture_output=True,
             text=True,
             check=False,
@@ -208,6 +228,7 @@ class GitHooksBehavioralTests(unittest.TestCase):
             ["bash", str(self.hooks_dir / "pre-push"), "origin", "git@github.com:example/repo.git"],
             cwd=self.repo_dir,
             input=stdin_input,
+            env=self.env,
             capture_output=True,
             text=True,
             check=False,
@@ -321,6 +342,179 @@ class GitHooksBehavioralTests(unittest.TestCase):
         )
         self.assertEqual(res.returncode, 1)
         self.assertIn("Basic E2E smoke tests failed", res.stdout)
+
+    def test_pre_push_empty_stdin_manual_invocation_validates_head(self):
+        """pre-push without args and empty stdin validates HEAD instead of falsely claiming deletion."""
+        (self.repo_dir / "README.md").write_text("Initial", encoding="utf-8")
+        self._git("add", "README.md")
+        self._git("commit", "-m", "commit 1")
+        head_commit = self._git("rev-parse", "HEAD")
+
+        # Set up a fresh pre-commit.ok marker
+        marker_dir = self.repo_dir / ".git/zipper-hooks"
+        marker_dir.mkdir(parents=True, exist_ok=True)
+        now = int(time.time())
+        (marker_dir / "pre-commit.ok").write_text(f"timestamp={now}\nhead={head_commit}\n", encoding="utf-8")
+
+        # Mock mutation smoke
+        tests_dir = self.repo_dir / "tests"
+        tests_dir.mkdir(parents=True, exist_ok=True)
+        (tests_dir / "run-mutation-smoke.sh").write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
+        (tests_dir / "run-mutation-smoke.sh").chmod(0o755)
+
+        # Run pre-push with empty stdin and no arguments (manual invocation)
+        res = subprocess.run(
+            ["bash", str(self.hooks_dir / "pre-push")],
+            cwd=self.repo_dir,
+            input="",
+            env=self.env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(res.returncode, 0)
+        self.assertNotIn("Deleting remote ref", res.stdout)
+        self.assertIn("Unit tests already passed in pre-commit", res.stdout)
+
+    def test_pre_push_up_to_date_skips_checks(self):
+        """When git push runs with no outgoing refs, pre-push skips checks and reports up-to-date."""
+        (self.repo_dir / "README.md").write_text("Initial", encoding="utf-8")
+        self._git("add", "README.md")
+        self._git("commit", "-m", "commit 1")
+
+        # Git calls pre-push <remote> <url> with empty stdin when up-to-date
+        res = subprocess.run(
+            ["bash", str(self.hooks_dir / "pre-push"), "origin", "git@github.com:example/repo.git"],
+            cwd=self.repo_dir,
+            input="",
+            env=self.env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(res.returncode, 0)
+        self.assertNotIn("Deleting remote ref", res.stdout)
+        self.assertIn("Everything up-to-date (no outgoing refs to push); skipping pre-push checks.", res.stdout)
+
+    def test_annotated_tag_pointing_to_head_borrows_pre_commit_ok(self):
+        """Pushing an annotated tag pointing to a verified HEAD peels to commit and borrows pre-commit.ok."""
+        (self.repo_dir / "README.md").write_text("Initial", encoding="utf-8")
+        self._git("add", "README.md")
+        self._git("commit", "-m", "commit 1")
+        head_commit = self._git("rev-parse", "HEAD")
+
+        # Create annotated tag
+        self._git("tag", "-a", "v1.0.0", "-m", "release v1.0.0")
+        tag_sha = self._git("rev-parse", "refs/tags/v1.0.0")
+        self.assertNotEqual(head_commit, tag_sha)
+
+        # Create pre-commit.ok marker for HEAD
+        marker_dir = self.repo_dir / ".git/zipper-hooks"
+        marker_dir.mkdir(parents=True, exist_ok=True)
+        now = int(time.time())
+        (marker_dir / "pre-commit.ok").write_text(f"timestamp={now}\nhead={head_commit}\n", encoding="utf-8")
+
+        # Mock mutation smoke
+        tests_dir = self.repo_dir / "tests"
+        tests_dir.mkdir(parents=True, exist_ok=True)
+        (tests_dir / "run-mutation-smoke.sh").write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
+        (tests_dir / "run-mutation-smoke.sh").chmod(0o755)
+
+        # Stdin gives tag_sha for the tag ref
+        stdin_input = f"refs/tags/v1.0.0 {tag_sha} refs/tags/v1.0.0 0000000000000000000000000000000000000000\n"
+        res = subprocess.run(
+            ["bash", str(self.hooks_dir / "pre-push"), "origin", "git@github.com:example/repo.git"],
+            cwd=self.repo_dir,
+            input=stdin_input,
+            env=self.env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(res.returncode, 0, f"Output: {res.stdout}\n{res.stderr}")
+        self.assertIn("Unit tests already passed in pre-commit", res.stdout)
+
+    def test_expired_pre_commit_ok_runs_unit_tests(self):
+        """pre-commit.ok older than 600s does not skip unit tests."""
+        (self.repo_dir / "README.md").write_text("Initial", encoding="utf-8")
+        self._git("add", "README.md")
+        self._git("commit", "-m", "commit 1")
+        head_commit = self._git("rev-parse", "HEAD")
+
+        # Marker from 601 seconds ago
+        marker_dir = self.repo_dir / ".git/zipper-hooks"
+        marker_dir.mkdir(parents=True, exist_ok=True)
+        stale_ts = int(time.time()) - 601
+        (marker_dir / "pre-commit.ok").write_text(f"timestamp={stale_ts}\nhead={head_commit}\n", encoding="utf-8")
+
+        mock_bin_dir = self.repo_dir / "bin"
+        mock_bin_dir.mkdir(parents=True, exist_ok=True)
+        mock_dotnet = mock_bin_dir / "dotnet"
+        mock_dotnet.write_text("#!/bin/bash\necho \"MOCK_DOTNET_CALLED: $@\"\nexit 0\n", encoding="utf-8")
+        mock_dotnet.chmod(0o755)
+
+        tests_dir = self.repo_dir / "tests"
+        tests_dir.mkdir(parents=True, exist_ok=True)
+        (tests_dir / "run-mutation-smoke.sh").write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
+        (tests_dir / "run-mutation-smoke.sh").chmod(0o755)
+
+        env = {k: v for k, v in os.environ.items() if k not in ("DOTNET_ROOT",)}
+        env["PATH"] = f"{mock_bin_dir}:{env.get('PATH', '')}"
+
+        stdin_input = f"refs/heads/main {head_commit} refs/heads/main 0000000000000000000000000000000000000000\n"
+        res = subprocess.run(
+            ["bash", str(self.hooks_dir / "pre-push"), "origin", "git@github.com:example/repo.git"],
+            cwd=self.repo_dir,
+            input=stdin_input,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertNotIn("Unit tests already passed in pre-commit", res.stdout)
+        self.assertIn("MOCK_DOTNET_CALLED", res.stdout)
+
+    def test_dirty_working_tree_invalidates_pre_commit_ok(self):
+        """Unstaged modifications invalidate pre-commit.ok skip."""
+        (self.repo_dir / "README.md").write_text("Initial", encoding="utf-8")
+        self._git("add", "README.md")
+        self._git("commit", "-m", "commit 1")
+        head_commit = self._git("rev-parse", "HEAD")
+
+        marker_dir = self.repo_dir / ".git/zipper-hooks"
+        marker_dir.mkdir(parents=True, exist_ok=True)
+        now = int(time.time())
+        (marker_dir / "pre-commit.ok").write_text(f"timestamp={now}\nhead={head_commit}\n", encoding="utf-8")
+
+        # Dirty working tree (unstaged edit)
+        (self.repo_dir / "README.md").write_text("Modified unstaged", encoding="utf-8")
+
+        mock_bin_dir = self.repo_dir / "bin"
+        mock_bin_dir.mkdir(parents=True, exist_ok=True)
+        mock_dotnet = mock_bin_dir / "dotnet"
+        mock_dotnet.write_text("#!/bin/bash\necho \"MOCK_DOTNET_CALLED: $@\"\nexit 0\n", encoding="utf-8")
+        mock_dotnet.chmod(0o755)
+
+        tests_dir = self.repo_dir / "tests"
+        tests_dir.mkdir(parents=True, exist_ok=True)
+        (tests_dir / "run-mutation-smoke.sh").write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
+        (tests_dir / "run-mutation-smoke.sh").chmod(0o755)
+
+        env = {k: v for k, v in os.environ.items() if k not in ("DOTNET_ROOT",)}
+        env["PATH"] = f"{mock_bin_dir}:{env.get('PATH', '')}"
+
+        stdin_input = f"refs/heads/main {head_commit} refs/heads/main 0000000000000000000000000000000000000000\n"
+        res = subprocess.run(
+            ["bash", str(self.hooks_dir / "pre-push"), "origin", "git@github.com:example/repo.git"],
+            cwd=self.repo_dir,
+            input=stdin_input,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertNotIn("Unit tests already passed in pre-commit", res.stdout)
+        self.assertIn("MOCK_DOTNET_CALLED", res.stdout)
 
 
 if __name__ == "__main__":
