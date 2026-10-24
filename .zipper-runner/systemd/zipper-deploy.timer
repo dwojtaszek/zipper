@@ -4,6 +4,11 @@ Description=Zipper Runner Deploy main Timer
 [Timer]
 OnBootSec=2min
 OnCalendar=*:0/1
+# systemd's default is 1min of slack, which equals this timer's whole cadence:
+# a tick may fire at +113s and the next minute is skipped. Measured on the live
+# host as 5.7% of ticks landing 113s apart instead of 60s. A one-minute cadence
+# cannot tolerate a one-minute slack, so pin the accuracy.
+AccuracySec=1s
 Persistent=false
 
 [Install]
