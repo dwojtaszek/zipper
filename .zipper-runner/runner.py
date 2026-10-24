@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import csv
 import argparse
+import gzip
 import html
 import hashlib
 import importlib.util
@@ -3328,6 +3329,23 @@ def _parse_publish_timestamp(pub: str) -> datetime:
     return datetime.fromisoformat(text)
 
 
+def _fetch_nuget_registration(url: str):
+    """GET a NuGet registration document, inflating the gzip-encoded hives.
+
+    NuGet serves its ``-gz-`` registration hives gzip-encoded even when the
+    request carries no ``Accept-Encoding`` header, so the body must be inflated
+    before parsing. The gzip magic is checked rather than the ``Content-Encoding``
+    header because the header is not guaranteed to survive every intermediary,
+    and a body that merely starts with ``{"`` is passed through untouched.
+    """
+    req = urllib.request.Request(url, headers={"User-Agent": "zipper-runner"})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        raw = resp.read()
+    if raw[:2] == b"\x1f\x8b":
+        raw = gzip.decompress(raw)
+    return json.loads(raw.decode("utf-8-sig"))
+
+
 def _iter_nuget_index_entries(index: dict):
     """Yield every catalog entry in a NuGet registration index.
 
@@ -3344,47 +3362,57 @@ def _iter_nuget_index_entries(index: dict):
             page_url = page.get("@id")
             if not page_url:
                 continue
-            req = urllib.request.Request(page_url, headers={"User-Agent": "zipper-runner"})
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                page_items = json.loads(resp.read().decode("utf-8-sig")).get("items", [])
+            page_items = _fetch_nuget_registration(page_url).get("items", [])
         for item in page_items:
             yield item
+
+
+# The registration hives to consult, most complete first. NuGet publishes the
+# same catalog under several hives, and they do not hold the same versions:
+# ``semver1`` omits every SemVer 2.0.0 version, which is what a dotted
+# prerelease such as ``11.0.0-rc.2.26504.105`` is, so a SemVer 2.0.0 bump is
+# unresolvable there and the age policy blocks it forever. ``gz-semver2`` is a
+# strict superset: measured over microsoft.extensions.logging, the flat container
+# lists 181 versions (79 dotted prereleases), semver1 lists 102 (11 prereleases,
+# none of them dotted), and gz-semver2 lists 181 (90 prereleases, the same 79
+# dotted) and resolves the dotted prerelease that 404s in semver1. The non-gzip
+# ``semver2`` hive is deliberately absent because it is not served at all (404 for
+# every package tried, including system.text.json and nuget.versioning, which
+# semver1 serves). semver1 stays as a fallback so a
+# failure of the gz hive degrades to the previous behaviour rather than to no
+# lookup at all.
+_NUGET_REGISTRATION_HIVES = ("registration5-gz-semver2", "registration5-semver1")
+
 
 def _fetch_upstream_publish_timestamp(name: str, version: str, ecosystem: str) -> datetime | None:
     """Fetch upstream release publication date in UTC for a package or action."""
     if ecosystem == "nuget":
         lower_name = urllib.parse.quote(name.lower(), safe="")
         lower_ver = urllib.parse.quote(version.lower(), safe="")
-        direct_url = f"https://api.nuget.org/v3/registration5-semver1/{lower_name}/{lower_ver}.json"
-        req = urllib.request.Request(direct_url, headers={"User-Agent": "zipper-runner"})
-        try:
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                data = json.loads(resp.read().decode("utf-8-sig"))
+        for hive in _NUGET_REGISTRATION_HIVES:
+            direct_url = f"https://api.nuget.org/v3/{hive}/{lower_name}/{lower_ver}.json"
+            try:
+                data = _fetch_nuget_registration(direct_url)
                 pub = data.get("published")
                 if pub:
                     return _parse_publish_timestamp(pub)
-        except urllib.error.HTTPError as e:
-            if e.code != 404:
-                print(f"[dependabot] NuGet API error for {name} {version}: {e}")
-                return None
-        except Exception as e:
-            print(f"[dependabot] NuGet request error for {name} {version}: {e}")
-            return None
+            except urllib.error.HTTPError as e:
+                if e.code != 404:
+                    print(f"[dependabot] NuGet API error for {name} {version} ({hive}): {e}")
+            except Exception as e:
+                print(f"[dependabot] NuGet request error for {name} {version} ({hive}): {e}")
 
-        index_url = f"https://api.nuget.org/v3/registration5-semver1/{lower_name}/index.json"
-        req_idx = urllib.request.Request(index_url, headers={"User-Agent": "zipper-runner"})
-        try:
-            with urllib.request.urlopen(req_idx, timeout=15) as resp:
-                data = json.loads(resp.read().decode("utf-8-sig"))
+            index_url = f"https://api.nuget.org/v3/{hive}/{lower_name}/index.json"
+            try:
+                data = _fetch_nuget_registration(index_url)
                 for item in _iter_nuget_index_entries(data):
                     entry = item.get("catalogEntry", {})
                     if entry.get("version", "").lower() == version.lower():
                         pub = entry.get("published")
                         if pub:
                             return _parse_publish_timestamp(pub)
-        except Exception as e:
-            print(f"[dependabot] NuGet index request error for {name} {version}: {e}")
-            return None
+            except Exception as e:
+                print(f"[dependabot] NuGet index request error for {name} {version} ({hive}): {e}")
         return None
 
     elif ecosystem == "github-actions":
