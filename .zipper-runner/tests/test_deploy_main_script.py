@@ -307,13 +307,17 @@ class DeployMainScriptTests(unittest.TestCase):
         new_upstream = self.repo.push_upstream_commit("two\n", "c2")
         self.repo.hold_lock(age_seconds=3600, with_created=False)
 
-        # A `stat` that rejects GNU `-c` and answers BSD `-f %m`, as macOS does.
+        # A `stat` that rejects GNU `-c` and answers BSD `-f %m`, as macOS does. The
+        # `-f %m` branch cannot just exec the real stat, because which of the two
+        # forms the real stat accepts is the very thing this test is standing in for.
         fake_bin = self.repo.root / "fakebin-stat"
         fake_bin.mkdir(exist_ok=True)
         (fake_bin / "stat").write_text(
             "#!/bin/bash\n"
+            'if [ "$1" = "-c" ]; then exit 1; fi\n'
             'if [ "$1" = "-f" ] && [ "$2" = "%m" ]; then\n'
-            '  exec /usr/bin/stat -c %Y "$3"\n'
+            '  /usr/bin/stat -c %Y "$3" 2>/dev/null && exit 0\n'
+            '  exec /usr/bin/stat -f %m "$3"\n'
             "fi\n"
             "exit 1\n"
         )
