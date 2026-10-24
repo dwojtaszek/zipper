@@ -3,7 +3,7 @@
 # Installs to: $(git rev-parse --git-common-dir)/hooks/pre-push
 #
 # Skips unit tests if the post-commit hook wrote a success marker within the
-# last 10 minutes on the current HEAD. Full E2E + coverage checks run in CI.
+# last 10 minutes on the commit being pushed. Full E2E + coverage checks run in CI.
 #
 # To bypass (not recommended): git push --no-verify
 
@@ -16,8 +16,9 @@ echo "│  Pre-push: Unit Tests + Mutation Smoke + Basic E2E Smoke │"
 echo "└──────────────────────────────────────────────────────────┘"
 
 if ! command -v dotnet >/dev/null 2>&1; then
-    echo "⚠ dotnet not found; skipping pre-push checks."
-    exit 0
+    echo "❌ dotnet not found. Push aborted." >&2
+    echo "   Install the .NET SDK or bypass with: git push --no-verify" >&2
+    exit 1
 fi
 
 if [[ -z "${DOTNET_ROOT:-}" ]]; then
@@ -26,44 +27,115 @@ if [[ -z "${DOTNET_ROOT:-}" ]]; then
 fi
 
 # ──────────────────────────────────────────────────
-# 1. Unit tests — skip if post-commit wrote a recent marker on the same HEAD,
-#    or run only DocsDriftTests if the entire branch diff since merge-base is docs-only.
+# 0. Read outgoing refs from standard input (passed by git push)
+# Format per line: <local_ref> <local_sha> <remote_ref> <remote_sha>
 # ──────────────────────────────────────────────────
-MERGE_BASE=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main 2>/dev/null || echo "")
-CHANGED_SINCE_BASE=""
-BRANCH_DIFF_OK=false
-if [[ -n "$MERGE_BASE" ]]; then
-    if CHANGED_SINCE_BASE=$(git diff --name-only "$MERGE_BASE" HEAD 2>/dev/null); then
-        BRANCH_DIFF_OK=true
-    fi
+REFS_TO_CHECK=()
+if [[ ! -t 0 ]]; then
+    while read -r local_ref local_sha remote_ref remote_sha; do
+        [[ -z "$local_ref" ]] && continue
+        # Deletion of remote ref (local_ref is (delete) or local_sha is all zeros)
+        if [[ "$local_ref" == "(delete)" || "$local_sha" =~ ^0+$ ]]; then
+            continue
+        fi
+        REFS_TO_CHECK+=("$local_ref $local_sha")
+    done
 fi
 
-RUN_UNIT_TESTS=true
+# If stdin was provided and all pushed refs were deletions, skip checks
+if [[ ! -t 0 && ${#REFS_TO_CHECK[@]} -eq 0 ]]; then
+    echo "✓ Deleting remote ref(s); skipping pre-push checks."
+    exit 0
+fi
+
+CURRENT_HEAD=$(git rev-parse HEAD 2>/dev/null || echo "")
+CURRENT_TREE=$(git rev-parse 'HEAD^{tree}' 2>/dev/null || echo "")
+
+# Fallback for manual invocation or interactive run
+if [[ ${#REFS_TO_CHECK[@]} -eq 0 && -n "$CURRENT_HEAD" ]]; then
+    REFS_TO_CHECK+=("HEAD $CURRENT_HEAD")
+fi
+
+# Verify each outgoing ref matches the checked-out tree.
+# Local hooks test the filesystem working tree; testing a commit whose tree
+# differs from the checkout would falsely validate the current working tree
+# instead of the outgoing changes.
+for entry in "${REFS_TO_CHECK[@]}"; do
+    local_ref="${entry%% *}"
+    local_sha="${entry##* }"
+    OUTGOING_TREE=$(git rev-parse "${local_sha}^{tree}" 2>/dev/null || echo "")
+    if [[ -z "$OUTGOING_TREE" ]]; then
+        echo "❌ Cannot resolve outgoing ref $local_ref ($local_sha). Push aborted." >&2
+        exit 1
+    fi
+    if [[ -n "$CURRENT_TREE" && "$OUTGOING_TREE" != "$CURRENT_TREE" ]]; then
+        echo "❌ Cannot validate outgoing ref $local_ref ($local_sha): current checkout tree differs from outgoing tree." >&2
+        echo "   Pre-push checks require the working tree to match the commit being pushed." >&2
+        echo "   Please check out the branch before pushing, or bypass with: git push --no-verify" >&2
+        exit 1
+    fi
+done
+
+# ──────────────────────────────────────────────────
+# 1. Unit tests — skip if post-commit wrote a recent marker for all pushed refs,
+#    or run only DocsDriftTests if every branch diff since merge-base is docs-only.
+# ──────────────────────────────────────────────────
+RUN_UNIT_TESTS=false
 MARKER=$(git rev-parse --git-path zipper-hooks/pre-commit.ok 2>/dev/null || echo "")
+MARKER_VALID=false
+MARKER_HEAD=""
+AGE=0
 if [[ -n "$MARKER" && -f "$MARKER" ]] && git diff --quiet 2>/dev/null && git diff --cached --quiet 2>/dev/null; then
     MARKER_TS=$(grep '^timestamp=' "$MARKER" | cut -d= -f2)
     MARKER_HEAD=$(grep '^head=' "$MARKER" | cut -d= -f2)
-    CURRENT_HEAD=$(git rev-parse HEAD 2>/dev/null || echo "")
-    if [[ -n "$MARKER_TS" && -n "$CURRENT_HEAD" && "$MARKER_HEAD" == "$CURRENT_HEAD" ]]; then
+    if [[ -n "$MARKER_TS" && -n "$MARKER_HEAD" ]]; then
         NOW=$(date +%s)
         AGE=$((NOW - MARKER_TS))
         if [[ "$AGE" -lt "$SKIP_WINDOW_SECONDS" ]]; then
-            echo "✓ Unit tests already passed in pre-commit (${AGE}s ago); skipping."
-            RUN_UNIT_TESTS=false
+            MARKER_VALID=true
         fi
     fi
 fi
 
-if [[ "$RUN_UNIT_TESTS" == "true" && "$BRANCH_DIFF_OK" == "true" ]]; then
-    ALL_BRANCH_CHANGES=$(
-        {
-            printf '%s\n' "$CHANGED_SINCE_BASE"
-            git diff --name-only HEAD 2>/dev/null || true
-        } | sed '/^$/d' | sort -u
-    )
-    TOTAL_CHANGED=$(printf '%s\n' "$ALL_BRANCH_CHANGES" | grep -c . || true)
-    DOCS_CHANGED=$(printf '%s\n' "$ALL_BRANCH_CHANGES" | grep -c -E '(^|/)(docs/|CHANGELOG(\.md)?$|.*\.(md|markdown)$)' || true)
-    if [[ "$TOTAL_CHANGED" -gt 0 && "$DOCS_CHANGED" -eq "$TOTAL_CHANGED" ]]; then
+# Unit tests can only be skipped if every pushed ref matches the verified commit in pre-commit.ok.
+# Pushing a non-current branch or unverified commit cannot borrow validation.
+for entry in "${REFS_TO_CHECK[@]}"; do
+    local_sha="${entry##* }"
+    if [[ "$MARKER_VALID" != "true" || "$MARKER_HEAD" != "$local_sha" ]]; then
+        RUN_UNIT_TESTS=true
+        break
+    fi
+done
+
+if [[ "$RUN_UNIT_TESTS" == "false" ]]; then
+    echo "✓ Unit tests already passed in pre-commit (${AGE}s ago); skipping."
+fi
+
+if [[ "$RUN_UNIT_TESTS" == "true" ]]; then
+    ALL_REFS_DOCS_ONLY=true
+    for entry in "${REFS_TO_CHECK[@]}"; do
+        local_sha="${entry##* }"
+        MERGE_BASE=$(git merge-base "$local_sha" origin/main 2>/dev/null || git merge-base "$local_sha" main 2>/dev/null || echo "")
+        if [[ -z "$MERGE_BASE" ]]; then
+            ALL_REFS_DOCS_ONLY=false
+            break
+        fi
+        CHANGED_SINCE_BASE=$(git diff --name-only "$MERGE_BASE" "$local_sha" 2>/dev/null || true)
+        ALL_BRANCH_CHANGES=$(
+            {
+                printf '%s\n' "$CHANGED_SINCE_BASE"
+                git diff --name-only "$local_sha" 2>/dev/null || true
+            } | sed '/^$/d' | sort -u
+        )
+        TOTAL_CHANGED=$(printf '%s\n' "$ALL_BRANCH_CHANGES" | grep -c . || true)
+        DOCS_CHANGED=$(printf '%s\n' "$ALL_BRANCH_CHANGES" | grep -c -E '(^|/)(docs/|CHANGELOG(\.md)?$|.*\.(md|markdown)$)' || true)
+        if [[ "$TOTAL_CHANGED" -eq 0 || "$DOCS_CHANGED" -ne "$TOTAL_CHANGED" ]]; then
+            ALL_REFS_DOCS_ONLY=false
+            break
+        fi
+    done
+
+    if [[ "$ALL_REFS_DOCS_ONLY" == "true" ]]; then
         echo ""
         echo "▶ Docs-only branch diff detected; running DocsDriftTests..."
         DRIFT_ARGS=(dotnet test src/Zipper.Tests/Zipper.Tests.csproj --filter "FullyQualifiedName~DocsDriftTests" --logger "console;verbosity=quiet" --nologo)
@@ -136,20 +208,31 @@ fi
 # 3. Basic E2E smoke suite (skip when no CLI/E2E files changed)
 # ──────────────────────────────────────────────────
 echo ""
-RUN_E2E=true
-if [[ "$BRANCH_DIFF_OK" == "true" ]]; then
+RUN_E2E=false
+for entry in "${REFS_TO_CHECK[@]}"; do
+    local_sha="${entry##* }"
+    MERGE_BASE=$(git merge-base "$local_sha" origin/main 2>/dev/null || git merge-base "$local_sha" main 2>/dev/null || echo "")
+    if [[ -z "$MERGE_BASE" ]]; then
+        RUN_E2E=true
+        break
+    fi
+    CHANGED_SINCE_BASE=$(git diff --name-only "$MERGE_BASE" "$local_sha" 2>/dev/null || true)
     CLI_OR_E2E_CHANGES=$(
         {
             printf '%s\n' "$CHANGED_SINCE_BASE"
-            git diff --name-only HEAD 2>/dev/null || true
+            git diff --name-only "$local_sha" 2>/dev/null || true
         } |
         grep -E '(^|/)(src/|Directory\.Build\.props$|Directory\.Packages\.props$|global\.json$|zipper\.sln$|tests/run-e2e-basic\.(sh|bat)$|tests/_zipper-cli\.(sh|bat)$)' |
         grep -v -E '^src/Zipper\.Tests/|^src/Zipper\.Analyzers(\.Tests)?/' || true
     )
-    if [[ -z "$CLI_OR_E2E_CHANGES" ]]; then
-        echo "✓ No CLI source or basic E2E script changes since merge-base; skipping basic E2E smoke."
-        RUN_E2E=false
+    if [[ -n "$CLI_OR_E2E_CHANGES" ]]; then
+        RUN_E2E=true
+        break
     fi
+done
+
+if [[ "$RUN_E2E" == "false" ]]; then
+    echo "✓ No CLI source or basic E2E script changes since merge-base; skipping basic E2E smoke."
 fi
 
 if [[ "$RUN_E2E" == "false" ]]; then
@@ -179,12 +262,8 @@ case "$(uname -s)" in
         fi
         ;;
     MINGW*|MSYS*|CYGWIN*)
-        if [[ -f "./tests/run-e2e-basic.bat" ]]; then
-            # Git Bash (MSYS2) invokes .bat files directly; no cmd.exe wrapper
-            # needed. The previous `cmd.exe //c` form is MSYS-specific and
-            # breaks under real Windows cmd.exe (which expects `/c`), and is
-            # unnecessary here because MSYS2 handles .bat natively.
-            if ! ./tests/run-e2e-basic.bat; then
+        if [[ -f "tests/run-e2e-basic.bat" ]]; then
+            if ! cmd.exe //c "tests\\run-e2e-basic.bat"; then
                 echo ""
                 echo "❌ Basic E2E smoke tests failed. Push aborted."
                 echo "   Run 'tests\\run-e2e-basic.bat' for details."
