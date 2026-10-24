@@ -3473,18 +3473,18 @@ def _load_dependabot_security_exception(pr_number: int, expected_head: str) -> d
         return None
 
 
-def _gh_api_paginate_slurp(endpoint: str) -> list:
-    """Query a paginated GitHub API endpoint with --slurp and return a flattened item list."""
+def _gh_api_paginate_slurp(endpoint: str) -> list | None:
+    """Query a paginated GitHub API endpoint with --slurp and return a flattened item list, or None on failure."""
     code, out, _ = run_cmd(
         ["gh", "api", endpoint, "--paginate", "--slurp"],
         cwd=REPO_PATH,
     )
-    pages = []
-    if code == 0 and out.strip():
-        try:
-            pages = json.loads(out)
-        except Exception:
-            pages = []
+    if code != 0 or not out.strip():
+        return None
+    try:
+        pages = json.loads(out)
+    except Exception:
+        return None
     return [item for p in pages for item in (p if isinstance(p, list) else [p])]
 
 
@@ -3504,6 +3504,9 @@ def _check_dependabot_upstream_age(pr: dict, reviewed_head: str, now: datetime |
     reviews = pr.get("reviews")
     if reviews is None:
         reviews = _gh_api_paginate_slurp(f"repos/{GITHUB_REPOSITORY}/pulls/{pr_num}/reviews")
+        if reviews is None:
+            print(f"[dependabot] PR #{pr_num} failed to fetch reviews from GitHub API -> BLOCKED (cannot verify authorization).")
+            return False, "Could not fetch PR reviews to verify authorization"
 
     latest = {}
     for r in reviews:
@@ -3518,12 +3521,16 @@ def _check_dependabot_upstream_age(pr: dict, reviewed_head: str, now: datetime |
         reason = sec_record.get("reason", "security patch")
 
         revoked = False
-        if auth_by in latest:
-            r = latest[auth_by]
+        r = latest.get(auth_by)
+        if r is not None:
             if r.get("state") != "APPROVED" or r.get("commit_id") != reviewed_head:
                 revoked = True
-        for login, r in latest.items():
-            if r.get("state") == "CHANGES_REQUESTED":
+        elif reason.startswith("Maintainer approval review"):
+            # If the exception was granted by a maintainer review, the approval must still be present
+            revoked = True
+
+        for login, rev in latest.items():
+            if rev.get("state") == "CHANGES_REQUESTED":
                 revoked = True
                 break
 
@@ -3559,10 +3566,12 @@ def _check_dependabot_upstream_age(pr: dict, reviewed_head: str, now: datetime |
                         print(f"[dependabot] PR #{pr_num} maintainer {login} approved security update for head {reviewed_head}. [DRY RUN] Exception recording bypassed.")
                     return True, f"Security update approved by maintainer {login}"
 
-    # 3. Extract updated dependencies
+    # 4. Extract updated dependencies
     commits = pr.get("commits")
     if commits is None:
         commits = _gh_api_paginate_slurp(f"repos/{GITHUB_REPOSITORY}/pulls/{pr_num}/commits")
+        if commits is None:
+            commits = []
     deps = _parse_dependabot_updated_dependencies(body, commits=commits, title=title)
 
     if not deps:

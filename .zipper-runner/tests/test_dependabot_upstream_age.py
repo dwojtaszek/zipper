@@ -403,6 +403,25 @@ updated-dependencies:
         self.assertIn("too new", msg.lower())
         self.assertFalse(os.path.exists(runner._security_exception_path(108)))
 
+        # If the exception came from a maintainer review and that review is dismissed (absent), it is revoked
+        pr_dismissed = self._create_dependabot_pr(number=108, name="vulnerable-lib", version="2.0.1", reviews=[])
+        runner._record_dependabot_security_exception(
+            108, "sha108", "dwojtaszek", "Maintainer approval review (security update): authorized"
+        )
+        self.assertTrue(os.path.exists(runner._security_exception_path(108)))
+        eligible_d, msg_d = runner._check_dependabot_upstream_age(pr_dismissed, "sha108", now=self.now)
+        self.assertFalse(eligible_d)
+        self.assertFalse(os.path.exists(runner._security_exception_path(108)))
+
+    @patch("runner._gh_api_paginate_slurp")
+    def test_check_upstream_age_reviews_fetch_failure_fails_closed(self, mock_slurp):
+        mock_slurp.return_value = None
+        pr = self._create_dependabot_pr(number=110, name="vulnerable-lib", version="2.0.1")
+        del pr["reviews"]  # Force fetching via API
+        eligible, msg = runner._check_dependabot_upstream_age(pr, "sha110", now=self.now)
+        self.assertFalse(eligible)
+        self.assertIn("could not fetch pr reviews", msg.lower())
+
     @patch("runner._fetch_upstream_publish_timestamp")
     def test_security_exception_unauthorized_user_review_does_not_bypass(self, mock_fetch):
         mock_fetch.return_value = self.now - timedelta(hours=12)
