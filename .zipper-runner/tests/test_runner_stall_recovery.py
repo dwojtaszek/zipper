@@ -676,6 +676,37 @@ class StateHardeningTests(unittest.TestCase):
         self.runner._escalate_blocked_worktree(99, "42", "fix/ISSUE-42-proof")
         self.assertEqual(self.fixture.emails.messages, [])
 
+    def test_savePrState_writesOnlyTheProvenanceKeys(self):
+        """_save_pr_state rebuilds the file, so it is only safe while this file
+        holds nothing else. Every reader reads at most these four keys; an
+        unfinished mission's local_head/completion_ready/blocker live in
+        pr-<N>-coderabbit-gate.json instead."""
+        self.runner._save_pr_state("42", "99", "fix/ISSUE-42-proof", "a" * 40)
+        state = json.loads((self.root / "state" / "issue-42.json").read_text())
+        self.assertEqual(set(state), {"pr_number", "branch", "created_at", "authorized_head"})
+        self.assertEqual(state["authorized_head"], "a" * 40)
+
+    def test_savePrState_omitsAHeadThatDoesNotResolve(self):
+        """A record is provenance. Storing a head that is not a real commit would
+        hand every later authorization check a value it can never match."""
+        for bogus in ("not-a-sha", "", "a" * 39, "a" * 41):
+            with self.subTest(head=bogus):
+                self.runner._save_pr_state("42", "99", "no/such/branch", bogus)
+                state = json.loads((self.root / "state" / "issue-42.json").read_text())
+                self.assertNotIn("authorized_head", state,
+                                 "an unresolvable head must never be recorded as provenance")
+
+    def test_savePrState_preservesTheSeparateGateRecord(self):
+        """The gate record carries the pending-retry fields, so a provenance save
+        for the same PR must leave it intact."""
+        self.runner._record_coderabbit_gate_failure(99, "fix/ISSUE-42-proof", "boom", completion_ready=False)
+        gate_path = self.root / "state" / "pr-99-coderabbit-gate.json"
+        before = json.loads(gate_path.read_text())
+        self.runner._save_pr_state("42", "99", "fix/ISSUE-42-proof", "a" * 40)
+        self.assertEqual(json.loads(gate_path.read_text()), before,
+                         "a provenance save must not touch the gate record")
+        self.assertIs(self.runner._is_coderabbit_gate_failed(99), True)
+
     def test_ciStatus_malformedRollup_isPendingNotACrash(self):
         """A null or malformed rollup must not raise: the cycle repeats every
         five minutes, so a crash here would loop identically forever."""

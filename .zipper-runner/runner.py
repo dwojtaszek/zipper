@@ -1274,6 +1274,15 @@ def _state_path(issue_number: str) -> str:
 
 
 def _save_pr_state(issue_number: str, pr_num: str, branch: str, authorized_head: str | None = None) -> None:
+    """Write the issue's provenance record, replacing any previous one.
+
+    This file holds only ``pr_number``, ``branch``, ``created_at``, and
+    ``authorized_head``; every reader in this module reads at most those keys, so
+    rebuilding it cannot drop anything. An unfinished mission's ``local_head``,
+    ``completion_ready``, and blocker live in ``pr-<N>-coderabbit-gate.json``,
+    written by ``_record_coderabbit_gate_failure`` and cleared separately, so this
+    write must not touch them.
+    """
     os.makedirs(STATE_DIR, exist_ok=True)
     state = {"pr_number": pr_num, "branch": branch, "created_at": datetime.now(timezone.utc).isoformat()}
     # Local state is provenance, not a wildcard authorization for future heads.
