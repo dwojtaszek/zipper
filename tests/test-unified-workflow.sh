@@ -212,6 +212,13 @@ else
     exit 1
 fi
 
+if grep -q "id-token: write" "$CALLER_WORKFLOW_FILE" && grep -q "attestations: write" "$CALLER_WORKFLOW_FILE"; then
+    echo "✓ Release job has OIDC provenance attestation permissions"
+else
+    echo "✗ Release job missing OIDC provenance attestation permissions"
+    exit 1
+fi
+
 # Check for caching. The reportgenerator cache moved into the shared composite
 # action (.github/actions/coverage-gate); match a tag or SHA-pinned
 # `actions/cache@` ref anywhere under .github/.
@@ -239,6 +246,35 @@ if [ "$(grep -c "path: .controller" "$CALLER_WORKFLOW_FILE")" -eq 2 ]; then
     echo "✓ Release controller runs from the triggering ref in both release jobs"
 else
     echo "✗ Release jobs must check out the controller from the triggering ref"
+    exit 1
+fi
+
+echo "16. Checking release provenance and checksum manifest configuration..."
+if grep -q "actions/attest-build-provenance@" "$CALLER_WORKFLOW_FILE"; then
+    echo "✓ Release publishes build provenance attestation"
+else
+    echo "✗ Missing build provenance attestation"
+    exit 1
+fi
+
+if grep -q "anchore/sbom-action@" "$CALLER_WORKFLOW_FILE"; then
+    echo "✓ Release generates SBOM"
+else
+    echo "✗ Missing SBOM generation"
+    exit 1
+fi
+
+if grep -q "SHA256SUMS" "$CALLER_WORKFLOW_FILE"; then
+    echo "✓ Release publishes standalone SHA-256 checksum manifest"
+else
+    echo "✗ Missing standalone checksum manifest"
+    exit 1
+fi
+
+if grep -q "if-no-files-found: error" "$SHARED_WORKFLOW_FILE"; then
+    echo "✓ Release asset uploads enforce if-no-files-found: error"
+else
+    echo "✗ Release asset uploads missing if-no-files-found: error"
     exit 1
 fi
 

@@ -245,6 +245,19 @@ if errorlevel 1 (
     echo [OK] Release job has contents write permission
 )
 
+findstr /C:"id-token: write" "%CALLER_WORKFLOW_FILE%" > nul
+if errorlevel 1 (
+    echo [FAIL] Release job missing id-token: write permission
+    exit /b 1
+)
+findstr /C:"attestations: write" "%CALLER_WORKFLOW_FILE%" > nul
+if errorlevel 1 (
+    echo [FAIL] Release job missing attestations: write permission
+    exit /b 1
+) else (
+    echo [OK] Release job has OIDC provenance attestation permissions
+)
+
 REM Check for caching
 echo.
 echo 14. Checking caching configuration...
@@ -276,6 +289,41 @@ if errorlevel 1 (
     exit /b 1
 ) else (
     echo [OK] Release controller runs from the triggering ref in both release jobs
+)
+
+REM Check for release provenance
+echo.
+echo 16. Checking release provenance and checksum manifest configuration...
+findstr /C:"actions/attest-build-provenance@" "%CALLER_WORKFLOW_FILE%" > nul
+if errorlevel 1 (
+    echo [FAIL] Missing build provenance attestation
+    exit /b 1
+) else (
+    echo [OK] Release publishes build provenance attestation
+)
+
+findstr /C:"anchore/sbom-action@" "%CALLER_WORKFLOW_FILE%" > nul
+if errorlevel 1 (
+    echo [FAIL] Missing SBOM generation
+    exit /b 1
+) else (
+    echo [OK] Release generates SBOM
+)
+
+findstr /C:"SHA256SUMS" "%CALLER_WORKFLOW_FILE%" > nul
+if errorlevel 1 (
+    echo [FAIL] Missing standalone checksum manifest
+    exit /b 1
+) else (
+    echo [OK] Release publishes standalone SHA-256 checksum manifest
+)
+
+findstr /C:"if-no-files-found: error" "%SHARED_WORKFLOW_FILE%" > nul
+if errorlevel 1 (
+    echo [FAIL] Release asset uploads missing if-no-files-found: error
+    exit /b 1
+) else (
+    echo [OK] Release asset uploads enforce if-no-files-found: error
 )
 
 echo.
