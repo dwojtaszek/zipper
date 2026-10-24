@@ -413,8 +413,10 @@ updated-dependencies:
         self.assertFalse(eligible_d)
         self.assertFalse(os.path.exists(runner._security_exception_path(108)))
 
+    @patch("runner._fetch_upstream_publish_timestamp")
     @patch("runner._gh_api_paginate_slurp")
-    def test_check_upstream_age_reviews_fetch_failure_fails_closed(self, mock_slurp):
+    def test_check_upstream_age_reviews_fetch_failure_fails_closed(self, mock_slurp, mock_fetch):
+        mock_fetch.return_value = self.now - timedelta(hours=12)
         mock_slurp.return_value = None
         pr = self._create_dependabot_pr(number=110, name="vulnerable-lib", version="2.0.1")
         del pr["reviews"]  # Force fetching via API
