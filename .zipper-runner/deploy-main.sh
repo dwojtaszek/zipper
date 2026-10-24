@@ -182,25 +182,43 @@ fi
 
 before="$(git rev-parse HEAD 2>/dev/null)"
 
-# Bounded on every host, and by three mechanisms because no single one covers
-# them all. `timeout`/`gtimeout` is the hard cap where it exists; `perl` gives the
-# same hard cap on macOS, which ships neither binary; and git's own low-speed abort
-# covers the measured failure (a stalled transfer, ~300s) but only for HTTP(S)
-# remotes, so it is the backstop rather than the bound. This runs once a minute, so
-# a fetch that blocks for minutes is worse than a fetch that fails: the next tick
-# retries.
+# The fetch is bounded on every host. `timeout`/`gtimeout` is used where it exists;
+# where neither does — macOS, which this repository's runner suite runs on in CI —
+# the fetch runs in the background with a watchdog that kills it. The watchdog is
+# used rather than `perl -e 'alarm shift; exec @ARGV'`, which looks equivalent but
+# is not: the alarm survives the exec only until the exec'd program is itself a
+# shell script, and then the signal is deferred until that script's foreground
+# child finishes, so the bound silently does nothing (measured: a 2s bound on a
+# 30s hang returned after 30s).
+#
+# Git's own low-speed abort is the third, weakest layer: it covers the measured
+# failure (a stalled transfer, ~300s) but only for HTTP(S) remotes, so it is a
+# backstop, not the bound. This runs once a minute, so a fetch that blocks for
+# minutes is worse than a fetch that fails: the next tick retries.
 FETCH_CMD=(git -c "http.lowSpeedLimit=1" -c "http.lowSpeedTime=$FETCH_TIMEOUT" fetch origin main)
-for candidate in timeout gtimeout; do
-    if command -v "$candidate" >/dev/null 2>&1; then
-        FETCH_CMD=("$candidate" "$FETCH_TIMEOUT" "${FETCH_CMD[@]}")
-        break
-    fi
-done
-if [ "${FETCH_CMD[0]}" = "git" ] && command -v perl >/dev/null 2>&1; then
-    FETCH_CMD=(perl -e 'alarm shift; exec @ARGV' "$FETCH_TIMEOUT" "${FETCH_CMD[@]}")
-fi
 
-if ! fetch_out="$("${FETCH_CMD[@]}" 2>&1)"; then
+fetch_out_file="$(mktemp)"
+fetch_rc=1
+if command -v timeout >/dev/null 2>&1; then
+    timeout "$FETCH_TIMEOUT" "${FETCH_CMD[@]}" > "$fetch_out_file" 2>&1
+    fetch_rc=$?
+elif command -v gtimeout >/dev/null 2>&1; then
+    gtimeout "$FETCH_TIMEOUT" "${FETCH_CMD[@]}" > "$fetch_out_file" 2>&1
+    fetch_rc=$?
+else
+    "${FETCH_CMD[@]}" > "$fetch_out_file" 2>&1 &
+    fetch_pid=$!
+    ( sleep "$FETCH_TIMEOUT"; kill -TERM "$fetch_pid" 2>/dev/null ) &
+    watchdog_pid=$!
+    wait "$fetch_pid"
+    fetch_rc=$?
+    kill "$watchdog_pid" 2>/dev/null || true
+    wait "$watchdog_pid" 2>/dev/null || true
+fi
+fetch_out="$(cat "$fetch_out_file")"
+rm -f "$fetch_out_file"
+
+if [ "$fetch_rc" -ne 0 ]; then
     log "SKIP: git fetch failed or exceeded ${FETCH_TIMEOUT}s: $fetch_out"
     exit 0
 fi

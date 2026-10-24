@@ -301,6 +301,89 @@ class DeployMainScriptTests(unittest.TestCase):
                         "a lock reclaimed by another process must not be deleted")
         self.assertIn("reclaimed by another process", self.repo.logs())
 
+    def test_deploy_whenOnlyBsdStatIsAvailable_shouldStillJudgeTheLockStale(self):
+        """macOS ships BSD `stat`, which rejects `-c`. The mtime fallback must work
+        there too, or a lock with no `created` file wedges every macOS deploy."""
+        new_upstream = self.repo.push_upstream_commit("two\n", "c2")
+        self.repo.hold_lock(age_seconds=3600, with_created=False)
+
+        # A `stat` that rejects GNU `-c` and answers BSD `-f %m`, as macOS does.
+        fake_bin = self.repo.root / "fakebin-stat"
+        fake_bin.mkdir(exist_ok=True)
+        (fake_bin / "stat").write_text(
+            "#!/bin/bash\n"
+            'if [ "$1" = "-f" ] && [ "$2" = "%m" ]; then\n'
+            '  exec /usr/bin/stat -c %Y "$3"\n'
+            "fi\n"
+            "exit 1\n"
+        )
+        (fake_bin / "stat").chmod(0o755)
+
+        env = dict(os.environ)
+        env["REPO_PATH"] = str(self.repo.checkout)
+        env["DEPLOY_LOGS_DIR"] = str(self.repo.root / "logs")
+        env["REPO_MUTATION_LOCK_PATH"] = str(self.repo.lock_path)
+        env["PATH"] = f"{fake_bin}:{env['PATH']}"
+
+        result = subprocess.run([str(self.repo.installed)], capture_output=True, text=True, env=env)
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(self.repo.head(), new_upstream, "BSD stat must not break reclamation")
+        self.assertIn("stealing a stale main-checkout lock", self.repo.logs())
+
+    def _pathWithoutTimeoutBinaries(self, extra_bin: Path) -> str:
+        """A PATH holding what the script needs but no `timeout`/`gtimeout`, as macOS.
+
+        Linux has `/usr/bin/timeout`, so a PATH that merely prepends a fake bin
+        directory still finds it and never exercises the fallback. This symlinks an
+        explicit allow-list instead, so absence is real rather than assumed.
+        """
+        sandbox = self.repo.root / "sandbox-bin"
+        sandbox.mkdir(exist_ok=True)
+        for name in ("dirname", "pwd", "mkdir", "date", "cat", "stat", "rm", "sleep", "mktemp", "bash"):
+            source = shutil.which(name)
+            if source and not (sandbox / name).exists():
+                (sandbox / name).symlink_to(source)
+        for absent in ("timeout", "gtimeout"):
+            self.assertIsNone(shutil.which(absent, path=f"{extra_bin}:{sandbox}"),
+                              f"{absent} must not be reachable for this test to mean anything")
+        return f"{extra_bin}:{sandbox}"
+
+    def test_deploy_whenTimeoutBinaryIsMissing_shouldBoundTheFetchWithTheWatchdog(self):
+        """macOS ships neither `timeout` nor `gtimeout`, so without the watchdog a
+        non-HTTP remote would be unbounded while holding the lock. This is also why
+        the watchdog is used instead of `perl -e 'alarm shift; exec @ARGV'`, which
+        silently fails to bound a fetch once the exec'd program is a shell script."""
+        self.repo.push_upstream_commit("two\n", "c2")
+        before = self.repo.head()
+
+        fake_bin = self.repo.root / "fakebin-notimeout"
+        fake_bin.mkdir(exist_ok=True)
+        real_git = shutil.which("git")
+        (fake_bin / "git").write_text(
+            "#!/bin/bash\n"
+            "for a in \"$@\"; do [ \"$a\" = fetch ] && { sleep 30; exit 1; }; done\n"
+            f'exec "{real_git}" "$@"\n'
+        )
+        (fake_bin / "git").chmod(0o755)
+
+        env = dict(os.environ)
+        env["REPO_PATH"] = str(self.repo.checkout)
+        env["DEPLOY_LOGS_DIR"] = str(self.repo.root / "logs")
+        env["REPO_MUTATION_LOCK_PATH"] = str(self.repo.lock_path)
+        env["DEPLOY_FETCH_TIMEOUT"] = "2"
+        env["PATH"] = self._pathWithoutTimeoutBinaries(fake_bin)
+
+        started = time.monotonic()
+        result = subprocess.run([str(self.repo.installed)], capture_output=True, text=True,
+                                env=env, timeout=25)
+        elapsed = time.monotonic() - started
+
+        self.assertEqual(result.returncode, 0)
+        self.assertLess(elapsed, 20, "the watchdog must kill a hanging fetch, not stall")
+        self.assertEqual(self.repo.head(), before)
+        self.assertIn("fetch failed or exceeded", self.repo.logs())
+
     def test_deploy_whenLockIsFreshButTheRunnerIsWorking_shouldNotStealIt(self):
         """The stale bound must exceed the runner's slowest mutation, or a slow
         fetch would be mistaken for a crashed holder and the lock stolen mid-write."""
@@ -383,8 +466,6 @@ class DeployMainScriptTests(unittest.TestCase):
         """A real unreachable origin stalled git for ~300s. On a one-minute timer
         that holds the unit open and delays every deploy behind it, so the fetch
         is bounded and the next tick retries."""
-        if shutil.which("timeout") is None and shutil.which("gtimeout") is None:
-            self.skipTest("needs a timeout binary to bound a git that ignores the stall config")
         self.repo.push_upstream_commit("two\n", "c2")
         before = self.repo.head()
 
