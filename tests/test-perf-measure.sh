@@ -418,7 +418,7 @@ t9_out="$TEMP_DIR/t9.out"
 t9_err="$TEMP_DIR/t9.err"
 t9_log="$TEMP_DIR/t9.args.log"
 t9_exit=0
-ARGS_LOG_FILE="$t9_log" TIME_CMD="$MOCK_TIME" bash "$MEASURE_SCRIPT" "$FAKE_CLI_LOG_ARGS" > "$t9_out" 2> "$t9_err" || t9_exit=$?
+env -u PERF_SEED ARGS_LOG_FILE="$t9_log" TIME_CMD="$MOCK_TIME" bash "$MEASURE_SCRIPT" "$FAKE_CLI_LOG_ARGS" > "$t9_out" 2> "$t9_err" || t9_exit=$?
 
 if [[ $t9_exit -ne 0 ]]; then
     print_error "Test 9 FAILED: Expected 0 exit code without --seed, got $t9_exit. Stderr:"
