@@ -4,7 +4,6 @@ import json
 import os
 import platform
 import subprocess
-import sys
 
 
 def median(values):
@@ -20,6 +19,8 @@ def load_runs(results_dir, scenarios):
         with open(run_file) as f:
             runs.append(json.load(f))
     for sc in scenarios:
+        if any(sc not in r or "rss_kb" not in r[sc] or "wall_s" not in r[sc] for r in runs):
+            raise ValueError(f"missing scenario measurement in run file for {sc}")
         if any(r[sc]["rss_kb"] <= 0 or r[sc]["wall_s"] < 0 for r in runs):
             raise ValueError(f"invalid measurement for {sc}: RSS must be positive and wall time non-negative")
     return runs
@@ -40,7 +41,7 @@ def compute_variability(runs, scenarios):
         pct_r = round((spread_r / med_r * 100), 1) if med_r > 0 else 0.0
         variability[sc] = {
             "wall_s": {
-                "median": med_w,
+                "median": round(med_w, 2),
                 "min": min_w,
                 "max": max_w,
                 "spread": spread_w,
@@ -59,7 +60,7 @@ def compute_variability(runs, scenarios):
 
 def get_dotnet_version():
     try:
-        res = subprocess.run(["dotnet", "--version"], capture_output=True, text=True, check=False)
+        res = subprocess.run(["dotnet", "--version"], capture_output=True, text=True, check=False, timeout=10)
         if res.returncode == 0:
             return res.stdout.strip()
     except Exception:

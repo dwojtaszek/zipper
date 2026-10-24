@@ -44,6 +44,11 @@ if [[ -z "$ZIPPER" ]]; then
     ZIPPER="$REPO_ROOT/src/bin/Release/net10.0/Zipper"
 fi
 
+if [[ ! "$SEED" =~ ^[0-9]+$ ]]; then
+    echo "Error: --seed must be a non-negative integer (got: '$SEED')" >&2
+    exit 1
+fi
+
 if [[ ! -x "$ZIPPER" ]]; then
     echo "Error: Zipper binary not found at $ZIPPER" >&2
     echo "Build with: dotnet publish src/Zipper.csproj -c Release" >&2

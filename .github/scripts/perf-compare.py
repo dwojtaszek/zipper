@@ -52,17 +52,6 @@ def parse_args(argv):
     return results_dir, table_out, measured_out
 
 
-def load_medians(results_dir, scenarios):
-    runs = load_runs(results_dir, scenarios)
-    medians = {}
-    for sc in scenarios:
-        medians[sc] = {
-            "wall_s": median([r[sc]["wall_s"] for r in runs]),
-            "rss_kb": median([r[sc]["rss_kb"] for r in runs]),
-        }
-    return medians
-
-
 def warn_wall(sc, ratio, measured, baseline):
     if ratio > WALL_WARN_RATIO:
         print(

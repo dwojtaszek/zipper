@@ -3,8 +3,8 @@
   "_methodology": "Run measure.sh 5x with --seed 42, take median(wall_s) and median(rss_kb) per scenario.",
   "_context": {
     "runner_os": "Linux",
-    "runner_image": "ubuntu-latest",
-    "dotnet_sdk": "10.0.x",
+    "runner_image": "ubuntu24 (20241013.1.0)",
+    "dotnet_sdk": "10.0.100",
     "seed": 42
   },
   "_variability": {

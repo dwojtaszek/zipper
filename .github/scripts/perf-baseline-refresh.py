@@ -2,7 +2,7 @@
 """Check performance baseline drift, compute medians, and update baselines.
 
 Usage:
-    perf-baseline-refresh.py <results-dir> <baselines-file> [--pr-body-out PATH] [--justification TEXT] [--seed N]
+    perf-baseline-refresh.py <results-dir> <baselines-file> [--pr-body-out PATH] [--justification TEXT] [--seed N] [--force]
 """
 
 import json
@@ -23,6 +23,8 @@ from perf_utils import (
     median,
 )
 
+DRIFT_THRESHOLD_PCT = 5.0
+
 
 def parse_args(argv):
     if len(argv) < 3:
@@ -31,12 +33,12 @@ def parse_args(argv):
     baselines_path = argv[2]
     pr_body_out = os.path.join(results_dir, "pr_body.md")
     justification = os.environ.get("JUSTIFICATION", "").strip()
+    force = False
     seed = None
     if "PERF_SEED" in os.environ:
-        try:
-            seed = int(os.environ["PERF_SEED"])
-        except ValueError:
-            pass
+        val = os.environ["PERF_SEED"].strip()
+        if val.isdigit():
+            seed = int(val)
 
     args = argv[3:]
     i = 0
@@ -48,17 +50,20 @@ def parse_args(argv):
             justification = args[i + 1].strip()
             i += 2
         elif args[i] == "--seed" and i + 1 < len(args):
-            try:
-                seed = int(args[i + 1])
-            except ValueError:
-                seed = 42
+            val = args[i + 1].strip()
+            if not val.isdigit():
+                return None
+            seed = int(val)
             i += 2
+        elif args[i] == "--force":
+            force = True
+            i += 1
         else:
             return None
 
     if seed is None:
         seed = 42
-    return results_dir, baselines_path, pr_body_out, justification, seed
+    return results_dir, baselines_path, pr_body_out, justification, seed, force
 
 
 def build_pr_body(today, seed, drift_rows, variability, context, scenarios, results_dir, has_increases, justification):
@@ -119,11 +124,11 @@ def main() -> int:
     parsed = parse_args(sys.argv)
     if parsed is None:
         print(
-            "usage: perf-baseline-refresh.py <results-dir> <baselines-file> [--pr-body-out PATH] [--justification TEXT] [--seed N]",
+            "usage: perf-baseline-refresh.py <results-dir> <baselines-file> [--pr-body-out PATH] [--justification TEXT] [--seed N] [--force]",
             file=sys.stderr,
         )
         return 2
-    results_dir, baselines_path, pr_body_out, justification, seed = parsed
+    results_dir, baselines_path, pr_body_out, justification, seed, force = parsed
 
     try:
         with open(baselines_path) as f:
@@ -155,7 +160,7 @@ def main() -> int:
     variability = compute_variability(runs, scenarios)
     context = get_runtime_context(seed=seed)
 
-    # Check drift (>= 5% in either direction on any metric)
+    # Check drift (>= DRIFT_THRESHOLD_PCT in either direction on any metric)
     drifted = False
     has_increases = False
     drift_rows = []
@@ -165,20 +170,20 @@ def main() -> int:
             new = new_baselines[sc][metric]
             ratio = new / old if old > 0 else 0
             drift_pct = abs(ratio - 1.0) * 100
-            if drift_pct >= 5.0:
+            if drift_pct >= DRIFT_THRESHOLD_PCT:
                 drifted = True
             if new > old:
                 has_increases = True
-            drift_rows.append(f"| {sc} | metric | {old} | {new} | {ratio:.2f}× | {drift_pct:.1f}% |".replace("metric", metric))
+            drift_rows.append(f"| {sc} | {metric} | {old} | {new} | {ratio:.2f}× | {drift_pct:.1f}% |")
 
     gh_out = os.environ.get("GITHUB_OUTPUT")
     if gh_out:
         with open(gh_out, "a") as f:
-            f.write(f"drifted={'true' if drifted else 'false'}\n")
+            f.write(f"drifted={'true' if (drifted or force) else 'false'}\n")
             f.write(f"has_increases={'true' if has_increases else 'false'}\n")
 
-    if not drifted:
-        print("Baselines in range (< 5% drift). No refresh needed.")
+    if not drifted and not force:
+        print(f"Baselines in range (< {DRIFT_THRESHOLD_PCT}% drift). No refresh needed.")
         return 0
 
     # Write new baselines
@@ -218,7 +223,10 @@ def main() -> int:
         with open(pr_body_out, "w") as f:
             f.write(body)
 
-    print("Drift detected. Updating baselines.")
+    if force and not drifted:
+        print("Force refresh applied (< 5% drift). Updated baselines.")
+    else:
+        print("Drift detected. Updating baselines.")
     return 0
 
 

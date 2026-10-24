@@ -455,6 +455,49 @@ else
     PASSED=$((PASSED + 1))
 fi
 
+# --- Test Case 11: PERF_SEED environment variable is used when --seed is not passed ---
+print_info "Test Case 11: PERF_SEED environment variable is forwarded to all scenarios"
+t11_out="$TEMP_DIR/t11.out"
+t11_err="$TEMP_DIR/t11.err"
+t11_log="$TEMP_DIR/t11.args.log"
+t11_exit=0
+PERF_SEED=789 ARGS_LOG_FILE="$t11_log" TIME_CMD="$MOCK_TIME" bash "$MEASURE_SCRIPT" "$FAKE_CLI_LOG_ARGS" > "$t11_out" 2> "$t11_err" || t11_exit=$?
+
+if [[ $t11_exit -ne 0 ]]; then
+    print_error "Test 11 FAILED: Expected 0 exit code with PERF_SEED=789, got $t11_exit. Stderr:"
+    cat "$t11_err"
+    FAILED=$((FAILED + 1))
+else
+    seed_count=$(grep -c -- "--seed 789" "$t11_log" 2>/dev/null || true)
+    if [[ "$seed_count" -ne 3 ]]; then
+        print_error "Test 11 FAILED: Expected PERF_SEED=789 forwarded to all 3 scenarios, found $seed_count times. Args log:"
+        cat "$t11_log"
+        FAILED=$((FAILED + 1))
+    else
+        print_info "PASS: PERF_SEED=789 forwarded to all 3 scenarios"
+        PASSED=$((PASSED + 1))
+    fi
+fi
+
+# --- Test Case 12: Invalid PERF_SEED fails nonzero with diagnostic ---
+print_info "Test Case 12: Invalid PERF_SEED fails nonzero with diagnostic"
+t12_out="$TEMP_DIR/t12.out"
+t12_err="$TEMP_DIR/t12.err"
+t12_exit=0
+PERF_SEED="notanumber" TIME_CMD="$MOCK_TIME" bash "$MEASURE_SCRIPT" "$FAKE_CLI_LOG_ARGS" > "$t12_out" 2> "$t12_err" || t12_exit=$?
+
+if [[ $t12_exit -eq 0 ]]; then
+    print_error "Test 12 FAILED: Expected nonzero exit code for invalid PERF_SEED, got 0"
+    FAILED=$((FAILED + 1))
+elif ! grep -qiE "seed|integer" "$t12_err"; then
+    print_error "Test 12 FAILED: Expected error diagnostic for invalid PERF_SEED. Stderr was:"
+    cat "$t12_err"
+    FAILED=$((FAILED + 1))
+else
+    print_info "PASS: Invalid PERF_SEED failed with diagnostic"
+    PASSED=$((PASSED + 1))
+fi
+
 # --- Summary ---
 echo ""
 TOTAL=$((PASSED + FAILED))
