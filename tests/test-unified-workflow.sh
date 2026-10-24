@@ -278,6 +278,13 @@ else
     exit 1
 fi
 
+if grep -q "test-diagnostics-" "$SHARED_WORKFLOW_FILE"; then
+    echo "✓ Failure diagnostics upload is configured"
+else
+    echo "✗ Missing failure diagnostics upload configuration"
+    exit 1
+fi
+
 echo ""
 echo "=== All Unified Workflow Validation Tests Passed ==="
 echo "New build-and-test.yml workflow is properly configured and ready"

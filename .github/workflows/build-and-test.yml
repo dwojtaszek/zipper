@@ -231,7 +231,7 @@ jobs:
       - name: Generate SBOM (Syft)
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
         with:
-          path: ./
+          path: artifacts
           format: spdx-json
           output-file: zipper.spdx.json
           upload-release-assets: false
@@ -244,6 +244,7 @@ jobs:
           import hashlib
           from pathlib import Path
 
+          # Mirror of release.py:ASSETS plus the generated SBOM
           files = [
               ("artifacts/zipper-linux-x64/zipper-linux-x64", "zipper-linux-x64"),
               ("artifacts/zipper-osx-arm64/zipper-osx-arm64", "zipper-osx-arm64"),

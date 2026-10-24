@@ -326,6 +326,14 @@ if errorlevel 1 (
     echo [OK] Release asset uploads enforce if-no-files-found: error
 )
 
+findstr /C:"test-diagnostics-" "%SHARED_WORKFLOW_FILE%" > nul
+if errorlevel 1 (
+    echo [FAIL] Missing failure diagnostics upload configuration
+    exit /b 1
+) else (
+    echo [OK] Failure diagnostics upload is configured
+)
+
 echo.
 echo === All Unified Workflow Validation Tests Passed ===
 echo New build-and-test.yml workflow is properly configured and ready

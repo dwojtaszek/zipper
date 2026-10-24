@@ -1,7 +1,6 @@
 """Regressions for release provenance — SHA-256 manifest, SBOM, and build attestation (#1220)."""
 from __future__ import annotations
 
-import os
 import unittest
 from pathlib import Path
 
@@ -77,6 +76,8 @@ class ReleaseProvenanceWorkflowTests(unittest.TestCase):
 
         path_val = step_with.get("path", "")
         self.assertIn("TestResults", path_val, "Failure diagnostics must collect TestResults")
+        self.assertIn("test_output", path_val, "Failure diagnostics must collect test_output")
+        self.assertIn("results", path_val, "Failure diagnostics must collect Unix E2E results")
 
     def test_publication_job_has_scoped_oidc_permissions(self):
         """tag-and-release job must have scoped id-token: write and attestations: write permissions."""
@@ -89,7 +90,7 @@ class ReleaseProvenanceWorkflowTests(unittest.TestCase):
         self.assertEqual(perms.get("attestations"), "write", "tag-and-release job missing attestations: write permission")
 
     def test_release_publishes_build_attestation(self):
-        """tag-and-release job must generate build provenance attestation."""
+        """tag-and-release job must generate build provenance attestation covering all binary assets."""
         if not self.release_yaml:
             self.skipTest("PyYAML not installed")
 
@@ -100,8 +101,13 @@ class ReleaseProvenanceWorkflowTests(unittest.TestCase):
         ]
         self.assertEqual(len(attest_steps), 1, "tag-and-release job must include actions/attest-build-provenance step")
 
+        subject_paths = attest_steps[0].get("with", {}).get("subject-path", "")
+        self.assertIn("zipper-linux-x64", subject_paths)
+        self.assertIn("zipper-win-x64.exe", subject_paths)
+        self.assertIn("zipper-osx-arm64", subject_paths)
+
     def test_release_generates_sbom(self):
-        """tag-and-release job must generate an SBOM in a workflow step."""
+        """tag-and-release job must generate an SBOM in SPDX JSON format scoped to artifacts."""
         if not self.release_yaml:
             self.skipTest("PyYAML not installed")
 
@@ -111,6 +117,10 @@ class ReleaseProvenanceWorkflowTests(unittest.TestCase):
             if isinstance(s, dict) and ("anchore/sbom-action@" in str(s.get("uses", "")) or "sbom" in str(s.get("name", "")).lower())
         ]
         self.assertGreater(len(sbom_steps), 0, "tag-and-release job must include an SBOM generation step")
+        sbom_with = sbom_steps[0].get("with", {})
+        self.assertEqual(sbom_with.get("format"), "spdx-json")
+        self.assertEqual(sbom_with.get("output-file"), "zipper.spdx.json")
+        self.assertEqual(sbom_with.get("path"), "artifacts")
 
     def test_release_publishes_checksum_manifest_and_provenance(self):
         """tag-and-release job must generate a SHA-256 manifest and upload provenance assets to the release."""
