@@ -18,15 +18,11 @@ class ReleaseProvenanceWorkflowTests(unittest.TestCase):
             import yaml
             self.ci_yaml = yaml.safe_load(self.ci_text)
             self.release_yaml = yaml.safe_load(self.release_text)
-        except ImportError:
-            self.ci_yaml = None
-            self.release_yaml = None
+        except ImportError as exc:
+            self.fail(f"PyYAML is required to validate workflow YAML contracts: {exc}")
 
     def test_ci_upload_release_artifacts_fail_on_missing_files(self):
         """Release asset uploads in ci.yml must set if-no-files-found: error."""
-        if not self.ci_yaml:
-            self.skipTest("PyYAML not installed")
-
         producer_steps = self.ci_yaml["jobs"]["build-and-test"]["steps"]
         upload_steps = [
             s for s in producer_steps
@@ -57,9 +53,6 @@ class ReleaseProvenanceWorkflowTests(unittest.TestCase):
 
     def test_ci_failure_diagnostics_uploaded_with_extended_retention(self):
         """TestResults and diagnostics must be uploaded on failure with retention > 14 days."""
-        if not self.ci_yaml:
-            self.skipTest("PyYAML not installed")
-
         producer_steps = self.ci_yaml["jobs"]["build-and-test"]["steps"]
         failure_uploads = [
             s for s in producer_steps
@@ -81,9 +74,6 @@ class ReleaseProvenanceWorkflowTests(unittest.TestCase):
 
     def test_publication_job_has_scoped_oidc_permissions(self):
         """tag-and-release job must have scoped id-token: write and attestations: write permissions."""
-        if not self.release_yaml:
-            self.skipTest("PyYAML not installed")
-
         tag_release_job = self.release_yaml["jobs"]["tag-and-release"]
         perms = tag_release_job.get("permissions", {})
         self.assertEqual(perms.get("id-token"), "write", "tag-and-release job missing id-token: write permission")
@@ -91,9 +81,6 @@ class ReleaseProvenanceWorkflowTests(unittest.TestCase):
 
     def test_release_publishes_build_attestation(self):
         """tag-and-release job must generate build provenance attestation covering all binary assets."""
-        if not self.release_yaml:
-            self.skipTest("PyYAML not installed")
-
         steps = self.release_yaml["jobs"]["tag-and-release"]["steps"]
         attest_steps = [
             s for s in steps
@@ -108,9 +95,6 @@ class ReleaseProvenanceWorkflowTests(unittest.TestCase):
 
     def test_release_generates_sbom(self):
         """tag-and-release job must generate an SBOM in SPDX JSON format scoped to artifacts."""
-        if not self.release_yaml:
-            self.skipTest("PyYAML not installed")
-
         steps = self.release_yaml["jobs"]["tag-and-release"]["steps"]
         sbom_steps = [
             s for s in steps
@@ -124,9 +108,6 @@ class ReleaseProvenanceWorkflowTests(unittest.TestCase):
 
     def test_release_publishes_checksum_manifest_and_provenance(self):
         """tag-and-release job must generate a SHA-256 manifest and upload provenance assets to the release."""
-        if not self.release_yaml:
-            self.skipTest("PyYAML not installed")
-
         steps = self.release_yaml["jobs"]["tag-and-release"]["steps"]
         manifest_steps = [
             s for s in steps
@@ -139,6 +120,7 @@ class ReleaseProvenanceWorkflowTests(unittest.TestCase):
             if isinstance(s, dict)
             and "gh release upload" in str(s.get("run", ""))
             and "SHA256SUMS" in str(s.get("run", ""))
+            and "zipper.spdx.json" in str(s.get("run", ""))
         ]
         self.assertEqual(len(upload_provenance_steps), 1, "tag-and-release job must upload SHA256SUMS and SBOM to the release")
 
