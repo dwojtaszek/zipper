@@ -8,26 +8,22 @@
 # fast-forward of a checkout that is supposed to sit on main and stay clean, so
 # it does not need to wait for a run: it needs to not collide with one.
 #
-# The runner reads runner.py once at process start, so replacing the file while a
-# run is in flight cannot affect that run. What must not happen is two git
-# operations mutating this checkout at the same time, so this script refuses to
-# act whenever the checkout is mid-operation, dirty, or locked by another git
-# process, and retries on the next tick instead.
+# The collision is real and not theoretical. The runner mutates this same
+# checkout (`_cleanup_git_state`, `sync_main_repo`, `_sync_main_after_merge`), and
+# `_cleanup_git_state` deletes `.git/index.lock` without checking its age, so a run
+# starting mid-merge would remove the lock an active git process is holding and
+# then run `git rebase --abort` on the same tree. Both sides therefore take the
+# same lock around checkout mutations: this script takes it for the whole run
+# (non-blocking, so a held lock costs one tick), and the runner takes it only
+# around its mutations, never across an agent mission. That is what makes the
+# deploy prompt without making it unsafe.
+#
+# The lock is a directory, not `flock`, because `flock` and `timeout` are GNU
+# utilities that macOS does not ship, and this repository's runner suite runs on
+# macOS in CI. `mkdir` is atomic everywhere.
 #
 # It never discards work: no reset, no checkout, no stash, no clean. If the
 # checkout is not a clean fast-forward, the script does nothing and says why.
-#
-# Known limitation, and why this is not the whole answer: the checks below and the
-# merge are not atomic with respect to the runner's own git operations on this
-# checkout. `git merge` tolerates local edits to files the incoming commit does
-# not touch (measured), so edits created between the clean check and the merge
-# would not stop the fast-forward — they survive it, but the checkout moves while
-# it is not clean, which the promise above says cannot happen. Excluding the runner
-# needs a lock shared around main-repo mutations, and the runner currently holds
-# one lock for a whole agent mission, so sharing it here would stall every deploy
-# for the 20-42 minutes a mission takes — the very delay this script removes. The
-# window closes when the runner's lock is narrowed to main-repo mutations, and
-# this script should then take that lock.
 #
 # Install this OUTSIDE the checkout it deploys, and set REPO_PATH. A copy living
 # inside the tree is an untracked file in the very commit that adds it, so the
@@ -50,15 +46,18 @@ else
     exit 0
 fi
 LOGS_DIR="${DEPLOY_LOGS_DIR:-$REPO_PATH/.zipper-runner/logs}"
-# The lock must not sit in the checkout. `_repo_is_clean()` counts untracked
-# files as dirt, so a stray lock in REPO_PATH makes the runner believe its own
-# checkout is dirty and changes how it recovers a failed sync. Next to the
-# script, it is host-local state and outside the tree being deployed.
-DEPLOY_LOCK="${DEPLOY_LOCK_PATH:-$RUNNER_BASE/.deploy.lock}"
+# Shared with the runner, and inside the checkout because that is where the
+# runner's own lock already lives. It is gitignored for the same reason
+# `runner.lock` is: `_repo_is_clean()` counts untracked files as dirt, so an
+# unignored lock here would make the runner believe its own checkout is dirty.
+REPO_LOCK="${REPO_MUTATION_LOCK_PATH:-$REPO_PATH/.zipper-runner/repo-mutation.lock}"
 REMOTE_REF="${MAIN_REMOTE_REF:-origin/main}"
 # Shorter than the tick interval would be pointless (nothing would retry sooner);
 # long enough to survive a slow handshake, short enough to not stall the timer.
 FETCH_TIMEOUT="${DEPLOY_FETCH_TIMEOUT:-45}"
+# Longer than the runner's own slowest single mutation (its network git timeout),
+# so a legitimately slow fetch is never mistaken for a crashed one and stolen.
+LOCK_STALE_SECONDS="${DEPLOY_LOCK_STALE_SECONDS:-1200}"
 
 mkdir -p "$LOGS_DIR"
 LOG_FILE="$LOGS_DIR/deploy_$(date +%Y%m%d_%H%M%S)_$$.log"
@@ -66,17 +65,54 @@ exec >> "$LOG_FILE" 2>&1
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*"; }
 
+now_epoch() { date +%s; }
+
+# Set only once this process actually holds the lock. The EXIT trap is installed
+# before the lock is attempted, so an unguarded release would delete a lock this
+# process does not hold — including the runner's, on the very skip path that
+# exists to leave it alone. That would hand the lock to the next tick while the
+# runner is still mid-mutation, which is the hazard the lock was added to remove.
+HOLDS_LOCK=0
+
+# Take the shared main-checkout lock, or report why not. Non-blocking on purpose:
+# waiting would hold this unit open behind a runner mutation, and the next tick
+# is a minute away.
+acquire_repo_lock() {
+    if mkdir "$REPO_LOCK" 2>/dev/null; then
+        now_epoch > "$REPO_LOCK/created"
+        HOLDS_LOCK=1
+        return 0
+    fi
+    created="$(cat "$REPO_LOCK/created" 2>/dev/null || true)"
+    now="$(now_epoch)"
+    if [ -n "$created" ] && [ "$((now - created))" -gt "$LOCK_STALE_SECONDS" ]; then
+        log "WARN: stealing a stale main-checkout lock (age $((now - created))s)."
+        rm -rf "$REPO_LOCK"
+        if mkdir "$REPO_LOCK" 2>/dev/null; then
+            now_epoch > "$REPO_LOCK/created"
+            HOLDS_LOCK=1
+            return 0
+        fi
+    fi
+    return 1
+}
+
+release_repo_lock() {
+    [ "$HOLDS_LOCK" = 1 ] || return 0
+    rm -rf "$REPO_LOCK" 2>/dev/null || true
+}
+trap release_repo_lock EXIT
+
 cd "$REPO_PATH" || { log "SKIP: cannot enter $REPO_PATH."; exit 0; }
 if ! git rev-parse --git-dir >/dev/null 2>&1; then
     log "SKIP: $REPO_PATH is not a git checkout."
     exit 0
 fi
 
-# Serialize this script against itself. A previous tick still fetching would
-# otherwise race the current one on the same index.
-exec 9> "$DEPLOY_LOCK"
-if ! flock -n 9; then
-    log "SKIP: another deploy is still running."
+# Everything below runs under the lock: the state checks are only meaningful if
+# nothing else can mutate the checkout between them and the merge.
+if ! acquire_repo_lock; then
+    log "SKIP: the main checkout is locked by the runner or another deploy."
     exit 0
 fi
 
@@ -111,11 +147,20 @@ fi
 
 before="$(git rev-parse HEAD 2>/dev/null)"
 
-# Bounded on purpose. This runs once a minute, so a fetch that blocks for minutes
-# is worse than a fetch that fails: a transient network stall would hold the unit
-# open and delay every deploy behind it, when the next tick would have retried
-# sooner anyway. Measured on an unreachable origin: git stalls for ~300s.
-if ! fetch_out="$(timeout "$FETCH_TIMEOUT" git fetch origin main 2>&1)"; then
+# Bounded twice over, and both bounds are portable. `timeout`/`gtimeout` is the
+# hard cap when the host has one; git's own low-speed abort covers the measured
+# failure (a stalled transfer, ~300s) everywhere else, including macOS, which
+# ships neither binary. This runs once a minute, so a fetch that blocks for
+# minutes is worse than a fetch that fails: the next tick retries.
+FETCH_CMD=(git -c "http.lowSpeedLimit=1" -c "http.lowSpeedTime=$FETCH_TIMEOUT" fetch origin main)
+for candidate in timeout gtimeout; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+        FETCH_CMD=("$candidate" "$FETCH_TIMEOUT" "${FETCH_CMD[@]}")
+        break
+    fi
+done
+
+if ! fetch_out="$("${FETCH_CMD[@]}" 2>&1)"; then
     log "SKIP: git fetch failed or exceeded ${FETCH_TIMEOUT}s: $fetch_out"
     exit 0
 fi

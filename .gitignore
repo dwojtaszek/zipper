@@ -86,6 +86,10 @@ graphify_audit/
 # safety net for running the copy that lives in the tree.
 .zipper-runner/.deploy.lock
 .zipper-runner/deploy.lock
+# The lock the runner and deploy-main.sh share around main-checkout mutations. It
+# lives in the checkout by design (next to runner.lock) and must stay ignored for
+# the same reason.
+.zipper-runner/repo-mutation.lock
 .zipper-runner/**/__pycache__/
 __pycache__/
 *.pyc

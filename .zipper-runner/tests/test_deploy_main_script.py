@@ -33,6 +33,7 @@ class _Repo:
         self.installed.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(_SCRIPT, self.installed)
         self.installed.chmod(0o755)
+        self.lock_path = self.root / "repo-mutation.lock"
         self._git("init", "--quiet", "--bare", "--initial-branch=main",
                   str(self.origin), cwd=self.root)
         self._git("clone", "--quiet", str(self.origin), str(self.checkout), cwd=self.root)
@@ -61,6 +62,11 @@ class _Repo:
 
     def head(self) -> str:
         return self._git("rev-parse", "HEAD").stdout.strip()
+
+    def hold_lock(self, age_seconds: int = 0) -> None:
+        """Take the shared main-checkout lock, as the runner or a peer deploy does."""
+        self.lock_path.mkdir(exist_ok=True)
+        (self.lock_path / "created").write_text(str(int(time.time()) - age_seconds))
 
     def push_upstream_commit(self, content: str, message: str) -> str:
         pusher = self.root / f"pusher-{message}"
@@ -91,7 +97,7 @@ class _Repo:
         env = dict(os.environ)
         env["REPO_PATH"] = str(self.checkout)
         env["DEPLOY_LOGS_DIR"] = str(self.root / "logs")
-        env["DEPLOY_LOCK_PATH"] = str(self.root / "deploy.lock")
+        env["REPO_MUTATION_LOCK_PATH"] = str(self.lock_path)
         return subprocess.run([str(self.installed)], capture_output=True, text=True, env=env)
 
     def logs(self) -> str:
@@ -214,10 +220,115 @@ class DeployMainScriptTests(unittest.TestCase):
         self.assertEqual((self.repo.checkout / "secret.txt").read_text(), "LOCAL PRECIOUS\n")
         self.assertIn("not a fast-forward", self.repo.logs())
 
+    def test_deploy_whenLockIsHeldByAnotherRun_shouldSkipWithoutTouchingTheCheckout(self):
+        self.repo.push_upstream_commit("two\n", "c2")
+        before = self.repo.head()
+        self.repo.hold_lock()
+
+        result = self.repo.run_script()
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(self.repo.head(), before)
+        self.assertIn("locked by the runner or another deploy", self.repo.logs())
+        self.assertTrue(self.repo.lock_path.exists(),
+                        "a skipped deploy must leave the other holder's lock alone")
+
+    def test_deploy_whenLockIsHeldByAStaleHolder_shouldReclaimItAndDeploy(self):
+        """A crashed deploy must not wedge every later tick. The bound is longer
+        than the runner's slowest mutation, so a live holder is never stolen."""
+        new_upstream = self.repo.push_upstream_commit("two\n", "c2")
+        self.repo.hold_lock(age_seconds=3600)
+
+        result = self.repo.run_script()
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(self.repo.head(), new_upstream, "a stale lock must not block the deploy")
+        self.assertIn("stealing a stale main-checkout lock", self.repo.logs())
+
+    def test_deploy_whenLockIsFreshButTheRunnerIsWorking_shouldNotStealIt(self):
+        """The stale bound must exceed the runner's slowest mutation, or a slow
+        fetch would be mistaken for a crashed holder and the lock stolen mid-write."""
+        self.repo.push_upstream_commit("two\n", "c2")
+        before = self.repo.head()
+        self.repo.hold_lock(age_seconds=600)
+
+        result = self.repo.run_script()
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(self.repo.head(), before, "a live holder must not be stolen from")
+        self.assertIn("locked by the runner or another deploy", self.repo.logs())
+        self.assertTrue(self.repo.lock_path.exists(),
+                        "a skipped deploy must leave the other holder's lock alone")
+
+    def test_deploy_whenRepoPathIsNotACheckout_shouldNotDeleteAnotherHoldersLock(self):
+        """The EXIT trap runs on every exit path, including the ones that give up
+        before the lock is even attempted. An unguarded release there would delete
+        the runner's lock and hand it to the next tick mid-mutation."""
+        self.repo.hold_lock()
+        not_a_repo = self.repo.root / "not-a-repo"
+        not_a_repo.mkdir()
+        env = dict(os.environ)
+        env["REPO_PATH"] = str(not_a_repo)
+        env["DEPLOY_LOGS_DIR"] = str(self.repo.root / "logs")
+        env["REPO_MUTATION_LOCK_PATH"] = str(self.repo.lock_path)
+
+        result = subprocess.run([str(self.repo.installed)], capture_output=True, text=True, env=env)
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("not a git checkout", self.repo.logs())
+        self.assertTrue(self.repo.lock_path.exists(),
+                        "an early exit must not delete another holder's lock")
+
+    def test_deploy_whenItFinishes_shouldReleaseTheSharedLock(self):
+        """The runner waits for this lock. Leaving it behind would make every later
+        run skip its mutations until the stale bound expired."""
+        self.repo.push_upstream_commit("two\n", "c2")
+
+        self.repo.run_script()
+
+        self.assertFalse(self.repo.lock_path.exists(), "the lock must be released on exit")
+
+    def test_deploy_whenFetching_shouldAlwaysBoundTheStallInPortableGitConfig(self):
+        """`timeout`/`gtimeout` is absent on macOS, where CI runs this suite, so the
+        git-level low-speed abort is the bound that always applies."""
+        self.repo.push_upstream_commit("two\n", "c2")
+
+        # A git that records its own arguments, fails only the fetch, and is the
+        # real git otherwise, so the pre-fetch state checks still behave.
+        recorder = self.repo.root / "recorder"
+        recorder.mkdir(exist_ok=True)
+        calls = recorder / "calls.txt"
+        fake_bin = self.repo.root / "fakebin-args"
+        fake_bin.mkdir(exist_ok=True)
+        real_git = shutil.which("git")
+        (fake_bin / "git").write_text(
+            "#!/bin/bash\n"
+            f'printf "%s\\n" "$*" >> "{calls}"\n'
+            "for a in \"$@\"; do [ \"$a\" = fetch ] && exit 1; done\n"
+            f'exec "{real_git}" "$@"\n'
+        )
+        (fake_bin / "git").chmod(0o755)
+
+        env = dict(os.environ)
+        env["REPO_PATH"] = str(self.repo.checkout)
+        env["DEPLOY_LOGS_DIR"] = str(self.repo.root / "logs")
+        env["REPO_MUTATION_LOCK_PATH"] = str(self.repo.lock_path)
+        env["DEPLOY_FETCH_TIMEOUT"] = "7"
+        env["PATH"] = f"{fake_bin}:{env['PATH']}"
+
+        subprocess.run([str(self.repo.installed)], capture_output=True, text=True, env=env)
+
+        fetch_calls = [line for line in calls.read_text().splitlines() if "fetch" in line]
+        self.assertEqual(len(fetch_calls), 1, "the fetch must be the recorded call")
+        self.assertIn("http.lowSpeedLimit=1", fetch_calls[0])
+        self.assertIn("http.lowSpeedTime=7", fetch_calls[0])
+
     def test_deploy_whenFetchHangs_shouldGiveUpWithinTheBoundAndNotStall(self):
         """A real unreachable origin stalled git for ~300s. On a one-minute timer
         that holds the unit open and delays every deploy behind it, so the fetch
         is bounded and the next tick retries."""
+        if shutil.which("timeout") is None and shutil.which("gtimeout") is None:
+            self.skipTest("needs a timeout binary to bound a git that ignores the stall config")
         self.repo.push_upstream_commit("two\n", "c2")
         before = self.repo.head()
 
@@ -235,7 +346,7 @@ class DeployMainScriptTests(unittest.TestCase):
         env = dict(os.environ)
         env["REPO_PATH"] = str(self.repo.checkout)
         env["DEPLOY_LOGS_DIR"] = str(self.repo.root / "logs")
-        env["DEPLOY_LOCK_PATH"] = str(self.repo.root / "deploy.lock")
+        env["REPO_MUTATION_LOCK_PATH"] = str(self.repo.lock_path)
         env["DEPLOY_FETCH_TIMEOUT"] = "2"
         env["PATH"] = f"{fake_bin}:{env['PATH']}"
 
@@ -294,23 +405,6 @@ class DeployMainScriptTests(unittest.TestCase):
         self.assertTrue((self.repo.checkout / "local.txt").exists())
         self.assertFalse((self.repo.checkout / ".git" / "MERGE_HEAD").exists(),
                          "no merge may be left in progress")
-
-    def test_deploy_whenLockIsHeldByAnotherRun_shouldSkipWithoutTouchingTheCheckout(self):
-        self.repo.push_upstream_commit("two\n", "c2")
-        before = self.repo.head()
-        lock_path = self.repo.root / "deploy.lock"
-        holder = subprocess.Popen(
-            ["flock", "-x", str(lock_path), "sleep", "5"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
-        self.addCleanup(holder.wait)
-        time.sleep(0.4)  # let flock take it
-
-        result = self.repo.run_script()
-
-        self.assertEqual(result.returncode, 0)
-        self.assertEqual(self.repo.head(), before)
-        self.assertIn("another deploy is still running", self.repo.logs())
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import contextlib
 import csv
 import argparse
 import gzip
@@ -50,6 +51,16 @@ REPO_PATH = os.environ.get("REPO_PATH", os.path.abspath(os.path.join(RUNNER_BASE
 WORKTREES_BASE = os.environ.get("WORKTREES_BASE", os.path.join(REPO_PATH, ".worktrees"))
 PLUGINS_DIR = os.environ.get("PLUGINS_DIR", os.path.join(RUNNER_BASE, "plugins"))
 LOCK_FILE_PATH = os.environ.get("LOCK_FILE_PATH", os.path.join(RUNNER_BASE, "runner.lock"))
+# Shared with .zipper-runner/deploy-main.sh, which fast-forwards this checkout from
+# outside the runner. The runner's own lock cannot serve this purpose: it is held
+# for a whole agent mission, so sharing it would stall every deploy for the 20-42
+# minutes a mission takes. This one is held only around git mutations.
+REPO_MUTATION_LOCK_PATH = os.environ.get(
+    "REPO_MUTATION_LOCK_PATH", os.path.join(RUNNER_BASE, "repo-mutation.lock"))
+REPO_MUTATION_LOCK_TIMEOUT = int(os.environ.get("REPO_MUTATION_LOCK_TIMEOUT", "120"))
+# Must exceed the runner's own slowest single mutation (NETWORK_GIT_TIMEOUT), or a
+# legitimately slow fetch would be mistaken for a crashed holder and stolen.
+REPO_MUTATION_LOCK_STALE_SECONDS = int(os.environ.get("REPO_MUTATION_LOCK_STALE_SECONDS", "1200"))
 EMAIL_RECIPIENT = os.environ.get("EMAIL_RECIPIENT", "dwojtaszek@gmail.com")
 MAX_ACTIVE_WORKTREES = int(os.environ.get("MAX_ACTIVE_WORKTREES", "1"))
 ACTIVE_AGENT = os.environ.get("ACTIVE_AGENT", "")
@@ -786,8 +797,91 @@ def _remove_worktree(wt_path: str, branch: str = "", *, is_merged: bool = False,
     return True
 
 
+_repo_mutation_lock_depth = 0
+
+
+def _steal_stale_repo_mutation_lock() -> bool:
+    """Remove the main-checkout lock when its holder is provably gone or wedged."""
+    try:
+        age = time.time() - os.path.getmtime(REPO_MUTATION_LOCK_PATH)
+    except OSError:
+        return False
+    if age <= REPO_MUTATION_LOCK_STALE_SECONDS:
+        return False
+    print(f"REPO LOCK: stealing a stale main-checkout lock (age {int(age)}s).")
+    shutil.rmtree(REPO_MUTATION_LOCK_PATH, ignore_errors=True)
+    return True
+
+
+@contextlib.contextmanager
+def _repo_mutation_lock(timeout: int | None = None):
+    """Exclusive lock around git mutations of the main checkout.
+
+    The deploy timer fast-forwards this same checkout from outside the runner, and
+    `_cleanup_git_state` deletes `.git/index.lock` without checking its age, so a
+    run starting mid-deploy would remove the lock an active git process holds and
+    then run `git rebase --abort` on the same tree. Both sides take this lock; the
+    runner takes it only around mutations, never across an agent mission, so a
+    deploy waits at most one mutation instead of a whole run.
+
+    Yields True when the caller may mutate and False when it may not, in which case
+    the caller must skip its mutation rather than proceed: another process is
+    mid-operation on this checkout, and git's own index lock is not sufficient
+    protection while `_cleanup_git_state` can delete it.
+
+    Re-entrant within a process, so a locked helper may call another locked helper.
+    The lock is a directory, because the shell side must take it too and `flock` is
+    absent on macOS, where this repository's runner suite runs in CI.
+    """
+    global _repo_mutation_lock_depth
+    if _repo_mutation_lock_depth > 0:
+        _repo_mutation_lock_depth += 1
+        try:
+            yield True
+        finally:
+            _repo_mutation_lock_depth -= 1
+        return
+
+    wait = REPO_MUTATION_LOCK_TIMEOUT if timeout is None else timeout
+    deadline = time.time() + wait
+    acquired = False
+    while True:
+        try:
+            os.mkdir(REPO_MUTATION_LOCK_PATH)
+            acquired = True
+            break
+        except FileExistsError:
+            if _steal_stale_repo_mutation_lock():
+                continue
+        except OSError as e:
+            print(f"REPO LOCK: cannot create {REPO_MUTATION_LOCK_PATH}: {e}")
+            break
+        if time.time() >= deadline:
+            break
+        time.sleep(1)
+
+    if not acquired:
+        print(f"REPO LOCK: main checkout busy for {wait}s; skipping this mutation.")
+        yield False
+        return
+
+    _repo_mutation_lock_depth = 1
+    try:
+        yield True
+    finally:
+        _repo_mutation_lock_depth = 0
+        shutil.rmtree(REPO_MUTATION_LOCK_PATH, ignore_errors=True)
+
+
 def _cleanup_git_state():
     """Cleans up stale git state: index lock, stuck rebase/merge/cherry-pick/etc."""
+    with _repo_mutation_lock() as locked:
+        if not locked:
+            return
+        _cleanup_git_state_locked()
+
+
+def _cleanup_git_state_locked():
     cwd = REPO_PATH
 
     index_lock = os.path.join(cwd, ".git", "index.lock")
@@ -2197,17 +2291,21 @@ def _active_worktree_count() -> int:
 
 
 def _sync_main_after_merge() -> bool:
-    code, branch, _ = run_cmd(["git", "branch", "--show-current"], cwd=REPO_PATH)
-    if code != 0 or branch.strip() != "main" or not _repo_is_clean(REPO_PATH):
-        print("Main sync deferred: repository is not clean on main. User work preserved.")
-        return False
-    for command in (["git", "fetch", "origin", "main"], ["git", "merge", "--ff-only", MAIN_REMOTE_REF]):
-        code, _, error = run_cmd(command, cwd=REPO_PATH, timeout=NETWORK_GIT_TIMEOUT if command[1] == "fetch" else None)
-        if code != 0:
-            print(f"Main sync deferred: {error.strip()}")
+    with _repo_mutation_lock() as locked:
+        if not locked:
+            print("Main sync deferred: main checkout is busy with another operation.")
             return False
-    print("Main synchronized after merge.")
-    return True
+        code, branch, _ = run_cmd(["git", "branch", "--show-current"], cwd=REPO_PATH)
+        if code != 0 or branch.strip() != "main" or not _repo_is_clean(REPO_PATH):
+            print("Main sync deferred: repository is not clean on main. User work preserved.")
+            return False
+        for command in (["git", "fetch", "origin", "main"], ["git", "merge", "--ff-only", MAIN_REMOTE_REF]):
+            code, _, error = run_cmd(command, cwd=REPO_PATH, timeout=NETWORK_GIT_TIMEOUT if command[1] == "fetch" else None)
+            if code != 0:
+                print(f"Main sync deferred: {error.strip()}")
+                return False
+        print("Main synchronized after merge.")
+        return True
 
 
 _WIP_CONTINUATIONS: set[str] = set()
@@ -3824,6 +3922,14 @@ def select_next_issue():
     return None
 
 def verify_repo_on_main():
+    with _repo_mutation_lock() as locked:
+        if not locked:
+            print("RECOVERY: main checkout is busy with another operation; deferring branch recovery.")
+            return False
+        return _verify_repo_on_main_locked()
+
+
+def _verify_repo_on_main_locked():
     _cleanup_git_state()
 
     code, out, err = run_cmd(["git", "branch", "--show-current"], cwd=REPO_PATH)
@@ -4049,6 +4155,14 @@ def _recover_dirty_main_repo(rebase_err: str):
 
 
 def sync_main_repo():
+    with _repo_mutation_lock() as locked:
+        if not locked:
+            print("Main sync deferred: main checkout is busy with another operation.")
+            return False
+        return _sync_main_repo_locked()
+
+
+def _sync_main_repo_locked():
     _fetch_origin_or_abort()
     _check_ignored_file_collisions()
 
