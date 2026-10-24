@@ -1445,6 +1445,12 @@ def _commit_identity(sha) -> tuple[str, str] | None:
     only in message, author, and dates, so merging either has the same effect —
     but only for a single-parent commit, so a merge commit and a root commit are
     both refused.
+
+    The 40-hex validation on both fields is load-bearing, not defensive: jq
+    interpolates an absent field as the literal string ``null``, so a degraded
+    payload with no ``commit.tree`` still yields a well-formed two-field line.
+    Two commits both reading ``null`` would compare equal and authorize a head
+    whose tree was never checked.
     """
     if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha):
         return None
@@ -1475,10 +1481,16 @@ def _adopt_tree_identical_head(pr_number, issue_number, branch, current_sha) -> 
 
     Every guard is a hard requirement, and any failure leaves the head
     unauthorized: the recorded state must name this exact PR and branch, and both
-    commits must resolve to the same tree *and* the same parent. An unreadable
-    commit (API failure, expired token) can never authorize, and neither can an
-    equal tree hung off a different parent, which would delete whatever that
+    commits must resolve to the same tree *and* the same parent, each a well-formed
+    40-hex SHA. An unreadable commit (API failure, expired token) can never
+    authorize, nor can a response jq degraded into the literal string ``null``, nor
+    an equal tree hung off a different parent, which would delete whatever that
     parent gained.
+
+    A caller that passes ``expected_head`` is only reached when the PR head already
+    equals it, so adoption is free to run: the head it returns is the one the
+    caller demanded. The record is stale even though the head is not, which is
+    exactly what adoption repairs.
 
     Returns True when the recorded head was advanced to ``current_sha``, or when a
     dry run would advance it without persisting anything.

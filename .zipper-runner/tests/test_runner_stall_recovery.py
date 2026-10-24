@@ -6,10 +6,15 @@ matched, and every recovery path was either silent or circular. The single
 worktree slot stayed occupied, intake skipped all four cycles, and no email was
 ever sent.
 
-The runner deliberately never adopts a head it cannot attribute to its own
-recorded work, because the recorded head is exactly what the force-push guard in
-_reconcile_active_worktree uses to notice a rewrite. What was missing was the
-signal, so these guards are:
+The runner adopts a moved head only when it is provably the same work: the
+recorded and current commits must resolve to the same git tree *and* the same
+single parent, so the rewrite changed nothing but the commit message. Any other
+rewrite is never adopted, because the recorded head is what the force-push guard
+in _reconcile_active_worktree uses to notice a rewrite. Adoption does advance that
+value, so _reconcile_active_worktree then rebases the worktree onto the adopted
+head instead of taking its rewrite branch; a local-only commit still survives and
+the PR is re-gated rather than merged unreviewed. What was missing was the signal,
+so these guards are:
 
   * escalation instead of a silent return when authorization fails,
   * a rate-limited blocked-worktree email naming a reason it can actually see,
@@ -516,10 +521,40 @@ class TreeIdenticalHeadAdoptionTests(unittest.TestCase):
                          "an unadopted head must not change the record")
 
     def test_malformedCommitIdentity_isNotAdopted(self):
-        """A malformed API response must not be read as an identity match."""
+        """A malformed API response must not be read as an identity match. Both
+        sides carry the SAME malformed field, so this only fails if the field is
+        actually validated — a differing malformed value would be rejected by the
+        plain comparison alone and prove nothing."""
+        malformed = f"{self.fixture.old_tree} not-a-sha"
         (self.root / "identities.json").write_text(json.dumps({
-            self.fixture.old_head: f"{self.fixture.old_tree} {self.fixture.old_parent}",
-            self.fixture.same_tree_head: f"{self.fixture.old_tree} not-a-sha",
+            self.fixture.old_head: malformed,
+            self.fixture.same_tree_head: malformed,
+        }))
+        self._write_pr(self.fixture.same_tree_head)
+        self.assertIsNone(self.runner._authorized_pr(99, "42"))
+        self.assertEqual(self._recorded_head(), self.fixture.old_head)
+
+    def test_nullInterpolatedTree_isNotAdopted(self):
+        """jq interpolates an absent field as the literal string "null", so a
+        degraded payload without commit.tree still yields a well-formed two-field
+        identity. Two sides reading "null" share no real tree, and the tree field
+        is what the 40-hex validation exists to reject."""
+        degraded = f"null {self.fixture.old_parent}"
+        (self.root / "identities.json").write_text(json.dumps({
+            self.fixture.old_head: degraded,
+            self.fixture.same_tree_head: degraded,
+        }))
+        self._write_pr(self.fixture.same_tree_head)
+        self.assertIsNone(self.runner._authorized_pr(99, "42"))
+        self.assertEqual(self._recorded_head(), self.fixture.old_head)
+
+    def test_nullInterpolatedParent_isNotAdopted(self):
+        """The same degradation on the parent field, which no other guard covers:
+        a shared tree with an unusable parent cannot pin what the commit changes."""
+        degraded = f"{self.fixture.old_tree} null"
+        (self.root / "identities.json").write_text(json.dumps({
+            self.fixture.old_head: degraded,
+            self.fixture.same_tree_head: degraded,
         }))
         self._write_pr(self.fixture.same_tree_head)
         self.assertIsNone(self.runner._authorized_pr(99, "42"))
@@ -610,12 +645,63 @@ class TreeIdenticalHeadAdoptionTests(unittest.TestCase):
         self.assertIn(self.fixture.old_head, body)
         self.assertIn(self.fixture.same_tree_head, body)
 
-    def test_adoption_isRefusedWhenExpectedHeadIsPassed(self):
-        """A caller that demands a specific head (the merge path) must never get
-        a different one back, even when the tree matches."""
+    def test_adoption_isRefusedWhenExpectedHeadIsStale(self):
+        """A caller that demands a specific head (the merge path) must never get a
+        different one back, even when the tree matches."""
         self._write_pr(self.fixture.same_tree_head)
         self.assertIsNone(self.runner._authorized_pr(99, "42", self.fixture.old_head))
         self.assertEqual(self._recorded_head(), self.fixture.old_head)
+
+    def test_adoption_isAllowedWhenExpectedHeadIsTheCurrentHead(self):
+        """When the demanded head IS the current head the caller's contract holds,
+        so adoption proceeds and records it: the PR head is exactly what was asked
+        for, and the stale record was the only thing blocking authorization."""
+        self._write_pr(self.fixture.same_tree_head)
+        authorized = self.runner._authorized_pr(99, "42", self.fixture.same_tree_head)
+        self.assertIsNotNone(authorized)
+        self.assertEqual(authorized["head"]["sha"], self.fixture.same_tree_head,
+                         "the returned head must be the one the caller demanded")
+        self.assertEqual(self._recorded_head(), self.fixture.same_tree_head)
+        self.assertEqual(len(self.fixture.emails.subjects()), 1)
+
+
+    def test_adoptedHead_reconcileKeepsLocalOnlyCommits(self):
+        """Adoption advances authorized_head, so _reconcile_active_worktree sees
+        previous_head == reviewed_head and skips its rewrite branch. The local
+        worktree is then rebased onto the adopted head instead, so a local-only
+        commit must still survive — and the rebase must re-gate the PR rather than
+        let it merge unreviewed."""
+        wt = self.root / "worktrees" / "issue-42"
+        subprocess.run(["git", "-C", str(self.fixture.repo), "worktree", "add",
+                        str(wt), "fix/ISSUE-42-proof"], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(wt), "reset", "--hard", self.fixture.old_head],
+                       check=True, capture_output=True)
+        (wt / "local.txt").write_text("local only")
+        subprocess.run(["git", "-C", str(wt), "add", "."], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(wt), "commit", "-m", "wip: local only"],
+                       check=True, capture_output=True)
+
+        self._write_pr(self.fixture.same_tree_head)
+        self.assertIsNotNone(self.runner._authorized_pr(99, "42"))
+        recorded = json.loads((self.root / "state" / "issue-42.json").read_text())["authorized_head"]
+        self.assertEqual(recorded, self.fixture.same_tree_head)
+
+        code, head, _ = self.runner._reconcile_active_worktree(
+            str(wt), "fix/ISSUE-42-proof", 99, self.fixture.same_tree_head, recorded)
+
+        self.assertEqual(code, 0, "the adopted head must reconcile cleanly")
+        self.assertTrue((wt / "local.txt").exists(),
+                        "the local-only commit must survive the reconciliation")
+        self.assertNotEqual(head.strip(), self.fixture.old_head,
+                            "the worktree must have moved off the stale head")
+        self.assertNotEqual(head.strip(), recorded,
+                            "the replayed local commit must remain on top of the adopted head")
+        self.assertEqual(
+            subprocess.check_output(["git", "-C", str(wt), "rev-parse", "HEAD^"], text=True).strip(),
+            recorded,
+            "the replayed local commit must be parented on the adopted head")
+        self.assertTrue((self.root / "state" / "pr-99-coderabbit-gate.json").exists(),
+                        "a rebased local completion must be re-gated before merge")
 
 
 @unittest.skipUnless(shutil.which("jq"), "the real jq program is what these tests pin")
