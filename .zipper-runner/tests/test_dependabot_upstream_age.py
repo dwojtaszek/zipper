@@ -12,6 +12,7 @@ Tests:
    - Tampered/mismatched head or unauthorized author fails closed.
    - Unrecorded security updates do not accidentally bypass.
 5. Integration with babysit_dependabot_prs auto-merge decision flow and logging.
+6. Publication timestamp parsing tolerates the fractional-second forms providers emit.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -492,3 +493,50 @@ updated-dependencies:
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PublishTimestampParsingTests(unittest.TestCase):
+    """Publication timestamps arrive in several fractional-second forms.
+
+    ``datetime.fromisoformat`` accepts only 3 or 6 fractional digits before
+    Python 3.11, while NuGet publishes .NET tick precision (7 digits) and npm
+    uses millisecond precision. A timestamp that fails to parse fails the
+    upstream-age check closed, so these forms must parse rather than block
+    every Dependabot PR on such a host.
+    """
+
+    def test_parse_publish_timestamp_fractionalSeconds_ofAnyLength_TruncateToMicroseconds(self):
+        cases = {
+            "2026-10-20T10:30:00.1234567+00:00": "2026-10-20T10:30:00.123456+00:00",
+            "2026-10-20T10:30:00.55+00:00": "2026-10-20T10:30:00.550000+00:00",
+            "2026-10-20T10:30:00.123+00:00": "2026-10-20T10:30:00.123000+00:00",
+            "2026-10-20T10:30:00.123456+00:00": "2026-10-20T10:30:00.123456+00:00",
+        }
+        for value, expected in cases.items():
+            with self.subTest(value=value):
+                self.assertEqual(runner._parse_publish_timestamp(value).isoformat(), expected)
+
+    def test_parse_publish_timestamp_zuluAndExplicitOffset_ResolveToTheSameInstant(self):
+        self.assertEqual(
+            runner._parse_publish_timestamp("2026-10-20T10:30:00Z"),
+            runner._parse_publish_timestamp("2026-10-20T10:30:00+00:00"),
+        )
+
+    def test_parse_publish_timestamp_unparseable_raisesValueError(self):
+        # Callers rely on the raise: NuGet and npm fail the age check closed from
+        # their except branch, and GitHub Actions falls through to the next tag.
+        # Returning None here would silently change that control flow.
+        for value in ["", "not-a-timestamp", "2026-13-45T99:99:99Z"]:
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError):
+                    runner._parse_publish_timestamp(value)
+
+    @patch("urllib.request.urlopen")
+    def test_fetch_nuget_publish_timestamp_sevenDigitFraction_ParsesInsteadOfFailingClosed(self, mock_urlopen):
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps({"published": "2026-10-20T10:30:00.1234567+00:00"}).encode()
+        mock_resp.__enter__.return_value = mock_resp
+        mock_urlopen.return_value = mock_resp
+
+        ts = runner._fetch_upstream_publish_timestamp("Newtonsoft.Json", "13.0.3", "nuget")
+        self.assertEqual(ts, datetime(2026, 10, 20, 10, 30, 0, 123456, tzinfo=timezone.utc))

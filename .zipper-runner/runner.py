@@ -3355,6 +3355,26 @@ def _resolve_dependency_ecosystem(dependency_name: str, branch_name: str = "") -
     return "nuget"
 
 
+_PUBLISH_FRACTION_RE = re.compile(r"\.(\d+)")
+
+
+def _parse_publish_timestamp(pub: str) -> datetime:
+    """Parse a provider publication timestamp, tolerating fractional seconds of any length.
+
+    ``datetime.fromisoformat`` accepts only 3 or 6 fractional digits before
+    Python 3.11, while NuGet publishes .NET tick precision (7 digits) and npm
+    uses millisecond precision. A timestamp that fails to parse fails the
+    upstream-age check closed, which would silently block every Dependabot PR
+    on such a host. Raises ValueError for input that is not a timestamp, so the
+    callers keep their existing failure handling.
+    """
+    text = pub.replace("Z", "+00:00")
+    match = _PUBLISH_FRACTION_RE.search(text)
+    if match and len(match.group(1)) not in (3, 6):
+        text = text[:match.start(1)] + (match.group(1) + "000000")[:6] + text[match.end(1):]
+    return datetime.fromisoformat(text)
+
+
 def _fetch_upstream_publish_timestamp(name: str, version: str, ecosystem: str) -> datetime | None:
     """Fetch upstream release publication date in UTC for a package or action."""
     if ecosystem == "nuget":
@@ -3367,7 +3387,7 @@ def _fetch_upstream_publish_timestamp(name: str, version: str, ecosystem: str) -
                 data = json.loads(resp.read().decode())
                 pub = data.get("published")
                 if pub:
-                    return datetime.fromisoformat(pub.replace("Z", "+00:00"))
+                    return _parse_publish_timestamp(pub)
         except urllib.error.HTTPError as e:
             if e.code != 404:
                 print(f"[dependabot] NuGet API error for {name} {version}: {e}")
@@ -3387,7 +3407,7 @@ def _fetch_upstream_publish_timestamp(name: str, version: str, ecosystem: str) -
                         if entry.get("version", "").lower() == version.lower():
                             pub = entry.get("published")
                             if pub:
-                                return datetime.fromisoformat(pub.replace("Z", "+00:00"))
+                                return _parse_publish_timestamp(pub)
         except Exception as e:
             print(f"[dependabot] NuGet index request error for {name} {version}: {e}")
             return None
@@ -3410,7 +3430,7 @@ def _fetch_upstream_publish_timestamp(name: str, version: str, ecosystem: str) -
                         continue
                     pub = rel.get("published_at")
                     if pub:
-                        return datetime.fromisoformat(pub.replace("Z", "+00:00"))
+                        return _parse_publish_timestamp(pub)
                 except Exception:
                     pass
         return None
@@ -3424,7 +3444,7 @@ def _fetch_upstream_publish_timestamp(name: str, version: str, ecosystem: str) -
                 time_map = data.get("time", {})
                 pub = time_map.get(version)
                 if pub:
-                    return datetime.fromisoformat(pub.replace("Z", "+00:00"))
+                    return _parse_publish_timestamp(pub)
         except Exception as e:
             print(f"[dependabot] npm request error for {name} {version}: {e}")
             return None
