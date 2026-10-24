@@ -307,11 +307,30 @@ def _fallback() -> bool:
 
 # ---------------------------------------------------------------------------
 
+# Email is an outward-facing side effect, so importing this module must never be
+# enough to send one. Production runs the file as a script (cron-wrapper.sh), so
+# __main__ is the normal case. Tests import it, and a test that exercises an email
+# path used to deliver real mail to the maintainer on every run; the few tests that
+# assert delivery set this flag deliberately.
+EMAIL_DELIVERY_ENABLED = False
+
+
+def _email_delivery_permitted() -> bool:
+    return EMAIL_DELIVERY_ENABLED or __name__ == "__main__"
+
+
 def send_email(subject, body_html):
     print(f"Sending email: {subject}")
     print(f"Email body:\n{body_html}")
     if DRY_RUN:
         print(f"[DRY RUN] Bypassed sending email to {EMAIL_RECIPIENT}")
+        return
+    if not _email_delivery_permitted():
+        # Importing the module must never be enough to mail a human. The test
+        # suite imports this file, so a test that exercises an email path used to
+        # deliver real mail on every run; tests that assert delivery opt in.
+        print(f"[email] Suppressed '{subject}' for {EMAIL_RECIPIENT}: "
+              f"runner.py was imported, not executed.")
         return
     msg = f"To: {EMAIL_RECIPIENT}\nSubject: {subject}\nContent-Type: text/html\n\n{body_html}"
     try:
