@@ -3303,7 +3303,7 @@ def _parse_dependabot_updated_dependencies(body: str = "", commits: list[dict] |
             block = match.group(1)
             if yaml is not None:
                 try:
-                    data = yaml.safe_load(block)
+                    data = yaml.load(block, Loader=yaml.BaseLoader)
                     if isinstance(data, dict) and isinstance(data.get("updated-dependencies"), list):
                         for item in data["updated-dependencies"]:
                             if isinstance(item, dict):
@@ -3511,7 +3511,12 @@ def _check_dependabot_upstream_age(pr: dict, reviewed_head: str, now: datetime |
             ["gh", "api", f"repos/{GITHUB_REPOSITORY}/pulls/{pr_num}/reviews", "--paginate", "--slurp"],
             cwd=REPO_PATH,
         )
-        pages = json.loads(out) if code == 0 else []
+        pages = []
+        if code == 0 and out.strip():
+            try:
+                pages = json.loads(out)
+            except Exception:
+                pages = []
         reviews = [r for p in pages for r in (p if isinstance(p, list) else [p])]
 
     for r in reviews:
@@ -3521,31 +3526,35 @@ def _check_dependabot_upstream_age(pr: dict, reviewed_head: str, now: datetime |
         review_body = (r.get("body") or "").lower()
         if login in (TRUSTED_AUTHORS | MERGE_MAINTAINERS) and state == "APPROVED" and commit_id == reviewed_head:
             labels = [lbl.get("name", "").lower() for lbl in (pr.get("labels") or [])]
-            is_sec_pr = "security" in labels or "security" in title.lower() or "cve" in title.lower() or "ghsa" in title.lower()
-            if is_sec_pr or "security" in review_body or "authorize-security" in review_body:
-                _record_dependabot_security_exception(
-                    pr_num, reviewed_head, login,
-                    f"Maintainer approval review (security update): {review_body or 'approved'}"
-                )
+            is_sec_pr = "security" in labels
+            if "authorize-security" in review_body or is_sec_pr:
+                if not DRY_RUN:
+                    _record_dependabot_security_exception(
+                        pr_num, reviewed_head, login,
+                        f"Maintainer approval review (security update): {review_body or 'approved'}"
+                    )
                 print(f"[dependabot] PR #{pr_num} maintainer {login} approved security update for head {reviewed_head}. Exception recorded.")
                 return True, f"Security update approved by maintainer {login}"
 
     # 3. Extract updated dependencies
-    deps = _parse_dependabot_updated_dependencies(body, title=title)
-    if not deps:
-        commits = pr.get("commits")
-        if commits is None:
-            code, out, _ = run_cmd(
-                ["gh", "api", f"repos/{GITHUB_REPOSITORY}/pulls/{pr_num}/commits", "--paginate", "--slurp"],
-                cwd=REPO_PATH,
-            )
-            commits_pages = json.loads(out) if code == 0 else []
-            commits = [c for p in commits_pages for c in (p if isinstance(p, list) else [p])]
-        deps = _parse_dependabot_updated_dependencies(body, commits=commits, title=title)
+    commits = pr.get("commits")
+    if commits is None:
+        code, out, _ = run_cmd(
+            ["gh", "api", f"repos/{GITHUB_REPOSITORY}/pulls/{pr_num}/commits", "--paginate", "--slurp"],
+            cwd=REPO_PATH,
+        )
+        commits_pages = []
+        if code == 0 and out.strip():
+            try:
+                commits_pages = json.loads(out)
+            except Exception:
+                commits_pages = []
+        commits = [c for p in commits_pages for c in (p if isinstance(p, list) else [p])]
+    deps = _parse_dependabot_updated_dependencies(body, commits=commits, title=title)
 
     if not deps:
-        print(f"[dependabot] PR #{pr_num} has no detectable dependency updates; skipping upstream age check.")
-        return True, "No dependency updates detected"
+        print(f"[dependabot] PR #{pr_num} has no detectable dependency updates -> BLOCKED (cannot verify age).")
+        return False, "Could not determine updated dependencies; upstream age cannot be verified"
 
     print(f"[dependabot] PR #{pr_num} evaluating {len(deps)} updated dependenc{'ies' if len(deps) > 1 else 'y'} for 3-day upstream age policy:")
 
@@ -3558,6 +3567,11 @@ def _check_dependabot_upstream_age(pr: dict, reviewed_head: str, now: datetime |
             msg = f"Could not verify upstream publication timestamp for {name} {ver} ({eco})"
             print(f"[dependabot]   - {name} {ver}: UNKNOWN PUBLISH DATE -> BLOCKED")
             return False, msg
+
+        if pub_dt.tzinfo is None:
+            pub_dt = pub_dt.replace(tzinfo=timezone.utc)
+        else:
+            pub_dt = pub_dt.astimezone(timezone.utc)
 
         age_seconds = (now_utc - pub_dt).total_seconds()
         age_days = age_seconds / 86400.0

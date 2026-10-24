@@ -1,5 +1,6 @@
 """Exercise authorization with real Git refs and subprocess CLI boundaries."""
 from contextlib import contextmanager
+from datetime import datetime, timezone
 import importlib.util
 import json
 import os
@@ -92,6 +93,8 @@ class MergeAuthorizationTests(unittest.TestCase):
                 pr["head"]["ref"] = "dependabot/spoof"
             if scenario.startswith("bot"):
                 pr["user"] = {"login": "dependabot[bot]", "type": "Bot", "id": 49699333}
+                pr["title"] = "deps(nuget): bump Foo from 1.0.0 to 1.1.0"
+                pr["body"] = "---\nupdated-dependencies:\n- dependency-name: Foo\n  dependency-version: 1.1.0\n...\n"
             if scenario in ("spoof-id", "spoof-type"):
                 pr["user"] = {"login": "dependabot[bot]", "type": "Bot", "id": 49699333}
                 pr["user"]["id" if scenario == "spoof-id" else "type"] = 1 if scenario == "spoof-id" else "User"
@@ -138,7 +141,7 @@ class MergeAuthorizationTests(unittest.TestCase):
                 "    else: print(json.dumps({'number':99,'state':'OPEN','headRefOid':pr.get('head',{}).get('sha'), 'statusCheckRollup':[{'__typename':'CheckRun','name':'ci-gate','status':'COMPLETED','conclusion':'SUCCESS'}]}))\n"
                 "elif args[:2] == ['pr','list']:\n"
                 "    pr=json.loads((root/'pr.json').read_text())\n"
-                "    print(json.dumps([{'number':99,'title':'Fix #42','body':'Closes #42','author':{'login':pr['user']['login']},'headRefName':pr.get('head',{}).get('ref','fix/ISSUE-42-proof'),'statusCheckRollup':[{'__typename':'CheckRun','name':'ci-gate','status':'COMPLETED','conclusion':'SUCCESS'}]}]))\n"
+                "    print(json.dumps([{'number':99,'title':pr.get('title','Fix #42'),'body':pr.get('body','Closes #42'),'author':{'login':pr['user']['login']},'headRefName':pr.get('head',{}).get('ref','fix/ISSUE-42-proof'),'statusCheckRollup':[{'__typename':'CheckRun','name':'ci-gate','status':'COMPLETED','conclusion':'SUCCESS'}]}]))\n"
                 "else: raise AssertionError(args)\n"
             )
             gh.chmod(0o755)
@@ -150,6 +153,7 @@ class MergeAuthorizationTests(unittest.TestCase):
             runner.WORKTREES_BASE = str(root / "worktrees")
             runner.TRUSTED_AUTHORS = {"dwojtaszek"}
             runner.DRY_RUN = False
+            runner._fetch_upstream_publish_timestamp = lambda name, ver, eco: datetime(2020, 1, 1, tzinfo=timezone.utc)
             (root / "state").mkdir()
             state = {
                 "pr_number": "99", "branch": "fix/ISSUE-42-proof", "authorized_head": head,

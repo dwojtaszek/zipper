@@ -39,12 +39,14 @@ class DependabotUpstreamAgeTests(unittest.TestCase):
     def setUp(self):
         self.test_dir = tempfile.mkdtemp(prefix="zipper-runner-test-")
         self._orig_state_dir = runner.STATE_DIR
+        self._orig_dry_run = runner.DRY_RUN
         runner.STATE_DIR = os.path.join(self.test_dir, "state")
         os.makedirs(runner.STATE_DIR, exist_ok=True)
         self.now = datetime(2026, 10, 24, 12, 0, 0, tzinfo=timezone.utc)
 
     def tearDown(self):
         runner.STATE_DIR = self._orig_state_dir
+        runner.DRY_RUN = self._orig_dry_run
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
     def test_parse_updated_dependencies_grouped_yaml(self):
@@ -93,6 +95,19 @@ updated-dependencies:
         self.assertEqual(fallback[0]["name"], "Foo.Bar")
         self.assertEqual(fallback[0]["version"], "1.2.0")
 
+    def test_parse_updated_dependencies_unquoted_version_scalar_preserved(self):
+        body = """
+---
+updated-dependencies:
+- dependency-name: Foo.Bar
+  dependency-version: 2.10
+...
+"""
+        deps = runner._parse_dependabot_updated_dependencies(body)
+        self.assertEqual(len(deps), 1)
+        self.assertEqual(deps[0]["name"], "Foo.Bar")
+        self.assertEqual(deps[0]["version"], "2.10")
+
     @patch("runner.urllib.request.urlopen")
     def test_fetch_nuget_publish_timestamp_direct_and_index_fallback(self, mock_urlopen):
         # Direct version hit
@@ -140,6 +155,8 @@ updated-dependencies:
             "title": "deps: bump Foo from 1.0 to 1.1",
             "body": "---\nupdated-dependencies:\n- dependency-name: Foo\n  dependency-version: 1.1\n...",
             "headRefName": "dependabot/nuget/foo-1.1",
+            "reviews": [],
+            "commits": [],
         }
         eligible, msg = runner._check_dependabot_upstream_age(pr, "sha101", now=self.now)
         self.assertTrue(eligible)
@@ -167,6 +184,8 @@ updated-dependencies:
 ...
 """,
             "headRefName": "dependabot/nuget/nuget-minor-patch",
+            "reviews": [],
+            "commits": [],
         }
 
         # Case 1: Both members >= 3 days old -> Eligible
@@ -196,6 +215,8 @@ updated-dependencies:
             "title": "deps: bump vulnerable-lib to fix CVE-2026-9999",
             "body": "---\nupdated-dependencies:\n- dependency-name: vulnerable-lib\n  dependency-version: 2.0.1\n...",
             "headRefName": "dependabot/nuget/vulnerable-lib-2.0.1",
+            "reviews": [],
+            "commits": [],
         }
 
         # Without recorded authorization, a security update does NOT accidentally bypass
@@ -237,18 +258,82 @@ updated-dependencies:
             "title": "deps: bump Foo from 1.0 to 1.1",
             "body": "---\nupdated-dependencies:\n- dependency-name: Foo\n  dependency-version: 1.1\n...",
             "headRefName": "dependabot/nuget/foo-1.1",
+            "reviews": [],
+            "commits": [],
         }
         eligible, msg = runner._check_dependabot_upstream_age(pr, "sha104", now=self.now)
         self.assertFalse(eligible)
         self.assertIn("could not verify", msg.lower())
 
+    def test_check_upstream_age_no_dependencies_fails_closed(self):
+        pr = {
+            "number": 105,
+            "title": "unparseable dependabot pr title",
+            "body": "no updated dependencies metadata",
+            "headRefName": "dependabot/nuget/foo",
+            "reviews": [],
+            "commits": [],
+        }
+        eligible, msg = runner._check_dependabot_upstream_age(pr, "sha105", now=self.now)
+        self.assertFalse(eligible)
+        self.assertIn("could not determine", msg.lower())
 
+    @patch("runner._fetch_upstream_publish_timestamp")
+    def test_security_exception_maintainer_review_authorization(self, mock_fetch):
+        # A freshly published package (< 3 days)
+        mock_fetch.return_value = self.now - timedelta(hours=12)
+        pr = {
+            "number": 106,
+            "title": "deps: bump vulnerable-lib",
+            "body": "---\nupdated-dependencies:\n- dependency-name: vulnerable-lib\n  dependency-version: 2.0.1\n...",
+            "headRefName": "dependabot/nuget/vulnerable-lib-2.0.1",
+            "reviews": [
+                {
+                    "user": {"login": "dwojtaszek"},
+                    "state": "APPROVED",
+                    "commit_id": "sha106",
+                    "body": "Approved with authorize-security for zero-day patch",
+                }
+            ],
+            "commits": [],
+        }
+        # In dry run, records exception in memory/bypass without disk pollution
+        runner.DRY_RUN = True
+        eligible, msg = runner._check_dependabot_upstream_age(pr, "sha106", now=self.now)
+        self.assertTrue(eligible)
+        self.assertIn("security update approved by maintainer dwojtaszek", msg.lower())
+        # Check that dry run did not write the file
+        self.assertFalse(os.path.exists(runner._security_exception_path(106)))
+
+        # Incidental mention of "security" without authorize-security marker or security label does NOT bypass
+        pr_incidental = {
+            "number": 107,
+            "title": "deps: bump lib",
+            "body": "---\nupdated-dependencies:\n- dependency-name: lib\n  dependency-version: 2.0.1\n...",
+            "headRefName": "dependabot/nuget/lib-2.0.1",
+            "reviews": [
+                {
+                    "user": {"login": "dwojtaszek"},
+                    "state": "APPROVED",
+                    "commit_id": "sha107",
+                    "body": "LGTM, no security concerns here",
+                }
+            ],
+            "commits": [],
+        }
+        eligible_inc, msg_inc = runner._check_dependabot_upstream_age(pr_incidental, "sha107", now=self.now)
+        self.assertFalse(eligible_inc)
+        self.assertIn("too new", msg_inc.lower())
+
+
+    @patch("runner._sync_main_after_merge")
+    @patch("runner.send_email")
     @patch("runner._merge_authorized_pr")
     @patch("runner.run_cmd")
     @patch("runner._authorized_pr")
     @patch("runner._fetch_upstream_publish_timestamp")
     def test_babysit_dependabot_prs_fresh_blocks_old_merges(
-        self, mock_fetch, mock_auth, mock_run_cmd, mock_merge
+        self, mock_fetch, mock_auth, mock_run_cmd, mock_merge, mock_email, mock_sync
     ):
         pr = {
             "number": 99,
@@ -258,6 +343,7 @@ updated-dependencies:
             "author": {"login": "dependabot[bot]"},
             "statusCheckRollup": [{"__typename": "CheckRun", "name": "ci-gate", "status": "COMPLETED", "conclusion": "SUCCESS"}],
             "reviews": [],
+            "commits": [],
         }
         mock_auth.return_value = {
             "number": 99,
@@ -286,12 +372,14 @@ updated-dependencies:
         runner.babysit_dependabot_prs()
         mock_merge.assert_called_once_with(99, None, "sha99", delete_branch=True)
 
+    @patch("runner._sync_main_after_merge")
+    @patch("runner.send_email")
     @patch("runner._merge_authorized_pr")
     @patch("runner.run_cmd")
     @patch("runner._authorized_pr")
     @patch("runner._fetch_upstream_publish_timestamp")
     def test_babysit_dependabot_prs_security_exception_merges_fresh(
-        self, mock_fetch, mock_auth, mock_run_cmd, mock_merge
+        self, mock_fetch, mock_auth, mock_run_cmd, mock_merge, mock_email, mock_sync
     ):
         pr = {
             "number": 99,
@@ -301,6 +389,7 @@ updated-dependencies:
             "author": {"login": "dependabot[bot]"},
             "statusCheckRollup": [{"__typename": "CheckRun", "name": "ci-gate", "status": "COMPLETED", "conclusion": "SUCCESS"}],
             "reviews": [],
+            "commits": [],
         }
         mock_auth.return_value = {
             "number": 99,
