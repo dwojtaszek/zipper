@@ -218,7 +218,7 @@ class MergeAuthorizationTests(unittest.TestCase):
 
 class WorktreeReconciliationTests(unittest.TestCase):
     @contextmanager
-    def _setup_fixture(self, coderabbit_findings=0, coderabbit_exit=0):
+    def _setup_fixture(self, coderabbit_findings=0, coderabbit_exit=0, coderabbit_rate_limit=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             repo = root / "repo"
@@ -262,7 +262,14 @@ class WorktreeReconciliationTests(unittest.TestCase):
             gh.chmod(0o755)
 
             cr = root / "coderabbit"
-            if coderabbit_exit:
+            if coderabbit_rate_limit:
+                cr.write_text(
+                    "#!/bin/sh\n"
+                    "echo '{\"type\":\"error\",\"errorType\":\"rate_limit\",\"message\":\"Rate limit exceeded\","
+                    "\"recoverable\":true,\"details\":{},\"metadata\":{\"waitTime\":\"19 minutes\"}}'\n"
+                    "exit 1\n"
+                )
+            elif coderabbit_exit:
                 cr.write_text(f"#!/bin/sh\necho 'review failed' >&2\nexit {coderabbit_exit}\n")
             else:
                 cr.write_text(
@@ -496,6 +503,28 @@ class WorktreeReconciliationTests(unittest.TestCase):
             self.assertIn("local CodeRabbit review gate failed for PR #99", runner._babysit_with_fallback.call_args[0][0])
             # The parse-path failure detail reaches the agent prompt.
             self.assertIn("unresolved finding(s)", runner._babysit_with_fallback.call_args[0][0])
+
+    def test_babysit_activeWorktree_coderabbitRateLimit_mergesWithoutRecordingAFailure(self):
+        """A rate limit is not a finding and not a failure. Recording it as one
+        blocked the merge on a review that never ran and dispatched a babysit
+        mission to fix it — 34 runs were blocked this way."""
+        with self._setup_fixture(coderabbit_rate_limit=True) as (root, repo, runner, directory):
+            wt_path, head = self._create_tracked_pr_worktree(
+                root, repo, remote_files={"proof.txt": "proof"}, gate_error="prior failure"
+            )
+
+            with self._fixture_env(directory):
+                runner.babysit_active_worktrees()
+
+            self.assertFalse((root / "state" / "pr-99-coderabbit-gate.json").exists(),
+                             "a rate-limited review must not be recorded as a gate failure")
+            self.assertTrue((root / "merged").exists(), "the merge must not be blocked by a rate limit")
+            runner._babysit_with_fallback.assert_not_called()
+            main_head = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "main"], text=True).strip()
+            self.assertEqual(main_head, head)
+            # The window is persisted, so the next cycle does not re-ask and fail again.
+            window = json.loads((root / "state" / "coderabbit-rate-limit.json").read_text())
+            self.assertEqual(window["wait_seconds"], 19 * 60)
 
     def test_babysit_activeWorktree_coderabbitCliError_blocksMerge(self):
         with self._setup_fixture(coderabbit_exit=1) as (root, repo, runner, directory):

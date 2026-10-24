@@ -17,6 +17,7 @@ import re
 import subprocess
 import signal
 from datetime import datetime, timedelta, timezone
+from typing import NamedTuple
 import urllib.request
 import urllib.error
 import urllib.parse
@@ -1270,26 +1271,181 @@ def _coderabbit_bin() -> str | None:
 
 _CODERABBIT_REVIEW_CACHE: set[tuple[str, str]] = set()
 
+# The CLI allows 3 reviews per rolling hour. When the allowance is spent it exits
+# non-zero with a `rate_limit` error record, which the gate used to read as an
+# ordinary failure: the run was recorded as a CodeRabbit gate failure, PR creation
+# or merging was blocked, and a babysit mission was dispatched to fix a review that
+# never ran. 34 runs were blocked this way, 25 of them naming a rate or usage limit.
+CODERABBIT_RATE_LIMIT_MINUTES = int(os.environ.get("RUNNER_CODERABBIT_RATE_LIMIT_MINUTES", "60"))
+# An implausible or garbled waitTime must not park the gate for days.
+CODERABBIT_RATE_LIMIT_MAX_MINUTES = int(os.environ.get("RUNNER_CODERABBIT_RATE_LIMIT_MAX_MINUTES", "360"))
 
-def _run_coderabbit_pre_pr_check(cwd: str) -> tuple[bool, str]:
-    """Run local coderabbit review before PR submit or update, ensuring issues are addressed first."""
+# CodeRabbit states its wait as "19 minutes", but the same field has been seen as
+# "37m", "2s", and "1h". Every unit is accepted; a bare number with no unit is not,
+# so an unrelated count in the message cannot be read as a duration.
+_CODERABBIT_WAIT_RE = re.compile(
+    r"(\d+)\s*(hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)\b",
+    re.IGNORECASE,
+)
+_UNIT_SECONDS = {"h": 3600, "m": 60, "s": 1}
+
+# Phrases the CLI uses when it refuses for an allowance reason, whether it reports
+# a structured record or only text. Deliberately narrow: a genuine failure such as
+# an auth error must keep failing the gate.
+_CODERABBIT_LIMIT_PHRASES = (
+    "rate limit",
+    "usage limit",
+    "included review",
+    "review limit",
+    "review capacity",
+)
+
+
+class CodeRabbitGate(NamedTuple):
+    """Outcome of the local CodeRabbit pre-PR gate.
+
+    `ok` is what callers act on: True means "you may proceed". `skipped` separates
+    the two ways True is reached, because they are not the same claim: a completed
+    review with zero findings is evidence, and a rate-limited skip is not. Only a
+    real review may be cached as one.
+    """
+
+    ok: bool
+    skipped: bool
+    detail: str
+
+
+def _coderabbit_rate_limit_path() -> str:
+    return os.path.join(STATE_DIR, "coderabbit-rate-limit.json")
+
+
+def _coderabbit_wait_seconds(text: str) -> int | None:
+    """Seconds CodeRabbit says to wait, or None when it states no usable duration."""
+    for match in _CODERABBIT_WAIT_RE.finditer(text):
+        amount, unit = int(match.group(1)), match.group(2).lower()[0]
+        if amount > 0:
+            return min(amount * _UNIT_SECONDS[unit], CODERABBIT_RATE_LIMIT_MAX_MINUTES * 60)
+    return None
+
+
+def _coderabbit_rate_limit_active() -> tuple[bool, str]:
+    """True while a recorded rate limit is still inside its window.
+
+    Persisted so a later cron cycle does not spend the CLI's 10-minute timeout
+    discovering the same refusal, and so the skip survives the process that hit it.
+    """
+    try:
+        with open(_coderabbit_rate_limit_path()) as stream:
+            state = json.load(stream)
+        resume_at = datetime.fromisoformat(state["resume_at"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return False, ""
+    remaining = (resume_at - datetime.now(timezone.utc)).total_seconds()
+    if remaining <= 0:
+        return False, ""
+    return True, f"rate limit window has {int(remaining // 60)}m left"
+
+
+def _record_coderabbit_rate_limit(wait_seconds: int, detail: str) -> None:
+    now = datetime.now(timezone.utc)
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        with open(_coderabbit_rate_limit_path(), "w") as handle:
+            json.dump({"resume_at": (now + timedelta(seconds=wait_seconds)).isoformat(),
+                       "recorded_at": now.isoformat(),
+                       "wait_seconds": wait_seconds,
+                       "detail": detail[:2000]}, handle)
+        print(f"[coderabbit] Rate limited; skipping the gate for {wait_seconds // 60}m "
+              f"({wait_seconds}s). Not recorded as a gate failure.")
+    except OSError as e:
+        print(f"[coderabbit] Could not persist the rate-limit window: {e}")
+
+
+def _clear_coderabbit_rate_limit() -> None:
+    try:
+        os.remove(_coderabbit_rate_limit_path())
+    except OSError:
+        pass
+
+
+def _coderabbit_rate_limited(out: str, err: str, code: int) -> tuple[bool, int, str]:
+    """Detect a rate-limit refusal in the CLI's output, exit code, and error text.
+
+    The refusal is reported three different ways depending on how the CLI fails, so
+    all three are checked: an `error` record on stdout, a non-zero exit with a
+    `Rate limit exceeded` message on stderr, and a plain-text mention in either.
+    Returns (limited, wait_seconds, evidence).
+    """
+    evidence = ""
+    wait_seconds = None
+    for line in out.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            data = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(data, dict) or data.get("type") != "error":
+            continue
+        message = str(data.get("message") or "")
+        error_type = str(data.get("errorType") or "")
+        metadata = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
+        wait_time = str(metadata.get("waitTime") or "")
+        if error_type == "rate_limit" or "rate limit" in f"{message} {wait_time}".lower():
+            evidence = line
+            wait_seconds = _coderabbit_wait_seconds(f"{wait_time} {message}")
+            break
+
+    if not evidence:
+        combined = f"{err}\n{out}".lower()
+        if any(phrase in combined for phrase in _CODERABBIT_LIMIT_PHRASES):
+            evidence = (err or out).strip()
+            wait_seconds = _coderabbit_wait_seconds(f"{err}\n{out}")
+
+    if not evidence:
+        return False, 0, ""
+    if wait_seconds is None:
+        wait_seconds = CODERABBIT_RATE_LIMIT_MINUTES * 60
+    return True, wait_seconds, evidence[:2000]
+
+
+def _run_coderabbit_pre_pr_check(cwd: str) -> CodeRabbitGate:
+    """Run local coderabbit review before PR submit or update, ensuring issues are addressed first.
+
+    A rate-limit refusal is not a finding and not a failure: it returns ok=True with
+    `skipped` set, and the wait is persisted so later cycles stop asking until the
+    window passes. Treating it as a failure is what blocked PRs on a review that
+    never ran.
+    """
     cr_bin = _coderabbit_bin()
     if not cr_bin:
-        return False, "coderabbit CLI not found on PATH or ~/.local/bin/coderabbit"
+        return CodeRabbitGate(False, False, "coderabbit CLI not found on PATH or ~/.local/bin/coderabbit")
+
+    active, window = _coderabbit_rate_limit_active()
+    if active:
+        print(f"[coderabbit] Skipping the gate: {window}.")
+        return CodeRabbitGate(True, True, f"skipped: {window}")
 
     code, commits, _ = run_cmd(["git", "rev-parse", "HEAD", "main"], cwd=cwd)
     cache_key = None
     if code == 0:
         if not _repo_is_clean(cwd):
-            return False, "Commit all changes before the committed CodeRabbit review."
+            return CodeRabbitGate(False, False, "Commit all changes before the committed CodeRabbit review.")
         cache_key = (os.path.realpath(cwd), commits.strip())
         if cache_key in _CODERABBIT_REVIEW_CACHE:
             print("Reusing successful CodeRabbit review for unchanged HEAD and main in this run.")
-            return True, ""
+            return CodeRabbitGate(True, False, "")
 
     code, out, err = run_cmd([cr_bin, "review", "--committed", "--base", "main", "--agent"], cwd=cwd, timeout=600)
+
+    limited, wait_seconds, evidence = _coderabbit_rate_limited(out, err, code)
+    if limited:
+        _record_coderabbit_rate_limit(wait_seconds, evidence)
+        return CodeRabbitGate(True, True, f"skipped: CodeRabbit rate limited for {wait_seconds // 60}m")
+
     if code != 0:
-        return False, f"coderabbit review failed (exit {code}):\n{err or out}"
+        return CodeRabbitGate(False, False, f"coderabbit review failed (exit {code}):\n{err or out}")
 
     findings = []
     completed = False
@@ -1312,18 +1468,22 @@ def _run_coderabbit_pre_pr_check(cwd: str) -> tuple[bool, str]:
             continue
 
     if findings:
-        return False, f"coderabbit review reported {len(findings)} unresolved finding(s):\n" + "\n".join(findings)
+        return CodeRabbitGate(False, False,
+                              f"coderabbit review reported {len(findings)} unresolved finding(s):\n" + "\n".join(findings))
 
     if not completed:
         if complete_status is not None:
-            return False, f"coderabbit review completed with status {complete_status!r} and {complete_findings} findings"
-        return False, "coderabbit review did not produce a valid completion record with 0 findings"
+            return CodeRabbitGate(False, False,
+                                  f"coderabbit review completed with status {complete_status!r} and {complete_findings} findings")
+        return CodeRabbitGate(False, False,
+                              "coderabbit review did not produce a valid completion record with 0 findings")
     if cache_key is not None:
         code, current, _ = run_cmd(["git", "rev-parse", "HEAD", "main"], cwd=cwd)
         if code != 0 or current.strip() != commits.strip() or not _repo_is_clean(cwd):
-            return False, "Repository changed during CodeRabbit review; rerun the review."
+            return CodeRabbitGate(False, False, "Repository changed during CodeRabbit review; rerun the review.")
         _CODERABBIT_REVIEW_CACHE.add(cache_key)
-    return True, ""
+    _clear_coderabbit_rate_limit()
+    return CodeRabbitGate(True, False, "")
 
 
 def _coderabbit_gate_path(pr_number: int) -> str:
@@ -1373,9 +1533,11 @@ def _is_coderabbit_gate_failed(pr_number: int) -> bool:
 
 
 def _create_pr_for_branch(branch: str, issue_number: str, issue_title: str, cwd: str = REPO_PATH) -> tuple[str, str, str]:
-    cr_ok, cr_err = _run_coderabbit_pre_pr_check(cwd)
-    if not cr_ok:
-        return "", "", f"Pre-PR CodeRabbit review failed:\n{cr_err}"
+    gate = _run_coderabbit_pre_pr_check(cwd)
+    if gate.skipped:
+        print(f"[coderabbit] Creating the PR without a local review: {gate.detail}")
+    if not gate.ok:
+        return "", "", f"Pre-PR CodeRabbit review failed:\n{gate.detail}"
 
     push_code, push_out, push_err = run_cmd(["git", "push", "-u", "origin", branch], cwd=cwd, timeout=NETWORK_GIT_TIMEOUT)
     if push_code != 0:
@@ -1944,11 +2106,16 @@ def _publish_reviewed_completion(wt_path: str, branch: str, pr_number: int,
         _record_coderabbit_gate_failure(pr_number, branch, "Authorized remote head changed or local completion is not a clean descendant", completion_ready=False)
         print("[authorization] Completion kept local; captured remote head no longer matches.")
         return False
-    review_ok, review_error = _run_coderabbit_pre_pr_check(wt_path)
-    if not review_ok:
-        _record_coderabbit_gate_failure(pr_number, branch, review_error)
-        print(f"[babysit] Completion kept local: {review_error}")
+    review = _run_coderabbit_pre_pr_check(wt_path)
+    if not review.ok:
+        _record_coderabbit_gate_failure(pr_number, branch, review.detail)
+        print(f"[babysit] Completion kept local: {review.detail}")
         return False
+    if review.skipped:
+        # Publishing an unreviewed completion is deliberate here: the alternative is
+        # to hold a finished, locally-verified commit back until the CLI's window
+        # passes, which stalls the PR for up to an hour over a review that never ran.
+        print(f"[babysit] Publishing without a local CodeRabbit review: {review.detail}")
     authorized = _authorized_pr(pr_number, issue_number, expected_head)
     if not authorized or authorized["head"]["ref"] != branch:
         _record_coderabbit_gate_failure(pr_number, branch, "Publication authorization was revoked or changed")
@@ -2901,16 +3068,18 @@ def babysit_active_worktrees():
                     wait_for_tokens()
                     _babysit_with_fallback(prompt, wt_path, branch, issue_number, pr_number)
                     continue
-                cr_ok, cr_err = _run_coderabbit_pre_pr_check(wt_path)
-                if cr_ok:
+                gate = _run_coderabbit_pre_pr_check(wt_path)
+                if gate.ok:
                     _clear_coderabbit_gate_failure(pr_number)
+                    if gate.skipped:
+                        print(f"Local CodeRabbit review gate skipped for PR #{pr_number}: {gate.detail}")
                 else:
                     print(f"Local CodeRabbit review gate is FAILED for PR #{pr_number}. Triggering babysit.")
                     prompt = (
                         f"babysit. CI is passing, but local CodeRabbit review gate failed for PR #{pr_number}. "
                         f"Run local CodeRabbit review ('coderabbit review --committed --base main --agent'), "
                         f"resolve all findings, commit, and push updates.\n"
-                        f"\nReview gate failure detail:\n{cr_err}\n"
+                        f"\nReview gate failure detail:\n{gate.detail}\n"
                     )
             if not _is_coderabbit_gate_failed(pr_number):
                 print(f"CI is SUCCESS for PR #{pr_number}. Checking robot review gate...")
@@ -2930,17 +3099,20 @@ def babysit_active_worktrees():
                         f"stderr:\n{review_err}"
                     )
                 else:
-                    cr_ok, cr_err = _run_coderabbit_pre_pr_check(wt_path)
-                    if not cr_ok:
-                        print(f"Robot review gate passed but local CodeRabbit check failed for PR #{pr_number}: {cr_err}")
-                        _record_coderabbit_gate_failure(pr_number, branch, cr_err)
+                    gate = _run_coderabbit_pre_pr_check(wt_path)
+                    if not gate.ok:
+                        print(f"Robot review gate passed but local CodeRabbit check failed for PR #{pr_number}: {gate.detail}")
+                        _record_coderabbit_gate_failure(pr_number, branch, gate.detail)
                         prompt = (
-                            f"babysit. Robot reviews passed, but local CodeRabbit review failed for PR #{pr_number}:\n{cr_err}\n"
+                            f"babysit. Robot reviews passed, but local CodeRabbit review failed for PR #{pr_number}:\n{gate.detail}\n"
                             f"Run local CodeRabbit review ('coderabbit review --committed --base main --agent'), "
                             f"resolve all findings, commit, and push updates.\n"
                         )
                     else:
                         _clear_coderabbit_gate_failure(pr_number)
+                        if gate.skipped:
+                            print(f"Local CodeRabbit review skipped for PR #{pr_number} ({gate.detail}); "
+                                  f"merging on the robot review gate alone.")
                         print(f"Robot review gate passed for PR #{pr_number}. Attempting to auto-merge...")
                         merge_code, merge_out, merge_err = _merge_authorized_pr(pr_number, issue_number, reviewed_head)
                         is_merged = (merge_code == 0)
