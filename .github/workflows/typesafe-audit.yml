@@ -75,12 +75,14 @@ jobs:
             "reason": "missing_typesafe_api_key"
           }
           EOF
-          echo "status=unavailable" >> "$GITHUB_OUTPUT"
-          echo "executed=false" >> "$GITHUB_OUTPUT"
-          echo "reason=missing_typesafe_api_key" >> "$GITHUB_OUTPUT"
-          echo "scope=${{ matrix.check }}" >> "$GITHUB_OUTPUT"
-          echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
-          echo "json={\"executed\":false,\"scope\":\"${{ matrix.check }}\",\"sha\":\"${{ github.sha }}\",\"status\":\"unavailable\",\"reason\":\"missing_typesafe_api_key\"}" >> "$GITHUB_OUTPUT"
+          {
+            echo "status=unavailable"
+            echo "executed=false"
+            echo "reason=missing_typesafe_api_key"
+            echo "scope=${{ matrix.check }}"
+            echo "sha=${{ github.sha }}"
+            echo "json={\"executed\":false,\"scope\":\"${{ matrix.check }}\",\"sha\":\"${{ github.sha }}\",\"status\":\"unavailable\",\"reason\":\"missing_typesafe_api_key\"}"
+          } >> "$GITHUB_OUTPUT"
           {
             echo "## TypeSafe audit skipped"
             echo ""
@@ -338,12 +340,14 @@ jobs:
             "reason": "missing_typesafe_api_key"
           }
           EOF
-          echo "status=unavailable" >> "$GITHUB_OUTPUT"
-          echo "executed=false" >> "$GITHUB_OUTPUT"
-          echo "reason=missing_typesafe_api_key" >> "$GITHUB_OUTPUT"
-          echo "scope=pr-spec" >> "$GITHUB_OUTPUT"
-          echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
-          echo "json={\"executed\":false,\"scope\":\"pr-spec\",\"sha\":\"${{ github.sha }}\",\"status\":\"unavailable\",\"reason\":\"missing_typesafe_api_key\"}" >> "$GITHUB_OUTPUT"
+          {
+            echo "status=unavailable"
+            echo "executed=false"
+            echo "reason=missing_typesafe_api_key"
+            echo "scope=pr-spec"
+            echo "sha=${{ github.sha }}"
+            echo "json={\"executed\":false,\"scope\":\"pr-spec\",\"sha\":\"${{ github.sha }}\",\"status\":\"unavailable\",\"reason\":\"missing_typesafe_api_key\"}"
+          } >> "$GITHUB_OUTPUT"
           {
             echo "## PR spec review skipped"
             echo ""

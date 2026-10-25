@@ -56,12 +56,14 @@ jobs:
             "reason": "missing_typesafe_api_key"
           }
           EOF
-          echo "status=unavailable" >> "$GITHUB_OUTPUT"
-          echo "executed=false" >> "$GITHUB_OUTPUT"
-          echo "reason=missing_typesafe_api_key" >> "$GITHUB_OUTPUT"
-          echo "scope=quality" >> "$GITHUB_OUTPUT"
-          echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
-          echo "json={\"executed\":false,\"scope\":\"quality\",\"sha\":\"${{ github.sha }}\",\"status\":\"unavailable\",\"reason\":\"missing_typesafe_api_key\"}" >> "$GITHUB_OUTPUT"
+          {
+            echo "status=unavailable"
+            echo "executed=false"
+            echo "reason=missing_typesafe_api_key"
+            echo "scope=quality"
+            echo "sha=${{ github.sha }}"
+            echo "json={\"executed\":false,\"scope\":\"quality\",\"sha\":\"${{ github.sha }}\",\"status\":\"unavailable\",\"reason\":\"missing_typesafe_api_key\"}"
+          } >> "$GITHUB_OUTPUT"
           {
             echo "## Quality audit skipped"
             echo ""

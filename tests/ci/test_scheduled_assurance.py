@@ -145,6 +145,36 @@ class ScheduledAssuranceWorkflowTests(unittest.TestCase):
                 },
                 "If all checks passed, inspect recent changes",
             ),
+            (
+                {
+                    "ASSURANCE_STATUS": "",
+                    "ASSURANCE_EXECUTED": "",
+                    "ASSURANCE_REASON": "",
+                    "DROID_RESULT": "skipped",
+                    "SMOKE_RESULT": "failure",
+                },
+                "Deterministic CLI smoke check FAILED (failure)",
+            ),
+            (
+                {
+                    "ASSURANCE_STATUS": "",
+                    "ASSURANCE_EXECUTED": "",
+                    "ASSURANCE_REASON": "",
+                    "DROID_RESULT": "skipped",
+                    "SMOKE_RESULT": "success",
+                },
+                "Droid QA check was SKIPPED",
+            ),
+            (
+                {
+                    "ASSURANCE_STATUS": "",
+                    "ASSURANCE_EXECUTED": "",
+                    "ASSURANCE_REASON": "",
+                    "DROID_RESULT": "cancelled",
+                    "SMOKE_RESULT": "success",
+                },
+                "Droid QA check was CANCELLED/ABORTED",
+            ),
         ]
 
         for env_vars, expected_text in scenarios:
@@ -253,6 +283,18 @@ class ScheduledAssuranceWorkflowTests(unittest.TestCase):
 
         test_cases = [
             (
+                {"CONFIG_OUTCOME": "skipped", "SCOPE_OUTCOME": "skipped"},
+                {"executed": False, "status": "failed", "reason": "scope_determination_failed", "scope": "cli"},
+            ),
+            (
+                {"CONFIG_OUTCOME": "success", "SCOPE_OUTCOME": "failure"},
+                {"executed": False, "status": "failed", "reason": "scope_determination_failed", "scope": "cli"},
+            ),
+            (
+                {"CLI_AFFECTED": "false", "VALIDATE_OUTCOME": "failure"},
+                {"executed": False, "status": "failed", "reason": "qa_report_validation_failed", "scope": "cli"},
+            ),
+            (
                 {"CLI_AFFECTED": "false", "DROID_AVAILABLE": "true", "QA_OUTCOME": "success", "VALIDATE_OUTCOME": "success"},
                 {"executed": False, "status": "unavailable", "reason": "no_cli_changes", "scope": "cli"},
             ),
@@ -301,6 +343,8 @@ class ScheduledAssuranceWorkflowTests(unittest.TestCase):
                     env = {
                         "PATH": os.environ.get("PATH", ""),
                         "COMMIT_SHA": "0123456789abcdef0123456789abcdef01234567",
+                        "CONFIG_OUTCOME": "success",
+                        "SCOPE_OUTCOME": "success",
                         "GITHUB_STEP_SUMMARY": str(Path(td) / "summary.md"),
                         "GITHUB_OUTPUT": str(output_file),
                         **env_overrides,
@@ -331,221 +375,77 @@ class ScheduledAssuranceWorkflowTests(unittest.TestCase):
                     self.assertEqual(outputs.get("executed"), "true" if expected["executed"] else "false")
                     self.assertEqual(outputs.get("reason"), expected["reason"])
 
+    def _run_assurance_script(
+        self, script: str, target_dir_rel: str, setup_files: dict, extra_env: dict
+    ) -> dict:
+        """Run an inline assurance script in an isolated tempdir and return the parsed JSON result."""
+        with tempfile.TemporaryDirectory() as td:
+            results_dir = Path(td) / target_dir_rel
+            results_dir.mkdir(parents=True, exist_ok=True)
+            for filename, content in setup_files.items():
+                (results_dir / filename).write_text(content, encoding="utf-8")
+            env = {
+                "PATH": os.environ.get("PATH", ""),
+                "GITHUB_STEP_SUMMARY": str(Path(td) / "summary.md"),
+                "GITHUB_OUTPUT": str(Path(td) / "output.txt"),
+                **extra_env,
+            }
+            proc = subprocess.run(["python3", "-c", script], cwd=td, env=env, capture_output=True, text=True)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            res_file = results_dir / "assurance-result.json"
+            self.assertTrue(res_file.exists(), f"Expected {res_file} to exist")
+            return json.loads(res_file.read_text(encoding="utf-8"))
+
     def test_typesafe_quality_assurance_script_logic(self):
         """Verify the quality assurance result emission logic across outcomes."""
         script = self._extract_python_inline_script(self.typesafe_quality_text, "Emit quality assurance result")
 
-        with tempfile.TemporaryDirectory() as td:
-            # Case 1: ranking.json exists
-            results_dir = Path(td) / "results" / "typesafe-quality"
-            results_dir.mkdir(parents=True, exist_ok=True)
-            (results_dir / "ranking.json").write_text("{}", encoding="utf-8")
-            env = {
-                "PATH": os.environ.get("PATH", ""),
-                "COMMIT_SHA": "sha123",
-                "RANKING_OUTCOME": "success",
-                "GITHUB_STEP_SUMMARY": str(Path(td) / "summary.md"),
-                "GITHUB_OUTPUT": str(Path(td) / "output.txt"),
-            }
-            proc = subprocess.run(["python3", "-c", script], cwd=td, env=env, capture_output=True, text=True)
-            self.assertEqual(proc.returncode, 0, proc.stderr)
-            data = json.loads((results_dir / "assurance-result.json").read_text(encoding="utf-8"))
-            self.assertEqual(data["status"], "executed")
-            self.assertEqual(data["executed"], True)
-            self.assertEqual(data["reason"], "completed")
-
-        with tempfile.TemporaryDirectory() as td:
-            # Case 2: ranking.json missing but ranking_outcome == success (advisory remote failure)
-            results_dir = Path(td) / "results" / "typesafe-quality"
-            env = {
-                "PATH": os.environ.get("PATH", ""),
-                "COMMIT_SHA": "sha123",
-                "RANKING_OUTCOME": "success",
-                "GITHUB_STEP_SUMMARY": str(Path(td) / "summary.md"),
-                "GITHUB_OUTPUT": str(Path(td) / "output.txt"),
-            }
-            proc = subprocess.run(["python3", "-c", script], cwd=td, env=env, capture_output=True, text=True)
-            self.assertEqual(proc.returncode, 0, proc.stderr)
-            data = json.loads((results_dir / "assurance-result.json").read_text(encoding="utf-8"))
-            self.assertEqual(data["status"], "unavailable")
-            self.assertEqual(data["executed"], False)
-            self.assertEqual(data["reason"], "remote_failure")
-
-        with tempfile.TemporaryDirectory() as td:
-            # Case 3: ranking.json missing and ranking_outcome == failure (check failure)
-            results_dir = Path(td) / "results" / "typesafe-quality"
-            env = {
-                "PATH": os.environ.get("PATH", ""),
-                "COMMIT_SHA": "sha123",
-                "RANKING_OUTCOME": "failure",
-                "GITHUB_STEP_SUMMARY": str(Path(td) / "summary.md"),
-                "GITHUB_OUTPUT": str(Path(td) / "output.txt"),
-            }
-            proc = subprocess.run(["python3", "-c", script], cwd=td, env=env, capture_output=True, text=True)
-            self.assertEqual(proc.returncode, 0, proc.stderr)
-            data = json.loads((results_dir / "assurance-result.json").read_text(encoding="utf-8"))
-            self.assertEqual(data["status"], "failed")
-            self.assertEqual(data["executed"], False)
-            self.assertEqual(data["reason"], "check_failed")
+        cases = [
+            ({"ranking.json": "{}"}, {"COMMIT_SHA": "sha123", "RANKING_OUTCOME": "success"}, "executed", True, "completed"),
+            ({}, {"COMMIT_SHA": "sha123", "RANKING_OUTCOME": "success"}, "unavailable", False, "remote_failure"),
+            ({}, {"COMMIT_SHA": "sha123", "RANKING_OUTCOME": "failure"}, "failed", False, "check_failed"),
+        ]
+        for setup, env_vars, exp_status, exp_exec, exp_reason in cases:
+            data = self._run_assurance_script(script, "results/typesafe-quality", setup, env_vars)
+            self.assertEqual((data["status"], data["executed"], data["reason"]), (exp_status, exp_exec, exp_reason))
 
     def test_typesafe_audit_assurance_script_logic(self):
         """Verify the audit assurance result emission logic across outcomes."""
         script = self._extract_python_inline_script(self.typesafe_audit_text, "Emit audit assurance result")
 
-        with tempfile.TemporaryDirectory() as td:
-            # Case 1: target file exists
-            results_dir = Path(td) / "results" / "typesafe-audit"
-            results_dir.mkdir(parents=True, exist_ok=True)
-            (results_dir / "traceability.json").write_text("{}", encoding="utf-8")
-            env = {
-                "PATH": os.environ.get("PATH", ""),
-                "COMMIT_SHA": "sha456",
-                "CHECK": "traceability",
-                "GITHUB_STEP_SUMMARY": str(Path(td) / "summary.md"),
-                "GITHUB_OUTPUT": str(Path(td) / "output.txt"),
-            }
-            proc = subprocess.run(["python3", "-c", script], cwd=td, env=env, capture_output=True, text=True)
-            self.assertEqual(proc.returncode, 0, proc.stderr)
-            data = json.loads((results_dir / "assurance-result.json").read_text(encoding="utf-8"))
-            self.assertEqual(data["status"], "executed")
-            self.assertEqual(data["executed"], True)
-            self.assertEqual(data["reason"], "completed")
-            self.assertEqual(data["scope"], "traceability")
-
-        with tempfile.TemporaryDirectory() as td:
-            # Case 2: foundation check resolving to report.json
-            results_dir = Path(td) / "results" / "typesafe-audit"
-            results_dir.mkdir(parents=True, exist_ok=True)
-            (results_dir / "report.json").write_text("{}", encoding="utf-8")
-            env = {
-                "PATH": os.environ.get("PATH", ""),
-                "COMMIT_SHA": "sha456",
-                "CHECK": "foundation",
-                "GITHUB_STEP_SUMMARY": str(Path(td) / "summary.md"),
-                "GITHUB_OUTPUT": str(Path(td) / "output.txt"),
-            }
-            proc = subprocess.run(["python3", "-c", script], cwd=td, env=env, capture_output=True, text=True)
-            self.assertEqual(proc.returncode, 0, proc.stderr)
-            data = json.loads((results_dir / "assurance-result.json").read_text(encoding="utf-8"))
-            self.assertEqual(data["status"], "executed")
-            self.assertEqual(data["executed"], True)
-            self.assertEqual(data["reason"], "completed")
-            self.assertEqual(data["scope"], "foundation")
-
-        with tempfile.TemporaryDirectory() as td:
-            # Case 3: target file missing (remote failure or unmet preconditions)
-            results_dir = Path(td) / "results" / "typesafe-audit"
-            env = {
-                "PATH": os.environ.get("PATH", ""),
-                "COMMIT_SHA": "sha456",
-                "CHECK": "requirements",
-                "GITHUB_STEP_SUMMARY": str(Path(td) / "summary.md"),
-                "GITHUB_OUTPUT": str(Path(td) / "output.txt"),
-            }
-            proc = subprocess.run(["python3", "-c", script], cwd=td, env=env, capture_output=True, text=True)
-            self.assertEqual(proc.returncode, 0, proc.stderr)
-            data = json.loads((results_dir / "assurance-result.json").read_text(encoding="utf-8"))
-            self.assertEqual(data["status"], "unavailable")
-            self.assertEqual(data["executed"], False)
-            self.assertEqual(data["reason"], "remote_failure_or_unmet_preconditions")
-            self.assertEqual(data["scope"], "requirements")
+        cases = [
+            ({"traceability.json": "{}"}, {"COMMIT_SHA": "sha456", "CHECK": "traceability"}, "executed", True, "completed", "traceability"),
+            ({"report.json": "{}"}, {"COMMIT_SHA": "sha456", "CHECK": "foundation"}, "executed", True, "completed", "foundation"),
+            ({}, {"COMMIT_SHA": "sha456", "CHECK": "requirements"}, "unavailable", False, "remote_failure_or_unmet_preconditions", "requirements"),
+        ]
+        for setup, env_vars, exp_status, exp_exec, exp_reason, exp_scope in cases:
+            data = self._run_assurance_script(script, "results/typesafe-audit", setup, env_vars)
+            self.assertEqual((data["status"], data["executed"], data["reason"], data["scope"]), (exp_status, exp_exec, exp_reason, exp_scope))
 
     def test_typesafe_triage_assurance_script_logic(self):
         """Verify the triage assurance result emission logic across outcomes."""
         script = self._extract_python_inline_script(self.typesafe_triage_text, "Emit triage assurance result")
 
-        with tempfile.TemporaryDirectory() as td:
-            # Case 1: triage.json exists
-            results_dir = Path(td) / "results" / "typesafe-triage"
-            results_dir.mkdir(parents=True, exist_ok=True)
-            (results_dir / "triage.json").write_text("{}", encoding="utf-8")
-            env = {
-                "PATH": os.environ.get("PATH", ""),
-                "COMMIT_SHA": "sha789",
-                "TRIAGE_OUTCOME": "success",
-                "GITHUB_STEP_SUMMARY": str(Path(td) / "summary.md"),
-                "GITHUB_OUTPUT": str(Path(td) / "output.txt"),
-            }
-            proc = subprocess.run(["python3", "-c", script], cwd=td, env=env, capture_output=True, text=True)
-            self.assertEqual(proc.returncode, 0, proc.stderr)
-            data = json.loads((results_dir / "assurance-result.json").read_text(encoding="utf-8"))
-            self.assertEqual(data["status"], "executed")
-            self.assertEqual(data["executed"], True)
-            self.assertEqual(data["reason"], "completed")
-            self.assertEqual(data["scope"], "triage")
-
-        with tempfile.TemporaryDirectory() as td:
-            # Case 2: triage.json missing and TRIAGE_OUTCOME == success (advisory remote failure)
-            results_dir = Path(td) / "results" / "typesafe-triage"
-            env = {
-                "PATH": os.environ.get("PATH", ""),
-                "COMMIT_SHA": "sha789",
-                "TRIAGE_OUTCOME": "success",
-                "GITHUB_STEP_SUMMARY": str(Path(td) / "summary.md"),
-                "GITHUB_OUTPUT": str(Path(td) / "output.txt"),
-            }
-            proc = subprocess.run(["python3", "-c", script], cwd=td, env=env, capture_output=True, text=True)
-            self.assertEqual(proc.returncode, 0, proc.stderr)
-            data = json.loads((results_dir / "assurance-result.json").read_text(encoding="utf-8"))
-            self.assertEqual(data["status"], "unavailable")
-            self.assertEqual(data["executed"], False)
-            self.assertEqual(data["reason"], "remote_failure")
-
-        with tempfile.TemporaryDirectory() as td:
-            # Case 3: triage.json missing and TRIAGE_OUTCOME == failure (check failure)
-            results_dir = Path(td) / "results" / "typesafe-triage"
-            env = {
-                "PATH": os.environ.get("PATH", ""),
-                "COMMIT_SHA": "sha789",
-                "TRIAGE_OUTCOME": "failure",
-                "GITHUB_STEP_SUMMARY": str(Path(td) / "summary.md"),
-                "GITHUB_OUTPUT": str(Path(td) / "output.txt"),
-            }
-            proc = subprocess.run(["python3", "-c", script], cwd=td, env=env, capture_output=True, text=True)
-            self.assertEqual(proc.returncode, 0, proc.stderr)
-            data = json.loads((results_dir / "assurance-result.json").read_text(encoding="utf-8"))
-            self.assertEqual(data["status"], "failed")
-            self.assertEqual(data["executed"], False)
-            self.assertEqual(data["reason"], "check_failed")
+        cases = [
+            ({"triage.json": "{}"}, {"COMMIT_SHA": "sha789", "TRIAGE_OUTCOME": "success"}, "executed", True, "completed"),
+            ({}, {"COMMIT_SHA": "sha789", "TRIAGE_OUTCOME": "success"}, "unavailable", False, "remote_failure"),
+            ({}, {"COMMIT_SHA": "sha789", "TRIAGE_OUTCOME": "failure"}, "failed", False, "check_failed"),
+        ]
+        for setup, env_vars, exp_status, exp_exec, exp_reason in cases:
+            data = self._run_assurance_script(script, "results/typesafe-triage", setup, env_vars)
+            self.assertEqual((data["status"], data["executed"], data["reason"]), (exp_status, exp_exec, exp_reason))
 
     def test_typesafe_pr_spec_assurance_script_logic(self):
         """Verify the pr-spec assurance result emission logic across outcomes."""
         script = self._extract_python_inline_script(self.typesafe_audit_text, "Emit PR spec assurance result")
 
-        with tempfile.TemporaryDirectory() as td:
-            # Case 1: pr-spec.json exists
-            results_dir = Path(td) / "results" / "typesafe-audit"
-            results_dir.mkdir(parents=True, exist_ok=True)
-            (results_dir / "pr-spec.json").write_text("{}", encoding="utf-8")
-            env = {
-                "PATH": os.environ.get("PATH", ""),
-                "COMMIT_SHA": "sha999",
-                "GITHUB_STEP_SUMMARY": str(Path(td) / "summary.md"),
-                "GITHUB_OUTPUT": str(Path(td) / "output.txt"),
-            }
-            proc = subprocess.run(["python3", "-c", script], cwd=td, env=env, capture_output=True, text=True)
-            self.assertEqual(proc.returncode, 0, proc.stderr)
-            data = json.loads((results_dir / "assurance-result.json").read_text(encoding="utf-8"))
-            self.assertEqual(data["status"], "executed")
-            self.assertEqual(data["executed"], True)
-            self.assertEqual(data["reason"], "completed")
-            self.assertEqual(data["scope"], "pr-spec")
-
-        with tempfile.TemporaryDirectory() as td:
-            # Case 2: pr-spec.json missing
-            results_dir = Path(td) / "results" / "typesafe-audit"
-            env = {
-                "PATH": os.environ.get("PATH", ""),
-                "COMMIT_SHA": "sha999",
-                "GITHUB_STEP_SUMMARY": str(Path(td) / "summary.md"),
-                "GITHUB_OUTPUT": str(Path(td) / "output.txt"),
-            }
-            proc = subprocess.run(["python3", "-c", script], cwd=td, env=env, capture_output=True, text=True)
-            self.assertEqual(proc.returncode, 0, proc.stderr)
-            data = json.loads((results_dir / "assurance-result.json").read_text(encoding="utf-8"))
-            self.assertEqual(data["status"], "unavailable")
-            self.assertEqual(data["executed"], False)
-            self.assertEqual(data["reason"], "remote_failure_or_missing_spec")
+        cases = [
+            ({"pr-spec.json": "{}"}, {"COMMIT_SHA": "sha999"}, "executed", True, "completed"),
+            ({}, {"COMMIT_SHA": "sha999"}, "unavailable", False, "remote_failure_or_missing_spec"),
+        ]
+        for setup, env_vars, exp_status, exp_exec, exp_reason in cases:
+            data = self._run_assurance_script(script, "results/typesafe-audit", setup, env_vars)
+            self.assertEqual((data["status"], data["executed"], data["reason"]), (exp_status, exp_exec, exp_reason))
 
 
 if __name__ == "__main__":
