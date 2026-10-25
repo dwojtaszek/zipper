@@ -413,7 +413,7 @@ public class ArchiveStructureCaseTests : WorkingDirectoryTestBase
     {
         var malformed = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.MalformedSuite);
 
-        Assert.Equal(52, malformed.Count);
+        Assert.Equal(53, malformed.Count);
         Assert.Contains(malformed, c => c.CaseKey == "unsupported-method");
         Assert.Contains(malformed, c => c.CaseKey == "unsupported-method-deflate64");
         Assert.Contains(malformed, c => c.CaseKey == "orphan-local-header");
@@ -422,9 +422,13 @@ public class ArchiveStructureCaseTests : WorkingDirectoryTestBase
         Assert.Contains(malformed, c => c.CaseKey == "deflate-invalid-btype");
         Assert.Contains(malformed, c => c.CaseKey == "deflate-corrupt-huffman");
         Assert.Contains(malformed, c => c.CaseKey == "stored-payload-bitflip");
+        Assert.Contains(malformed, c => c.CaseKey == "deflate-payload-bitflip");
         Assert.DoesNotContain(
             ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.SmokeSuite),
             c => c.CaseKey == "stored-payload-bitflip");
+        Assert.DoesNotContain(
+            ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.SmokeSuite),
+            c => c.CaseKey == "deflate-payload-bitflip");
         Assert.Equal("policy-sensitive", ArchiveTestCatalog.GetCase("unsupported-method").Classification);
         Assert.Equal("policy-sensitive", ArchiveTestCatalog.GetCase("unsupported-method-deflate64").Classification);
         Assert.Equal("malformed", ArchiveTestCatalog.GetCase("orphan-local-header").Classification);
@@ -450,6 +454,7 @@ public class ArchiveStructureCaseTests : WorkingDirectoryTestBase
     [InlineData("prefix-unrebased")]
     [InlineData("deflate-invalid-btype")]
     [InlineData("deflate-corrupt-huffman")]
+    [InlineData("deflate-payload-bitflip")]
     [InlineData("method-cross-deflate64-deflate")]
     [InlineData("method-cross-bzip2-stored")]
     [InlineData("method-data-deflate-as-bzip2")]
@@ -1044,7 +1049,7 @@ public class ArchiveStructureCaseTests : WorkingDirectoryTestBase
     public async Task GenerateAsync_AllSuites_PublishesUniqueValidatedPairsForEachCase()
     {
         var all = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.AllSuites);
-        Assert.Equal(107, all.Count);
+        Assert.Equal(109, all.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(all.Select(c => c.CaseKey).ToList(), 42, Path.Combine(TempDir, "all")),

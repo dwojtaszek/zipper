@@ -29,6 +29,29 @@ public class ArchiveTestSuiteGeneratorTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void BuildExpectationFile_DeflatePayloadBitflip_DeclaresDeflateIntegrityProfile()
+    {
+        var definition = ArchiveTestCatalog.GetCase("deflate-payload-bitflip");
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+
+        var testCase = ArchiveTestSuiteGenerator.BuildExpectationFile(artifact, definition);
+
+        Assert.Equal(
+            ["list-succeeds"],
+            testCase.Expectations.Single(expectation => expectation.Operation == "list").AllowedOutcomes);
+        Assert.Equal(
+            ["read-entry-fails", "read-entry-returns-unverified-bytes"],
+            testCase.Expectations.Single(expectation => expectation.Operation == "read-entry").AllowedOutcomes);
+        var integrity = testCase.Expectations.Single(expectation => expectation.Operation == "integrity-check");
+        Assert.Equal("strict-integrity-v1", integrity.Profile);
+        Assert.Equal(["crc-mismatch-rejected", "integrity-fails"], integrity.AllowedOutcomes);
+        Assert.Equal("deflate-bitstream", integrity.Capability);
+        Assert.Equal(
+            ["extract-fails"],
+            testCase.Expectations.Single(expectation => expectation.Operation == "extract").AllowedOutcomes);
+    }
+
+    [Fact]
     public async Task GenerateAsync_SmokeCases_PublishFlatPairsWithMatchingIds()
     {
         var request = ArchiveTestRequest.Create(
@@ -418,6 +441,7 @@ public class ArchiveTestSuiteGeneratorTests : WorkingDirectoryTestBase
     [InlineData("bzip2-wrong-crc", "test", "failure", 3)]
     [InlineData("deflate64-corrupt-stream", "test", "failure", 3)]
     [InlineData("deflate64-truncated-stream", "test", "failure", 3)]
+    [InlineData("deflate-payload-bitflip", "test", "failure", 3)]
     [InlineData("multidisk-eocd-declared", "test", "failure", 3)]
     [InlineData("multidisk-central-entry-declared", "test", "failure", 3)]
     [InlineData("eocd-entry-count-mismatch", "test", "failure", 3)]

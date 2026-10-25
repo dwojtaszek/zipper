@@ -30,11 +30,11 @@ internal sealed record ArchiveFixtureArtifact(
 
 /// <summary>
 /// Builds the valid baseline (control) Archives for Archive Test cases using the
-/// standard <see cref="ZipArchive"/> library only for stored/deflate recipes (never
-/// the Standard-mode pipeline), then captures the exact structure layout. Recipes
-/// naming Deflate64 or BZip2 take the hand-built path, which serializes headers
-/// directly around real codec bytes. Budgets (REQ-213) are enforced with
-/// checked arithmetic during writes, one artifact at a time. No filesystem output.
+/// standard <see cref="ZipArchive"/> library for ordinary stored/deflate recipes
+/// (never the Standard-mode pipeline), then captures the exact structure layout.
+/// Hand-built constructions serialize headers directly around controlled DEFLATE,
+/// Deflate64, or BZip2 streams. Budgets (REQ-213) are enforced with checked arithmetic
+/// during writes, one artifact at a time. No filesystem output.
 /// </summary>
 internal static class ArchiveFixtureBuilder
 {
@@ -189,6 +189,11 @@ internal static class ArchiveFixtureBuilder
         if (definition.Construction is ArchiveControlConstruction.PinnedDeflate64LongMatch)
         {
             return BuildHandBuiltPinnedDeflate64(definition, cancellationToken);
+        }
+
+        if (definition.Construction is ArchiveControlConstruction.DeflateStoredBlock)
+        {
+            return BuildHandBuiltDeflateStoredBlock(definition, seed, cancellationToken);
         }
 
         if (definition.Construction is ArchiveControlConstruction.NestedCumulativeBudget)
@@ -1193,6 +1198,87 @@ internal static class ArchiveFixtureBuilder
                     PayloadCodec: recipeEntry.PayloadCodec),
             ],
             Mutations: []);
+    }
+
+    /// <summary>Builds a method-8 control with RFC 1951 stored blocks so literal
+    /// bytes can be flipped while the stream remains decodable.</summary>
+    private static ArchiveFixtureArtifact BuildHandBuiltDeflateStoredBlock(
+        ArchiveTestCaseDefinition definition, int seed, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (definition.Recipe.Entries.Count != 1
+            || definition.Recipe.Entries[0].IsDirectory
+            || ArchiveTestCodec.WireCode(definition.Recipe.Entries[0].PayloadCodec) != ArchiveTestCodec.Deflate)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test case '{definition.CaseKey}': the stored-block DEFLATE baseline expects exactly one method-8 file entry.");
+        }
+
+        var recipeEntry = definition.Recipe.Entries[0];
+        ValidatePathDepth(definition.CaseKey, recipeEntry.Name);
+        var content = GeneratePayload(definition.CaseKey, seed, recipeEntry);
+        var encoded = DeflateStoredBlocks(content);
+        var name = Encoding.UTF8.GetBytes(recipeEntry.Name);
+        var version = ArchiveTestCodec.VersionNeeded(ArchiveTestCodec.Deflate);
+
+        using var stream = new MemoryStream();
+        WriteLocalHeader(stream, version, ArchiveTestCodec.Deflate, content, encoded, name);
+        var centralDirectoryOffset = stream.Position;
+        WriteCentralHeader(stream, version, ArchiveTestCodec.Deflate, content, encoded, name, 0);
+        var centralDirectorySize = checked((int)(stream.Position - centralDirectoryOffset));
+        var eocd = new byte[22];
+        BinaryPrimitives.WriteUInt32LittleEndian(eocd, 0x06054b50);
+        BinaryPrimitives.WriteUInt16LittleEndian(eocd.AsSpan(8), 1);
+        BinaryPrimitives.WriteUInt16LittleEndian(eocd.AsSpan(10), 1);
+        BinaryPrimitives.WriteUInt32LittleEndian(eocd.AsSpan(12), (uint)centralDirectorySize);
+        BinaryPrimitives.WriteUInt32LittleEndian(eocd.AsSpan(16), (uint)centralDirectoryOffset);
+        stream.Write(eocd);
+
+        var bytes = stream.ToArray();
+        if (bytes.Length > ArchiveTestCaseSemantics.MaxArchivePhysicalBytes)
+        {
+            throw new InvalidDataException($"Archive Test case '{definition.CaseKey}' Archive is {bytes.Length} bytes, over the physical budget.");
+        }
+
+        var contentSha = Convert.ToHexStringLower(SHA256.HashData(content));
+        return new ArchiveFixtureArtifact(
+            ArchiveBytes: bytes,
+            ArchiveSha256: Convert.ToHexStringLower(SHA256.HashData(bytes)),
+            Layout: ArchiveFixtureLayout.Read(bytes),
+            Entries:
+            [
+                new ArchiveFixtureEntryExpectation(
+                    Ordinal: 0,
+                    Name: recipeEntry.Name,
+                    IsDirectory: false,
+                    Method: ArchiveTestCodec.Deflate,
+                    Content: content,
+                    ContentSha256: contentSha,
+                    PayloadCodec: recipeEntry.PayloadCodec),
+            ],
+            Mutations: []);
+    }
+
+    private static byte[] DeflateStoredBlocks(ReadOnlySpan<byte> content)
+    {
+        var blockCount = Math.Max(1, checked((content.Length + ushort.MaxValue - 1) / ushort.MaxValue));
+        var encoded = new byte[checked(content.Length + blockCount * 5)];
+        var contentOffset = 0;
+        var encodedOffset = 0;
+
+        for (var block = 0; block < blockCount; block++)
+        {
+            var length = Math.Min(ushort.MaxValue, content.Length - contentOffset);
+            encoded[encodedOffset++] = block == blockCount - 1 ? (byte)1 : (byte)0;
+            BinaryPrimitives.WriteUInt16LittleEndian(encoded.AsSpan(encodedOffset), (ushort)length);
+            BinaryPrimitives.WriteUInt16LittleEndian(encoded.AsSpan(encodedOffset + 2), unchecked((ushort)~length));
+            encodedOffset += 4;
+            content.Slice(contentOffset, length).CopyTo(encoded.AsSpan(encodedOffset));
+            contentOffset += length;
+            encodedOffset += length;
+        }
+
+        return encoded;
     }
 
     /// <summary>

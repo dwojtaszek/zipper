@@ -68,6 +68,10 @@ To generate the malformed `stored-payload-bitflip` Archive Test Fixture on its o
 ```bash
 zipper --archive-test-suite malformed --archive-test-cases stored-payload-bitflip --seed 42 --output-path ./payload-corruption
 ```
+To generate the malformed `deflate-payload-bitflip` Archive Test Fixture, which flips a stored-block literal while keeping the method-8 stream decodable:
+```bash
+zipper --archive-test-suite malformed --archive-test-cases deflate-payload-bitflip --seed 42 --output-path ./deflate-payload-corruption
+```
 
 #### 7. Choose the Archive compression method
 `--compression` sets the ZIP compression method for every Archive the run produces (Standard mode, `--include-load-file`, and `--production-zip`) and defaults to `deflate`:
