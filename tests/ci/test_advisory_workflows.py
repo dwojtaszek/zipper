@@ -111,14 +111,9 @@ class AdvisoryWorkflowExitClassificationTests(unittest.TestCase):
             "run_check.py in typesafe-issue-triage.yml must be guarded with || rc=$?",
         )
 
-    @unittest.skipIf(os.name == "nt" or shutil.which("bash") is None, "POSIX bash execution boundary")
-    def test_quality_audit_step_exit_classification_under_bash_e(self):
-        """Quality audit step must handle exit codes 0, 2, and 3 correctly under bash -eo pipefail."""
-        step_run = self._get_step_run(self.quality_wf_text, "Run TypeSafe quality ranking (advisory)")
-        self.assertTrue(step_run, "Could not locate 'Run TypeSafe quality ranking (advisory)' step script")
-        # Sanitize GitHub Actions ${{ ... }} expressions for shell test execution
+    def _assert_advisory_exit_classification(self, step_run: str, summary_phrase: str):
+        """Verify advisory step exit code classification (0 success, 3 neutral, 2 failure) under bash -eo pipefail."""
         script = re.sub(r"\$\{\{[^}]+\}\}", "dummy_val", step_run)
-
         for mock_rc, expected_exit, expect_summary in [
             (0, 0, False),
             (3, 0, True),  # Advisory neutral: remote failure exits 0 with summary
@@ -159,16 +154,59 @@ class AdvisoryWorkflowExitClassificationTests(unittest.TestCase):
 
                     if expect_summary:
                         self.assertIn(
-                            "Quality ranking unavailable (remote failure; advisory)",
+                            summary_phrase,
                             summary_content,
-                            "Exit code 3 must append advisory unavailable message to GITHUB_STEP_SUMMARY",
+                            f"Exit code 3 must append '{summary_phrase}' to GITHUB_STEP_SUMMARY",
                         )
                     else:
                         self.assertNotIn(
-                            "Quality ranking unavailable",
+                            summary_phrase,
                             summary_content,
-                            f"Exit code {mock_rc} must not append advisory unavailable message",
+                            f"Exit code {mock_rc} must not append '{summary_phrase}'",
                         )
+
+    def _run_stryker_step(self, script: str, td: str, dotnet_rc: int, python_output: str = ""):
+        """Execute the Stryker workflow step in a temporary directory with mocked tools."""
+        bin_dir = os.path.join(td, "bin")
+        os.makedirs(bin_dir)
+        os.makedirs(os.path.join(td, "src"))
+
+        mock_timeout = os.path.join(bin_dir, "timeout")
+        with open(mock_timeout, "w", encoding="utf-8") as f:
+            f.write("#!/bin/sh\nshift\nexec \"$@\"\n")
+        os.chmod(mock_timeout, 0o755)
+
+        mock_dotnet = os.path.join(bin_dir, "dotnet")
+        with open(mock_dotnet, "w", encoding="utf-8") as f:
+            f.write(f"#!/bin/sh\nexit {dotnet_rc}\n")
+        os.chmod(mock_dotnet, 0o755)
+
+        mock_py = os.path.join(bin_dir, "python3")
+        with open(mock_py, "w", encoding="utf-8") as f:
+            f.write(f"#!/bin/sh\n{python_output}\nexit 0\n")
+        os.chmod(mock_py, 0o755)
+
+        env = os.environ.copy()
+        env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
+        env["SCOPE"] = "LoadFiles/**"
+        env["SHARD_TIMEOUT"] = "45"
+
+        return subprocess.run(
+            ["bash", "-eo", "pipefail", "-c", script],
+            cwd=td,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+
+    @unittest.skipIf(os.name == "nt" or shutil.which("bash") is None, "POSIX bash execution boundary")
+    def test_quality_audit_step_exit_classification_under_bash_e(self):
+        """Quality audit step must handle exit codes 0, 2, and 3 correctly under bash -eo pipefail."""
+        step_run = self._get_step_run(self.quality_wf_text, "Run TypeSafe quality ranking (advisory)")
+        self.assertTrue(step_run, "Could not locate 'Run TypeSafe quality ranking (advisory)' step script")
+        self._assert_advisory_exit_classification(
+            step_run, "Quality ranking unavailable (remote failure; advisory)"
+        )
 
     @unittest.skipIf(os.name == "nt" or shutil.which("bash") is None, "POSIX bash execution boundary")
     def test_quality_audit_stryker_step_error_propagation_under_bash_e(self):
@@ -181,39 +219,7 @@ class AdvisoryWorkflowExitClassificationTests(unittest.TestCase):
         for exit_code in (1, 2, 124):
             with self.subTest(exit_code=exit_code):
                 with tempfile.TemporaryDirectory() as td:
-                    bin_dir = os.path.join(td, "bin")
-                    os.makedirs(bin_dir)
-                    src_dir = os.path.join(td, "src")
-                    os.makedirs(src_dir)
-
-                    mock_timeout = os.path.join(bin_dir, "timeout")
-                    with open(mock_timeout, "w", encoding="utf-8") as f:
-                        f.write("#!/bin/sh\nshift\nexec \"$@\"\n")
-                    os.chmod(mock_timeout, 0o755)
-
-                    mock_dotnet = os.path.join(bin_dir, "dotnet")
-                    with open(mock_dotnet, "w", encoding="utf-8") as f:
-                        f.write(f"#!/bin/sh\nexit {exit_code}\n")
-                    os.chmod(mock_dotnet, 0o755)
-
-                    mock_py = os.path.join(bin_dir, "python3")
-                    with open(mock_py, "w", encoding="utf-8") as f:
-                        f.write("#!/bin/sh\nexit 0\n")
-                    os.chmod(mock_py, 0o755)
-
-                    env = os.environ.copy()
-                    env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
-                    env["SCOPE"] = "LoadFiles/**"
-                    env["SHARD_TIMEOUT"] = "45"
-
-                    proc = subprocess.run(
-                        ["bash", "-eo", "pipefail", "-c", script],
-                        cwd=td,
-                        env=env,
-                        capture_output=True,
-                        text=True,
-                    )
-
+                    proc = self._run_stryker_step(script, td, dotnet_rc=exit_code)
                     self.assertEqual(
                         proc.returncode,
                         exit_code,
@@ -227,39 +233,9 @@ class AdvisoryWorkflowExitClassificationTests(unittest.TestCase):
 
         # Test success case
         with tempfile.TemporaryDirectory() as td:
-            bin_dir = os.path.join(td, "bin")
-            os.makedirs(bin_dir)
-            src_dir = os.path.join(td, "src")
-            os.makedirs(src_dir)
-
-            mock_timeout = os.path.join(bin_dir, "timeout")
-            with open(mock_timeout, "w", encoding="utf-8") as f:
-                f.write("#!/bin/sh\nshift\nexec \"$@\"\n")
-            os.chmod(mock_timeout, 0o755)
-
-            mock_dotnet = os.path.join(bin_dir, "dotnet")
-            with open(mock_dotnet, "w", encoding="utf-8") as f:
-                f.write("#!/bin/sh\nexit 0\n")
-            os.chmod(mock_dotnet, 0o755)
-
-            mock_py = os.path.join(bin_dir, "python3")
-            with open(mock_py, "w", encoding="utf-8") as f:
-                f.write("#!/bin/sh\necho \"normalized in $(pwd)\"\nexit 0\n")
-            os.chmod(mock_py, 0o755)
-
-            env = os.environ.copy()
-            env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
-            env["SCOPE"] = "LoadFiles/**"
-            env["SHARD_TIMEOUT"] = "45"
-
-            proc = subprocess.run(
-                ["bash", "-eo", "pipefail", "-c", script],
-                cwd=td,
-                env=env,
-                capture_output=True,
-                text=True,
+            proc = self._run_stryker_step(
+                script, td, dotnet_rc=0, python_output='echo "normalized in $(pwd)"'
             )
-
             self.assertEqual(
                 proc.returncode,
                 0,
@@ -281,58 +257,9 @@ class AdvisoryWorkflowExitClassificationTests(unittest.TestCase):
         """Issue triage step must handle exit codes 0, 2, and 3 correctly under bash -eo pipefail."""
         step_run = self._get_step_run(self.triage_wf_text, "Run TypeSafe triage (dry run, advisory)")
         self.assertTrue(step_run, "Could not locate 'Run TypeSafe triage (dry run, advisory)' step script")
-        script = re.sub(r"\$\{\{[^}]+\}\}", "dummy_val", step_run)
-
-        for mock_rc, expected_exit, expect_summary in [
-            (0, 0, False),
-            (3, 0, True),  # Advisory neutral: remote failure exits 0 with summary
-            (2, 2, False), # Config/input error fails the step visibly
-        ]:
-            with self.subTest(mock_rc=mock_rc):
-                with tempfile.TemporaryDirectory() as td:
-                    bin_dir = os.path.join(td, "bin")
-                    os.makedirs(bin_dir)
-                    mock_py = os.path.join(bin_dir, "python3")
-                    with open(mock_py, "w", encoding="utf-8") as f:
-                        f.write(f"#!/bin/sh\nexit {mock_rc}\n")
-                    os.chmod(mock_py, 0o755)
-
-                    summary_file = os.path.join(td, "step_summary.md")
-                    env = os.environ.copy()
-                    env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
-                    env["GITHUB_STEP_SUMMARY"] = summary_file
-
-                    proc = subprocess.run(
-                        ["bash", "-eo", "pipefail", "-c", script],
-                        cwd=td,
-                        env=env,
-                        capture_output=True,
-                        text=True,
-                    )
-
-                    self.assertEqual(
-                        proc.returncode,
-                        expected_exit,
-                        f"Expected exit code {expected_exit} for child exit {mock_rc}, got {proc.returncode}. stderr: {proc.stderr}",
-                    )
-
-                    summary_content = ""
-                    if os.path.exists(summary_file):
-                        with open(summary_file, "r", encoding="utf-8") as sf:
-                            summary_content = sf.read()
-
-                    if expect_summary:
-                        self.assertIn(
-                            "Issue triage unavailable (remote failure; advisory)",
-                            summary_content,
-                            "Exit code 3 must append advisory unavailable message to GITHUB_STEP_SUMMARY",
-                        )
-                    else:
-                        self.assertNotIn(
-                            "Issue triage unavailable",
-                            summary_content,
-                            f"Exit code {mock_rc} must not append advisory unavailable message",
-                        )
+        self._assert_advisory_exit_classification(
+            step_run, "Issue triage unavailable (remote failure; advisory)"
+        )
 
 
 if __name__ == "__main__":
