@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -231,6 +232,10 @@ class WorkflowSecurityTests(unittest.TestCase):
 
     def test_dry_run_marker(self):
         self.assertIn("dry-run", self.wf.lower())
+
+    def test_workflow_guards_run_check_under_bash_e(self):
+        # Under bash -e, run_check.py must be guarded so rc=$? handler executes (#1224).
+        self.assertRegex(self.wf, r"(?s)run_check\.py.*?\|\|\s*rc=\$\?")
 
 
 if __name__ == "__main__":

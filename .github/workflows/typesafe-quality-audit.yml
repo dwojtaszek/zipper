@@ -93,7 +93,8 @@ jobs:
           # Scope is relative to project root src/; strip leading src/ if provided.
           MUTATE_SCOPE="${SCOPE#src/}"
           mkdir -p results/mutation
-          cd src && timeout "${SHARD_TIMEOUT}m" dotnet stryker \
+          STRYKER_RC=0
+          (cd src && timeout "${SHARD_TIMEOUT}m" dotnet stryker \
             --project Zipper.csproj \
             --test-project Zipper.Tests/Zipper.Tests.csproj \
             --mutate "$MUTATE_SCOPE" \
@@ -101,13 +102,11 @@ jobs:
             --output "../results/mutation" \
             --break-at 0 \
             --concurrency 4 \
-            --skip-version-check
-          STRYKER_RC=$?
+            --skip-version-check) || STRYKER_RC=$?
           if [ "$STRYKER_RC" -ne 0 ]; then
             echo "::error::dotnet stryker exited with code $STRYKER_RC"
             exit "$STRYKER_RC"
           fi
-          cd ..
           python3 tools/typesafe-audit/quality/normalize_report.py \
             --input results/mutation \
             --output results/mutation/mutation-report.json \
@@ -120,14 +119,14 @@ jobs:
           TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
         run: |
           set -o pipefail
+          rc=0
           python3 tools/typesafe-audit/quality/run_check.py \
             --mode live \
             --coverage "${{ steps.coverage.outputs.coverage_file }}" \
             --mutation results/mutation/mutation-report.json \
             --json-out results/typesafe-quality/ranking.json \
             --md-out results/typesafe-quality/ranking.md \
-            --summary-out "$GITHUB_STEP_SUMMARY"
-          rc=$?
+            --summary-out "$GITHUB_STEP_SUMMARY" || rc=$?
           if [ "$rc" -eq 0 ]; then
             exit 0
           fi
