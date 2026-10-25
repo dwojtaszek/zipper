@@ -751,6 +751,9 @@ run_standalone_suite "CLI coverage gap tests" bash ./tests/test-cli-coverage-gap
 # Keep the Windows wrapper's child exit codes guarded (#1040)
 run_standalone_suite "Run-tests child-exit-code guard parity tests" bash ./tests/test-run-tests-guard-parity.sh
 
+# Mutation smoke candidate selection (Linux-only; see tests/validate-e2e-parity.sh)
+run_standalone_suite "mutation smoke candidate selection tests" bash ./tests/test-mutation-smoke-operators.sh
+
 run_standalone_suite "mixed file types tests" bash ./tests/test-mixed-file-types.sh
 
 run_standalone_suite "source-driven generation tests" bash ./tests/test-source-driven.sh

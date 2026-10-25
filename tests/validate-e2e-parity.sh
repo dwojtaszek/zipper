@@ -46,11 +46,15 @@ BAT_RUNNER="$SCRIPT_DIR/run-tests.bat"
 #     and perf-guard / baseline-refresh integrations (#826).
 #   tests/test-stress-harness — Linux/bash-only regression guard for stress
 #     test runner and scenario scripts (#1114).
+#   tests/test-mutation-smoke-operators — Linux/bash-only regression guard for
+#     run-mutation-smoke.sh candidate selection; builds a throwaway git repo
+#     with POSIX tools and has no Windows counterpart.
 EXEMPT_SUBSCRIPTS=(
     tests/test-run-tests-fatal
     .github/actions/coverage-gate/test-coverage-gate
     tests/test-perf-measure
     tests/test-stress-harness
+    tests/test-mutation-smoke-operators
 )
 
 STRICT=0
