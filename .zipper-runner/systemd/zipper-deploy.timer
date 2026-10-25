@@ -4,6 +4,10 @@ Description=Zipper Runner Deploy main Timer
 [Timer]
 OnBootSec=2min
 OnCalendar=*:0/1
+# systemd's default accuracy is 1min, which equals this timer's whole cadence, so
+# a tick may fire up to 60s after its scheduled elapse. A one-minute cadence
+# cannot tolerate a one-minute slack, so pin the accuracy rather than inherit it.
+AccuracySec=1s
 Persistent=false
 
 [Install]
