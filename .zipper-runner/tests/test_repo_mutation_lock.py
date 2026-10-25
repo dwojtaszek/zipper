@@ -10,11 +10,13 @@ Run from the .zipper-runner directory:
     python3 -m unittest discover -s tests
 """
 
+import fcntl
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -45,6 +47,138 @@ class RepoMutationLockTests(unittest.TestCase):
         (runner.REPO_MUTATION_LOCK_PATH, runner.REPO_MUTATION_LOCK_TIMEOUT,
          runner.REPO_MUTATION_LOCK_STALE_SECONDS, runner.REPO_PATH,
          runner.DRY_RUN, runner._repo_mutation_lock_depth) = self._saved
+
+    def test_lockIsHeld_whenTheLockIsAbsent_shouldNotCreateIt(self):
+        """Asking whether a lock is held must never create one.
+
+        `_lock_is_held` opened the path with "a", which creates the file. Against
+        the main-checkout lock's path that manufactured a zero-byte regular file
+        where the protocol requires a directory, so every later mkdir failed with
+        EEXIST and read as "another process holds it". Observed on the host: one
+        `--status` run wedged deploys for 20 minutes, and a second did it again for 11.
+        """
+        self.assertFalse(self.lock_path.exists())
+
+        self.assertFalse(runner._lock_is_held(str(self.lock_path)))
+
+        self.assertFalse(self.lock_path.exists(),
+                         "probing a free lock must leave the path absent, not create a file")
+
+    def test_lockIsHeld_whenThePathVanishesBetweenTheCheckAndTheOpen_shouldNotRecreateIt(self):
+        """The guard has to hold under the race, not just when nothing else is running.
+
+        `os.path.exists` and the open are two steps, and this path is a *shared* lock
+        that other processes remove routinely, so "it exists" does not mean it still
+        exists a moment later. A probe that opened with "a" would then recreate the
+        exact poison file it is supposed to stop making, so the regression would come
+        back whenever `--status` raced a deploy's reclaim.
+        """
+        # Report the path as present while it is absent, which is what the race looks
+        # like from inside the probe.
+        with patch.object(runner.os.path, "exists", return_value=True):
+            self.assertFalse(runner._lock_is_held(str(self.lock_path)))
+
+        self.assertFalse(self.lock_path.exists(),
+                         "a probe must not create the path even when it believes it exists")
+
+    def test_lockIsHeld_whenThePathIsAFifo_shouldReportFreeWithoutBlocking(self):
+        """Two failures in one path: opening a fifo for writing blocks until a reader
+        appears, and `flock` on a fifo fails on macOS (ENOTSUP) while succeeding on
+        Linux. Trusting `flock` there would make the answer platform-dependent, so
+        the type is classified from the descriptor and a fifo reads as free.
+
+        The no-block property is checked on every platform. The classification is
+        only *discriminated* on macOS, because `flock` on a fifo succeeds on Linux
+        and would return free by accident; macOS CI is what catches a regression in
+        the descriptor check, and it did.
+        """
+        os.mkfifo(self.lock_path)
+
+        # A hang would hit the suite's own timeout rather than this assertion, so the
+        # probe runs on a thread and the test fails fast with a real message.
+        result: list[bool] = []
+        thread = threading.Thread(target=lambda: result.append(
+            runner._lock_is_held(str(self.lock_path))), daemon=True)
+        thread.start()
+        thread.join(timeout=10)
+
+        self.assertFalse(thread.is_alive(), "probing a fifo must not block")
+        self.assertEqual(result, [False], "a fifo cannot hold a lock")
+        self.assertTrue(self.lock_path.exists(), "the probe must leave the fifo in place")
+
+    def test_lockIsHeld_whenThePathIsACharacterDevice_shouldReportFree(self):
+        """The same classification for a descriptor `flock` cannot lock. Like the fifo
+        case, Linux's `flock` accepts it anyway, so the discriminating platform is
+        macOS; this pins the reported answer on both."""
+        self.assertFalse(runner._lock_is_held(os.devnull))
+
+    def test_lockIsHeld_whenTheLockIsAFreeDirectory_shouldReportHeld(self):
+        """The main-checkout lock is a directory, not a flock file: its existence is
+        the lock, so the probe must read it as held."""
+        self.lock_path.mkdir()
+
+        self.assertTrue(runner._lock_is_held(str(self.lock_path)))
+
+    def test_lockIsHeld_whenTheLockIsAFlockFile_shouldReportIt(self):
+        """The other protocol this helper serves: a real flock must still be
+        detected, or `--status` would report every agent lock as free."""
+        self.lock_path.touch()
+        with open(self.lock_path, "a") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            self.assertTrue(runner._lock_is_held(str(self.lock_path)))
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+        self.assertFalse(runner._lock_is_held(str(self.lock_path)))
+
+    def test_lock_whenAFileSitsAtTheLockPath_shouldReclaimImmediately(self):
+        """A regular file cannot be a held lock under a mkdir protocol, so it must be
+        reclaimed at once rather than deferred until the 20-minute stale bound."""
+        self.lock_path.touch()
+
+        with runner._repo_mutation_lock() as locked:
+            self.assertTrue(locked, "a non-directory lock path must be reclaimed at once")
+            self.assertTrue(self.lock_path.is_dir(), "the acquired lock must be a directory")
+
+    def test_lock_whenAFileSitsAtTheLockPath_shouldNotWaitForTheStaleBound(self):
+        """The reclaim must not depend on age: a fresh poison file is just as
+        unusable as an old one, and waiting out the bound is the whole bug.
+
+        The timeout is raised above its fail-fast default so this actually measures
+        something. A reclaim that fell through to the age path would spend the whole
+        timeout before yielding False, so both assertions below would fail; with the
+        timeout at 0 the elapsed check could never fail at all.
+        """
+        self.lock_path.touch()
+        runner.REPO_MUTATION_LOCK_TIMEOUT = 20
+
+        started = time.monotonic()
+        with runner._repo_mutation_lock() as locked:
+            elapsed = time.monotonic() - started
+
+        self.assertTrue(locked, "a fresh poison file must be reclaimed, not waited out")
+        self.assertLess(elapsed, 2, "the reclaim must not consume the lock timeout")
+
+    def test_removePoisonedLock_whenThePathIsASymlinkToALock_shouldLeaveTheRealLockAlone(self):
+        """Removing a symlink removes the link, never its target, so a redirect aimed
+        at a real lock directory cannot be used to delete that lock."""
+        real_lock = self.root / "elsewhere"
+        real_lock.mkdir()
+        self.lock_path.symlink_to(real_lock)
+
+        self.assertFalse(runner._remove_poisoned_repo_mutation_lock())
+        self.assertTrue(real_lock.is_dir(), "the symlink target must survive")
+        self.assertTrue(self.lock_path.is_symlink(), "a link to a real lock must be left alone")
+
+    def test_removePoisonedLock_whenThePathIsARealLock_shouldLeaveItAlone(self):
+        """The reclaim must not become a way to delete a live holder's lock."""
+        self.hold_lock_asAnotherProcess(pid=self._live_pid())
+
+        self.assertFalse(runner._remove_poisoned_repo_mutation_lock())
+        self.assertTrue(self.lock_path.is_dir(), "a real lock must survive the poison check")
+
+    def test_removePoisonedLock_whenThePathIsAbsent_shouldReportNothingRemoved(self):
+        self.assertFalse(runner._remove_poisoned_repo_mutation_lock())
+        self.assertFalse(self.lock_path.exists())
 
     def hold_lock_asAnotherProcess(self, age_seconds: int = 0, pid: int | None = None) -> None:
         """Take the lock the way deploy-main.sh does: an atomic mkdir on the path."""

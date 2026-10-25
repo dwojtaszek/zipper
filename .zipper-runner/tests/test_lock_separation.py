@@ -387,6 +387,52 @@ class BabysitLockIntegrationTests(unittest.TestCase):
         self.assertIn("Runner Lock Status: ACTIVE / LOCKED", result.stdout)
         self.assertIn("Babysit Lock Status: IDLE / UNLOCKED", result.stdout)
 
+    def test_status_shouldNotCreateTheMainCheckoutLockItReportsOn(self):
+        """`_lock_is_held` probed with `open(path, "a")`, which creates the file.
+
+        `show_status` probes the main-checkout lock, which is a *directory*, so the
+        probe manufactured a zero-byte regular file where the protocol requires a
+        directory: every later mkdir failed with EEXIST and read as "held", wedging
+        deploys and runner mutations for the 20-minute stale bound. This drives the
+        real CLI, which is the only place the two halves meet.
+        """
+        env = self._env()
+        holder = open(env["LOCK_FILE_PATH"], "a")
+        self.addCleanup(holder.close)
+        fcntl.flock(holder, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        lock_path = Path(env["RUNNER_BASE"]) / "repo-mutation.lock"
+        self.assertFalse(lock_path.exists())
+
+        result = subprocess.run(
+            [sys.executable, str(self.base / "runner.py"), "--status", "--dry-run"],
+            env=env, capture_output=True, text=True, timeout=120)
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Main checkout Lock Status: IDLE / UNLOCKED", result.stdout)
+        self.assertFalse(lock_path.exists(),
+                         "a --status run must not leave a file at the directory-lock path")
+
+    def test_status_whenTheMainCheckoutLockIsHeld_shouldReportItHeld(self):
+        """The other half of the same bug: `open(dir, "a")` raised IsADirectoryError,
+        so `--status` reported IDLE / UNLOCKED while the checkout was genuinely
+        locked. A diagnostic that reports the opposite of the truth is worse than
+        none, because it is what an operator checks before intervening."""
+        env = self._env()
+        intake_holder = open(env["LOCK_FILE_PATH"], "a")
+        self.addCleanup(intake_holder.close)
+        fcntl.flock(intake_holder, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        lock_path = Path(env["RUNNER_BASE"]) / "repo-mutation.lock"
+        lock_path.mkdir()
+        self.addCleanup(shutil.rmtree, lock_path, ignore_errors=True)
+
+        result = subprocess.run(
+            [sys.executable, str(self.base / "runner.py"), "--status", "--dry-run"],
+            env=env, capture_output=True, text=True, timeout=120)
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Main checkout Lock Status: ACTIVE / LOCKED", result.stdout)
+        self.assertTrue(lock_path.is_dir(), "the held lock must be left as a directory")
+
 
 if __name__ == "__main__":
     unittest.main()
