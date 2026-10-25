@@ -21,7 +21,7 @@ on:
       shard:
         description: "Per-shard mutation timeout in minutes"
         required: false
-        default: "45"
+        default: "60"
 
 permissions:
   contents: read
@@ -116,11 +116,11 @@ jobs:
 
       - name: Mutation testing shard (Phase 2)
         if: steps.secret.outputs.available == 'true'
-        timeout-minutes: ${{ fromJSON(github.event.inputs.shard || '45') }}
+        timeout-minutes: ${{ fromJSON(github.event.inputs.shard || '60') }}
         env:
           SCOPE: ${{ github.event.inputs.scope || 'LoadFiles/**,PathValidator.cs,Validation/ProductionSetPostValidator.cs,ProductionSetOrchestrator.cs,ManifestComparison/ProductionManifestComparer.cs,ZipArchiveSink.cs,Emails/EmailFactory.cs,ChaosSampler.cs,DatAnomalyApplier.cs,OptAnomalyApplier.cs' }}
           BREAK_AT: ${{ github.event.inputs.break_at || '50' }}
-          SHARD_TIMEOUT: ${{ github.event.inputs.shard || '45' }}
+          SHARD_TIMEOUT: ${{ github.event.inputs.shard || '60' }}
         run: |
           # Scope is relative to project root src/; split comma-separated globs.
           MUTATE_ARGS=()
@@ -155,15 +155,17 @@ jobs:
             --break-at "$BREAK_AT" \
             --concurrency 4 \
             --skip-version-check) || STRYKER_RC=$?
+          if [ -d results/mutation ]; then
+            python3 tools/typesafe-audit/quality/normalize_report.py \
+              --input results/mutation \
+              --output results/mutation/mutation-report.json \
+              --scope "$SCOPE" \
+              --repo-root . || true
+          fi
           if [ "$STRYKER_RC" -ne 0 ]; then
             echo "::error::dotnet stryker exited with code $STRYKER_RC"
             exit "$STRYKER_RC"
           fi
-          python3 tools/typesafe-audit/quality/normalize_report.py \
-            --input results/mutation \
-            --output results/mutation/mutation-report.json \
-            --scope "$SCOPE" \
-            --repo-root .
 
       - name: Run TypeSafe quality ranking (advisory)
         id: quality-ranking

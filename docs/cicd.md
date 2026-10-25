@@ -134,7 +134,7 @@ Trigger: `push` → `main`, stable tags `v*`, and manual recovery via `workflow_
 | Line coverage ≥ 80% | build-and-test (Linux) | Yes |
 | Branch coverage ≥ 85% | build-and-test (Linux) | Yes |
 | Per-file line coverage ≥ 50% (≥20 lines) | build-and-test (Linux) | Yes |
-| Mutation score ≥ 50% | typesafe-quality-audit (Phase 2) | Yes |
+| Mutation score ≥ 50% | typesafe-quality-audit (Phase 2) | Yes (scheduled/manual audit gate; does not run on PRs) |
 | Full E2E (all 3 OS) | build-and-test | Yes |
 | Golden parity | goldens | Yes |
 | Oversized file (>500 KB) | lint | Yes |

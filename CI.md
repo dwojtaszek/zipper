@@ -25,7 +25,7 @@ Issues ordered: `BLOCKER` → `MAJOR` → `MINOR` → `INFO`. MINOR and INFO are
 The SonarCloud check can fail even with zero code issues. Common non-issue causes:
 
 - **Security hotspots** (e.g., unpinned GitHub Actions) — fix by pinning to full commit SHA: `uses: owner/action@<full-sha> # vN`
-- **Coverage gate** — enforces 80% total line coverage, 85% total branch coverage, and 50% per-file line coverage (≥20 lines); may not be actionable for test-only or infra PRs; not a merge blocker if no code issues exist
+- **SonarCloud coverage gate** — SonarCloud's advisory coverage gate status may flag test-only or infra PRs; not a merge blocker if no code issues exist. Note: The CI coverage gate in `ci.yml` (Linux `build-and-test` step) strictly enforces 80% total line coverage, 85% total branch coverage, and 50% per-file line coverage (≥20 lines), and a failure there blocks `ci-gate`.
 
 Check quality gate details if the check fails but no issues are found:
 
