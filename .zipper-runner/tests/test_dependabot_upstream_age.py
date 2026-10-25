@@ -110,7 +110,7 @@ class DependabotUpstreamAgeTests(unittest.TestCase):
             return (0, "", "")
 
         mock_run_cmd.side_effect = fake_run_cmd
-        mock_merge.return_value = (0, "merged", "")
+        mock_merge.return_value = (0, "merged", "", None)
 
     def test_parse_updated_dependencies_grouped_yaml(self):
         body = """
