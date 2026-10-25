@@ -421,6 +421,10 @@ public class ArchiveStructureCaseTests : WorkingDirectoryTestBase
         Assert.Contains(malformed, c => c.CaseKey == "prefix-unrebased");
         Assert.Contains(malformed, c => c.CaseKey == "deflate-invalid-btype");
         Assert.Contains(malformed, c => c.CaseKey == "deflate-corrupt-huffman");
+        Assert.Contains(malformed, c => c.CaseKey == "stored-payload-bitflip");
+        Assert.DoesNotContain(
+            ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.SmokeSuite),
+            c => c.CaseKey == "stored-payload-bitflip");
         Assert.Equal("policy-sensitive", ArchiveTestCatalog.GetCase("unsupported-method").Classification);
         Assert.Equal("policy-sensitive", ArchiveTestCatalog.GetCase("unsupported-method-deflate64").Classification);
         Assert.Equal("malformed", ArchiveTestCatalog.GetCase("orphan-local-header").Classification);

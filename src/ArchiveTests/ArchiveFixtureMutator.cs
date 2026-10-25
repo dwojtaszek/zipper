@@ -814,9 +814,9 @@ internal static class ArchiveFixtureMutator
     }
 
     /// <summary>
-    /// Flips the low bit of entry 0's stored payload byte while headers, CRC-32, sizes,
-    /// and central directory stay intact: decoders and integrity checks detect the corruption
-    /// through the recorded CRC-32 and content hash (ticket #1276).
+    /// Flips the low bit of entry 0's stored payload byte while all ZIP declarations stay
+    /// unchanged; the recorded CRC-32 and original content hash remain independent oracles
+    /// for the mutation (ticket #1276).
     /// </summary>
     private static MutatedArchiveFixture FlipStoredPayloadByte(ArchiveFixtureArtifact control, byte[] before)
     {
@@ -841,7 +841,7 @@ internal static class ArchiveFixtureMutator
         [
             new MutationSpec(
                 code, "file-data", dataOffset,
-                "Flips bit 0 of the first entry's stored payload byte while headers, CRC-32, sizes, and central directory stay intact; decoders and integrity checks detect the corruption through the recorded CRC-32 and content hash.",
+                "Flips bit 0 of the first entry's stored payload byte while all ZIP declarations stay unchanged; the recorded CRC-32 and original content hash remain independent oracles for the mutation.",
                 entry.Ordinal, 1, 1,
                 DeclaredValue: $"payload-byte-flip=bit0 data-offset={dataOffset} original-content-sha256={contentSha256}"),
         ], after => after[dataOffset] ^= 0x01);
