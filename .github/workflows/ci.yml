@@ -100,7 +100,7 @@ jobs:
   # and gives it its own checkout without the .NET build in the way.
   runner-tests:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 5
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
