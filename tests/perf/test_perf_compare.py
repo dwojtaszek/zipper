@@ -351,6 +351,343 @@ class PerfCompareTests(unittest.TestCase):
         self.assertEqual(2, invalid_flag.returncode)
         self.assertIn("usage: perf-compare.py", invalid_flag.stderr)
 
+    def test_perf_compare_emits_variability_and_runtime_context(self):
+        """Verifies that perf-compare.py outputs run-to-run variability and machine/runtime context."""
+        with tempfile.TemporaryDirectory() as directory:
+            results = Path(directory)
+            self._write_runs(results, self.runs_high_rss)
+
+            result = self._run_compare(results)
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertIn("### Run-to-Run Variability", result.stdout)
+            self.assertIn("### Runtime Context", result.stdout)
+            self.assertIn("Seed", result.stdout)
+            self.assertIn(".NET SDK", result.stdout)
+
+
+class PerfBaselineRefreshTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.baselines = json.loads((ROOT / "tests/perf/baselines.json").read_text())
+        cls.scenarios = [k for k in cls.baselines if not k.startswith("_")]
+
+    def _write_runs(self, directory: Path, runs):
+        for n, run in enumerate(runs, 1):
+            (directory / f"run_{n}.json").write_text(json.dumps(run))
+
+    def _run_refresh(self, results_dir, baselines_path, extra_args=None, env=None):
+        script = ROOT / ".github/scripts/perf-baseline-refresh.py"
+        args = [sys.executable, str(script), str(results_dir), str(baselines_path)]
+        if extra_args:
+            args.extend(extra_args)
+        run_env = dict(os.environ) if env is None else dict(env)
+        if env is None:
+            for key in ("GITHUB_OUTPUT", "JUSTIFICATION", "PERF_SEED"):
+                run_env.pop(key, None)
+        return subprocess.run(
+            args,
+            cwd=ROOT,
+            env=run_env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def test_baseline_refresh_uses_median_and_records_context_and_variability(self):
+        """Proves baseline refresh uses median (NOT max), and records context and variability in baselines.json."""
+        with tempfile.TemporaryDirectory() as directory:
+            temp_dir = Path(directory)
+            results = temp_dir / "results"
+            results.mkdir()
+
+            # Create 5 runs where median strictly differs from max
+            # e.g. for pdf_50k wall_s: [1.0, 1.2, 1.5, 2.0, 3.0] -> median 1.5, max 3.0
+            runs = []
+            wall_vals = [1.0, 1.2, 1.5, 2.0, 3.0]
+            rss_vals = [100000, 110000, 120000, 130000, 150000]
+            for i in range(5):
+                run = {}
+                for sc in self.scenarios:
+                    run[sc] = {"wall_s": wall_vals[i], "rss_kb": rss_vals[i]}
+                runs.append(run)
+            self._write_runs(results, runs)
+
+            baselines_copy = temp_dir / "baselines.json"
+            baselines_copy.write_text(json.dumps(self.baselines))
+            gh_out = temp_dir / "gh_output"
+
+            result = self._run_refresh(
+                results,
+                baselines_copy,
+                extra_args=["--pr-body-out", str(temp_dir / "pr_body.md")],
+                env=dict(os.environ, GITHUB_OUTPUT=str(gh_out)),
+            )
+            self.assertEqual(0, result.returncode, f"stderr: {result.stderr}")
+            gh_text = gh_out.read_text()
+            self.assertIn("drifted=true\n", gh_text)
+            self.assertIn("has_increases=true\n", gh_text)
+
+            new_baselines = json.loads(baselines_copy.read_text())
+
+            # 1. Proves median is stored, NOT max
+            self.assertEqual(1.5, new_baselines["pdf_50k"]["wall_s"])
+            self.assertNotEqual(3.0, new_baselines["pdf_50k"]["wall_s"])
+            self.assertEqual(120000, new_baselines["pdf_50k"]["rss_kb"])
+            self.assertNotEqual(150000, new_baselines["pdf_50k"]["rss_kb"])
+
+            # 2. Methodology explicitly states median
+            self.assertIn("median", new_baselines.get("_methodology", "").lower())
+            self.assertNotIn("max(", new_baselines.get("_methodology", "").lower())
+
+            # 3. Context recorded
+            self.assertIn("_context", new_baselines)
+            ctx = new_baselines["_context"]
+            self.assertIn("dotnet_sdk", ctx)
+            self.assertIn("seed", ctx)
+
+            # 4. Variability recorded
+            self.assertIn("_variability", new_baselines)
+            var_pdf = new_baselines["_variability"]["pdf_50k"]
+            self.assertEqual(1.0, var_pdf["wall_s"]["min"])
+            self.assertEqual(3.0, var_pdf["wall_s"]["max"])
+
+    def test_baseline_refresh_justification_and_raw_runs_attached(self):
+        """Verifies justification is recorded for increases and raw runs are embedded in PR body."""
+        with tempfile.TemporaryDirectory() as directory:
+            temp_dir = Path(directory)
+            results = temp_dir / "results"
+            results.mkdir()
+
+            # Create 5 runs that represent an increase over baselines
+            runs = []
+            for i in range(5):
+                run = {}
+                for sc in self.scenarios:
+                    bw = self.baselines[sc]["wall_s"]
+                    br = self.baselines[sc]["rss_kb"]
+                    run[sc] = {"wall_s": round(bw * 1.5, 2), "rss_kb": int(round(br * 1.5))}
+                runs.append(run)
+            self._write_runs(results, runs)
+
+            baselines_copy = temp_dir / "baselines.json"
+            baselines_copy.write_text(json.dumps(self.baselines))
+            pr_body_path = temp_dir / "pr_body.md"
+            gh_out = temp_dir / "gh_output"
+
+            result = self._run_refresh(
+                results,
+                baselines_copy,
+                extra_args=[
+                    "--pr-body-out", str(pr_body_path),
+                    "--justification", "Upgraded runtime to .NET 10 with expanded metadata profiling.",
+                ],
+                env=dict(os.environ, GITHUB_OUTPUT=str(gh_out)),
+            )
+            self.assertEqual(0, result.returncode, f"stderr: {result.stderr}")
+            gh_text = gh_out.read_text()
+            self.assertIn("drifted=true\n", gh_text)
+            self.assertIn("has_increases=true\n", gh_text)
+
+            new_baselines = json.loads(baselines_copy.read_text())
+            self.assertEqual(
+                "Upgraded runtime to .NET 10 with expanded metadata profiling.",
+                new_baselines.get("_justification"),
+            )
+
+            pr_body = pr_body_path.read_text()
+            self.assertIn("Upgraded runtime to .NET 10 with expanded metadata profiling.", pr_body)
+            self.assertIn("Recorded justification for baseline increase", pr_body)
+            self.assertIn("### Run-to-Run Variability", pr_body)
+            self.assertIn("### Runtime Context", pr_body)
+            self.assertIn("<details>", pr_body)
+            self.assertIn("run_1.json", pr_body)
+            self.assertIn("run_5.json", pr_body)
+
+    def test_same_revision_consistency_between_guard_and_refresh(self):
+        """Proves guard and refresh compute identical medians for identical runs."""
+        with tempfile.TemporaryDirectory() as directory:
+            temp_dir = Path(directory)
+            results = temp_dir / "results"
+            results.mkdir()
+
+            # Use 5 unequal runs
+            runs = []
+            for i in range(5):
+                run = {}
+                for sc in self.scenarios:
+                    bw = self.baselines[sc]["wall_s"]
+                    br = self.baselines[sc]["rss_kb"]
+                    run[sc] = {
+                        "wall_s": round(bw * (0.9 + i * 0.1), 2),
+                        "rss_kb": int(round(br * (0.9 + i * 0.1))),
+                    }
+                runs.append(run)
+            self._write_runs(results, runs)
+
+            # Guard calculation
+            measured_path = temp_dir / "measured.json"
+            guard_env = {k: v for k, v in os.environ.items() if k != "GITHUB_OUTPUT"}
+            guard_res = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / ".github/scripts/perf-compare.py"),
+                    str(results),
+                    "--measured-out",
+                    str(measured_path),
+                ],
+                cwd=ROOT,
+                env=guard_env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(0, guard_res.returncode)
+            guard_medians = json.loads(measured_path.read_text())
+
+            # Refresh calculation
+            baselines_copy = temp_dir / "baselines.json"
+            baselines_copy.write_text(json.dumps(self.baselines))
+            refresh_res = self._run_refresh(
+                results,
+                baselines_copy,
+                extra_args=["--pr-body-out", str(temp_dir / "pr_body.md")],
+            )
+            self.assertEqual(0, refresh_res.returncode)
+            refreshed_baselines = json.loads(baselines_copy.read_text())
+
+            for sc in self.scenarios:
+                self.assertEqual(
+                    guard_medians[sc]["wall_s"],
+                    refreshed_baselines[sc]["wall_s"],
+                    f"Wall median mismatch for {sc}",
+                )
+                self.assertEqual(
+                    guard_medians[sc]["rss_kb"],
+                    refreshed_baselines[sc]["rss_kb"],
+                    f"RSS median mismatch for {sc}",
+                )
+
+    def test_baseline_refresh_no_drift_and_force_flag(self):
+        """Verifies < 5% drift early exit without update, and --force flag behavior."""
+        with tempfile.TemporaryDirectory() as directory:
+            temp_dir = Path(directory)
+            results = temp_dir / "results"
+            results.mkdir()
+
+            # Create 5 runs identical to current baselines (0% drift)
+            runs = []
+            for _ in range(5):
+                run = {
+                    sc: dict(self.baselines[sc])
+                    for sc in self.scenarios
+                }
+                runs.append(run)
+            self._write_runs(results, runs)
+
+            baselines_copy = temp_dir / "baselines.json"
+            baselines_copy.write_text(json.dumps(self.baselines))
+            gh_out = temp_dir / "gh_output"
+
+            # 1. Without --force: no drift, baselines unchanged, drifted=false
+            res_nodrift = self._run_refresh(
+                results,
+                baselines_copy,
+                env=dict(os.environ, GITHUB_OUTPUT=str(gh_out)),
+            )
+            self.assertEqual(0, res_nodrift.returncode)
+            self.assertIn("No refresh needed", res_nodrift.stdout)
+            self.assertIn("drifted=false\n", gh_out.read_text())
+            self.assertEqual(self.baselines, json.loads(baselines_copy.read_text()))
+
+            # 2. With --force: forces update even with 0% drift
+            gh_out.unlink()
+            res_force = self._run_refresh(
+                results,
+                baselines_copy,
+                extra_args=["--force", "--pr-body-out", str(temp_dir / "pr_body.md")],
+                env=dict(os.environ, GITHUB_OUTPUT=str(gh_out)),
+            )
+            self.assertEqual(0, res_force.returncode)
+            self.assertIn("Force refresh applied", res_force.stdout)
+            self.assertIn("drifted=true\n", gh_out.read_text())
+            forced_baselines = json.loads(baselines_copy.read_text())
+            self.assertIn("_context", forced_baselines)
+
+    def test_baseline_refresh_unsupplied_justification_placeholder(self):
+        """Verifies placeholder checklist item generated when baseline increases but no justification is supplied."""
+        with tempfile.TemporaryDirectory() as directory:
+            temp_dir = Path(directory)
+            results = temp_dir / "results"
+            results.mkdir()
+
+            runs = []
+            for i in range(5):
+                run = {}
+                for sc in self.scenarios:
+                    bw = self.baselines[sc]["wall_s"]
+                    br = self.baselines[sc]["rss_kb"]
+                    run[sc] = {"wall_s": round(bw * 1.3, 2), "rss_kb": int(round(br * 1.3))}
+                runs.append(run)
+            self._write_runs(results, runs)
+
+            baselines_copy = temp_dir / "baselines.json"
+            baselines_copy.write_text(json.dumps(self.baselines))
+            pr_body_path = temp_dir / "pr_body.md"
+
+            res = self._run_refresh(
+                results,
+                baselines_copy,
+                extra_args=["--pr-body-out", str(pr_body_path)],
+            )
+            self.assertEqual(0, res.returncode)
+            pr_body = pr_body_path.read_text()
+            self.assertIn("REQUIRED: One or more baseline metrics increased", pr_body)
+            new_baselines = json.loads(baselines_copy.read_text())
+            self.assertNotIn("_justification", new_baselines)
+
+    def test_baseline_refresh_invalid_args_and_missing_runs_fails(self):
+        """Verifies status 2 on invalid arguments, invalid seeds, and missing run files."""
+        # Missing args
+        no_args = subprocess.run(
+            [sys.executable, str(ROOT / ".github/scripts/perf-baseline-refresh.py")],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(2, no_args.returncode)
+
+        # Invalid seed (non-integer)
+        invalid_seed = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / ".github/scripts/perf-baseline-refresh.py"),
+                "results",
+                "tests/perf/baselines.json",
+                "--seed",
+                "notanumber",
+            ],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(2, invalid_seed.returncode)
+
+        # Missing run file
+        with tempfile.TemporaryDirectory() as directory:
+            temp_dir = Path(directory)
+            results = temp_dir / "results"
+            results.mkdir()
+            for n in range(1, 4):  # only 3 runs
+                (results / f"run_{n}.json").write_text(json.dumps({}))
+            baselines_copy = temp_dir / "baselines.json"
+            baselines_copy.write_text(json.dumps(self.baselines))
+
+            missing_run = self._run_refresh(results, baselines_copy)
+            self.assertEqual(2, missing_run.returncode)
+            self.assertIn("missing run file", missing_run.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

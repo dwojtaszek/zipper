@@ -13,16 +13,23 @@ and appends failed=/table outputs when GITHUB_OUTPUT is set (GitHub Actions).
 import json
 import os
 import sys
+from pathlib import Path
+
+# Add current script directory to sys.path so perf_utils can be imported
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from perf_utils import (
+    compute_variability,
+    format_context_section,
+    format_variability_table,
+    get_runtime_context,
+    load_runs,
+    median,
+)
 
 WALL_THRESHOLD = 1.25  # informational only — never fails the job
 RSS_THRESHOLD = 1.20  # advisory warning threshold
 WALL_WARN_RATIO = 1.5
-
-
-def median(values):
-    s = sorted(values)
-    n = len(s)
-    return s[n // 2] if n % 2 else (s[n // 2 - 1] + s[n // 2]) / 2
 
 
 def parse_args(argv):
@@ -43,22 +50,6 @@ def parse_args(argv):
         else:
             return None
     return results_dir, table_out, measured_out
-
-
-def load_medians(results_dir, scenarios):
-    runs = []
-    for n in range(1, 6):
-        with open(os.path.join(results_dir, f"run_{n}.json")) as f:
-            runs.append(json.load(f))
-    medians = {}
-    for sc in scenarios:
-        if any(r[sc]["rss_kb"] <= 0 or r[sc]["wall_s"] < 0 for r in runs):
-            raise ValueError(f"invalid measurement for {sc}: RSS must be positive and wall time non-negative")
-        medians[sc] = {
-            "wall_s": median([r[sc]["wall_s"] for r in runs]),
-            "rss_kb": median([r[sc]["rss_kb"] for r in runs]),
-        }
-    return medians
 
 
 def warn_wall(sc, ratio, measured, baseline):
@@ -86,7 +77,7 @@ def scenario_rows(sc, baseline, measured):
     return rows, rr > RSS_THRESHOLD
 
 
-def build_table(baselines, medians, scenarios):
+def build_table(baselines, medians, scenarios, variability=None, context=None):
     rows = []
     failed = False
     for sc in scenarios:
@@ -96,6 +87,10 @@ def build_table(baselines, medians, scenarios):
     table = "| Scenario | Metric | Baseline | Measured | Ratio | Status |\n"
     table += "|----------|--------|----------|----------|-------|--------|\n"
     table += "\n".join(rows)
+    if variability:
+        table += "\n\n" + format_variability_table(variability, scenarios)
+    if context:
+        table += "\n\n" + format_context_section(context)
     return table, failed
 
 
@@ -128,14 +123,31 @@ def main() -> int:
     scenarios = [k for k in baselines if not k.startswith("_")]
 
     try:
-        medians = load_medians(results_dir, scenarios)
+        runs = load_runs(results_dir, scenarios)
     except FileNotFoundError as e:
         print(f"perf-compare: missing run file: {e.filename}", file=sys.stderr)
         return 2
     except ValueError as e:
         print(f"perf-compare: {e}", file=sys.stderr)
         return 2
-    table, failed = build_table(baselines, medians, scenarios)
+
+    medians = {
+        sc: {
+            "wall_s": median([r[sc]["wall_s"] for r in runs]),
+            "rss_kb": median([r[sc]["rss_kb"] for r in runs]),
+        }
+        for sc in scenarios
+    }
+    variability = compute_variability(runs, scenarios)
+    context = get_runtime_context()
+
+    table, failed = build_table(
+        baselines,
+        medians,
+        scenarios,
+        variability=variability,
+        context=context,
+    )
     emit_outputs(table, failed, medians, table_out, measured_out)
 
     if failed:

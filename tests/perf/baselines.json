@@ -1,6 +1,6 @@
 {
   "_captured_on": "ubuntu-latest (5-run max, 2026-10-19)",
-  "_methodology": "Run measure.sh 5x, take max(wall_s) and max(rss_kb) per scenario.",
+  "_methodology": "Run measure.sh 5x with --seed 42, take median(wall_s) and median(rss_kb) per scenario.",
   "pdf_50k": {
     "wall_s": 2.51,
     "rss_kb": 131708

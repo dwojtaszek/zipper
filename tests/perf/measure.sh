@@ -2,7 +2,7 @@
 # Performance measurement script for Zipper CI perf guard.
 # Runs three scenarios and emits JSON with wall time (seconds) and peak RSS (KB).
 #
-# Usage: ./tests/perf/measure.sh [path-to-zipper-binary]
+# Usage: ./tests/perf/measure.sh [path-to-zipper-binary] [--seed N]
 # Output: JSON to stdout
 
 set -euo pipefail
@@ -11,7 +11,43 @@ shopt -s inherit_errexit 2>/dev/null || true
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-ZIPPER="${1:-$REPO_ROOT/src/bin/Release/net10.0/Zipper}"
+ZIPPER=""
+SEED="${PERF_SEED:-42}"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --seed)
+            if [[ $# -lt 2 || ! "$2" =~ ^[0-9]+$ ]]; then
+                echo "Error: --seed requires a non-negative integer" >&2
+                exit 1
+            fi
+            SEED="$2"
+            shift 2
+            ;;
+        -*)
+            echo "Error: Unknown option: $1" >&2
+            exit 1
+            ;;
+        *)
+            if [[ -z "$ZIPPER" ]]; then
+                ZIPPER="$1"
+            else
+                echo "Error: Unexpected argument: $1" >&2
+                exit 1
+            fi
+            shift
+            ;;
+    esac
+done
+
+if [[ -z "$ZIPPER" ]]; then
+    ZIPPER="$REPO_ROOT/src/bin/Release/net10.0/Zipper"
+fi
+
+if [[ ! "$SEED" =~ ^[0-9]+$ ]]; then
+    echo "Error: --seed must be a non-negative integer (got: '$SEED')" >&2
+    exit 1
+fi
 
 if [[ ! -x "$ZIPPER" ]]; then
     echo "Error: Zipper binary not found at $ZIPPER" >&2
@@ -78,13 +114,13 @@ run_scenario() {
 # --- Scenarios ---
 
 pdf_50k=$(run_scenario "pdf_50k" \
-    --type pdf --count 50000 --folders 4 --with-metadata)
+    --type pdf --count 50000 --folders 4 --with-metadata --seed "$SEED")
 
 eml_20k=$(run_scenario "eml_20k" \
-    --type eml --count 20000 --attachment-rate 30)
+    --type eml --count 20000 --attachment-rate 30 --seed "$SEED")
 
 loadfile_200k=$(run_scenario "loadfile_200k" \
-    --loadfile-only --count 200000 --column-profile standard)
+    --loadfile-only --count 200000 --column-profile standard --seed "$SEED")
 
 # --- Output JSON ---
 
