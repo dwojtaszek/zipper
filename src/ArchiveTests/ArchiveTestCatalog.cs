@@ -558,7 +558,7 @@ internal static class ArchiveTestCatalog
             controlCaseKey: Zip64ControlCaseKey,
             classification: PolicySensitiveClassification,
             suites: [MalformedSuite, SecuritySuite],
-            adapterChecks: SevenZipTestFailure),
+            adapterChecks: SevenZipExtract),
         // Ticket #842 policy-sensitive cases: member names and metadata that exercise
         // extractor safety. All are direct recipes (no mutation, no construction): the
         // bytes are exactly what the standard writer emits for these names. They are

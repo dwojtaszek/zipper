@@ -569,9 +569,9 @@ internal static class ArchiveTestSuiteGenerator
             // retain larger, conflicting values (ticket #1279). Readers may use
             // the headers, use the extras, or reject the nonconformant structure;
             // every source-selection outcome is allowed, but the size lie and
-            // bounded-read invariants remain required. Observed here: CPython
-            // zipfile and .NET list the entry but reject its read; 7-Zip 26.04
-            // rejects the Archive test.
+            // bounded-read invariants remain required. Observed here: CPython zipfile,
+            // .NET, and 7-Zip 26.04 use the real header sizes and read the content;
+            // 7-Zip reports a Headers Error warning but its test succeeds.
             ArchiveTestMutationKind.Zip64SentinelCleared =>
             [
                 Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [NoPartialWrites, "metadata-sources-disagree", "declared-sizes-are-lies", "no-allocation-from-declared-sizes"], ["open", ListOperation]),

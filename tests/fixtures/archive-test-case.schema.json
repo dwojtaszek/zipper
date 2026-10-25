@@ -65,7 +65,7 @@
     "classification": {
       "type": "string",
       "enum": ["valid", "malformed", "policy-sensitive"],
-      "description": "valid: well-formed. malformed: corrupt structure. policy-sensitive: well-formed bytes whose extraction outcome depends on extractor policy."
+      "description": "valid: well-formed. malformed: corrupt structure. policy-sensitive: reader or extractor behavior depends on implementation policy or support, including extraction safety, unsupported methods, and nonconformant parser/source-selection differences."
     },
     "archive": {
       "type": "object",

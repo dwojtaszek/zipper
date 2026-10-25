@@ -781,8 +781,9 @@ internal static class ArchiveFixtureMutator
 
     /// <summary>
     /// Rewrites both headers' 32-bit compressed and uncompressed sizes to their real
-    /// values while the Zip64 extra fields claim 64 additional bytes. The central
-    /// local-header-offset sentinel and Zip64 EOCD offsets stay unchanged.
+    /// values while the Zip64 extra fields claim 64 additional bytes. It also clears
+    /// the central local-header-offset sentinel so the extra field no longer supplies
+    /// any required Zip64 value and only the size-source disagreement remains.
     /// </summary>
     private static MutatedArchiveFixture ClearZip64SizeSentinels(ArchiveFixtureArtifact control, byte[] before)
     {
@@ -854,6 +855,10 @@ internal static class ArchiveFixtureMutator
                 code, "central-header", centralExtraOffset + 4,
                 $"Changes only the central Zip64 extra field's uncompressed and compressed size values from {actualSize} to {conflictingSize}; the subfield ID, length, and local-header offset value stay intact.",
                 entry.Ordinal, 16, 16, DeclaredValue: declaredSizes),
+            new MutationSpec(
+                code, "central-header", centralLocalHeaderOffset,
+                $"Clears the central header's local-header-offset sentinel to {entry.LocalHeaderOffset}; the still-present Zip64 extra field no longer needs to supply the offset.",
+                entry.Ordinal, 4, 4, DeclaredValue: $"local-header-offset={entry.LocalHeaderOffset}"),
         ], after =>
         {
             BinaryPrimitives.WriteUInt32LittleEndian(after.AsSpan((int)localCompressedOffset, 4), actualSize);
@@ -864,6 +869,9 @@ internal static class ArchiveFixtureMutator
             BinaryPrimitives.WriteUInt32LittleEndian(after.AsSpan((int)centralUncompressedOffset, 4), actualSize);
             BinaryPrimitives.WriteUInt64LittleEndian(after.AsSpan((int)centralExtraOffset + 4, 8), conflictingSize);
             BinaryPrimitives.WriteUInt64LittleEndian(after.AsSpan((int)centralExtraOffset + 12, 8), conflictingSize);
+            BinaryPrimitives.WriteUInt32LittleEndian(
+                after.AsSpan((int)centralLocalHeaderOffset, 4),
+                checked((uint)entry.LocalHeaderOffset));
         });
     }
 

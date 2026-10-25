@@ -167,7 +167,7 @@ public class ArchiveTestSuiteContractTests
 
     // ---- compatibility and malformed: classification-based, plus pinned structure cases ----
     [Fact]
-    public void ListSuite_Security_Zip64ExtraWithoutSentinelsIsPolicySensitiveAndRequiresSevenZipFailure()
+    public void ListSuite_Security_Zip64ExtraWithoutSentinelsIsPolicySensitiveAndSevenZipExtracts()
     {
         var definition = ArchiveTestCatalog.GetCase("zip64-extra-without-sentinels");
         var adapterCheck = Assert.Single(definition.AdapterChecks!);
@@ -175,7 +175,7 @@ public class ArchiveTestSuiteContractTests
         Assert.Equal(ArchiveTestCatalog.PolicySensitiveClassification, definition.Classification);
         Assert.Equal(["malformed", "security"], definition.Suites);
         Assert.Equal([ArchiveTestMutationKind.Zip64SentinelCleared], definition.Mutations!);
-        Assert.Equal(("7zip", "test", "failure"),
+        Assert.Equal(("7zip", "extract", "success"),
             (adapterCheck.Adapter, adapterCheck.Action, adapterCheck.ExpectedOutcome));
     }
 
