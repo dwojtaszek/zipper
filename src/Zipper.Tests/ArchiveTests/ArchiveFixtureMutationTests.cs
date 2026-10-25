@@ -70,6 +70,71 @@ public class ArchiveFixtureMutationTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void Apply_StoredPayloadBitflip_ChangesOnlyPayloadByteAtDataOffset()
+    {
+        var control = BuildControl();
+
+        var mutated = ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.StoredPayloadBitflip, control);
+
+        Assert.Equal("stored-payload-bitflip", mutated.Mutations[0].Code);
+        Assert.Equal("file-data", mutated.Mutations[0].Structure);
+        Assert.Equal(1, CountDifferingBytes(control.ArchiveBytes, mutated.ArchiveBytes));
+        Assert.NotEqual(control.ArchiveSha256, mutated.ArchiveSha256);
+
+        var entry = control.Layout.Entries[0];
+        var mutation = mutated.Mutations[0];
+        Assert.Equal(entry.DataOffset, mutation.Offset);
+        Assert.Equal(control.ArchiveBytes[(int)entry.DataOffset] ^ 0x01, mutated.ArchiveBytes[(int)entry.DataOffset]);
+        Assert.Equal(
+            $"payload-byte-flip=bit0 data-offset={entry.DataOffset} original-content-sha256={control.Entries[0].ContentSha256}",
+            mutation.DeclaredValue);
+
+        // Control payload != mutated payload:
+        // .NET ZipArchive does not verify CRC when streaming stored content, so ReadEntryContent reads the corrupted payload.
+        var mutatedPayload = ReadEntryContent(mutated.ArchiveBytes, "a.txt");
+        Assert.NotEqual(control.Entries[0].Content, mutatedPayload);
+
+        // Intact declarations: CRC, uncompressed size, compressed size in both headers unchanged
+        var mutatedLayout = ArchiveFixtureLayout.Read(mutated.ArchiveBytes);
+        Assert.Equal(entry.Crc32, mutatedLayout.Entries[0].Crc32);
+        Assert.Equal(entry.CompressedSize, mutatedLayout.Entries[0].CompressedSize);
+        Assert.Equal(entry.UncompressedSize, mutatedLayout.Entries[0].UncompressedSize);
+
+        // Sidecar content hash is still the control's original content hash
+        var definition = ArchiveTestCatalog.GetCase("stored-payload-bitflip");
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+        var sidecar = ArchiveTestSuiteGenerator.BuildExpectationFile(artifact, definition, 42);
+        Assert.Equal(control.Entries[0].ContentSha256, sidecar.Entries[0].ContentSha256);
+    }
+
+    [Fact]
+    public void Apply_StoredPayloadBitflip_NonStoredOrEmptyControl_ThrowsInvalidOperationException()
+    {
+        var emptyControl = ArchiveFixtureBuilder.BuildControl("valid-empty", 42, CancellationToken.None);
+        Assert.Throws<InvalidOperationException>(() =>
+            ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.StoredPayloadBitflip, emptyControl));
+
+        var deflateControl = ArchiveFixtureBuilder.BuildControl("valid-deflate", 42, CancellationToken.None);
+        Assert.Throws<InvalidOperationException>(() =>
+            ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.StoredPayloadBitflip, deflateControl));
+    }
+
+    [Fact]
+    public void Apply_StoredPayloadBitflip_ZeroLengthStoredControl_ThrowsInvalidOperationException()
+    {
+        var definition = new ArchiveTestCaseDefinition(
+            "empty-stored-control", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [ArchiveTestCatalog.CompatibilitySuite],
+            Recipe: new ArchiveTestRecipe([ArchiveTestRecipeEntry.File("empty.txt", 0, "stored")]));
+        var control = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+
+        var error = Assert.Throws<InvalidOperationException>(
+            () => ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.StoredPayloadBitflip, control));
+
+        Assert.Contains("non-zero payload size", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Apply_CrcBothMismatch_RecordsBothChangedRangesWithSameWrongValue()
     {
         var control = BuildControl();
