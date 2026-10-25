@@ -426,19 +426,7 @@ internal static class ArchiveFixtureMutator
                     before.Length - (int)control.Layout.CentralDirectoryOffset,
                     after.Length - (int)control.Layout.CentralDirectoryOffset,
                     DeclaredValue:
-                        $"file-comment-offset={commentOffset} file-comment-length={commentLength} fake-central-header-offset={fakeCentralOffset} fake-zip64-eocd-offset={fakeZip64EocdOffset} fake-zip64-locator-offset={fakeZip64LocatorOffset}"),
-                before,
-                after),
-            Record(
-                new MutationSpec(
-                    code,
-                    "central-header",
-                    entry.CentralDirectoryOffset + 32,
-                    $"Sets the final central header's comment length to {commentLength}, making the physical central-directory size 0xFFFF.",
-                    entry.Ordinal,
-                    2,
-                    2,
-                    DeclaredValue: $"central-header-comment-length={commentLength} central-directory-size={HeuristicZip64DirectorySize}"),
+                        $"file-comment-offset={commentOffset} file-comment-length={commentLength} central-header-comment-length={commentLength} fake-central-header-offset={fakeCentralOffset} fake-zip64-eocd-offset={fakeZip64EocdOffset} fake-zip64-locator-offset={fakeZip64LocatorOffset} central-directory-size={HeuristicZip64DirectorySize}"),
                 before,
                 after),
         ]);

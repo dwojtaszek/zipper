@@ -546,9 +546,11 @@ public class ArchiveFixtureMutationTests : WorkingDirectoryTestBase
 
         var mutated = ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.Zip64LocatorAmbiguity, control);
 
-        Assert.Equal(2, mutated.Mutations.Count);
-        var mutation = mutated.Mutations[0];
-        var commentLengthMutation = mutated.Mutations[1];
+        var mutation = Assert.Single(mutated.Mutations);
+        Assert.All(mutated.Mutations, record =>
+            Assert.Equal(
+                record.AfterSize!.Value,
+                record.BeforeSize!.Value - record.DeletedLength!.Value + record.InsertedLength!.Value));
         var commentLength = ushort.MaxValue - (46 + entry.CentralNameLength + entry.CentralExtraLength);
         var eocdOffset = control.Layout.EocdOffset + commentLength;
         const int FakeCentralNameLength = 13;
@@ -578,9 +580,8 @@ public class ArchiveFixtureMutationTests : WorkingDirectoryTestBase
         Assert.Contains($"fake-central-header-offset={fakeCentralOffset}", mutation.DeclaredValue, StringComparison.Ordinal);
         Assert.Contains($"fake-zip64-eocd-offset={zip64EocdOffset}", mutation.DeclaredValue, StringComparison.Ordinal);
         Assert.Contains($"fake-zip64-locator-offset={locatorOffset}", mutation.DeclaredValue, StringComparison.Ordinal);
-        Assert.Equal("central-header", commentLengthMutation.Structure);
-        Assert.Equal(entry.CentralDirectoryOffset + 32, commentLengthMutation.Offset);
-        Assert.Contains($"central-directory-size={ushort.MaxValue}", commentLengthMutation.DeclaredValue, StringComparison.Ordinal);
+        Assert.Contains($"central-header-comment-length={commentLength}", mutation.DeclaredValue, StringComparison.Ordinal);
+        Assert.Contains($"central-directory-size={ushort.MaxValue}", mutation.DeclaredValue, StringComparison.Ordinal);
 
         Assert.Equal(ArchiveFixtureLayout.CentralHeaderSignature, ReadUInt32(fakeCentralOffset));
         Assert.Equal("fake_file.txt", Encoding.ASCII.GetString(
