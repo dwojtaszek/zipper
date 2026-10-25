@@ -64,19 +64,35 @@ Both drop-ins name UTC in their `OnCalendar` (`*:0/15 UTC`, `*:0/5 UTC`). A bare
 
 ### Locks
 
-Three locks, each guarding a different thing. Confusing them is what starved babysitting.
+Four locks, each guarding a different thing. Confusing them is what starved babysitting.
 
 | Lock | Path (default) | Held by | Held for |
 |------|----------------|---------|----------|
 | Intake | `.zipper-runner/runner.lock` (`LOCK_FILE_PATH`) | an intake run | the whole run, including its agent mission |
 | Babysit | `.zipper-runner/babysit.lock` (`BABYSIT_LOCK_PATH`) | a babysit pass | that pass only |
 | Main checkout | `.zipper-runner/repo-mutation.lock` (`REPO_MUTATION_LOCK_PATH`) | either process | one git mutation of the main checkout |
+| Worktree mission | `state/worktree-<name>-mission.lock` | either process | one agent mission in that worktree |
 
 The babysit lock is separate from the intake lock on purpose. `zipper-babysit.timer` fires every 5 minutes, and an intake run holds the intake lock for the 20-42 minutes its mission takes, so while babysit shared that lock **67% of the last 60 babysit firings did nothing** (47 of 235 overall) — they waited out `RUNNER_LOCK_TIMEOUT` and exited. A babysit pass is bounded work on an existing PR, so it takes the babysit lock instead and runs alongside an in-flight mission. An intake run also babysits; it takes the babysit lock only around its own pass and releases it before it starts a mission, or every babysit firing during that mission would skip again.
 
-Both processes still take the main checkout lock around the git mutations that touch the shared checkout, and defer their mutation when they cannot get it. That is what protects the checkout; the intake and babysit locks only decide *who runs*, not *who may touch the tree*. Each lock has its own heartbeat (`<kind>-heartbeat.json`), so one kind's stale-lock watchdog can never judge, or kill, the other kind's holder. `runner.py --status` reports all three.
+Both processes still take the main checkout lock around the git mutations that touch the shared checkout, and defer their mutation when they cannot get it. That is what protects the checkout; the intake and babysit locks only decide *who runs*, not *who may touch the tree*. Each lock has its own heartbeat (`<kind>-heartbeat.json`), so one kind's stale-lock watchdog can never judge, or kill, the other kind's holder. `runner.py --status` reports these three by name, and the worktree mission lock below per worktree.
 
 Because the babysit lock is non-blocking (`BABYSIT_LOCK_TIMEOUT`, 0), a firing that finds another babysit already running exits immediately and the next firing retries in 5 minutes, rather than queueing behind it.
+
+The **worktree mission lock** is the one the other three do not cover. The intake and babysit locks decide who runs, but nothing stopped two runs from driving the *same worktree*: an intake mission implements an issue while a babysit firing picks the same worktree up and resumes it. Both agents then edit the same files and commit to the same branch, so one side's work is overwritten or its commit orphaned while both report success. Measured on the host, 3 of 318 completed runs had an intake and a babysit mission in one worktree at the same time, one pair overlapping for 40 minutes.
+
+Every agent mission now takes this lock for its duration, and a run that cannot get it leaves the worktree untouched for the run that holds it. It is non-blocking for the same reason the babysit lock is: a mission runs for tens of minutes and the caller's own cadence retries within minutes, so skipping costs one cycle while waiting would hold an entire run open.
+
+It is **reentrant within one process**, like the main checkout lock and for the same reason: an intake run babysits its own worktree as soon as its mission returns, so the holder must be able to re-enter its own lock. `flock` is per open file descriptor and refuses a second `open()` even from the process that already holds it, so without that check the run's own babysit pass would skip the PR it had just published and log "another run" that does not exist.
+
+The lock file is exempt from the `state/` age sweep (`_prunable_state_file`). `open(path, "a")` does not advance a file's mtime, so an old lock file stays old forever and the sweep would delete it every run. Deleting a *held* lock does not release it — the inode lives on — but the next acquire creates a fresh inode that a second process can lock, leaving two runs both convinced they own the worktree.
+
+It is deliberately **not** wired to the `_reclaim_stale_lock` watchdog, which reclaims by killing the holder's process group; that would kill a whole intake run for a worktree it is merely borrowing. Because it therefore has no heartbeat and no reclaim path, `runner.py --status` prints the recorded holder (`pid` and how long it has been held) beside each worktree, so a wedged holder is visible instead of looking like an idle worktree. The recorded pid is what says whether removing the file is safe.
+
+Two limits are worth stating plainly, because the lock is narrower than "this worktree is exclusive":
+
+- **The holder is the runner, not the work.** `flock` is released when the holder dies, and the agent runs in its own session, so a runner killed outright (OOM, `kill -9`) frees the worktree while its agent is still writing. The watchdog does not cover that case either, since it reclaims by killing the holder's process group and the agent's separate session escapes it. What keeps the window small is that every plugin bounds a mission at 2400-2700s. A systemd stop is safe: it kills the whole control group, agent included.
+- **Missions are not the only thing that touches a worktree.** The pre-PR CodeRabbit check, PR creation, the orphan-PR branch checkout, and worktree removal run without this lock. The lock serializes *agent missions*, which is the hazard that was measured; it does not make a worktree generally exclusive.
 
 ### Deploying merged changes
 
