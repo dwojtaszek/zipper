@@ -275,6 +275,18 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
         Assert.Equal("integrity-passes", NormalizeIntegrityCheck(artifact.ArchiveBytes, testCase));
     }
 
+    [Fact]
+    public void ReadOperations_Zip64LocatorAmbiguity_UsesLengthAnchoredDirectory()
+    {
+        var definition = ArchiveTestCatalog.GetCase("zip64-locator-ambiguity");
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+        var testCase = ArchiveTestSuiteGenerator.BuildExpectationFile(artifact, definition, 42);
+
+        Assert.Equal("list-succeeds", NormalizeList(artifact.ArchiveBytes, testCase));
+        Assert.Equal("read-entry-content-matches", NormalizeReadEntry(artifact.ArchiveBytes, testCase));
+        Assert.Equal("integrity-passes", NormalizeIntegrityCheck(artifact.ArchiveBytes, testCase));
+    }
+
     [Theory]
     [InlineData("list")]
     [InlineData("read-entry")]

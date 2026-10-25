@@ -65,8 +65,9 @@ public class ArchiveTestSuiteContractTests
         "bzip2-high-ratio-bounded",
     ];
 
-    /// <summary>The malformed parser-differential cases (tickets #869 and #870) housed in security.</summary>
-    private static readonly string[] ParserDifferentialSecurityCaseKeys = ["orphan-local-header", "eocdr-ambiguity-comment"];
+    /// <summary>The malformed parser-differential cases (tickets #869, #870, and #1280) housed in security.</summary>
+    private static readonly string[] ParserDifferentialSecurityCaseKeys =
+        ["orphan-local-header", "eocdr-ambiguity-comment", "zip64-locator-ambiguity"];
 
     /// <summary>The hostile filename-byte cases (ticket #876) housed in security.</summary>
     private static readonly string[] HostileNameSecurityCaseKeys = ["filename-null-byte", "filename-c0-control"];
@@ -233,6 +234,7 @@ public class ArchiveTestSuiteContractTests
             .Append("multidisk-central-entry-declared")
             .Append("mixed-methods-one-unsupported-member")
             .Append("eocdr-ambiguity-comment")
+            .Append("zip64-locator-ambiguity")
             .Append("zip64-extra-without-sentinels")
             .Order(StringComparer.Ordinal);
         Assert.Equal(expected, malformed);
@@ -266,8 +268,8 @@ public class ArchiveTestSuiteContractTests
         // +1 for the #934 clean Unicode Path control, +1 for the #935 nested budget boundary,
         // +2 for the #935 mixed one-bad-member cases, +1 for #888, +1 for #870,
         // +2 for #878, +3 for the #887 legacy-codec encoding controls, +1 for #1276,
-        // +2 for #1277, +1 for #1279): a case
+        // +2 for #1277, +1 for #1279, +1 for #1280): a case
         // dropped from the catalogue or unlisted from every suite fails here.
-        Assert.Equal(110, AllKeys().Count);
+        Assert.Equal(111, AllKeys().Count);
     }
 }

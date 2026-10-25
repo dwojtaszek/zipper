@@ -546,6 +546,11 @@ internal static class ArchiveTestCatalog
             ArchiveTestMutationKind.EocdAmbiguityComment,
             classification: PolicySensitiveClassification,
             suites: [MalformedSuite, SecuritySuite]),
+        ["zip64-locator-ambiguity"] = MutatedDefinition(
+            ArchiveTestMutationKind.Zip64LocatorAmbiguity,
+            controlCaseKey: "valid-signatures-in-comment",
+            classification: PolicySensitiveClassification,
+            suites: [MalformedSuite, SecuritySuite]),
         ["invalid-utf8-name"] = MutatedDefinition(ArchiveTestMutationKind.InvalidUtf8Name),
         ["zip64-missing-extra"] = MutatedDefinition(
             ArchiveTestMutationKind.Zip64MissingExtra, controlCaseKey: Zip64ControlCaseKey),
@@ -679,6 +684,7 @@ internal static class ArchiveTestCatalog
     private const string DeflateDynamicControlCaseKey = "valid-deflate-dynamic";
     private const string DeflateStoredBlockControlCaseKey = "valid-deflate-stored-block";
     private const string SignaturePayloadControlCaseKey = "valid-signature-payload";
+    private const string SignatureCommentControlCaseKey = "valid-signatures-in-comment";
     private const string ExtraFieldControlCaseKey = "valid-extra-field";
     private const string Zip64ControlCaseKey = "valid-zip64-small";
 
@@ -715,6 +721,7 @@ internal static class ArchiveTestCatalog
     private static ArchiveTestRecipe ControlRecipe(string controlCaseKey) => controlCaseKey switch
     {
         StoredControlCaseKey or ExtraFieldControlCaseKey => StoredControlRecipe,
+        SignatureCommentControlCaseKey => SignatureCommentControlRecipe,
         DeflateControlCaseKey => DeflateControlRecipe,
         Bzip2ControlCaseKey => Bzip2ControlRecipe,
         DeflateDynamicControlCaseKey => DeflateDynamicRecipe,

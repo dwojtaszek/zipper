@@ -441,6 +441,334 @@ class EocdAmbiguityTests(TempDirTest):
         self.assertEqual("eocd-ambiguity", caught.exception.check)
 
 
+class Zip64LocatorAmbiguityTests(TempDirTest):
+    ARCHIVE_COMMENT = b"PK\x03\x04PK\x01\x02PK\x07\x08atc-comment!"
+    EXPECTATIONS = [
+        {"operation": "list", "profile": "strict",
+         "allowedOutcomes": ["list-succeeds", "list-fails"],
+         "invariants": ["comment-bytes-are-pure-data"],
+         "failureStages": ["open", "list"]},
+        {"operation": "read-entry", "profile": "strict",
+         "allowedOutcomes": ["read-entry-content-matches", "read-entry-fails",
+                             "read-entry-returns-unverified-bytes"],
+         "invariants": ["comment-bytes-are-pure-data"],
+         "failureStages": ["open", "read-entry"]},
+        {"operation": "integrity-check", "profile": "strict",
+         "allowedOutcomes": ["integrity-passes", "integrity-fails",
+                             "integrity-unchecked"],
+         "invariants": ["comment-bytes-are-pure-data"],
+         "failureStages": ["open", "read-entry", "integrity-check"]},
+        {"operation": "extract", "profile": "strict",
+         "allowedOutcomes": ["extract-fails"],
+         "invariants": ["comment-bytes-are-pure-data"]},
+    ]
+
+    @classmethod
+    def make_case(cls, archive=None, offsets=None):
+        content = b"zip64 locator ambiguity"
+        if archive is None:
+            control = make_zip([("note.txt", content)])
+            central_offset = control.index(b"PK\x01\x02")
+            eocd_offset = control.rfind(b"PK\x05\x06")
+            name_length, extra_length = struct.unpack_from("<HH", control, central_offset + 28)
+            file_comment_offset = central_offset + 46 + name_length + extra_length
+            if file_comment_offset != eocd_offset:
+                raise AssertionError("the synthetic control must have no file comment")
+
+            file_comment_length = 0xFFFF - 46 - name_length - extra_length
+            fake_name = b"fake_file.txt"
+            fake_central = bytearray(46 + len(fake_name))
+            struct.pack_into("<I", fake_central, 0, 0x02014B50)
+            struct.pack_into("<H", fake_central, 6, 20)
+            struct.pack_into("<H", fake_central, 28, len(fake_name))
+            fake_central[46:] = fake_name
+            fake_zip64_eocd_offset = file_comment_offset + file_comment_length - 20 - 56
+            fake_central_offset = fake_zip64_eocd_offset - len(fake_central)
+            fake_zip64_eocd = struct.pack(
+                "<IQHHIIQQQQ", 0x06064B50, 44, 45, 45, 0, 0, 1, 1,
+                len(fake_central), fake_central_offset)
+            fake_zip64_locator_offset = fake_zip64_eocd_offset + 56
+            fake_zip64_locator = struct.pack(
+                "<IIQI", 0x07064B50, 0, fake_zip64_eocd_offset, 1)
+            padding_length = fake_central_offset - file_comment_offset
+            file_comment = (
+                b"\x00" * padding_length + fake_central
+                + fake_zip64_eocd + fake_zip64_locator)
+            archive = bytearray(
+                control[:eocd_offset] + file_comment + control[eocd_offset:]
+                + cls.ARCHIVE_COMMENT)
+            shifted_eocd_offset = eocd_offset + file_comment_length
+            struct.pack_into("<H", archive, central_offset + 32, file_comment_length)
+            struct.pack_into("<I", archive, shifted_eocd_offset + 12, 0xFFFF)
+            struct.pack_into("<H", archive, shifted_eocd_offset + 20, len(cls.ARCHIVE_COMMENT))
+            offsets = {
+                "central-directory-offset": central_offset,
+                "file-comment-offset": file_comment_offset,
+                "file-comment-length": file_comment_length,
+                "fake-central-header-offset": fake_central_offset,
+                "fake-zip64-eocd-offset": fake_zip64_eocd_offset,
+                "fake-zip64-locator-offset": fake_zip64_locator_offset,
+                "eocd-offset": shifted_eocd_offset,
+            }
+            archive = bytes(archive)
+
+        declared = " ".join(
+            "%s=%d" % (key, value) for key, value in offsets.items()
+            if key != "central-directory-offset" and key != "eocd-offset")
+        declared += (" central-header-comment-length=%d central-directory-size=65535"
+                     % offsets["file-comment-length"])
+        mutation = {
+            "code": "zip64-locator-ambiguity",
+            "structure": "whole-archive",
+            "offsetBasis": "before-mutation",
+            "offset": offsets["central-directory-offset"],
+            "afterSize": len(archive),
+            "afterSha256": sha256_hex(archive),
+            "explanation": "synthetic Zip64 records inside a central-header comment",
+            "declaredValue": declared,
+        }
+        case = case_for(
+            "zip64-locator-ambiguity", "policy-sensitive", archive,
+            [entry_record(0, "note.txt", content)], [mutation], cls.EXPECTATIONS)
+        return case, archive, offsets
+
+    def test_comment_bytes_are_verified_from_the_archive(self):
+        case, archive, offsets = self.make_case()
+        write_pair(self.dir, case, archive)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(0, exit_code, report["fixtures"][0]["failure"])
+        audit = next(check for check in report["fixtures"][0]["structureChecks"]
+                     if check["check"] == "zip64-locator-ambiguity")
+        self.assertIn("fake-locator=%d" % offsets["fake-zip64-locator-offset"],
+                      audit["detail"])
+
+    def test_duplicate_declared_offset_is_rejected(self):
+        case, archive, offsets = self.make_case()
+        write_pair(self.dir, case, archive)
+        case, path = self.rewrite_case(case)
+        declared = case["mutations"][0]["declaredValue"]
+        case["mutations"][0]["declaredValue"] = (
+            "fake-zip64-locator-offset=%d %s"
+            % (offsets["fake-zip64-locator-offset"] - 1, declared))
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("zip64-locator-ambiguity", failure["check"])
+        self.assertIn("repeats", failure["message"])
+
+    def test_unknown_declared_offset_is_rejected(self):
+        case, archive, _ = self.make_case()
+        write_pair(self.dir, case, archive)
+        case, path = self.rewrite_case(case)
+        case["mutations"][0]["declaredValue"] += " unsupported-offset=0"
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("zip64-locator-ambiguity", failure["check"])
+        self.assertIn("keys", failure["message"])
+
+    def test_malformed_declared_offset_is_rejected(self):
+        case, archive, _ = self.make_case()
+        write_pair(self.dir, case, archive)
+        case, path = self.rewrite_case(case)
+        case["mutations"][0]["declaredValue"] += " malformed"
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("zip64-locator-ambiguity", failure["check"])
+        self.assertIn("malformed", failure["message"])
+
+    def test_inaccurate_declared_offset_is_rejected(self):
+        case, archive, offsets = self.make_case()
+        write_pair(self.dir, case, archive)
+        case, path = self.rewrite_case(case)
+        tokens = case["mutations"][0]["declaredValue"].split()
+        case["mutations"][0]["declaredValue"] = " ".join(
+            "fake-zip64-locator-offset=%d"
+            % (offsets["fake-zip64-locator-offset"] - 1)
+            if token.startswith("fake-zip64-locator-offset=") else token
+            for token in tokens)
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("zip64-locator-ambiguity", failure["check"])
+        self.assertIn("expected", failure["message"])
+
+    def test_moved_locator_fails_even_when_declared_offsets_are_updated(self):
+        _, archive, offsets = self.make_case()
+        moved = bytearray(archive)
+        record_tail = bytes(moved[offsets["fake-central-header-offset"]:offsets["eocd-offset"]])
+        moved[offsets["fake-central-header-offset"] - 1:offsets["eocd-offset"] - 1] = record_tail
+        moved[offsets["eocd-offset"] - 1] = 0
+        moved_offsets = dict(offsets)
+        for key in ("fake-central-header-offset", "fake-zip64-eocd-offset",
+                    "fake-zip64-locator-offset"):
+            moved_offsets[key] -= 1
+        struct.pack_into(
+            "<Q", moved, moved_offsets["fake-zip64-eocd-offset"] + 48,
+            moved_offsets["fake-central-header-offset"])
+        struct.pack_into(
+            "<Q", moved, moved_offsets["fake-zip64-locator-offset"] + 8,
+            moved_offsets["fake-zip64-eocd-offset"])
+        case, moved, _ = self.make_case(bytes(moved), moved_offsets)
+        write_pair(self.dir, case, moved)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("zip64-locator-ambiguity", failure["check"])
+        self.assertIn("locator", failure["message"])
+
+    def test_archive_comment_byte_change_fails_after_identity_is_recomputed(self):
+        _, archive, offsets = self.make_case()
+        tampered = bytearray(archive)
+        tampered[-1] ^= 1
+        case, tampered, _ = self.make_case(bytes(tampered), offsets)
+        write_pair(self.dir, case, tampered)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("zip64-locator-ambiguity", failure["check"])
+        self.assertIn("Archive comment bytes changed", failure["message"])
+
+    def test_fake_central_disk_change_fails_after_identity_is_recomputed(self):
+        _, archive, offsets = self.make_case()
+        tampered = bytearray(archive)
+        struct.pack_into(
+            "<H", tampered, offsets["fake-central-header-offset"] + 34, 1)
+        case, tampered, _ = self.make_case(bytes(tampered), offsets)
+        write_pair(self.dir, case, tampered)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("zip64-locator-ambiguity", failure["check"])
+        self.assertIn("disk", failure["message"])
+
+    def test_fake_zip64_version_change_fails_after_identity_is_recomputed(self):
+        _, archive, offsets = self.make_case()
+        tampered = bytearray(archive)
+        struct.pack_into(
+            "<H", tampered, offsets["fake-zip64-eocd-offset"] + 14, 20)
+        case, tampered, _ = self.make_case(bytes(tampered), offsets)
+        write_pair(self.dir, case, tampered)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("zip64-locator-ambiguity", failure["check"])
+        self.assertIn("Zip64 EOCD", failure["message"])
+
+    def test_fake_zip64_version_made_by_change_fails_after_identity_is_recomputed(self):
+        _, archive, offsets = self.make_case()
+        tampered = bytearray(archive)
+        struct.pack_into(
+            "<H", tampered, offsets["fake-zip64-eocd-offset"] + 12, 20)
+        case, tampered, _ = self.make_case(bytes(tampered), offsets)
+        write_pair(self.dir, case, tampered)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("zip64-locator-ambiguity", failure["check"])
+        self.assertIn("Zip64 EOCD", failure["message"])
+
+    def test_fake_central_version_change_fails_after_identity_is_recomputed(self):
+        _, archive, offsets = self.make_case()
+        tampered = bytearray(archive)
+        struct.pack_into(
+            "<H", tampered, offsets["fake-central-header-offset"] + 6, 21)
+        case, tampered, _ = self.make_case(bytes(tampered), offsets)
+        write_pair(self.dir, case, tampered)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("zip64-locator-ambiguity", failure["check"])
+        self.assertIn("single-disk decoy entry", failure["message"])
+
+    def test_fake_central_local_header_offset_must_resolve(self):
+        _, archive, offsets = self.make_case()
+        tampered = bytearray(archive)
+        struct.pack_into(
+            "<I", tampered, offsets["fake-central-header-offset"] + 42,
+            len(archive) + 1)
+        case, tampered, _ = self.make_case(bytes(tampered), offsets)
+        write_pair(self.dir, case, tampered)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("zip64-locator-ambiguity", failure["check"])
+        self.assertIn("local-header offset", failure["message"])
+
+    def test_fake_central_local_header_offset_must_point_to_a_header(self):
+        _, archive, offsets = self.make_case()
+        tampered = bytearray(archive)
+        struct.pack_into(
+            "<I", tampered, offsets["fake-central-header-offset"] + 42,
+            offsets["file-comment-offset"])
+        case, tampered, _ = self.make_case(bytes(tampered), offsets)
+        write_pair(self.dir, case, tampered)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("zip64-locator-ambiguity", failure["check"])
+        self.assertIn("local-header offset", failure["message"])
+
+    def test_entry_ordinal_must_match_authentic_member(self):
+        case, archive, _ = self.make_case()
+        write_pair(self.dir, case, archive)
+        case, path = self.rewrite_case(case)
+        case["entries"][0]["ordinal"] = 1
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("zip64-locator-ambiguity", failure["check"])
+        self.assertIn("ordinal", failure["message"])
+
+    def test_local_name_must_match_authentic_member(self):
+        case, archive, _ = self.make_case()
+        write_pair(self.dir, case, archive)
+        case, path = self.rewrite_case(case)
+        case["entries"][0]["localNameRaw"] = b"other.txt".hex()
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("zip64-locator-ambiguity", failure["check"])
+        self.assertIn("local name", failure["message"])
+
+
 class AdlsSegmentTests(unittest.TestCase):
     @staticmethod
     def make_case(case_key, segments):

@@ -67,6 +67,14 @@ MAX_JSON_BYTES = 1024 * 1024
 MAX_DEADLINE_SECONDS = 10
 MAX_FOLDER_TOTAL_BYTES = 256 * 1024 * 1024
 
+ZIP64_LOCATOR_AMBIGUITY_ARCHIVE_COMMENT = b"PK\x03\x04PK\x01\x02PK\x07\x08atc-comment!"
+ZIP_EOCD_FIXED_SIZE = 22
+ZIP_LOCAL_HEADER_FIXED_SIZE = 30
+ZIP_CENTRAL_HEADER_FIXED_SIZE = 46
+ZIP64_LOCATOR_FIXED_SIZE = 20
+ZIP64_EOCD_FIXED_SIZE = 56
+ZIP64_VERSION = 45
+
 OPERATIONS = ("list", "read-entry", "integrity-check", "extract")
 FAILURE_TOKENS = {
     "list": "list-fails",
@@ -110,6 +118,7 @@ STRUCTURAL_INVARIANT_CHECKS = {
     "declared-sizes-are-lies": "mutations",
     "declared-counts-disagree": "mutations",
     "metadata-sources-disagree": "mutations",
+    "comment-bytes-are-pure-data": "zip64-locator-ambiguity",
     "one-member-fails": "mutations",
     "one-member-unsupported": "mutations",
     "spanning-declared-single-file": "mutations",
@@ -462,6 +471,14 @@ class FixtureVerifier:
         if case.get("caseKey") == "eocdr-ambiguity-comment":
             eocd_note = verify_eocd_ambiguity(case, zip_bytes)
             checks.append({"check": "eocd-ambiguity", "status": "pass", "detail": eocd_note})
+
+        # Zip64 locator ambiguity (#1280): derive the true EOCD from the fixed
+        # Archive comment length, then parse the fake Zip64 records from the
+        # final central-header comment rather than trusting mutation metadata.
+        if case.get("caseKey") == "zip64-locator-ambiguity":
+            zip64_note = verify_zip64_locator_ambiguity(case, zip_bytes)
+            checks.append({"check": "zip64-locator-ambiguity", "status": "pass",
+                           "detail": zip64_note})
 
         # Unicode Path extra field (ticket #871): a valid 0x7075 subfield in both
         # headers whose CRC matches the standard name; readers ignore the field.
@@ -1449,6 +1466,157 @@ def verify_eocd_ambiguity(case, zip_bytes):
     return ("authentic-eocd=%d authentic-cd=%d shadow-eocd=%d shadow-cd=%d "
             "python-selects=b.bin" %
             (authentic_eocd, authentic_cd, shadow_eocd, shadow_cd))
+
+
+def verify_zip64_locator_ambiguity(case, zip_bytes):
+    """Re-derive the fake Zip64 structure from the Archive bytes (#1280).
+
+    The authentic EOCD is fixed by the control's trailing comment length. The
+    declared 32-bit directory size and central-header comment then locate the
+    decoy records, which must form a plausible Zip64 directory and locator at
+    the heuristic-sensitive positions immediately before the authentic EOCD.
+    """
+    import struct
+
+    check = "zip64-locator-ambiguity"
+    archive_comment = ZIP64_LOCATOR_AMBIGUITY_ARCHIVE_COMMENT
+    eocd_offset = len(zip_bytes) - len(archive_comment) - ZIP_EOCD_FIXED_SIZE
+    if eocd_offset < 0 or zip_bytes[eocd_offset:eocd_offset + 4] != b"PK\x05\x06":
+        raise VerificationError(check, "length-anchored EOCD signature is missing")
+    if zip_bytes[eocd_offset + ZIP_EOCD_FIXED_SIZE:] != archive_comment:
+        raise VerificationError(check, "the authentic Archive comment bytes changed")
+
+    disk, cd_disk, disk_entries, total_entries, cd_size, cd_offset, archive_comment_length = \
+        struct.unpack_from("<HHHHIIH", zip_bytes, eocd_offset + 4)
+    if (disk, cd_disk, disk_entries, total_entries) != (0, 0, 1, 1):
+        raise VerificationError(check, "authentic EOCD must declare one single-disk entry")
+    if archive_comment_length != len(archive_comment):
+        raise VerificationError(check, "authentic EOCD comment length changed")
+    if cd_size != 0xFFFF or cd_offset + cd_size != eocd_offset:
+        raise VerificationError(check, "authentic EOCD no longer declares the 0xffff directory")
+    if (cd_offset + ZIP_CENTRAL_HEADER_FIXED_SIZE > eocd_offset
+            or zip_bytes[cd_offset:cd_offset + 4] != b"PK\x01\x02"):
+        raise VerificationError(check, "authentic central header is missing")
+
+    name_length, extra_length, comment_length = struct.unpack_from(
+        "<HHH", zip_bytes, cd_offset + 28)
+    comment_offset = cd_offset + ZIP_CENTRAL_HEADER_FIXED_SIZE + name_length + extra_length
+    name_offset = cd_offset + ZIP_CENTRAL_HEADER_FIXED_SIZE
+    if (name_length != len(b"note.txt")
+            or zip_bytes[name_offset:name_offset + name_length] != b"note.txt"
+            or extra_length != 0
+            or comment_length != cd_size - ZIP_CENTRAL_HEADER_FIXED_SIZE - name_length - extra_length
+            or comment_offset + comment_length != eocd_offset):
+        raise VerificationError(check, "the authentic central-header comment is not length-anchored")
+
+    local_offset = struct.unpack_from("<I", zip_bytes, cd_offset + 42)[0]
+    if (local_offset + ZIP_LOCAL_HEADER_FIXED_SIZE > cd_offset
+            or zip_bytes[local_offset:local_offset + 4] != b"PK\x03\x04"):
+        raise VerificationError(check, "authentic local header is missing before the central directory")
+    local_name_length, local_extra_length = struct.unpack_from(
+        "<HH", zip_bytes, local_offset + 26)
+    local_name_offset = local_offset + ZIP_LOCAL_HEADER_FIXED_SIZE
+    if (local_name_length != len(b"note.txt")
+            or zip_bytes[local_name_offset:local_name_offset + local_name_length] != b"note.txt"
+            or local_extra_length != 0):
+        raise VerificationError(check, "authentic local name is not note.txt")
+    if zip_bytes[local_name_offset:local_name_offset + local_name_length] != \
+            zip_bytes[name_offset:name_offset + name_length]:
+        raise VerificationError(check, "authentic local and central names disagree")
+
+    fake_locator_offset = eocd_offset - ZIP64_LOCATOR_FIXED_SIZE
+    fake_zip64_eocd_offset = fake_locator_offset - ZIP64_EOCD_FIXED_SIZE
+    if fake_zip64_eocd_offset < comment_offset:
+        raise VerificationError(check, "fake Zip64 locator is outside the central-header comment")
+    locator_signature, locator_disk, locator_eocd_offset, disk_count = struct.unpack_from(
+        "<IIQI", zip_bytes, fake_locator_offset)
+    if (locator_signature != 0x07064B50 or locator_disk != 0
+            or locator_eocd_offset != fake_zip64_eocd_offset or disk_count != 1):
+        raise VerificationError(check, "fake Zip64 locator is not immediately before the authentic EOCD")
+
+    (zip64_signature, zip64_size, zip64_version_made_by, zip64_version_needed,
+     zip64_disk, zip64_cd_disk,
+     zip64_disk_entries, zip64_total_entries, fake_cd_size, fake_cd_offset) = \
+        struct.unpack_from("<IQHHIIQQQQ", zip_bytes, fake_zip64_eocd_offset)
+    if (zip64_signature != 0x06064B50 or zip64_size != 44
+            or zip64_version_made_by != ZIP64_VERSION
+            or zip64_version_needed != ZIP64_VERSION
+            or zip64_disk != 0 or zip64_cd_disk != 0
+            or zip64_disk_entries != 1 or zip64_total_entries != 1
+            or fake_cd_size < ZIP_CENTRAL_HEADER_FIXED_SIZE
+            or fake_cd_offset < comment_offset
+            or fake_cd_offset + fake_cd_size != fake_zip64_eocd_offset):
+        raise VerificationError(check, "fake Zip64 EOCD does not describe a complete comment-local directory")
+
+    if zip_bytes[fake_cd_offset:fake_cd_offset + 4] != b"PK\x01\x02":
+        raise VerificationError(check, "fake central header is missing from the comment")
+    fake_name_length, fake_extra_length, fake_comment_length = struct.unpack_from(
+        "<HHH", zip_bytes, fake_cd_offset + 28)
+    fake_version_needed = struct.unpack_from("<H", zip_bytes, fake_cd_offset + 6)[0]
+    fake_disk_start = struct.unpack_from("<H", zip_bytes, fake_cd_offset + 34)[0]
+    fake_local_offset = struct.unpack_from("<I", zip_bytes, fake_cd_offset + 42)[0]
+    fake_name_start = fake_cd_offset + ZIP_CENTRAL_HEADER_FIXED_SIZE
+    fake_name_end = fake_name_start + fake_name_length
+    if (zip_bytes[fake_name_start:fake_name_end] != b"fake_file.txt"
+            or fake_version_needed != 20 or fake_disk_start != 0
+            or fake_extra_length != 0 or fake_comment_length != 0
+            or fake_cd_size != ZIP_CENTRAL_HEADER_FIXED_SIZE + fake_name_length):
+        raise VerificationError(check, "fake central header is not a complete single-disk decoy entry")
+    if (fake_local_offset + ZIP_LOCAL_HEADER_FIXED_SIZE > fake_cd_offset
+            or zip_bytes[fake_local_offset:fake_local_offset + 4] != b"PK\x03\x04"):
+        raise VerificationError(check, "fake central header local-header offset does not resolve")
+    fake_local_name_length, fake_local_extra_length = struct.unpack_from(
+        "<HH", zip_bytes, fake_local_offset + 26)
+    fake_local_data_offset = (fake_local_offset + ZIP_LOCAL_HEADER_FIXED_SIZE
+                              + fake_local_name_length + fake_local_extra_length)
+    fake_local_compressed_size = struct.unpack_from(
+        "<I", zip_bytes, fake_local_offset + 18)[0]
+    if (fake_local_data_offset > fake_cd_offset
+            or fake_local_data_offset + fake_local_compressed_size > fake_cd_offset):
+        raise VerificationError(check, "fake central header local-header record is incomplete")
+
+    entries = case.get("entries", [])
+    if len(entries) != 1 or entries[0].get("ordinal") != 0:
+        raise VerificationError(check, "Expectation File must describe the authentic entry at ordinal 0")
+    if (entries[0].get("readableName") != "note.txt"
+            or entries[0].get("centralNameRaw") != b"note.txt".hex()):
+        raise VerificationError(check, "Expectation File does not describe the authentic central name")
+    if entries[0].get("localNameRaw") != b"note.txt".hex():
+        raise VerificationError(check, "Expectation File local name does not match the authentic entry")
+
+    mutations = [mutation for mutation in case.get("mutations", [])
+                 if mutation.get("code") == "zip64-locator-ambiguity"]
+    if (len(mutations) != 1 or mutations[0].get("structure") != "whole-archive"
+            or mutations[0].get("offset") != cd_offset):
+        raise VerificationError(check, "expected one whole-archive Zip64 ambiguity mutation")
+    declared = {}
+    for token in mutations[0].get("declaredValue", "").split():
+        if "=" not in token:
+            raise VerificationError(check, "mutation declaredValue token is malformed: %r" % token)
+        key, value = token.split("=", 1)
+        if key in declared:
+            raise VerificationError(check, "mutation declaredValue repeats %s" % key)
+        declared[key] = value
+    expected_offsets = {
+        "file-comment-offset": comment_offset,
+        "file-comment-length": comment_length,
+        "central-header-comment-length": comment_length,
+        "fake-central-header-offset": fake_cd_offset,
+        "fake-zip64-eocd-offset": fake_zip64_eocd_offset,
+        "fake-zip64-locator-offset": fake_locator_offset,
+        "central-directory-size": cd_size,
+    }
+    if set(declared) != set(expected_offsets):
+        raise VerificationError(check, "mutation declaredValue keys do not match the Zip64 ambiguity structure")
+    for key, value in expected_offsets.items():
+        if declared.get(key) != str(value):
+            raise VerificationError(check, "mutation %s is %r, expected %d"
+                                    % (key, declared.get(key), value))
+
+    return ("eocd=%d central-comment=%d+%d fake-central=%d "
+            "fake-zip64-eocd=%d fake-locator=%d" %
+            (eocd_offset, comment_offset, comment_length, fake_cd_offset,
+             fake_zip64_eocd_offset, fake_locator_offset))
 
 
 def verify_adls_segments(case):

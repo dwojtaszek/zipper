@@ -52,6 +52,32 @@ public class ArchiveTestSuiteGeneratorTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void BuildExpectationFile_Zip64LocatorAmbiguity_DeclaresReaderVariance()
+    {
+        var definition = ArchiveTestCatalog.GetCase("zip64-locator-ambiguity");
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+
+        var testCase = ArchiveTestSuiteGenerator.BuildExpectationFile(artifact, definition);
+
+        Assert.Equal(ArchiveTestCatalog.PolicySensitiveClassification, testCase.Classification);
+        Assert.Equal(
+            ["list-succeeds", "list-fails"],
+            testCase.Expectations.Single(expectation => expectation.Operation == "list").AllowedOutcomes);
+        Assert.Equal(
+            ["read-entry-content-matches", "read-entry-fails", "read-entry-returns-unverified-bytes"],
+            testCase.Expectations.Single(expectation => expectation.Operation == "read-entry").AllowedOutcomes);
+        Assert.Equal(
+            ["integrity-passes", "integrity-fails", "integrity-unchecked"],
+            testCase.Expectations.Single(expectation => expectation.Operation == "integrity-check").AllowedOutcomes);
+        Assert.Equal(
+            ["extract-succeeds", "extract-fails"],
+            testCase.Expectations.Single(expectation => expectation.Operation == "extract").AllowedOutcomes);
+        Assert.All(testCase.Expectations, expectation =>
+            Assert.Equal(["comment-bytes-are-pure-data"], expectation.Invariants));
+        Assert.Empty(ArchiveTestCaseSemantics.Validate(testCase));
+    }
+
+    [Fact]
     public async Task GenerateAsync_SmokeCases_PublishFlatPairsWithMatchingIds()
     {
         var request = ArchiveTestRequest.Create(
