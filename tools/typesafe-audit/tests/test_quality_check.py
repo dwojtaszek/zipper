@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -1194,6 +1195,11 @@ class WorkflowWiringTests(unittest.TestCase):
     def test_workflow_locates_and_normalizes_mutation_report(self):
         self.assertIn("normalize_report.py", self.wf)
         self.assertIn('--output "../results/mutation"', self.wf)
+
+    def test_workflow_guards_commands_under_bash_e(self):
+        # Under bash -e, commands must be guarded so rc=$? / STRYKER_RC=$? handlers execute (#1224).
+        self.assertRegex(self.wf, r"(?s)dotnet stryker.*?\|\|\s*STRYKER_RC=\$\?")
+        self.assertRegex(self.wf, r"(?s)run_check\.py.*?\|\|\s*rc=\$\?")
 
 
 class MutationNormalizeTests(unittest.TestCase):

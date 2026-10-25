@@ -65,13 +65,13 @@ jobs:
           TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
         run: |
           set -o pipefail
+          rc=0
           python3 tools/typesafe-audit/triage/run_check.py \
             --mode live \
             --issue-json results/typesafe-triage/issue-input.json \
             --json-out results/typesafe-triage/triage.json \
             --md-out results/typesafe-triage/triage.md \
-            --summary-out "$GITHUB_STEP_SUMMARY"
-          rc=$?
+            --summary-out "$GITHUB_STEP_SUMMARY" || rc=$?
           if [ "$rc" -eq 0 ]; then
             exit 0
           fi
