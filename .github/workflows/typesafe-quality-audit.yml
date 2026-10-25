@@ -21,7 +21,7 @@ on:
       shard:
         description: "Per-shard mutation timeout in minutes"
         required: false
-        default: "60"
+        default: "45"
 
 permissions:
   contents: read
@@ -116,11 +116,11 @@ jobs:
 
       - name: Mutation testing shard (Phase 2)
         if: steps.secret.outputs.available == 'true'
-        timeout-minutes: ${{ fromJSON(github.event.inputs.shard || '60') }}
+        timeout-minutes: ${{ fromJSON(github.event.inputs.shard || '45') }}
         env:
           SCOPE: ${{ github.event.inputs.scope || 'LoadFiles/**,PathValidator.cs,Validation/ProductionSetPostValidator.cs,ProductionSetOrchestrator.cs,ManifestComparison/ProductionManifestComparer.cs,ZipArchiveSink.cs,Emails/EmailFactory.cs,ChaosSampler.cs,DatAnomalyApplier.cs,OptAnomalyApplier.cs' }}
           BREAK_AT: ${{ github.event.inputs.break_at || '50' }}
-          SHARD_TIMEOUT: ${{ github.event.inputs.shard || '60' }}
+          SHARD_TIMEOUT: ${{ github.event.inputs.shard || '45' }}
         run: |
           # Scope is relative to project root src/; split comma-separated globs.
           MUTATE_ARGS=()
