@@ -4886,6 +4886,22 @@ def _release_lock(lock_file) -> None:
         pass
 
 
+# Both intake prompts carry this. Measured on the host: agy hands a long command
+# (a test suite, a CI wait) to a background task, its turn then has nothing to do,
+# and it idles out the entire `--print-timeout` before returning partial output —
+# `root agent idle; waiting up to 40m0s for 1 background task(s)` in its own stderr,
+# 15 runs so far, 11 of them over 25 minutes. The work is usually finished by then;
+# the runner cannot tell, so it re-dispatches next cycle and burns the single
+# worktree slot twice. Foreground execution keeps the turn active, so the agent
+# returns as soon as the command does.
+_LONG_COMMAND_INSTRUCTION = (
+    "Run every long command in the foreground and wait for it in the same turn. "
+    "Do NOT hand a test suite, build, or CI wait to a background task and then idle waiting for it: "
+    "an idle turn is killed by the print timeout and returns partial output, "
+    "so your finished work is reported as unfinished and has to be redone.\n"
+)
+
+
 def main():
     global AGENT_CANDIDATES
 
@@ -5021,6 +5037,7 @@ def main():
                 f"Only after all review findings are resolved, open a PR. "
                 f"When creating the pull request, you MUST include the text 'Closes #{num}' in the PR body/description so that GitHub automatically closes the issue when the PR is merged.\n"
                 f"DO NOT pause or exit with an intermediate summary until you have verified all tests pass with 'dotnet test', committed the changes to git, and created the pull request with 'gh pr create'. If any compiler errors or test failures remain, resolve them immediately in this session.\n"
+                + _LONG_COMMAND_INSTRUCTION +
                 f"You must run completely autonomously, do not ask any questions or wait for interactive input, "
                 f"and make all technical decisions yourself using your best engineering judgment."
             )
@@ -5199,6 +5216,7 @@ def main():
                                 f"Only after all review findings are resolved, open a PR. "
                                 f"When creating the pull request, you MUST include the text 'Closes #{num}' in the PR body/description so that GitHub automatically closes the issue when the PR is merged.\n"
                                 f"DO NOT pause or exit with an intermediate summary until you have verified all tests pass with 'dotnet test', committed the changes to git, and created the pull request with 'gh pr create'. If any compiler errors or test failures remain, resolve them immediately in this session.\n"
+                                + _LONG_COMMAND_INSTRUCTION +
                                 f"You must run completely autonomously, do not ask any questions or wait for interactive input, "
                                 f"and make all technical decisions yourself using your best engineering judgment."
                             )
