@@ -296,5 +296,27 @@ public class DocsDriftTests
             Assert.True(matched, $"req-traceability.tsv should contain unit test reference for seam: {seam}");
         }
     }
+
+    [Fact]
+    public void TraceabilityManifest_REQ030_MapsToLiveVersionTestsAndRetiresComputeVersion()
+    {
+        var tsvPath = Path.Combine(RepoRoot, "tests", "req-traceability.tsv");
+        var lines = File.ReadAllLines(tsvPath);
+
+        var req030Lines = lines.Where(l => l.StartsWith("REQ-030\t", StringComparison.Ordinal)).ToList();
+        Assert.NotEmpty(req030Lines);
+        Assert.DoesNotContain(req030Lines, l => l.Contains("test-compute-version.sh"));
+        Assert.Contains(req030Lines, l => l.Contains("test-build-version.sh"));
+        Assert.Contains(req030Lines, l => l.Contains("ci/test_release.py"));
+
+        var computeVersionScript = Path.Combine(RepoRoot, ".github", "scripts", "compute-version.sh");
+        var computeVersionTest = Path.Combine(RepoRoot, "tests", "test-compute-version.sh");
+        Assert.False(File.Exists(computeVersionScript), ".github/scripts/compute-version.sh should be retired");
+        Assert.False(File.Exists(computeVersionTest), "tests/test-compute-version.sh should be retired");
+
+        var testsReadmePath = Path.Combine(RepoRoot, "tests", "README.md");
+        var testsReadme = File.ReadAllText(testsReadmePath);
+        Assert.DoesNotContain("test-compute-version.sh", testsReadme);
+    }
 }
 
