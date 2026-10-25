@@ -98,6 +98,29 @@ MAIN_REMOTE_REF = "origin/main"
 REVIEW_GATE_SCRIPT = "tests/wait-for-reviews.sh"
 GITHUB_REPOSITORY = "dwojtaszek/zipper"
 
+# Robot reviewers are a convenience, not an authority: the merge gate is the
+# required `ci-gate` context (the zipper test suite) plus SonarCloud, both of which
+# are always present because they run as repository workflows rather than as an
+# external app's discretion. The two review bots are neither: CodeRabbit declines
+# this repository outright (public OSS, fewer than 10 stars) and rate-limits itself
+# to a few reviews per hour, and Codex sometimes does not answer at all. Waiting the
+# full gate timeout for a bot that was never going to reply is the delay this
+# tracking removes -- and it removes only the *wait*: unresolved review threads
+# still block the merge through required conversation resolution, so a bot that
+# answers late with findings still stops the merge.
+REVIEW_GATE_ENV_SKIP = "WAIT_FOR_REVIEWS_SKIP"
+# A reviewer that has answered with a skip is unavailable for this long. The gate
+# itself already persists CodeRabbit's own local-CLI rate-limit window; this is the
+# same idea for the *remote* app, whose skips the runner cannot otherwise see.
+REVIEWER_SKIP_COOLDOWN_HOURS = int(os.environ.get("RUNNER_REVIEWER_SKIP_COOLDOWN_HOURS", "6"))
+# Consecutive silent timeouts before a reviewer is treated as unavailable. One
+# silence is noise (a slow queue); two in a row on separate cycles is a pattern.
+REVIEWER_SILENT_STRIKES = int(os.environ.get("RUNNER_REVIEWER_SILENT_STRIKES", "2"))
+REVIEWER_SILENT_COOLDOWN_HOURS = int(os.environ.get("RUNNER_REVIEWER_SILENT_COOLDOWN_HOURS", "6"))
+# The gate's exit code for "could not read review state". Distinct from exit 1 so
+# an API outage never dispatches a mission to fix code that was never reviewed.
+REVIEW_GATE_ENVIRONMENTAL_EXIT = 3
+
 # Unattended-endurance limits. Every external command is bounded so a network
 # black hole can never hang a locked run; a holder past MAX_RUN_SECONDS is
 # killed and its lock reclaimed by the next cycle; quota exhaustion is
@@ -626,12 +649,14 @@ def _should_send_rate_limited(subject: str, *, min_consecutive: int = 3, cooldow
         json.dump(state, f)
     return True
 
-def run_cmd(args, cwd=None, timeout=None):
+def run_cmd(args, cwd=None, timeout=None, env=None):
     """Runs a system command, returning exit code, stdout, and stderr.
 
     Commands without an explicit timeout are bounded by DEFAULT_CMD_TIMEOUT so
     a hung gh/git/network call can never freeze the runner while it holds the
-    lock (unattended-endurance guarantee)."""
+    lock (unattended-endurance guarantee). `env` adds or overrides variables for
+    this command only; the base environment and the git I/O guards below are
+    always applied on top of it."""
     if timeout is None:
         timeout = DEFAULT_CMD_TIMEOUT
     print(f"Running command: {' '.join(args)} (cwd: {cwd})")
@@ -676,6 +701,8 @@ def run_cmd(args, cwd=None, timeout=None):
         return 0, "MOCK SUCCESS", ""
 
     custom_env = os.environ.copy()
+    if env:
+        custom_env.update({str(k): str(v) for k, v in env.items()})
     # Abort stalled git HTTP I/O instead of blocking on a half-open TCP
     # connection for the kernel's ~2h keepalive window (unattended endurance).
     # GIT_SSH_COMMAND is deliberately NOT injected: it would override the
@@ -1885,6 +1912,192 @@ def _run_coderabbit_pre_pr_check(cwd: str) -> CodeRabbitGate:
 
 def _coderabbit_gate_path(pr_number: int) -> str:
     return os.path.join(STATE_DIR, f"pr-{pr_number}-coderabbit-gate.json")
+
+
+def _reviewer_availability_path() -> str:
+    return os.path.join(STATE_DIR, "reviewer-availability.json")
+
+
+def _load_reviewer_availability() -> dict:
+    try:
+        with open(_reviewer_availability_path()) as stream:
+            data = json.load(stream)
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _save_reviewer_availability(data: dict) -> None:
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        with open(_reviewer_availability_path(), "w") as stream:
+            json.dump(data, stream)
+    except OSError as e:
+        print(f"[reviewers] Could not persist reviewer availability: {e}")
+
+
+def _reviewer_entry_state(entry, now: datetime) -> tuple[bool, int]:
+    """Read one record as (parked, effective strike count) after applying expiry.
+
+    Two independent clocks, because they answer different questions. The park
+    window says "do not wait on this reviewer until then"; the strike window says
+    "these consecutive silences still count". Collapsing them was a bug: a single
+    silence wrote a window that had already expired, so the entry was pruned on the
+    next read and the strike count could never reach the threshold.
+    """
+    parked = False
+    try:
+        parked = datetime.fromisoformat(entry["unavailable_until"]) > now
+    except (ValueError, TypeError, KeyError, AttributeError):
+        parked = False
+    strikes = 0
+    try:
+        if datetime.fromisoformat(entry["strikes_expire_at"]) > now:
+            strikes = max(0, int(entry.get("consecutive_silent", 0)))
+    except (ValueError, TypeError, KeyError, AttributeError):
+        strikes = 0
+    return parked, strikes
+
+
+def _reviewers_currently_unavailable() -> list[str]:
+    """Reviewers inside a recorded unavailability window.
+
+    Entries are pruned as they are read, so the file cannot grow stale into a
+    permanent skip: a reviewer that recovers is waited on again as soon as its
+    window passes. An entry survives while either clock is still running, so an
+    unexpired strike count is not lost between cycles.
+    """
+    now = datetime.now(timezone.utc)
+    data = _load_reviewer_availability()
+    unavailable, kept = [], {}
+    for bot, entry in data.items():
+        if not isinstance(entry, dict):
+            continue
+        parked, strikes = _reviewer_entry_state(entry, now)
+        if parked:
+            unavailable.append(bot)
+        if parked or strikes:
+            kept[bot] = entry
+    if len(kept) != len(data):
+        _save_reviewer_availability(kept)
+    return sorted(unavailable)
+
+
+def _record_reviewer_outcomes(output: str, count_silence: bool = True) -> None:
+    """Fold the gate's `REVIEWER-OUTCOME` lines into the availability record.
+
+    Only two states change what the runner does next cycle:
+      * `skipped` — the reviewer refused (a rate limit, or a policy decline such as
+        CodeRabbit's on this repository). Waiting again soon is pointless, so it is
+        parked for the skip cooldown.
+      * `silent` — the reviewer was asked and did not answer. One silence is noise;
+        `REVIEWER_SILENT_STRIKES` in a row is a pattern, so only then is it parked.
+
+    Only `reviewed` clears the record, because it is the one state that is evidence
+    the reviewer answers. `skipped-by-policy` must *not*: that state is what the gate
+    reports for a reviewer this function already parked, so clearing it would delete
+    the park on the very next cycle and the cooldown would never outlast one pass.
+
+    `count_silence=False` ignores `silent` outcomes entirely. A silence only means the
+    reviewer is gone if it was given its full poll budget to answer; the 1-minute
+    quick passes time out on reviewers that are merely queued, and counting those
+    would park a working reviewer after two cycles about ten minutes apart.
+    """
+    now = datetime.now(timezone.utc)
+    data = _load_reviewer_availability()
+    changed = False
+    for line in output.splitlines():
+        line = line.strip()
+        if not line.startswith("REVIEWER-OUTCOME "):
+            continue
+        bot, _, state = line[len("REVIEWER-OUTCOME "):].partition("=")
+        bot, state = bot.strip(), state.strip()
+        if not bot:
+            continue
+        entry = data.get(bot) if isinstance(data.get(bot), dict) else {}
+        if state == "skipped":
+            # A refusal is not a silence, so the strike count starts over: the
+            # reviewer answered, it just declined to review.
+            hours = REVIEWER_SKIP_COOLDOWN_HOURS
+            data[bot] = {"unavailable_until": (now + timedelta(hours=hours)).isoformat(),
+                         "recorded_at": now.isoformat(), "reason": "declared a skip",
+                         "consecutive_silent": 0}
+            print(f"[reviewers] {bot} declared a skip; not waiting on it for {hours}h.")
+            changed = True
+        elif state == "silent" and count_silence:
+            _, strikes = _reviewer_entry_state(entry, now)
+            strikes += 1
+            record = {"recorded_at": now.isoformat(),
+                      "consecutive_silent": strikes,
+                      # Keep the strikes alive across cycles without parking the
+                      # reviewer, so "silent twice in a row" is observable.
+                      "strikes_expire_at": (now + timedelta(
+                          hours=REVIEWER_SILENT_COOLDOWN_HOURS)).isoformat()}
+            if strikes >= REVIEWER_SILENT_STRIKES:
+                hours = REVIEWER_SILENT_COOLDOWN_HOURS
+                record["unavailable_until"] = (now + timedelta(hours=hours)).isoformat()
+                record["reason"] = f"silent {strikes} times"
+                print(f"[reviewers] {bot} has been silent {strikes} times; not waiting on it "
+                      f"for {hours}h.")
+            else:
+                record["reason"] = f"silent {strikes} time(s)"
+                print(f"[reviewers] {bot} was silent ({strikes}/{REVIEWER_SILENT_STRIKES}); "
+                      f"will wait for it next cycle.")
+            data[bot] = record
+            changed = True
+        elif state == "reviewed" and bot in data:
+            del data[bot]
+            print(f"[reviewers] {bot} is answering again; waiting on it normally.")
+            changed = True
+    if changed:
+        _save_reviewer_availability(data)
+
+
+class ReviewGate(NamedTuple):
+    """Outcome of the robot-review wait gate.
+
+    `ok` is what callers act on. `environmental` marks the case where the review
+    state could not be read at all: that is not a review verdict, so it must not
+    dispatch a mission to fix code nobody reviewed -- it just retries next cycle.
+    """
+
+    ok: bool
+    environmental: bool
+    detail: str
+
+
+def _run_review_gate(pr_number, cwd: str, wait_minutes: int | None = None,
+                     timeout: int = 1500) -> ReviewGate:
+    """Wait for robot reviews, skipping reviewers already known to be gone.
+
+    `wait_minutes` overrides the script's own poll timeout (its 1-minute form is
+    used by the quick orphan/Dependabot passes, which re-check every cycle rather
+    than block). Returns a ReviewGate; the caller branches on `ok` and
+    `environmental`.
+    """
+    unavailable = _reviewers_currently_unavailable()
+    env = None
+    if unavailable:
+        print(f"[reviewers] Not waiting on {', '.join(unavailable)} "
+              f"(recorded unavailable).")
+        env = {REVIEW_GATE_ENV_SKIP: ",".join(unavailable)}
+    args = ["bash", REVIEW_GATE_SCRIPT, str(pr_number)]
+    if wait_minutes is not None:
+        args.append(str(wait_minutes))
+    code, out, err = run_cmd(args, cwd=cwd, timeout=timeout, env=env)
+    # The quick passes give the gate ~1 minute, which is not long enough for a
+    # queued reviewer to answer, so their silences must not count as strikes.
+    _record_reviewer_outcomes(out, count_silence=wait_minutes is None)
+    # Only exit 1 is a verdict on the code (unresolved threads exist). Everything
+    # else nonzero is "the reviewers could not be asked": REVIEW_GATE_ENVIRONMENTAL_EXIT
+    # is the gate's own environmental code, 2 means `gh` was missing or `gh repo view`
+    # failed, and -1 is `run_cmd` killing the gate on timeout. Those must not dispatch a
+    # mission to fix review threads nobody raised.
+    if code not in (0, 1):
+        return ReviewGate(False, True, (out + "\n" + err).strip())
+    if code == 1:
+        return ReviewGate(False, False, (out + "\n" + err).strip())
+    return ReviewGate(True, False, out.strip())
 
 
 def _load_coderabbit_gate_state(pr_number: int) -> dict:
@@ -3742,20 +3955,25 @@ def babysit_active_worktrees():
                     )
             if not _is_coderabbit_gate_failed(pr_number):
                 print(f"CI is SUCCESS for PR #{pr_number}. Checking robot review gate...")
-                review_code, review_out, review_err = run_cmd(["bash", REVIEW_GATE_SCRIPT, str(pr_number)], cwd=wt_path, timeout=1500)
-                if review_code != 0:
-                    before_review_out = review_out
+                review = _run_review_gate(pr_number, wt_path)
+                if review.environmental:
+                    # The reviewers could not be asked, so this says nothing about
+                    # the code. Retry next cycle instead of sending an agent to fix
+                    # review threads nobody raised.
+                    print(f"Could not read robot review state for PR #{pr_number}; "
+                          f"retrying next cycle without dispatching a mission.\n{review.detail}")
+                    continue
+                if not review.ok:
+                    before_review_out = review.detail
                     print(
                         f"Review gate failed for PR #{pr_number}. Triggering babysit.\n"
-                        f"stdout:\n{review_out}\n"
-                        f"stderr:\n{review_err}"
+                        f"{review.detail}"
                     )
                     prompt = (
                         f"babysit. CI is passing, but `bash {REVIEW_GATE_SCRIPT} {pr_number}` failed. "
                         f"Resolve every unresolved review thread, reply with a brief reason if skipping a finding, "
                         f"fix the code, commit, run local CodeRabbit review ('coderabbit review --committed --base main --agent') and address all issues first, push fixes if needed, and rerun the script until it exits 0.\n\n"
-                        f"stdout:\n{review_out}\n"
-                        f"stderr:\n{review_err}"
+                        f"{review.detail}"
                     )
                 else:
                     gate = _run_coderabbit_pre_pr_check(wt_path)
@@ -4051,9 +4269,16 @@ def babysit_orphaned_issue_prs():
 
         if ci_status == "SUCCESS":
             print(f"[orphan-pr] CI is SUCCESS for PR #{pr_num}. Checking robot review gate...")
-            review_code, review_out, _ = run_cmd(["bash", REVIEW_GATE_SCRIPT, str(pr_num), "1"], cwd=REPO_PATH, timeout=300)
-            if review_code != 0:
-                print(f"[orphan-pr] Review gate not yet satisfied for PR #{pr_num}. Recreating worktree for babysitting.\n{review_out}")
+            review = _run_review_gate(pr_num, REPO_PATH, wait_minutes=1, timeout=300)
+            if review.environmental:
+                # Nobody was asked, so there is nothing to babysit. Recreating the
+                # worktree here would consume the single runner slot -- and escalate
+                # "Cannot Be Babied" -- for a PR with no problem at all.
+                print(f"[orphan-pr] Could not read robot review state for PR #{pr_num}; "
+                      f"retrying next cycle.\n{review.detail}")
+                continue
+            if not review.ok:
+                print(f"[orphan-pr] Review gate not yet satisfied for PR #{pr_num}. Recreating worktree for babysitting.\n{review.detail}")
                 if not _recreate_worktree_for_pr(issue_num_str, head_branch, pr_num, reviewed_head):
                     _escalate_unrecoverable_pr(pr_num, issue_num_str, head_branch)
                 continue
@@ -4552,9 +4777,9 @@ def babysit_dependabot_prs():
                 continue
 
             print(f"[dependabot] CI is SUCCESS and upstream age policy satisfied for Dependabot PR #{pr_num}. Checking robot review gate...")
-            review_code, review_out, _ = run_cmd(["bash", REVIEW_GATE_SCRIPT, str(pr_num), "1"], cwd=REPO_PATH, timeout=300)
-            if review_code != 0:
-                print(f"[dependabot] Review gate not yet satisfied for PR #{pr_num}. Waiting.\n{review_out}")
+            review = _run_review_gate(pr_num, REPO_PATH, wait_minutes=1, timeout=300)
+            if not review.ok:
+                print(f"[dependabot] Review gate not yet satisfied for PR #{pr_num}. Waiting.\n{review.detail}")
                 continue
 
             print(f"[dependabot] Robot review gate passed for PR #{pr_num}. Auto-merging...")

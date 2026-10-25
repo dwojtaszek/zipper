@@ -61,13 +61,14 @@ def _hanging_command() -> list[str]:
     return [sys.executable, "-c", "import time; print('started', flush=True); time.sleep(60)"]
 
 
-def _hanging_executable(directory: str, name: str) -> str:
+def _hanging_executable(directory: str, name: str, stderr_text: str = "") -> str:
     fake = Path(directory) / name
     fake.write_text(
         "#!/usr/bin/env python3\n"
-        "import time\n"
+        "import sys, time\n"
         "print('started', flush=True)\n"
-        "time.sleep(60)\n"
+        + (f"print({stderr_text!r}, file=sys.stderr, flush=True)\n" if stderr_text else "")
+        + "time.sleep(60)\n"
     )
     fake.chmod(0o755)
     return str(fake)
@@ -164,6 +165,111 @@ class KillMessageTests(unittest.TestCase):
         self.assertIn("started", out, "the partial output must survive the kill")
         self.assertIn("hung", err)
         self.assertNotIn("45 minutes", buffer.getvalue())
+
+    def test_codexKill_shouldKeepPartialOutputAndNameTheBoundThatFired(self):
+        """codex threw its partial output away (#1345).
+
+        It returns `-1, "", "Timeout"` on `TimeoutExpired`, so a timeout left no
+        record of why the agent stalled -- while opencode, hermes, and agy all
+        preserve theirs. The output is on the exception; it just was not read.
+        """
+        plugin = _load("codex")
+        buffer = StringIO()
+        with tempfile.TemporaryDirectory() as directory:
+            _hanging_executable(directory, "codex")
+            env = {"PATH": directory + os.pathsep + os.environ["PATH"]}
+            with ExitStack() as stack:
+                stack.enter_context(patch.object(plugin, "MISSION_TIMEOUT", self.TINY_BOUND))
+                stack.enter_context(patch.dict(os.environ, env))
+                stack.enter_context(redirect_stdout(buffer))
+                code, out, err = plugin.run_mission("hang", directory)
+        self.assertEqual(code, -1, err)
+        self.assertIn("started", out, "the partial output must survive the kill")
+        self.assertIn("hung", err)
+        self.assertNotIn("45 minutes", buffer.getvalue())
+
+    def test_codexPartialOutput_shouldBeDecodedText(self):
+        """`subprocess.run` hands back bytes even with `text=True`.
+
+        Returning the raw value would put a `b'started\\n'` repr in the diagnostic
+        trail, which is not what the agent wrote.
+        """
+        plugin = _load("codex")
+        buffer = StringIO()
+        with tempfile.TemporaryDirectory() as directory:
+            _hanging_executable(directory, "codex")
+            env = {"PATH": directory + os.pathsep + os.environ["PATH"]}
+            with ExitStack() as stack:
+                stack.enter_context(patch.object(plugin, "MISSION_TIMEOUT", self.TINY_BOUND))
+                stack.enter_context(patch.dict(os.environ, env))
+                stack.enter_context(redirect_stdout(buffer))
+                _, out, _ = plugin.run_mission("hang", directory)
+        self.assertNotIn("b'", out, "the partial output must be decoded, not a bytes repr")
+        self.assertNotIn("\\n", out.replace("started\n", ""),
+                         "the decoded text must carry real newlines")
+
+    def test_codexKill_shouldReturnPartialStderrSoQuotaIsSeen(self):
+        """codex captures stderr separately, so its partial stderr must come back.
+
+        The runner scans the *returned* streams with `is_quota_exhausted(out, err)`.
+        Printing the partial stderr without returning it hides a quota reported
+        there, and the runner relaunches a model that is cooling down.
+        """
+        import runner as runner_module
+
+        plugin = _load("codex")
+        buffer = StringIO()
+        with tempfile.TemporaryDirectory() as directory:
+            _hanging_executable(directory, "codex",
+                                stderr_text="429 RESOURCE_EXHAUSTED: quota exceeded")
+            env = {"PATH": directory + os.pathsep + os.environ["PATH"]}
+            with ExitStack() as stack:
+                stack.enter_context(patch.object(plugin, "MISSION_TIMEOUT", self.TINY_BOUND))
+                stack.enter_context(patch.dict(os.environ, env))
+                stack.enter_context(redirect_stdout(buffer))
+                code, out, err = plugin.run_mission("hang", directory)
+        self.assertEqual(code, -1, err)
+        self.assertIn("hung", err, "the kill message must survive alongside it")
+        self.assertTrue(runner_module.is_quota_exhausted(out, err),
+                        "a quota reported on stderr must reach the quota check")
+
+    def test_claudeKill_shouldKeepPartialOutputAndNameTheBoundThatFired(self):
+        """claude threw away the temp file it had already written (#1345).
+
+        Its output goes to a temp file rather than a pipe, so the partial output is
+        on disk at the moment of the kill -- and the `finally` block deletes it.
+        Reading it before that is the whole fix.
+        """
+        plugin = _load("claude")
+        buffer = StringIO()
+        with tempfile.TemporaryDirectory() as directory:
+            _hanging_executable(directory, "claude")
+            env = {"PATH": directory + os.pathsep + os.environ["PATH"]}
+            with ExitStack() as stack:
+                stack.enter_context(patch.object(plugin, "MISSION_TIMEOUT", self.TINY_BOUND))
+                stack.enter_context(patch.dict(os.environ, env))
+                stack.enter_context(redirect_stdout(buffer))
+                code, out, err = plugin.run_mission("hang", directory)
+        self.assertEqual(code, -1, err)
+        self.assertIn("started", out, "the partial output must survive the kill")
+        self.assertIn("hung", err)
+        self.assertNotIn("45 minutes", buffer.getvalue())
+
+    def test_claudePartialOutput_shouldSurviveTheTempFileCleanup(self):
+        """The kill path must read the log before the `finally` unlinks it."""
+        plugin = _load("claude")
+        buffer = StringIO()
+        with tempfile.TemporaryDirectory() as directory:
+            _hanging_executable(directory, "claude")
+            env = {"PATH": directory + os.pathsep + os.environ["PATH"]}
+            with ExitStack() as stack:
+                stack.enter_context(patch.object(plugin, "MISSION_TIMEOUT", self.TINY_BOUND))
+                stack.enter_context(patch.dict(os.environ, env))
+                stack.enter_context(redirect_stdout(buffer))
+                _, out, _ = plugin.run_mission("hang", directory)
+        self.assertTrue(out.strip(), "a timeout must not return an empty diagnostic")
+        self.assertNotIn("claude.log", buffer.getvalue(),
+                         "the partial output must be read, not a leftover path")
 
 
 class BoundIsActuallyAppliedTests(unittest.TestCase):

@@ -68,12 +68,29 @@ bash tests/wait-for-reviews.sh <PR-number> [timeout-minutes]   # default timeout
 
 The script blocks until each expected bot (CodeRabbit, Codex) has posted a review, posted a completion marker, or declared a rate-limit skip, then lists every unresolved review thread and exits non-zero while any remain. Fix or reply-with-reason on each thread, resolve it, and re-run until exit 0. A bot that stays silent past the timeout produces a warning, not a failure.
 
+Exit codes are distinct because they mean different things:
+
+| Exit | Meaning | What to do |
+|------|---------|------------|
+| 0 | Every bot accounted for, no unresolved threads | Proceed |
+| 1 | Unresolved review threads | Fix, or reply with a skip reason and resolve |
+| 2 | Usage error / missing `gh` or `jq` | Fix the environment |
+| 3 | Review state could not be read (`gh` API failure) | Retry; this is environmental, not a verdict |
+
+Exit 3 exists to close a false-pass hole: an unreadable thread list used to be read as "zero unresolved threads", which would let a PR merge with its review threads unverified. A caller must never treat exit 3 as either a pass or a review failure.
+
+The script prints a machine-readable contract on stdout: one `REVIEWER-OUTCOME <bot>=<state>` line per reviewer (`reviewed`, `skipped`, `silent`, `skipped-by-policy`) and a final `REVIEW-GATE-RESULT unresolved=<n|unknown>` line. The autonomous runner consumes these to track reviewer availability, and passes `WAIT_FOR_REVIEWS_SKIP=<bot>,<bot>` to skip waiting on a reviewer it has already recorded as unavailable. Only `reviewed` is evidence that a reviewer answers, so only `reviewed` clears its record: `skipped-by-policy` is what the gate reports for a reviewer the caller parked, and treating that as "answering again" would delete the park on the very next cycle.
+
+**The review bots are a convenience, not the authority.** The merge gate is the required `ci-gate` context (the zipper test suite) plus SonarCloud; both always run, because they are repository workflows rather than an external app's discretion. The two bots are not: CodeRabbit declines this repository outright (public OSS, fewer than 10 stars) and rate-limits itself to a few reviews per rolling hour, and Codex sometimes does not answer. Not waiting on them is safe because unresolved review threads still block the merge through required conversation resolution, so a bot that answers late with findings still stops it. That is the whole basis for skipping the wait: "we stopped waiting", never "we stopped checking".
+
 Caveats:
 - A "pass" check status from a review bot can mean "review skipped" (rate limit) — never treat check status as approval.
 - Resolving a thread without a reply is prohibited; the thread must carry a fix reference or a skip reason.
 - Codex sometimes reports a finished review as a summary issue comment carrying a `codex-review-state:v1` marker instead of a formal review object. The gate counts that marker in either carrier, because it cannot otherwise see such a review at all and waits out its entire timeout on a PR the bot has already reviewed — measured at 20 minutes on PR #1328.
 
-Server-side enforcement: `main` has branch protection with **required conversation resolution** and a **required status check** — GitHub refuses the merge while any review thread is unresolved or the `ci-gate` check is red. `ci-gate` (aggregate job in `pr.yml`) always runs, even on docs-only PRs where the other jobs are skipped, and fails if any needed job (`docs-only`, `ci`, `goldens`) failed or was cancelled. `ci` is the reusable workflow [ci.yml](.github/workflows/ci.yml) — `lint`, `runner-tests`, `version-metadata`, and the three `build-and-test` matrix legs running the full E2E suite — so a red leg inside it still fails the caller job and therefore `ci-gate`. The required check context is always posted. `enforce_admins` is on — no one merges red CI. One-time setup (admin):
+Server-side enforcement: `main` has branch protection with **required conversation resolution** and a **required status check** — GitHub refuses the merge while any review thread is unresolved or the `ci-gate` check is red. `ci-gate` (aggregate job in `pr.yml`) runs on every `pull_request` event, including docs-only PRs where the other jobs are skipped, and fails if any needed job (`docs-only`, `ci`, `goldens`) failed or was cancelled. `ci` is the reusable workflow [ci.yml](.github/workflows/ci.yml) — `lint`, `runner-tests`, `version-metadata`, and the three `build-and-test` matrix legs running the full E2E suite — so a red leg inside it still fails the caller job and therefore `ci-gate`. `enforce_admins` is on — no one merges red CI.
+
+`ci-gate` is posted on every event that creates a workflow run, but it is not *guaranteed* to be posted: a push can produce no `pull_request` run at all, which leaves the required context permanently missing and the PR unmergeable. Observed on #1340, where a push created no `pull_request` run while `pull_request_target` runs did fire. The runner detects that shape and re-arms the trigger rather than treating it as a code failure — see `.zipper-runner/README.md` (`REQUIRED_STATUS_CONTEXT`). One-time setup (admin):
 
 ```bash
 gh api -X PUT "repos/dwojtaszek/zipper/branches/main/protection" \

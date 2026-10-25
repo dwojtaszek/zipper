@@ -28,7 +28,9 @@ import tempfile
 # slow work, and the bound is the only guard. 15 minutes matches the other silent
 # agents (opencode, hermes). See opencode.py for the measurement behind it.
 MISSION_TIMEOUT = 900
-_HUNG_KILL_MESSAGE = f"Mission timed out after {MISSION_TIMEOUT // 60} minutes"
+_HUNG_KILL_MESSAGE = (
+    f"Error: Agent process hung and was forcefully killed after {MISSION_TIMEOUT // 60} minutes."
+)
 
 
 def check_installation() -> bool:
@@ -134,7 +136,20 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
         return result.returncode, output, ""
     except subprocess.TimeoutExpired:
         print(f"[claude] {_HUNG_KILL_MESSAGE}")
-        return -1, "", "Timeout"
+        # claude streams to a temp file rather than a pipe, so there is nothing on
+        # the exception to read -- the partial output is the file, and the `finally`
+        # below deletes it. Read it here, before that runs: otherwise a timeout
+        # leaves no record of why the agent stalled. The other silent agents keep
+        # their partial output, and this matches them.
+        partial = ""
+        try:
+            with open(tmp_path, "r", errors="replace") as f:
+                partial = f.read()
+        except OSError:
+            pass
+        if partial:
+            print(f"--- [claude stdout (partial)] ---\n{partial}")
+        return -1, partial, _HUNG_KILL_MESSAGE
     except Exception as e:
         return -1, "", str(e)
     finally:
