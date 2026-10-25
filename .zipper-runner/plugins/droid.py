@@ -20,6 +20,15 @@ import time
 
 DEFAULT_MODEL = "gpt-6-luna"
 REASONING_EFFORT = "max"
+# droid is the one agent that emits a real liveness signal: `assistant progress`
+# on each assistant message, streamed as droid produces it. A wall-clock cut
+# would truncate a working mission rather than a hung one -- both measured
+# missions were still alive at 44 minutes. Agents that hang silently use 900s
+# instead (see opencode.py).
+#
+# Note HEARTBEAT_SECONDS is *not* a liveness signal: it is this plugin's own
+# timer, printed whether or not droid produces anything, so it proves only that
+# the pipe drain is running. Do not build a silence watchdog on it.
 MISSION_TIMEOUT = 2700
 HEARTBEAT_SECONDS = 60
 

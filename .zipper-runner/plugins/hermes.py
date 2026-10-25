@@ -19,6 +19,16 @@ HERMES_BIN = shutil.which("hermes") or (
     "/opt/hermes/.venv/bin/hermes" if os.path.exists("/opt/hermes/.venv/bin/hermes") else None
 )
 
+# hermes emits no liveness output, so this bound is the only thing between a
+# silent hang and a wasted mission. It matches opencode's 15 minutes for the same
+# reason; agents that signal liveness or stop themselves keep their longer bound
+# (agy's nested `--print-timeout`, droid's `assistant progress`). See opencode.py
+# for the measurement behind the number.
+MISSION_TIMEOUT = 900
+_HUNG_KILL_MESSAGE = (
+    f"Error: Agent process hung and was forcefully killed after {MISSION_TIMEOUT // 60} minutes."
+)
+
 
 def list_models() -> list[str]:
     """Returns list of available model strings."""
@@ -98,15 +108,16 @@ def run_mission(
             env=env,
             start_new_session=True,
         )
-        # 45-minute hard timeout to prevent indefinite lockups
-        stdout, stderr = p.communicate(timeout=2700)
+        # Hard timeout to prevent indefinite lockups (see MISSION_TIMEOUT).
+        stdout, stderr = p.communicate(timeout=MISSION_TIMEOUT)
         print(f"--- [hermes stdout] ---\n{stdout}")
         if stderr:
             print(f"--- [hermes stderr] ---\n{stderr}")
         return p.returncode, stdout, stderr
     except subprocess.TimeoutExpired:
         print(
-            "[hermes] CRITICAL: Agent process hung for over 45 minutes! Forcefully killing it."
+            f"[hermes] CRITICAL: Agent process hung for over "
+            f"{MISSION_TIMEOUT // 60} minutes! Forcefully killing it."
         )
         if p:
             # Kill the whole process group: p.kill() alone leaves children
@@ -122,11 +133,7 @@ def run_mission(
             print(f"--- [hermes stdout (partial)] ---\n{stdout}")
             if stderr:
                 print(f"--- [hermes stderr (partial)] ---\n{stderr}")
-            return (
-                -1,
-                stdout,
-                "Error: Agent process hung and was forcefully killed after 45 minutes.",
-            )
+            return -1, stdout, _HUNG_KILL_MESSAGE
         return -1, "", "Error: Timeout before process started."
     except Exception as e:
         return -1, "", str(e)

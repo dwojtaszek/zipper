@@ -21,6 +21,13 @@ KNOWN_MODELS = [
     "openai/gpt-5.4",
 ]
 
+# codex runs via a buffered `subprocess.run`, so the plugin sees no output until
+# the process exits: there is no liveness signal to distinguish a hang from slow
+# work, and the bound is the only guard. 15 minutes matches the other silent
+# agents (opencode, hermes). See opencode.py for the measurement behind it.
+MISSION_TIMEOUT = 900
+_HUNG_KILL_MESSAGE = f"Mission timed out after {MISSION_TIMEOUT // 60} minutes"
+
 
 def list_models() -> list[str]:
     """Returns known Codex model strings."""
@@ -101,7 +108,7 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
             text=True,
             cwd=cwd,
             env=env,
-            timeout=2700,
+            timeout=MISSION_TIMEOUT,
         )
         output = result.stdout
         if result.stderr:
@@ -109,7 +116,7 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
         print(f"--- [codex output] ---\n{output}")
         return result.returncode, output, result.stderr
     except subprocess.TimeoutExpired:
-        print("[codex] Mission timed out after 45 minutes")
+        print(f"[codex] {_HUNG_KILL_MESSAGE}")
         return -1, "", "Timeout"
     except Exception as e:
         return -1, "", str(e)

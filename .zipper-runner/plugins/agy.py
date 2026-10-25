@@ -16,6 +16,15 @@ import subprocess
 import shutil
 import tempfile
 
+# agy stops itself and reports partial output, so this kill is a backstop rather
+# than the primary bound: PRINT_TIMEOUT_SECONDS must fire first. Both are named so
+# the relationship is testable instead of being two loose literals.
+PRINT_TIMEOUT_SECONDS = 2400
+MISSION_TIMEOUT = 2700
+_HUNG_KILL_MESSAGE = (
+    f"Error: Agent process hung and was forcefully killed after {MISSION_TIMEOUT // 60} minutes."
+)
+
 
 def list_models() -> list[str]:
     """Returns list of available model identifiers from agy models."""
@@ -157,11 +166,21 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
         base += ["--continue"]
     if model and model != "default":
         base += ["--model", model]
-    # agy's own print timeout must fire before the 45-minute (2700s) kill below,
-    # so the agent gets to flush its partial output instead of being SIGKILLed
+    # agy's own print timeout must fire before the MISSION_TIMEOUT kill below, so
+    # the agent gets to flush its partial output instead of being SIGKILLed
     # mid-turn. 30m truncated long missions routinely; 40m leaves 5 minutes of
     # slack for the process to exit and report what it finished.
-    base += ["--prompt", prompt, "--print-timeout", "40m", "--dangerously-skip-permissions"]
+    #
+    # This is why agy keeps a 2700s kill while the silent agents (opencode,
+    # hermes, codex, claude) use 900s: agy stops itself and reports partial work,
+    # whereas those four hang silently with nothing to recover. The nested
+    # relationship is the invariant, not the number -- pinned by
+    # test_agy_plugin.AgyMissionTimeoutTests.
+    base += [
+        "--prompt", prompt,
+        "--print-timeout", f"{PRINT_TIMEOUT_SECONDS // 60}m",
+        "--dangerously-skip-permissions",
+    ]
 
     abs_cwd = os.path.abspath(cwd)
     env = os.environ.copy()
@@ -179,14 +198,17 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
             env=env,
             start_new_session=True,
         )
-        # 45-minute hard timeout to prevent indefinite lockups
-        stdout, stderr = p.communicate(timeout=2700)
+        # Hard timeout to prevent indefinite lockups (see MISSION_TIMEOUT).
+        stdout, stderr = p.communicate(timeout=MISSION_TIMEOUT)
         print(f"--- [agy stdout] ---\n{stdout}")
         if stderr:
             print(f"--- [agy stderr] ---\n{stderr}")
         return p.returncode, stdout, stderr
     except subprocess.TimeoutExpired:
-        print("[agy] CRITICAL: Agent process hung for over 45 minutes! Forcefully killing it.")
+        print(
+            f"[agy] CRITICAL: Agent process hung for over "
+            f"{MISSION_TIMEOUT // 60} minutes! Forcefully killing it."
+        )
         # Kill the whole process group: p.kill() alone leaves children
         # alive holding the pipes, and communicate() would block forever.
         # start_new_session=True made the child the group leader, so p.pid
@@ -200,6 +222,6 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
         print(f"--- [agy stdout (partial)] ---\n{stdout}")
         if stderr:
             print(f"--- [agy stderr (partial)] ---\n{stderr}")
-        return -1, stdout, "Error: Agent process hung and was forcefully killed after 45 minutes."
+        return -1, stdout, _HUNG_KILL_MESSAGE
     except Exception as e:
         return -1, "", str(e)

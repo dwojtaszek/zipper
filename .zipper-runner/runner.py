@@ -1573,6 +1573,25 @@ def _latest_commit_is_wip(cwd: str = REPO_PATH) -> bool:
     return code == 0 and out.strip().lower().startswith("wip:")
 
 
+def _mission_produced_work(pr_num: str | int | None, has_commits: bool,
+                           added_commits: int, wt_path: str) -> bool:
+    """True when a mission left work worth preserving *and* stopping the cycle for.
+
+    A WIP checkpoint is deliberately not progress. `_auto_commit_wip_checkpoint`
+    runs after every mission, so an agent that was cut short (or that failed)
+    while leaving edits behind always produces a commit — counting that as work
+    would take the "Progress recorded" branch and `break`, ending the cycle with
+    the single worktree slot idle instead of handing it to the next candidate.
+    Excluding it routes the interrupted attempt through `_fallback()`, which
+    preserves the same partial work either way.
+    """
+    if pr_num:
+        return True
+    if not (has_commits and added_commits > 0):
+        return False
+    return not _latest_commit_is_wip(wt_path)
+
+
 def _pr_head_commit_is_wip(pr_number: int | str) -> bool:
     code, out, _ = run_cmd(["gh", "pr", "view", str(pr_number), "--json", "commits", "--jq", ".commits[-1].messageHeadline"], cwd=REPO_PATH)
     return code == 0 and out.strip().lower().startswith("wip:")
@@ -2558,7 +2577,7 @@ def _is_environmental_gate_failure(pr_create_err: str) -> bool:
     """True for gate failures an agent mission cannot fix (missing CLI).
 
     Dispatching a mission to 'fix' a missing coderabbit binary just burns a
-    45-minute run per cycle for the outage's duration."""
+    full mission run per cycle for the outage's duration."""
     return "coderabbit cli not found" in (pr_create_err or "").lower()
 
 
@@ -4860,8 +4879,8 @@ def _worktree_mission_lock(wt_path: str):
     outlives a SIGKILLed runner, so a runner killed outright can free a worktree
     whose agent is still writing. The watchdog does not cover that case either: it
     reclaims by killing the holder's process group, which the agent's separate
-    session escapes. Each plugin's own mission bound (2400-2700s) is what keeps that
-    window small.
+    session escapes. Each plugin's own mission bound (900-2700s, see the plugins)
+    is what keeps that window small.
 
     Deliberately not wired to `_reclaim_stale_lock`: that reclaims by killing the
     holder's process group, which would kill a whole intake run for a worktree it
@@ -5140,7 +5159,12 @@ def main():
                         _, new_commits, _ = run_cmd(["git", "rev-list", "--count", f"main..{branch_name}"], cwd=REPO_PATH)
                         new_count = int(new_commits.strip() or "0")
                         added_commits = new_count - before_count
-                        work_done = pr_num_val or (has_commits and added_commits > 0)
+                        # A WIP checkpoint is not progress: it is the runner saving
+                        # whatever an interrupted agent had on disk. See
+                        # _mission_produced_work for why that distinction decides
+                        # whether the slot goes to the next candidate.
+                        work_done = _mission_produced_work(
+                            pr_num_val, has_commits, added_commits, wt_path)
 
                         if agy_code == 0 and not pr_num_val and has_commits and _worktree_is_clean(wt_path) and not _latest_commit_is_wip(wt_path):
                             print(f"Agent exited successfully with committed work but no PR. Creating PR for '{branch_name}' directly.")
