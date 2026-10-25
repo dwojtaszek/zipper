@@ -86,6 +86,7 @@ internal static class ArchiveFixtureMutator
             ArchiveTestMutationKind.UnicodePathCrcMismatch => MismatchUnicodePathCrc(control, before),
             ArchiveTestMutationKind.UnicodePathNameDivergence => DivergeUnicodePathName(control, before),
             ArchiveTestMutationKind.StoredPayloadBitflip => FlipStoredPayloadByte(control, before),
+            ArchiveTestMutationKind.DeflatePayloadBitflip => FlipDeflateStoredBlockByte(control, before),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown Archive Test mutation kind."),
         };
     }
@@ -845,6 +846,100 @@ internal static class ArchiveFixtureMutator
                 entry.Ordinal, 1, 1,
                 DeclaredValue: $"payload-byte-flip=bit0 data-offset={dataOffset} original-content-sha256={contentSha256}"),
         ], after => after[dataOffset] ^= 0x01);
+    }
+
+    /// <summary>
+    /// Flips one literal byte in a method-8 stored-block stream after validating every
+    /// block boundary, LEN/NLEN pair, and the final-block boundary.
+    /// </summary>
+    private static MutatedArchiveFixture FlipDeflateStoredBlockByte(ArchiveFixtureArtifact control, byte[] before)
+    {
+        var kind = ArchiveTestMutationKind.DeflatePayloadBitflip;
+        if (control.Layout.Entries.Count != 1 || control.Layout.Entries[0].Method != ArchiveTestCodec.Deflate)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test mutation '{kind.ToCaseKey()}': the control must have exactly one method-8 entry.");
+        }
+
+        var entry = control.Layout.Entries[0];
+        if (entry.DataOffset < 0 || entry.CompressedSize == 0 || entry.CompressedSize > int.MaxValue
+            || entry.DataOffset > before.LongLength - entry.CompressedSize)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test mutation '{kind.ToCaseKey()}': the method-8 payload range is empty or outside the Archive.");
+        }
+
+        var dataOffset = checked((int)entry.DataOffset);
+        var compressed = before.AsSpan(dataOffset, (int)entry.CompressedSize);
+        var cursor = 0;
+        var finalBlock = false;
+        long literalOffset = -1;
+        while (!finalBlock)
+        {
+            if (cursor >= compressed.Length)
+            {
+                throw new InvalidOperationException(
+                    $"Archive Test mutation '{kind.ToCaseKey()}': the stored-block stream ends before a final block.");
+            }
+
+            var header = compressed[cursor++];
+            finalBlock = (header & 1) != 0;
+            if (((header >> 1) & 3) != 0)
+            {
+                throw new InvalidOperationException(
+                    $"Archive Test mutation '{kind.ToCaseKey()}': the DEFLATE stream contains a non-stored block.");
+            }
+
+            if (compressed.Length - cursor < 4)
+            {
+                throw new InvalidOperationException(
+                    $"Archive Test mutation '{kind.ToCaseKey()}': a stored block is missing LEN/NLEN.");
+            }
+
+            var length = BinaryPrimitives.ReadUInt16LittleEndian(compressed[cursor..]);
+            var complement = BinaryPrimitives.ReadUInt16LittleEndian(compressed[(cursor + 2)..]);
+            cursor += 4;
+            if (complement != unchecked((ushort)~length))
+            {
+                throw new InvalidOperationException(
+                    $"Archive Test mutation '{kind.ToCaseKey()}': a stored block has inconsistent LEN/NLEN values.");
+            }
+
+            if (length > compressed.Length - cursor)
+            {
+                throw new InvalidOperationException(
+                    $"Archive Test mutation '{kind.ToCaseKey()}': a stored block's literal data exceeds the compressed payload.");
+            }
+
+            if (literalOffset < 0 && length > 0)
+            {
+                literalOffset = entry.DataOffset + cursor;
+            }
+
+            cursor += length;
+        }
+
+        if (cursor != compressed.Length)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test mutation '{kind.ToCaseKey()}': bytes follow the final stored block.");
+        }
+
+        if (literalOffset < 0 || entry.Ordinal < 0 || entry.Ordinal >= control.Entries.Count)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test mutation '{kind.ToCaseKey()}': the control has no literal data to flip.");
+        }
+
+        var contentSha256 = control.Entries[entry.Ordinal].ContentSha256;
+        return Patch(kind, before,
+        [
+            new MutationSpec(
+                kind.ToCaseKey(), "file-data", literalOffset,
+                "Flips bit 0 of a method-8 stored-block literal byte while preserving valid DEFLATE framing; the declared CRC-32 and original content hash remain unchanged.",
+                entry.Ordinal, 1, 1,
+                DeclaredValue: $"payload-byte-flip=bit0 literal-data-offset={literalOffset} original-content-sha256={contentSha256}"),
+        ], after => after[(int)literalOffset] ^= 0x01);
     }
 
     /// <summary>
@@ -1700,6 +1795,7 @@ internal enum ArchiveTestMutationKind
     MixedMethodsOneCorruptMember,
     MixedMethodsOneUnsupportedMember,
     StoredPayloadBitflip,
+    DeflatePayloadBitflip,
 }
 
 internal static class ArchiveTestMutationKindExtensions
@@ -1758,6 +1854,7 @@ internal static class ArchiveTestMutationKindExtensions
         ArchiveTestMutationKind.MixedMethodsOneCorruptMember => "mixed-methods-one-corrupt-member",
         ArchiveTestMutationKind.MixedMethodsOneUnsupportedMember => "mixed-methods-one-unsupported-member",
         ArchiveTestMutationKind.StoredPayloadBitflip => "stored-payload-bitflip",
+        ArchiveTestMutationKind.DeflatePayloadBitflip => "deflate-payload-bitflip",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown Archive Test mutation kind."),
     };
 }

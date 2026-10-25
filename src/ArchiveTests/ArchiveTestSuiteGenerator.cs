@@ -403,6 +403,15 @@ internal static class ArchiveTestSuiteGenerator
                 Expectation(IntegrityCheckOperation, "strict-integrity-v1", ["crc-mismatch-rejected", "integrity-fails"], [NoPartialWrites], ["open", ReadEntryOperation, IntegrityCheckOperation], capability: "crc32"),
                 Expectation(ExtractOperation, StrictProfile, ["extract-fails"], [NoPartialWrites], ["open", ReadEntryOperation, ExtractOperation]),
             ],
+            // The stored-block method-8 stream still decodes after one literal byte is
+            // flipped; readers may reject its original CRC or return unverified bytes.
+            ArchiveTestMutationKind.DeflatePayloadBitflip =>
+            [
+                Expectation(ListOperation, StrictProfile, [ListSucceeds], [NoPartialWrites], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-fails", "read-entry-returns-unverified-bytes"], [NoPartialWrites], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, "strict-integrity-v1", ["crc-mismatch-rejected", "integrity-fails"], [NoPartialWrites], ["open", ReadEntryOperation, IntegrityCheckOperation], capability: "deflate-bitstream"),
+                Expectation(ExtractOperation, StrictProfile, ["extract-fails"], [NoPartialWrites], ["open", ReadEntryOperation, ExtractOperation]),
+            ],
             // Local-header lies with an intact central directory: lenient central-based
             // readers succeed; strict local-header validators reject (ticket #840).
             // The orphan hidden entry (ticket #869) keeps the visible central directory

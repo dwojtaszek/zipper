@@ -83,10 +83,9 @@ internal sealed record ArchiveTestCaseDefinition(
 /// <summary>
 /// Baseline construction steps for valid controls (tickets #840 and #841). Construction
 /// is valid building, never a defect: the Archive stays fully readable with matching
-/// content hashes. <see cref="LocalExtraField"/> through <see cref="ArchiveComment"/>
-/// are applied after the standard writer finalized the Archive;
-/// <see cref="NonSeekableDescriptor"/> and <see cref="Zip64HandBuilt"/> change how the
-/// baseline bytes are produced in the first place.
+/// content hashes. Extra-field, name, prefix, and comment constructions are applied
+/// after the standard writer finalizes the Archive; descriptor, Zip64, coded-stream,
+/// and nested-budget constructions change how the baseline bytes are produced.
 /// </summary>
 internal enum ArchiveControlConstruction
 {
@@ -148,6 +147,10 @@ internal enum ArchiveControlConstruction
     /// stream of the Deflate64-specific control (ticket #931); the hand-built
     /// coded path can only emit Deflate-subset streams for method 9.</summary>
     PinnedDeflate64LongMatch,
+
+    /// <summary>Serializes a method-8 entry whose DEFLATE stream uses stored blocks,
+    /// so the literal bytes can be changed without breaking decoding.</summary>
+    DeflateStoredBlock,
 
     /// <summary>Serializes a tiny genuine Zip64 Archive whose single deflate
     /// entry uses a data descriptor with the signature (ticket #934).</summary>
@@ -274,6 +277,11 @@ internal static class ArchiveTestCatalog
             "valid-deflate-dynamic", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite],
             Recipe: DeflateDynamicRecipe),
+        ["valid-deflate-stored-block"] = new(
+            "valid-deflate-stored-block", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
+            Suites: [CompatibilitySuite],
+            Recipe: DeflateStoredBlockRecipe,
+            Construction: ArchiveControlConstruction.DeflateStoredBlock),
         // Ticket #897 BZip2 control: one entry with real BZip2-compressed data
         // (method 12).
         ["valid-bzip2"] = new(
@@ -420,6 +428,10 @@ internal static class ArchiveTestCatalog
             ArchiveTestMutationKind.CrcBothMismatch, suites: SmokeMalformedSuites),
         ["stored-payload-bitflip"] = MutatedDefinition(
             ArchiveTestMutationKind.StoredPayloadBitflip, adapterChecks: SevenZipTestFailure),
+        ["deflate-payload-bitflip"] = MutatedDefinition(
+            ArchiveTestMutationKind.DeflatePayloadBitflip,
+            controlCaseKey: DeflateStoredBlockControlCaseKey,
+            adapterChecks: SevenZipTestFailure),
         ["truncate-payload-tail"] = MutatedDefinition(ArchiveTestMutationKind.TruncatePayloadTail),
         ["truncate-central-tail"] = MutatedDefinition(ArchiveTestMutationKind.TruncateCentralTail),
         ["truncate-eocd"] = MutatedDefinition(ArchiveTestMutationKind.TruncateEocd),
@@ -657,6 +669,7 @@ internal static class ArchiveTestCatalog
     private const string Bzip2ControlCaseKey = "valid-bzip2";
     private const string Deflate64ControlCaseKey = "valid-deflate64";
     private const string DeflateDynamicControlCaseKey = "valid-deflate-dynamic";
+    private const string DeflateStoredBlockControlCaseKey = "valid-deflate-stored-block";
     private const string SignaturePayloadControlCaseKey = "valid-signature-payload";
     private const string ExtraFieldControlCaseKey = "valid-extra-field";
     private const string Zip64ControlCaseKey = "valid-zip64-small";
@@ -697,6 +710,7 @@ internal static class ArchiveTestCatalog
         DeflateControlCaseKey => DeflateControlRecipe,
         Bzip2ControlCaseKey => Bzip2ControlRecipe,
         DeflateDynamicControlCaseKey => DeflateDynamicRecipe,
+        DeflateStoredBlockControlCaseKey => DeflateStoredBlockRecipe,
         Deflate64ControlCaseKey => Deflate64ControlRecipe,
         SignaturePayloadControlCaseKey => SignaturePayloadControlRecipe,
         Zip64ControlCaseKey => Zip64ControlRecipe,
@@ -771,6 +785,11 @@ internal static class ArchiveTestCatalog
     private static ArchiveTestRecipe DeflateDynamicRecipe => new(
     [
         new ArchiveTestRecipeEntry("dyn.txt", 4096, "deflate", IsDirectory: false, PayloadPrefix: DeflateDynamicText),
+    ]);
+
+    private static ArchiveTestRecipe DeflateStoredBlockRecipe => new(
+    [
+        ArchiveTestRecipeEntry.File("stored-block.txt", 65_536, "deflate"),
     ]);
 
     // The deflate control for the declared-size-oversized, orphan-local-header,

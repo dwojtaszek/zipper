@@ -77,6 +77,54 @@ public class ArchiveFixtureBuilderTests
     }
 
     [Fact]
+    public void BuildControl_ValidDeflateStoredBlock_EmitsDecodableStoredBlocks()
+    {
+        var artifact = ArchiveFixtureBuilder.BuildControl("valid-deflate-stored-block", 42, CancellationToken.None);
+
+        var entry = Assert.Single(artifact.Layout.Entries);
+        Assert.Equal((ushort)8, entry.Method);
+        Assert.Equal("stored-block.txt", entry.Name);
+
+        var compressed = artifact.ArchiveBytes.AsSpan((int)entry.DataOffset, (int)entry.CompressedSize);
+        var cursor = 0;
+        var decoded = new MemoryStream();
+        var finalBlock = false;
+        while (!finalBlock)
+        {
+            var header = compressed[cursor++];
+            finalBlock = (header & 1) != 0;
+            Assert.Equal(0, (header >> 1) & 3);
+
+            var length = BinaryPrimitives.ReadUInt16LittleEndian(compressed[cursor..]);
+            var complement = BinaryPrimitives.ReadUInt16LittleEndian(compressed[(cursor + 2)..]);
+            cursor += 4;
+            Assert.Equal((ushort)~length, complement);
+            decoded.Write(compressed.Slice(cursor, length));
+            cursor += length;
+        }
+
+        Assert.Equal(compressed.Length, cursor);
+        Assert.Equal(artifact.Entries[0].Content, decoded.ToArray());
+        Assert.Equal(artifact.Entries[0].Content, ReadEntryContent(artifact.ArchiveBytes, entry.Name));
+        Assert.Equal((uint)artifact.Entries[0].Content.Length, entry.UncompressedSize);
+        Assert.Equal(ArchiveFixtureBuilder.Crc32(artifact.Entries[0].Content), entry.Crc32);
+    }
+
+    [Fact]
+    public void Build_DeflateStoredBlockConstruction_WithStoredRecipe_ThrowsDescriptively()
+    {
+        var definition = new ArchiveTestCaseDefinition(
+            "invalid-deflate-stored-block", 1, 1, "valid", [ArchiveTestCatalog.CompatibilitySuite],
+            new ArchiveTestRecipe([ArchiveTestRecipeEntry.File("content.txt", 1, "stored")]),
+            Construction: ArchiveControlConstruction.DeflateStoredBlock);
+
+        var error = Assert.Throws<InvalidOperationException>(
+            () => ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None));
+
+        Assert.Contains("exactly one method-8 file entry", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildControl_ValidDirectories_KeepsDirectoryAndFileEntries()
     {
         var artifact = ArchiveFixtureBuilder.BuildControl("valid-directories", 42, CancellationToken.None);

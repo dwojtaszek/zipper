@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using ICSharpCode.SharpZipLib.BZip2;
@@ -34,6 +35,36 @@ public class ArchiveFixtureMutationTests : WorkingDirectoryTestBase
         }
 
         return differences;
+    }
+
+    private static List<(long HeaderOffset, long Start, long End)> StoredBlockRanges(
+        byte[] archiveBytes, ArchiveFixtureEntryLayout entry)
+    {
+        var compressed = archiveBytes.AsSpan((int)entry.DataOffset, (int)entry.CompressedSize);
+        var ranges = new List<(long HeaderOffset, long Start, long End)>();
+        var cursor = 0;
+        var finalBlock = false;
+        while (!finalBlock)
+        {
+            Assert.True(cursor < compressed.Length, "stored-block stream ended before its final block");
+            var headerOffset = entry.DataOffset + cursor;
+            var header = compressed[cursor++];
+            finalBlock = (header & 1) != 0;
+            Assert.Equal(0, (header >> 1) & 3);
+            Assert.True(compressed.Length - cursor >= 4, "stored block is missing LEN/NLEN");
+
+            var length = BinaryPrimitives.ReadUInt16LittleEndian(compressed[cursor..]);
+            var complement = BinaryPrimitives.ReadUInt16LittleEndian(compressed[(cursor + 2)..]);
+            cursor += 4;
+            Assert.Equal((ushort)~length, complement);
+            Assert.True(length <= compressed.Length - cursor, "stored-block literal data is truncated");
+
+            ranges.Add((headerOffset, entry.DataOffset + cursor, entry.DataOffset + cursor + length));
+            cursor += length;
+        }
+
+        Assert.Equal(compressed.Length, cursor);
+        return ranges;
     }
 
     [Theory]
@@ -105,6 +136,84 @@ public class ArchiveFixtureMutationTests : WorkingDirectoryTestBase
         var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
         var sidecar = ArchiveTestSuiteGenerator.BuildExpectationFile(artifact, definition, 42);
         Assert.Equal(control.Entries[0].ContentSha256, sidecar.Entries[0].ContentSha256);
+    }
+
+    [Fact]
+    public void Apply_DeflatePayloadBitflip_ChangesLiteralByteAndPreservesDeclarations()
+    {
+        var control = ArchiveFixtureBuilder.BuildControl("valid-deflate-stored-block", 42, CancellationToken.None);
+        var definition = ArchiveTestCatalog.GetCase("deflate-payload-bitflip");
+
+        var mutated = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+
+        var entry = Assert.Single(control.Layout.Entries);
+        var mutation = Assert.Single(mutated.Mutations);
+        Assert.Equal("deflate-payload-bitflip", mutation.Code);
+        Assert.Equal("file-data", mutation.Structure);
+        Assert.Equal(entry.Ordinal, mutation.Ordinal);
+        Assert.Equal(1, CountDifferingBytes(control.ArchiveBytes, mutated.ArchiveBytes));
+        Assert.NotEqual(control.ArchiveSha256, mutated.ArchiveSha256);
+
+        var literalRanges = StoredBlockRanges(control.ArchiveBytes, entry);
+        Assert.Contains(literalRanges, range => mutation.Offset >= range.Start && mutation.Offset < range.End);
+        Assert.Equal(
+            control.ArchiveBytes[(int)mutation.Offset] ^ 0x01,
+            mutated.ArchiveBytes[(int)mutation.Offset]);
+        Assert.Equal(
+            $"payload-byte-flip=bit0 literal-data-offset={mutation.Offset} original-content-sha256={control.Entries[0].ContentSha256}",
+            mutation.DeclaredValue);
+
+        var mutatedLayout = ArchiveFixtureLayout.Read(mutated.ArchiveBytes);
+        Assert.Equal(entry.Method, mutatedLayout.Entries[0].Method);
+        Assert.Equal(entry.Crc32, mutatedLayout.Entries[0].Crc32);
+        Assert.Equal(entry.CompressedSize, mutatedLayout.Entries[0].CompressedSize);
+        Assert.Equal(entry.UncompressedSize, mutatedLayout.Entries[0].UncompressedSize);
+        Assert.Equal(
+            BinaryPrimitives.ReadUInt32LittleEndian(control.ArchiveBytes.AsSpan((int)entry.LocalHeaderOffset + 14, 4)),
+            BinaryPrimitives.ReadUInt32LittleEndian(mutated.ArchiveBytes.AsSpan((int)entry.LocalHeaderOffset + 14, 4)));
+
+        var decoded = ReadEntryContent(mutated.ArchiveBytes, entry.Name);
+        Assert.NotEqual(control.Entries[0].Content, decoded);
+        Assert.Equal(control.Entries[0].Content.Length, decoded.Length);
+        Assert.NotEqual(entry.Crc32, ArchiveFixtureBuilder.Crc32(decoded));
+
+        var sidecar = ArchiveTestSuiteGenerator.BuildExpectationFile(mutated, definition, 42);
+        Assert.Equal(control.Entries[0].ContentSha256, sidecar.Entries[0].ContentSha256);
+    }
+
+    [Theory]
+    [InlineData("btype")]
+    [InlineData("len-nlen")]
+    [InlineData("missing-final")]
+    public void Apply_DeflatePayloadBitflip_InvalidStoredBlockFraming_ThrowsInvalidOperationException(string defect)
+    {
+        var control = ArchiveFixtureBuilder.BuildControl("valid-deflate-stored-block", 42, CancellationToken.None);
+        var entry = control.Layout.Entries[0];
+        var malformedBytes = (byte[])control.ArchiveBytes.Clone();
+        var compressedOffset = checked((int)entry.DataOffset);
+
+        switch (defect)
+        {
+            case "btype":
+                malformedBytes[compressedOffset] |= 0x02;
+                break;
+            case "len-nlen":
+                malformedBytes[compressedOffset + 3] ^= 0x01;
+                break;
+            case "missing-final":
+                {
+                    var lastBlockHeaderOffset = StoredBlockRanges(control.ArchiveBytes, entry)[^1].HeaderOffset;
+                    malformedBytes[(int)lastBlockHeaderOffset] &= 0xFE;
+                    break;
+                }
+        }
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            ArchiveFixtureMutator.Apply(
+                ArchiveTestMutationKind.DeflatePayloadBitflip,
+                control with { ArchiveBytes = malformedBytes }));
+
+        Assert.Contains("deflate-payload-bitflip", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
