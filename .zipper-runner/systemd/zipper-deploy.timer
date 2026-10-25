@@ -3,7 +3,16 @@ Description=Zipper Runner Deploy main Timer
 
 [Timer]
 OnBootSec=2min
-OnCalendar=*:0/1
+# Pinned to UTC so the cadence survives a DST transition. systemd walks an
+# OnCalendar spec in local wall-clock time, and at the autumn fall-back the clock
+# repeats an hour: after 02:59 CEST the next local minute is 02:00 CET, which
+# sorts *before* the minute just fired, so the iterator treats the whole repeated
+# hour as already elapsed and skips it. Measured on the host: all three runner
+# timers went from a last fire of 02:45-02:59 CEST to a next fire of 03:00 CET, a
+# 61-75 minute real-time outage for the entire runner. UTC has no transition, so
+# its wall clock never repeats or skips. On a whole-hour UTC offset the local
+# minute alignment is unchanged, and the cadence is what the unit declares.
+OnCalendar=*:0/1 UTC
 # systemd's default accuracy is 1min, which equals this timer's whole cadence, so
 # a tick may fire up to 60s after its scheduled elapse. A one-minute cadence
 # cannot tolerate a one-minute slack, so pin the accuracy rather than inherit it.
