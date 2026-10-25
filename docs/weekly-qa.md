@@ -13,8 +13,11 @@ model step is capped at 20 minutes and is asked for two change-specific cases
 not covered by basic smoke. Missing credentials, expired access, exhausted
 credits, or a failed tool/model call do not skip the deterministic job.
 Inspect the Droid job outcome and artifact; a failed Droid call is **not** a
-passing functional test. The GitHub job can still fail if its configuration
-or an actual report validation fails.
+passing functional test. The Droid execution steps do not use `continue-on-error`,
+so a failed scheduled Droid run results in a failed job conclusion. The workflow
+emits a structured machine-readable result (`assurance-result.json`) and job outputs
+that explicitly distinguish unavailable checks (missing credentials, no CLI changes)
+from executed-and-failed runs.
 
 Each scheduled run opens one `testing`/`P3` issue titled by the run's creation
 ISO week, or comments on the same week's issue if retried. It links to the run,

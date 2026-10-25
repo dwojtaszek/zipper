@@ -59,6 +59,10 @@ jobs:
       cli_outcome: ${{ steps.install-droid.outcome }}
       marketplace_outcome: ${{ steps.marketplace.outcome }}
       plugin_outcome: ${{ steps.plugin.outcome }}
+      assurance_status: ${{ steps.assurance-result.outputs.status }}
+      assurance_executed: ${{ steps.assurance-result.outputs.executed }}
+      assurance_reason: ${{ steps.assurance-result.outputs.reason }}
+      assurance_json: ${{ steps.assurance-result.outputs.json }}
     environment: QA
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -235,7 +239,6 @@ jobs:
       - name: Install terminal QA tools
         id: terminal-tools
         if: steps.qa-scope.outputs.cli_affected == 'true' && (steps.droid-key.outputs.available == 'true' || github.event_name == 'workflow_dispatch')
-        continue-on-error: ${{ github.event_name == 'schedule' }}
         shell: bash
         env:
           IMAGEMAGICK: ${{ steps.qa-config.outputs.imagemagick }}
@@ -262,13 +265,11 @@ jobs:
       - name: Install Droid CLI
         id: install-droid
         if: steps.qa-scope.outputs.cli_affected == 'true' && (steps.droid-key.outputs.available == 'true' || github.event_name == 'workflow_dispatch')
-        continue-on-error: ${{ github.event_name == 'schedule' }}
         run: npm install --global --ignore-scripts --no-audit --no-fund @factory/cli@0.226.2
 
       - name: Register pinned Droid Control marketplace
         id: marketplace
         if: steps.qa-scope.outputs.cli_affected == 'true' && (steps.droid-key.outputs.available == 'true' || github.event_name == 'workflow_dispatch') && steps.terminal-tools.outcome == 'success' && steps.install-droid.outcome == 'success'
-        continue-on-error: ${{ github.event_name == 'schedule' }}
         env:
           MARKETPLACE_URL: ${{ steps.qa-config.outputs.marketplace_url }}
         run: droid plugin marketplace add "$MARKETPLACE_URL"
@@ -276,7 +277,6 @@ jobs:
       - name: Install Droid Control plugin
         id: plugin
         if: steps.qa-scope.outputs.cli_affected == 'true' && (steps.droid-key.outputs.available == 'true' || github.event_name == 'workflow_dispatch') && steps.marketplace.outcome == 'success'
-        continue-on-error: ${{ github.event_name == 'schedule' }}
         env:
           PLUGIN: ${{ steps.qa-config.outputs.plugin }}
         run: droid plugin install "$PLUGIN" --scope project
@@ -284,7 +284,6 @@ jobs:
       - name: Run functional QA
         id: qa
         if: steps.qa-scope.outputs.cli_affected == 'true' && (steps.droid-key.outputs.available == 'true' || github.event_name == 'workflow_dispatch') && steps.plugin.outcome == 'success'
-        continue-on-error: ${{ github.event_name == 'schedule' }}
         timeout-minutes: 20
         env:
           FACTORY_API_KEY: ${{ secrets.FACTORY_API_KEY }}
@@ -344,8 +343,9 @@ jobs:
           REPORT
 
       - name: Validate QA report
+        id: validate-report
         shell: bash
-        if: success() && (github.event_name != 'schedule' || steps.qa.outcome == 'success' || steps.qa-scope.outputs.cli_affected == 'false')
+        if: success() && (steps.qa.outcome == 'success' || steps.qa-scope.outputs.cli_affected == 'false')
         env:
           CLI_AFFECTED: ${{ steps.qa-scope.outputs.cli_affected }}
           QA_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
@@ -513,6 +513,113 @@ jobs:
             exit 1
           }
 
+      - name: Emit QA assurance result
+        id: assurance-result
+        if: always()
+        shell: bash
+        env:
+          CONFIG_OUTCOME: ${{ steps.qa-config.outcome }}
+          SCOPE_OUTCOME: ${{ steps.qa-scope.outcome }}
+          CLI_AFFECTED: ${{ steps.qa-scope.outputs.cli_affected }}
+          DROID_AVAILABLE: ${{ steps.droid-key.outputs.available }}
+          TOOLS_OUTCOME: ${{ steps.terminal-tools.outcome }}
+          CLI_OUTCOME: ${{ steps.install-droid.outcome }}
+          MARKETPLACE_OUTCOME: ${{ steps.marketplace.outcome }}
+          PLUGIN_OUTCOME: ${{ steps.plugin.outcome }}
+          QA_OUTCOME: ${{ steps.qa.outcome }}
+          VALIDATE_OUTCOME: ${{ steps.validate-report.outcome }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p qa-results
+          python3 - <<'PY'
+          import json
+          import os
+
+          config_outcome = os.environ.get("CONFIG_OUTCOME", "")
+          scope_outcome = os.environ.get("SCOPE_OUTCOME", "")
+          cli_affected = os.environ.get("CLI_AFFECTED") == "true"
+          droid_available = os.environ.get("DROID_AVAILABLE") == "true"
+          tools_outcome = os.environ.get("TOOLS_OUTCOME", "")
+          cli_outcome = os.environ.get("CLI_OUTCOME", "")
+          marketplace_outcome = os.environ.get("MARKETPLACE_OUTCOME", "")
+          plugin_outcome = os.environ.get("PLUGIN_OUTCOME", "")
+          qa_outcome = os.environ.get("QA_OUTCOME", "")
+          validate_outcome = os.environ.get("VALIDATE_OUTCOME", "")
+          sha = os.environ.get("COMMIT_SHA", "")
+
+          if config_outcome == "failure" or scope_outcome == "failure":
+              executed = False
+              status = "failed"
+              reason = "scope_determination_failed"
+          elif not cli_affected:
+              executed = False
+              status = "unavailable"
+              reason = "no_cli_changes"
+          elif not droid_available:
+              executed = False
+              status = "unavailable"
+              reason = "missing_factory_api_key"
+          elif tools_outcome == "failure":
+              executed = False
+              status = "failed"
+              reason = "terminal_tools_install_failed"
+          elif cli_outcome == "failure":
+              executed = False
+              status = "failed"
+              reason = "droid_cli_install_failed"
+          elif marketplace_outcome == "failure":
+              executed = False
+              status = "failed"
+              reason = "marketplace_registration_failed"
+          elif plugin_outcome == "failure":
+              executed = False
+              status = "failed"
+              reason = "plugin_install_failed"
+          elif qa_outcome == "failure":
+              executed = True
+              status = "failed"
+              reason = "droid_qa_execution_failed"
+          elif validate_outcome == "failure":
+              executed = True
+              status = "failed"
+              reason = "qa_report_validation_failed"
+          elif qa_outcome == "success" and validate_outcome == "success":
+              executed = True
+              status = "executed"
+              reason = "completed"
+          else:
+              executed = False
+              status = "failed"
+              reason = "incomplete_or_aborted"
+
+          result = {
+              "executed": executed,
+              "scope": "cli",
+              "sha": sha,
+              "status": status,
+              "reason": reason,
+          }
+
+          os.makedirs("qa-results", exist_ok=True)
+          result_path = "qa-results/assurance-result.json"
+          with open(result_path, "w", encoding="utf-8") as f:
+              json.dump(result, f, indent=2)
+
+          print(f"Emitted QA assurance result: {json.dumps(result)}")
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
+              f.write("### Scheduled Assurance Result\n\n```json\n" + json.dumps(result, indent=2) + "\n```\n\n")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+              f.write(f"status={status}\n")
+              f.write(f"executed={'true' if executed else 'false'}\n")
+              f.write(f"reason={reason}\n")
+              f.write("scope=cli\n")
+              f.write(f"sha={sha}\n")
+              f.write(f"json={json.dumps(result)}\n")
+          PY
+
       - name: Preserve run evidence and remove generated data
         if: always()
         shell: bash
@@ -564,6 +671,9 @@ jobs:
           CLI_RESULT: ${{ needs.qa.outputs.cli_outcome }}
           MARKETPLACE_RESULT: ${{ needs.qa.outputs.marketplace_outcome }}
           PLUGIN_RESULT: ${{ needs.qa.outputs.plugin_outcome }}
+          ASSURANCE_STATUS: ${{ needs.qa.outputs.assurance_status }}
+          ASSURANCE_EXECUTED: ${{ needs.qa.outputs.assurance_executed }}
+          ASSURANCE_REASON: ${{ needs.qa.outputs.assurance_reason }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
@@ -574,13 +684,32 @@ jobs:
             echo "Commit: $GITHUB_SHA"
             echo
             echo "- Deterministic CLI smoke: $SMOKE_RESULT"
-            echo "- Optional Droid job: $DROID_RESULT"
+            echo "- Scheduled Droid assurance: ${ASSURANCE_STATUS:-unknown} (executed: ${ASSURANCE_EXECUTED:-unknown}, reason: ${ASSURANCE_REASON:-unknown})"
+            echo "- Droid job conclusion: $DROID_RESULT"
             echo "- Droid availability (key configured): ${DROID_AVAILABLE:-not checked}"
             echo "- Droid prerequisites (terminal / CLI / marketplace / plugin): ${TOOLS_RESULT:-skipped} / ${CLI_RESULT:-skipped} / ${MARKETPLACE_RESULT:-skipped} / ${PLUGIN_RESULT:-skipped}"
             echo "- Droid execution: ${DROID_OUTCOME:-skipped}"
             echo
-            echo "Download the run's artifacts to inspect the smoke log and, when present, the Droid report and raw terminal snapshots."
-            echo "If a check failed or Droid was unavailable, investigate that result before claiming a Zipper defect. If all checks passed, inspect recent changes and choose one concrete, reproducible CLI coverage improvement; do not invent a failure."
+            if [ "${ASSURANCE_STATUS:-}" = "unavailable" ]; then
+              if [ "${ASSURANCE_REASON:-}" = "no_cli_changes" ]; then
+                echo "Droid QA check was UNAVAILABLE (no CLI app code changed in the audited window)."
+                echo "QA is not applicable for this run."
+              else
+                echo "Droid QA check was UNAVAILABLE (${ASSURANCE_REASON:-missing secret or prerequisites})."
+                echo "This is an environment or credential availability condition, not a code regression."
+              fi
+            elif [ "${ASSURANCE_STATUS:-}" = "failed" ] || [ "$DROID_RESULT" = "failure" ]; then
+              if [ "${ASSURANCE_EXECUTED:-}" = "true" ]; then
+                echo "Droid QA check EXECUTED AND FAILED (${ASSURANCE_REASON:-failure})."
+                echo "Investigate the failure log and evidence snapshots before claiming a Zipper defect."
+              else
+                echo "Droid QA check failed during setup/prerequisites (${ASSURANCE_REASON:-prerequisite failure}; executed: false)."
+                echo "Investigate prerequisite installation or configuration before claiming a Zipper defect."
+              fi
+            else
+              echo "Download the run's artifacts to inspect the smoke log and, when present, the Droid report and raw terminal snapshots."
+              echo "If all checks passed, inspect recent changes and choose one concrete, reproducible CLI coverage improvement; do not invent a failure."
+            fi
           } > weekly-issue.md
           number="$(gh issue list -R "$GITHUB_REPOSITORY" --state all --search "in:title \"$title\"" --limit 100 --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -n 1)"
           if [[ -n "$number" ]]; then
@@ -601,6 +730,15 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p qa-results
+          cat > qa-results/assurance-result.json <<JSON
+          {
+            "executed": false,
+            "scope": "cli",
+            "sha": "${{ github.sha }}",
+            "status": "unavailable",
+            "reason": "dispatch_ref_not_main"
+          }
+          JSON
           cat > qa-results/report.md <<'REPORT'
           ## QA Report
 
@@ -615,10 +753,16 @@ jobs:
 
           </details>
           REPORT
+          {
+            echo "### Scheduled Assurance Result"
+            echo '```json'
+            cat qa-results/assurance-result.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: qa-results-${{ github.run_id }}-${{ github.run_attempt }}
-          path: qa-results/report.md
+          path: qa-results/
           if-no-files-found: warn
           retention-days: 14

@@ -30,6 +30,11 @@ jobs:
   quality-audit:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    outputs:
+      assurance_status: ${{ steps.assurance-result.outputs.status || steps.secret-assurance.outputs.status }}
+      assurance_executed: ${{ steps.assurance-result.outputs.executed || steps.secret-assurance.outputs.executed }}
+      assurance_reason: ${{ steps.assurance-result.outputs.reason || steps.secret-assurance.outputs.reason }}
+      assurance_json: ${{ steps.assurance-result.outputs.json || steps.secret-assurance.outputs.json }}
     steps:
       - name: Check secret availability (skips neutrally when absent)
         id: secret
@@ -38,12 +43,34 @@ jobs:
         run: echo "available=$HAS_KEY" >> "$GITHUB_OUTPUT"
 
       - name: Neutral skip summary
+        id: secret-assurance
         if: steps.secret.outputs.available != 'true'
         run: |
+          mkdir -p results/typesafe-quality
+          cat > results/typesafe-quality/assurance-result.json <<EOF
+          {
+            "executed": false,
+            "scope": "quality",
+            "sha": "${{ github.sha }}",
+            "status": "unavailable",
+            "reason": "missing_typesafe_api_key"
+          }
+          EOF
+          echo "status=unavailable" >> "$GITHUB_OUTPUT"
+          echo "executed=false" >> "$GITHUB_OUTPUT"
+          echo "reason=missing_typesafe_api_key" >> "$GITHUB_OUTPUT"
+          echo "scope=quality" >> "$GITHUB_OUTPUT"
+          echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          echo "json={\"executed\":false,\"scope\":\"quality\",\"sha\":\"${{ github.sha }}\",\"status\":\"unavailable\",\"reason\":\"missing_typesafe_api_key\"}" >> "$GITHUB_OUTPUT"
           {
             echo "## Quality audit skipped"
             echo ""
             echo "TYPESAFE_API_KEY is not available in this context."
+            echo ""
+            echo "### Scheduled Assurance Result"
+            echo '```json'
+            cat results/typesafe-quality/assurance-result.json
+            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Checkout
@@ -114,6 +141,7 @@ jobs:
             --repo-root .
 
       - name: Run TypeSafe quality ranking (advisory)
+        id: quality-ranking
         if: steps.secret.outputs.available == 'true'
         env:
           TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
@@ -138,8 +166,65 @@ jobs:
           # Input/config errors (2) and anything else fail the job per spec.
           exit "$rc"
 
-      - name: Upload quality artifacts
+      - name: Emit quality assurance result
+        id: assurance-result
         if: always() && steps.secret.outputs.available == 'true'
+        shell: bash
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          RANKING_OUTCOME: ${{ steps.quality-ranking.outcome }}
+        run: |
+          set -euo pipefail
+          mkdir -p results/typesafe-quality
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          ranking_outcome = os.environ.get("RANKING_OUTCOME", "")
+          sha = os.environ.get("COMMIT_SHA", "")
+          ranking_json = Path("results/typesafe-quality/ranking.json")
+
+          if ranking_json.exists():
+              executed = True
+              status = "executed"
+              reason = "completed"
+          elif ranking_outcome == "success":
+              executed = False
+              status = "unavailable"
+              reason = "remote_failure"
+          else:
+              executed = False
+              status = "failed"
+              reason = "check_failed"
+
+          result = {
+              "executed": executed,
+              "scope": "quality",
+              "sha": sha,
+              "status": status,
+              "reason": reason,
+          }
+
+          os.makedirs("results/typesafe-quality", exist_ok=True)
+          result_path = "results/typesafe-quality/assurance-result.json"
+          with open(result_path, "w", encoding="utf-8") as f:
+              json.dump(result, f, indent=2)
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
+              f.write("### Scheduled Assurance Result\n\n```json\n" + json.dumps(result, indent=2) + "\n```\n\n")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+              f.write(f"status={status}\n")
+              f.write(f"executed={'true' if executed else 'false'}\n")
+              f.write(f"reason={reason}\n")
+              f.write("scope=quality\n")
+              f.write(f"sha={sha}\n")
+              f.write(f"json={json.dumps(result)}\n")
+          PY
+
+      - name: Upload quality artifacts
+        if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: typesafe-quality-report
@@ -148,6 +233,7 @@ jobs:
             results/mutation/**
             results/typesafe-quality/ranking.json
             results/typesafe-quality/ranking.md
+            results/typesafe-quality/assurance-result.json
           retention-days: 7
-          if-no-files-found: ignore
+          if-no-files-found: warn
 
