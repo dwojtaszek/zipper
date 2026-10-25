@@ -26,7 +26,25 @@ KNOWN_MODELS = [
 # work, and the bound is the only guard. 15 minutes matches the other silent
 # agents (opencode, hermes). See opencode.py for the measurement behind it.
 MISSION_TIMEOUT = 900
-_HUNG_KILL_MESSAGE = f"Mission timed out after {MISSION_TIMEOUT // 60} minutes"
+_HUNG_KILL_MESSAGE = (
+    f"Error: Agent process hung and was forcefully killed after {MISSION_TIMEOUT // 60} minutes."
+)
+
+
+def _partial_output(exc: subprocess.TimeoutExpired, stderr: bool = False) -> str:
+    """Decode whatever the killed process had already written.
+
+    `subprocess.run` populates the exception's `output`/`stdout`/`stderr` with the
+    bytes captured before the kill, but *always as bytes* even when `text=True`,
+    so a raw read would put a `b'...'` repr into the diagnostic trail. An unset
+    attribute means nothing was captured.
+    """
+    raw = exc.stderr if stderr else (exc.stdout if exc.stdout is not None else exc.output)
+    if raw is None:
+        return ""
+    if isinstance(raw, bytes):
+        return raw.decode("utf-8", errors="replace")
+    return str(raw)
 
 
 def list_models() -> list[str]:
@@ -115,8 +133,25 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
             output += f"\n--- stderr ---\n{result.stderr}"
         print(f"--- [codex output] ---\n{output}")
         return result.returncode, output, result.stderr
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
         print(f"[codex] {_HUNG_KILL_MESSAGE}")
-        return -1, "", "Timeout"
+        # Return what the agent produced before the kill. The runner treats a
+        # non-zero exit as "try the next candidate", so the worktree and the WIP
+        # checkpoint survive either way -- but the partial output is the only
+        # record of *why* it stalled, and discarding it left a timeout with no
+        # diagnostic trail at all. The other silent agents preserve theirs.
+        partial = _partial_output(exc)
+        if partial:
+            print(f"--- [codex stdout (partial)] ---\n{partial}")
+        partial_err = _partial_output(exc, stderr=True)
+        if partial_err:
+            print(f"--- [codex stderr (partial)] ---\n{partial_err}")
+        # The partial stderr has to come back in `err`, not just go to the log:
+        # providers report quota and rate limits there, and the runner scans the
+        # returned streams with `is_quota_exhausted(out, err)`. Returning only the
+        # kill message would hide the quota and relaunch a model that is cooling
+        # down. The success path folds stderr in the same way.
+        err = f"{partial_err}\n{_HUNG_KILL_MESSAGE}" if partial_err else _HUNG_KILL_MESSAGE
+        return -1, partial, err
     except Exception as e:
         return -1, "", str(e)

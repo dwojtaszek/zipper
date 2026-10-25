@@ -5,13 +5,23 @@
 # unresolved review thread.
 #
 # Usage:   bash tests/wait-for-reviews.sh <PR-number> [timeout-minutes]
+# Env:     WAIT_FOR_REVIEWS_SKIP=<bot>[,<bot>...]  reviewers known to be
+#          unavailable, which are not waited on at all (see below).
 # Exit:    0 = all bots accounted for, no unresolved review threads
 #          1 = unresolved review threads exist (fix or reply + resolve, re-run)
 #          2 = usage error / missing prerequisites
+#          3 = could not determine review state (API failure) — environmental,
+#              not a review outcome
 #
 # A bot that stays silent past the timeout produces a warning, not a failure:
 # branch protection (required conversation resolution) still blocks the merge
-# if its threads appear later.
+# if its threads appear later. The same reasoning is why exit 3 is distinct from
+# exit 1: "the reviewers could not be asked" is not "the reviewers objected".
+#
+# Machine-readable contract for the runner: one `REVIEWER-OUTCOME <bot>=<state>`
+# line per reviewer (states: reviewed, skipped, skipped-by-policy, silent) and a
+# final `REVIEW-GATE-RESULT unresolved=<n>` line. The runner persists these to
+# track reviewer availability so it stops waiting on a reviewer that is gone.
 #
 # Spec: docs/superpowers/specs/2026-06-10-review-wait-gate-design.md
 
@@ -32,6 +42,22 @@ SKIP_PATTERN='usage limit|rate limit|review limit|Review skipped|skip review|Rev
 # PR Codex has already finished — measured at 20 minutes on PR #1328.
 CODEX_COMPLETION_PATTERN='codex-review-state:v1'
 POLL_SECONDS=30
+
+# Reviewers the caller already knows to be unavailable (a rate-limit window, a
+# previous silent timeout). Waiting on one costs the whole timeout to learn what
+# the caller already recorded, so they are reported as skipped-by-policy and the
+# wait is skipped entirely.
+SKIP_BOTS="${WAIT_FOR_REVIEWS_SKIP:-}"
+is_skip_bot() {
+    local bot="$1"
+    [[ -n "$SKIP_BOTS" ]] || return 1
+    local entry
+    local IFS=','
+    for entry in $SKIP_BOTS; do
+        [[ "$entry" == "$bot" ]] && return 0
+    done
+    return 1
+}
 
 # --- Prerequisites ---
 
@@ -89,13 +115,29 @@ print_ok()    { printf '\033[42m[ OK ]\033[0m %s\n' "$1"; }
 
 # Fetches reviews and issue comments once per polling cycle; individual bots
 # are then checked against the local JSON to keep API usage flat.
+#
+# A failed fetch is recorded rather than silently read as "no reviews". That
+# distinction is the whole point: an API outage that looked like an empty review
+# list would make the gate wait out its timeout and then report every reviewer as
+# silent, which reads as "the reviewers did not answer" when in fact nobody was
+# asked. `FETCH_OK` counts the cycles that actually returned state.
 reviews_json=""
 comments_json=""
+FETCH_OK=0
 fetch_review_state() {
-    reviews_json=$(with_timeout gh api --paginate "repos/$REPO/pulls/$PR/reviews" 2>/dev/null \
-        | jq -s 'flatten' 2>/dev/null) || reviews_json="[]"
-    comments_json=$(with_timeout gh api --paginate "repos/$REPO/issues/$PR/comments" 2>/dev/null \
-        | jq -s 'flatten' 2>/dev/null) || comments_json="[]"
+    local reviews comments
+    if ! reviews=$(with_timeout gh api --paginate "repos/$REPO/pulls/$PR/reviews" 2>/dev/null) \
+            || ! jq -s 'flatten' <<<"$reviews" >/dev/null 2>&1; then
+        return 1
+    fi
+    if ! comments=$(with_timeout gh api --paginate "repos/$REPO/issues/$PR/comments" 2>/dev/null) \
+            || ! jq -s 'flatten' <<<"$comments" >/dev/null 2>&1; then
+        return 1
+    fi
+    reviews_json=$(jq -s 'flatten' <<<"$reviews")
+    comments_json=$(jq -s 'flatten' <<<"$comments")
+    FETCH_OK=$((FETCH_OK + 1))
+    return 0
 }
 
 bot_accounted_for() {
@@ -124,13 +166,61 @@ bot_accounted_for() {
 }
 
 print_info "Waiting for robot reviews on PR #$PR (timeout: ${TIMEOUT_MINUTES}m)..."
-pending=("${EXPECTED_BOTS[@]}")
+
+# Records each reviewer's outcome for the machine-readable contract. `silent`
+# and `skipped-by-policy` are both non-blocking here, but they are different
+# facts: the first means the reviewer was asked and did not answer, the second
+# means it was not asked because the caller already knew it was unavailable.
+#
+# A newline-delimited string rather than `declare -A`: bot names such as
+# `coderabbitai[bot]` are not valid associative-array keys on bash 3.2 (the stock
+# macOS /bin/bash, where the runner suite runs), and an indexed assignment would
+# evaluate the name arithmetically. The stress runner uses the same indexed-record
+# shape for the same reason.
+REVIEWER_OUTCOMES=""
+set_outcome() { REVIEWER_OUTCOMES+="$1=$2"$'\n'; }
+get_outcome() {
+    local line result="unknown"
+    while IFS= read -r line; do
+        [[ "$line" == "$1="* ]] && result="${line#*=}"
+    done <<<"$REVIEWER_OUTCOMES"
+    printf '%s' "$result"
+}
+pending=()
+for bot in "${EXPECTED_BOTS[@]}"; do
+    if is_skip_bot "$bot"; then
+        print_info "$bot is known unavailable; not waiting for it."
+        set_outcome "$bot" "skipped-by-policy"
+    else
+        pending+=("$bot")
+    fi
+done
+NEEDED_STATE=${#pending[@]}
+
 while [[ ${#pending[@]} -gt 0 ]]; do
-    fetch_review_state
+    if ! fetch_review_state; then
+        print_warn "Could not read review state (gh api failed); retrying."
+        if [[ $(date +%s) -ge $DEADLINE ]]; then
+            break
+        fi
+        sleep "$POLL_SECONDS"
+        continue
+    fi
     still_pending=()
     for bot in "${pending[@]}"; do
         if bot_accounted_for "$bot"; then
             print_ok "$bot has reviewed or declared a skip."
+            # Distinguish a real review from a declared skip: only the former is
+            # evidence about the code, and only the latter is evidence the
+            # reviewer is unavailable.
+            if jq -e --arg bot "$bot" '.[] | select(.user.login == $bot)' <<<"$reviews_json" >/dev/null 2>&1; then
+                set_outcome "$bot" "reviewed"
+            elif jq -r --arg bot "$bot" '.[] | select(.user.login == $bot) | .body' <<<"$comments_json" 2>/dev/null \
+                    | grep -qiE "$SKIP_PATTERN"; then
+                set_outcome "$bot" "skipped"
+            else
+                set_outcome "$bot" "reviewed"
+            fi
         else
             still_pending+=("$bot")
         fi
@@ -140,16 +230,30 @@ while [[ ${#pending[@]} -gt 0 ]]; do
     if [[ $(date +%s) -ge $DEADLINE ]]; then
         for bot in "${pending[@]}"; do
             print_warn "$bot did not respond within ${TIMEOUT_MINUTES}m — proceeding without it."
+            set_outcome "$bot" "silent"
         done
         break
     fi
     sleep "$POLL_SECONDS"
 done
 
+for bot in "${EXPECTED_BOTS[@]}"; do
+    echo "REVIEWER-OUTCOME $bot=$(get_outcome "$bot")"
+done
+
+# Never fetched state at all: the reviewers were not asked, so this says nothing
+# about the code. Reported as environmental (exit 3) rather than as a review
+# result, so the runner retries instead of recording the reviewers as silent.
+if [[ $NEEDED_STATE -gt 0 && $FETCH_OK -eq 0 ]]; then
+    echo "REVIEW-GATE-RESULT unresolved=unknown"
+    print_error "Could not read review state for PR #$PR (gh api failed every attempt)."
+    exit 3
+fi
+
 # --- Phase 2: report unresolved review threads ---
 
 # shellcheck disable=SC2016  # $vars below are GraphQL variables, not shell
-threads_json=$(with_timeout gh api graphql \
+if ! threads_json=$(with_timeout gh api graphql \
     -f owner="$OWNER" -f name="$NAME" -F pr="$PR" -f query='
     query($owner: String!, $name: String!, $pr: Int!) {
       repository(owner: $owner, name: $name) {
@@ -164,10 +268,26 @@ threads_json=$(with_timeout gh api graphql \
           }
         }
       }
-    }')
+    }'); then
+    echo "REVIEW-GATE-RESULT unresolved=unknown"
+    print_error "Could not read review threads for PR #$PR (gh api graphql failed)."
+    exit 3
+fi
 
-unresolved=$(jq '[.data?.repository?.pullRequest?.reviewThreads?.nodes? // [] | .[] | select(.isResolved | not)]' <<<"$threads_json")
+# An unreadable or unexpected response must not be read as "no threads". The
+# query is the only thing that proves the threads are resolved, so a response
+# that does not actually contain the thread list is an environmental failure:
+# without this, a transient API error would report zero unresolved threads and
+# let the PR merge unverified.
+if ! jq -e '.data.repository.pullRequest.reviewThreads.nodes' <<<"$threads_json" >/dev/null 2>&1; then
+    echo "REVIEW-GATE-RESULT unresolved=unknown"
+    print_error "Review-thread response for PR #$PR was not readable (unexpected GraphQL shape)."
+    exit 3
+fi
+
+unresolved=$(jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)]' <<<"$threads_json")
 unresolved_count=$(jq 'length' <<<"$unresolved")
+echo "REVIEW-GATE-RESULT unresolved=$unresolved_count"
 
 # Non-empty review summary bodies (verdicts, overviews) — informational.
 print_info "Review summaries:"

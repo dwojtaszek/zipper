@@ -977,6 +977,18 @@ class OrphanRecoveryEscalationTests(unittest.TestCase):
         self.assertEqual(len(self.fixture.emails.messages), 1)
         self.assertIn("Cannot Be Babied", self.fixture.emails.subjects()[0])
 
+    def test_orphanScan_environmentalReviewGate_doesNotRecreateOrEscalate(self):
+        """An unreadable review state says nothing about the PR, so there is nothing
+        to babysit. Recreating the worktree here would consume the single runner slot
+        and, if recreation failed, mail "Cannot Be Babied" for a healthy PR."""
+        self._authorize_current_head()
+        (self.fixture.repo / "env-gate.sh").write_text("#!/bin/sh\nexit 3\n")
+        self.runner.REVIEW_GATE_SCRIPT = "env-gate.sh"
+        self._scan(self._orphan_pr())
+        self.assertFalse((self.root / "merged").exists())
+        self.assertFalse((self.root / "worktrees" / "issue-42").exists())
+        self.assertEqual(self.fixture.emails.messages, [])
+
     def test_orphanScan_failedMergeUnrecreatable_escalates(self):
         """A merge that keeps failing must escalate rather than loop silently."""
         self._authorize_current_head(block_recreation=True)
