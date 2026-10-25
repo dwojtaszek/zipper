@@ -110,12 +110,19 @@ public class ArchiveFixtureBuilderTests
         Assert.Equal(ArchiveFixtureBuilder.Crc32(artifact.Entries[0].Content), entry.Crc32);
     }
 
-    [Fact]
-    public void Build_DeflateStoredBlockConstruction_WithStoredRecipe_ThrowsDescriptively()
+    [Theory]
+    [InlineData(1, "stored", false)]
+    [InlineData(1, "deflate", true)]
+    [InlineData(2, "deflate", false)]
+    public void Build_DeflateStoredBlockConstruction_WithInvalidRecipe_ThrowsDescriptively(
+        int entryCount, string payloadCodec, bool isDirectory)
     {
+        var entry = isDirectory
+            ? new ArchiveTestRecipeEntry("content.txt/", 0, payloadCodec, IsDirectory: true, PayloadPrefix: null)
+            : ArchiveTestRecipeEntry.File("content.txt", 1, payloadCodec);
         var definition = new ArchiveTestCaseDefinition(
             "invalid-deflate-stored-block", 1, 1, "valid", [ArchiveTestCatalog.CompatibilitySuite],
-            new ArchiveTestRecipe([ArchiveTestRecipeEntry.File("content.txt", 1, "stored")]),
+            new ArchiveTestRecipe(Enumerable.Repeat(entry, entryCount).ToArray()),
             Construction: ArchiveControlConstruction.DeflateStoredBlock);
 
         var error = Assert.Throws<InvalidOperationException>(

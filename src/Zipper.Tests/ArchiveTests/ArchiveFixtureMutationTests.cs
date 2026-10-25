@@ -182,15 +182,19 @@ public class ArchiveFixtureMutationTests : WorkingDirectoryTestBase
     }
 
     [Theory]
-    [InlineData("btype")]
-    [InlineData("len-nlen")]
-    [InlineData("missing-final")]
-    public void Apply_DeflatePayloadBitflip_InvalidStoredBlockFraming_ThrowsInvalidOperationException(string defect)
+    [InlineData("btype", "non-stored block")]
+    [InlineData("len-nlen", "inconsistent LEN/NLEN")]
+    [InlineData("missing-final", "stream ends before a final block")]
+    [InlineData("literal-overrun", "literal data exceeds the compressed payload")]
+    [InlineData("trailing-byte", "bytes follow the final stored block")]
+    public void Apply_DeflatePayloadBitflip_InvalidStoredBlockFraming_ThrowsInvalidOperationException(
+        string defect, string expectedMessage)
     {
         var control = ArchiveFixtureBuilder.BuildControl("valid-deflate-stored-block", 42, CancellationToken.None);
         var entry = control.Layout.Entries[0];
         var malformedBytes = (byte[])control.ArchiveBytes.Clone();
         var compressedOffset = checked((int)entry.DataOffset);
+        var malformedControl = control with { ArchiveBytes = malformedBytes };
 
         switch (defect)
         {
@@ -206,14 +210,46 @@ public class ArchiveFixtureMutationTests : WorkingDirectoryTestBase
                     malformedBytes[(int)lastBlockHeaderOffset] &= 0xFE;
                     break;
                 }
+            case "literal-overrun":
+                {
+                    var lastBlockHeaderOffset = StoredBlockRanges(control.ArchiveBytes, entry)[^1].HeaderOffset;
+                    BinaryPrimitives.WriteUInt16LittleEndian(malformedBytes.AsSpan((int)lastBlockHeaderOffset + 1), 2);
+                    BinaryPrimitives.WriteUInt16LittleEndian(malformedBytes.AsSpan((int)lastBlockHeaderOffset + 3), unchecked((ushort)~2));
+                    break;
+                }
+            case "trailing-byte":
+                malformedControl = control with
+                {
+                    Layout = control.Layout with
+                    {
+                        Entries = [entry with { CompressedSize = checked(entry.CompressedSize + 1) }],
+                    },
+                };
+                break;
         }
 
         var error = Assert.Throws<InvalidOperationException>(() =>
             ArchiveFixtureMutator.Apply(
                 ArchiveTestMutationKind.DeflatePayloadBitflip,
-                control with { ArchiveBytes = malformedBytes }));
+                malformedControl));
 
-        Assert.Contains("deflate-payload-bitflip", error.Message, StringComparison.Ordinal);
+        Assert.Contains(expectedMessage, error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Apply_DeflatePayloadBitflip_ZeroLengthStoredControl_ThrowsInvalidOperationException()
+    {
+        var definition = new ArchiveTestCaseDefinition(
+            "empty-deflate-stored-block", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [ArchiveTestCatalog.CompatibilitySuite],
+            Recipe: new ArchiveTestRecipe([ArchiveTestRecipeEntry.File("empty.txt", 0, "deflate")]),
+            Construction: ArchiveControlConstruction.DeflateStoredBlock);
+        var control = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+
+        var error = Assert.Throws<InvalidOperationException>(
+            () => ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.DeflatePayloadBitflip, control));
+
+        Assert.Contains("no literal data to flip", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
