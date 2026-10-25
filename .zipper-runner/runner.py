@@ -81,6 +81,19 @@ PREFERENCES_PATH = os.path.join(RUNNER_BASE, "AGENT_PREFERENCES.md")
 TRUSTED_AUTHORS = set(filter(None, os.environ.get("TRUSTED_AUTHORS", "dwojtaszek").split(",")))
 MERGE_MAINTAINERS = set(filter(None, os.environ.get("MERGE_MAINTAINERS", "dwojtaszek").split(",")))
 STATE_DIR = os.environ.get("STATE_DIR", os.path.join(RUNNER_BASE, "state"))
+# The one status context branch protection requires on `main`. When it is absent
+# from a PR head's rollup the merge can never succeed, because GitHub treats an
+# unreported required context as missing rather than passing. Observed on #1340:
+# the `pull_request` workflows created no run for a push (while
+# `pull_request_target` ones did), so `ci-gate` was never posted and the PR sat
+# BLOCKED with every reported check green. No diff can fix that, so the runner
+# re-arms the trigger instead of dispatching a repair mission -- see
+# _rearm_required_check. Kept in sync with the `ci-gate` job in pr.yml.
+REQUIRED_STATUS_CONTEXT = os.environ.get("REQUIRED_STATUS_CONTEXT", "ci-gate")
+# How many times one PR head may be re-armed. More than one attempt absorbs a
+# transient event-delivery miss; a context still missing after that is not a lost
+# event, so the runner stops pushing empty commits and reports it instead.
+REARM_MAX_ATTEMPTS = int(os.environ.get("REARM_MAX_ATTEMPTS", "2"))
 MAIN_REMOTE_REF = "origin/main"
 REVIEW_GATE_SCRIPT = "tests/wait-for-reviews.sh"
 GITHUB_REPOSITORY = "dwojtaszek/zipper"
@@ -1555,13 +1568,51 @@ def _worktree_is_clean(wt_path: str) -> bool:
     return code == 0 and not out.strip()
 
 
+def _wip_checkpoint_should_skip_hooks(wt_path: str) -> bool:
+    """True when every uncommitted path is runner-internal.
+
+    The pre-commit hook short-circuits to `DocsDriftTests` only for `*.md`/`docs/`
+    changes. A `.zipper-runner/**` change is not docs-only, so it runs
+    `dotnet format` plus the full 3,400-test unit suite -- and in a worktree with
+    no build output that means building first, which was measured at over two
+    minutes and is paid on the agent-dispatch critical path.
+
+    That cost buys nothing here: a WIP checkpoint is a crash-safety snapshot that
+    is never pushed, and this function already fell back to `--no-verify` whenever
+    the hook failed, so unverified WIP commits were always possible. The skip is
+    restricted to changes that are *entirely* runner-internal, so a product change
+    still gets the hook and a genuinely broken C# state is still caught early.
+    """
+    code, out, _ = run_cmd(["git", "status", "--porcelain"], cwd=wt_path)
+    if code != 0 or not out.strip():
+        return False
+    paths = []
+    for line in out.splitlines():
+        if len(line) < 4:
+            # Cannot classify it, so do not suppress a gate on a guess.
+            return False
+        body = line[3:].strip()
+        # A rename or copy touches both sides: moving a product file *into*
+        # `.zipper-runner/` still changes product code, so both paths must be
+        # runner-internal for the skip to be safe.
+        if line[0] in ("R", "C") and " -> " in body:
+            paths.extend(part.strip().strip('"') for part in body.split(" -> "))
+        else:
+            paths.append(body.strip('"'))
+    return bool(paths) and all(path.startswith(".zipper-runner/") for path in paths)
+
+
 def _auto_commit_wip_checkpoint(wt_path: str, issue_number: int | str, agent_name: str) -> None:
     if DRY_RUN or _worktree_is_clean(wt_path):
         return
     print(f"Agent left uncommitted work in worktree '{wt_path}'. Auto-committing WIP checkpoint.")
     run_cmd(["git", "add", "-A"], cwd=wt_path)
     wip_msg = f"wip: progress on issue #{issue_number} by {agent_name}"
-    wip_code, _, _ = run_cmd(["git", "commit", "-m", wip_msg], cwd=wt_path)
+    if _wip_checkpoint_should_skip_hooks(wt_path):
+        print(f"WIP checkpoint is runner-internal only; skipping the pre-commit suite to keep dispatch off the critical path.")
+        wip_code, _, _ = run_cmd(["git", "commit", "--no-verify", "-m", wip_msg], cwd=wt_path)
+    else:
+        wip_code, _, _ = run_cmd(["git", "commit", "-m", wip_msg], cwd=wt_path)
     if wip_code != 0 and not _worktree_is_clean(wt_path):
         print(f"Pre-commit hook rejected WIP checkpoint in '{wt_path}'; falling back to --no-verify to preserve uncommitted work.")
         run_cmd(["git", "add", "-A"], cwd=wt_path)
@@ -2239,27 +2290,268 @@ def _escalate_unrecoverable_pr(pr_number, issue_number, branch) -> None:
 
 
 def _merge_authorized_pr(pr_number, issue_number, reviewed_head, delete_branch=False):
+    """Attempt the merge. Returns (code, out, err, rollup).
+
+    `rollup` is the statusCheckRollup the merge decision was actually made
+    against, re-fetched here rather than taken from the caller's earlier view:
+    the caller fetched its view before the robot-review gate, which can block for
+    25 minutes, so by merge time it can be stale enough to describe a different
+    head. The absent-required-check guard must judge the same snapshot the merge
+    refused on, or it would re-arm a PR whose merge failed for an unrelated reason
+    (a moved head, a newly-failed check, a transient API error).
+
+    `rollup` is None when no snapshot was fetched, and also when the head is no
+    longer `reviewed_head` -- a moved head must be re-evaluated, not re-armed.
+    """
     if _is_coderabbit_gate_failed(pr_number):
-        return 1, "", "Local CodeRabbit/publication gate remains blocked"
+        return 1, "", "Local CodeRabbit/publication gate remains blocked", None
     if not _authorized_pr(pr_number, issue_number, reviewed_head):
-        return 1, "", "PR origin, provenance, or reviewed head is no longer authorized"
+        return 1, "", "PR origin, provenance, or reviewed head is no longer authorized", None
     code, out, _ = run_cmd(
         ["gh", "pr", "view", str(pr_number), "--json", "headRefOid,statusCheckRollup"], cwd=REPO_PATH,
     )
     try:
         current = json.loads(out) if code == 0 else {}
-        if current.get("headRefOid") != reviewed_head or _ci_status_from_rollup(current.get("statusCheckRollup") or [])[0] != "SUCCESS":
-            return 1, "", "CI is not successful on the authorized reviewed head"
+        if current.get("headRefOid") != reviewed_head:
+            return 1, "", "the reviewed head moved before the merge", None
+        rollup = current.get("statusCheckRollup") or []
+        if _ci_status_from_rollup(rollup)[0] != "SUCCESS":
+            return 1, "", "CI is not successful on the authorized reviewed head", rollup
     except (ValueError, AttributeError):
-        return 1, "", "Cannot verify current CI/head"
+        return 1, "", "Cannot verify current CI/head", None
     command = ["gh", "pr", "merge", str(pr_number), "--squash", "--match-head-commit", reviewed_head]
     if delete_branch:
         command.append("--delete-branch")
-    return run_cmd(command, cwd=REPO_PATH)
+    merge_code, merge_out, merge_err = run_cmd(command, cwd=REPO_PATH)
+    return merge_code, merge_out, merge_err, rollup
 
 
 def _rerun_count_path(pr_number: int) -> str:
     return os.path.join(STATE_DIR, f"pr-{pr_number}-rerun.json")
+
+
+def _required_check_absent(rollup) -> bool:
+    """True when branch protection's required context has not been posted.
+
+    An absent required context is not a failure and not a running check: GitHub
+    never received a status for it, so the merge is refused indefinitely. It
+    happens when a `pull_request` workflow creates no run for a push at all, and
+    no code change can resolve it. Checked by name rather than by the *required*
+    flag, because the rollup's `isRequired` reflects the check's own definition
+    (which the runner must not trust), while the context branch protection
+    enforces is the runner's own constant.
+
+    A matching entry that has not started (`EXPECTED`) counts as absent too: the
+    context exists only because branch protection expects it, and no run was ever
+    created to satisfy it -- which is the same defect as an entry that is missing
+    entirely. A matching entry that is running (`PENDING`) or finished is present,
+    because that means a run exists and re-arming would only add another.
+    """
+    for check in rollup or []:
+        if not isinstance(check, dict):
+            continue
+        if check.get("name") != REQUIRED_STATUS_CONTEXT and check.get("context") != REQUIRED_STATUS_CONTEXT:
+            continue
+        if check.get("state") == "EXPECTED":
+            continue
+        return False
+    return True
+
+
+def _rearm_count_path(pr_number: int) -> str:
+    return os.path.join(STATE_DIR, f"pr-{pr_number}-rearm.json")
+
+
+def _get_rearm_count(pr_number: int, head_sha: str = "") -> int:
+    """Re-arms used for this PR head, so the budget resets when the head moves."""
+    path = _rearm_count_path(pr_number)
+    if os.path.exists(path):
+        try:
+            with open(path) as f:
+                data = json.load(f)
+            if head_sha and data.get("head_sha", "") != head_sha:
+                return 0
+            return int(data.get("count", 0))
+        except Exception:
+            return 0
+    return 0
+
+
+def _bump_rearm_count(pr_number: int, head_sha: str = "", base_count: int | None = None) -> int:
+    """Spend one re-arm attempt and record it against `head_sha`.
+
+    `base_count` lets a caller that already knows the running total carry it
+    across a head change it caused itself: the re-arm push moves the head, so
+    re-deriving the count from the new head would find nothing and reset the
+    budget on every attempt.
+    """
+    os.makedirs(STATE_DIR, exist_ok=True)
+    if base_count is None:
+        base_count = _get_rearm_count(pr_number, head_sha)
+    count = base_count + 1
+    with open(_rearm_count_path(pr_number), "w") as f:
+        json.dump({"count": count, "head_sha": head_sha}, f)
+    return count
+
+
+def _clear_rearm_count(pr_number: int) -> None:
+    path = _rearm_count_path(pr_number)
+    if os.path.exists(path):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+def _rearm_required_check(pr_number: int, branch: str, head_sha: str, wt_path: str,
+                          issue_number=None) -> tuple[bool, str]:
+    """Make GitHub re-evaluate a PR head whose required check was never posted.
+
+    A commit on the branch produces a new head, which fires the `pull_request`
+    event and so re-posts the required context. The commit carries the parent's
+    tree, so the work under review is identical and every gate re-runs against the
+    same content -- nothing is bypassed or skipped.
+
+    Authorization is re-verified first: this function runs `git push` against the
+    PR branch, and a push is a publication, so it must never act on a PR whose
+    origin, base, or provenance is not the maintainer's. The caller already holds
+    a `_merge_authorized_pr` failure, but that failure is exactly the state in
+    which assuming authorization is least safe. `issue_number` must be passed
+    through from the caller: it is what lets `_authorized_pr` check the runner's
+    own record for the PR, which is how a runner-opened PR is authorized. Without
+    it only the maintainer-approval path remains, and GitHub forbids approving
+    your own pull request, so the maintainer's own PRs would never re-arm.
+
+    The commit is made in the PR's own worktree so the worktree, the local branch,
+    and the remote all advance together; a ref-only push would leave the worktree
+    checked out behind origin, which the next mission would then have to
+    reconcile. Its tree is taken from the existing tree object rather than from the
+    index, so the byte-identical guarantee cannot be broken by whatever an agent
+    left staged. Bounded by REARM_MAX_ATTEMPTS per head, because a re-arm that does
+    not restore the context means the cause was not a lost event, and retrying
+    forever would push an empty commit every five minutes. The spent attempt is
+    recorded against the head this function just created, carrying the running
+    total forward, so the budget survives the runner's own pushes and resets only
+    when someone else moves the head.
+
+    Returns (rearmed, detail).
+    """
+    if DRY_RUN:
+        return False, "dry run"
+    if not wt_path or not os.path.isdir(wt_path):
+        return False, f"no worktree at {wt_path or '<unset>'}"
+    if _authorized_pr(pr_number, issue_number, head_sha) is None:
+        return False, "PR is not authorized for automated action"
+    count = _get_rearm_count(pr_number, head_sha)
+    if count >= REARM_MAX_ATTEMPTS:
+        return False, f"re-arm budget exhausted for head {head_sha[:8]} ({count} attempts)"
+    code, current, _ = run_cmd(["git", "branch", "--show-current"], cwd=wt_path)
+    if code != 0 or current.strip() != branch:
+        return False, f"worktree is not on '{branch}'"
+
+    # Build the re-arm commit from the existing tree object rather than from the
+    # index. `git commit --allow-empty` commits whatever is staged, and a failed
+    # WIP checkpoint leaves the whole worktree staged -- so a re-arm would have
+    # published unreviewed agent work under a "re-arm ci-gate" message and broken
+    # the byte-identical-tree property this mechanism rests on. commit-tree cannot
+    # see the index at all, so the invariant holds by construction.
+    old_code, old_head, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
+    tree_code, tree, _ = run_cmd(["git", "rev-parse", "HEAD^{tree}"], cwd=wt_path)
+    if old_code != 0 or tree_code != 0 or not old_head.strip() or not tree.strip():
+        return False, "cannot read the worktree head"
+    old_head, tree = old_head.strip(), tree.strip()
+    # The whole safety argument is that the new head carries the reviewed tree, so
+    # assert the worktree really is at the head being re-armed rather than resting
+    # on a caller invariant. Re-arming some other commit would publish a head
+    # nobody reviewed.
+    if old_head != head_sha:
+        return False, f"worktree is at {old_head[:8]}, not the authorized head {head_sha[:8]}"
+    new_code, new_sha, new_err = run_cmd(
+        ["git", "commit-tree", tree, "-p", old_head, "-m",
+         f"chore: re-arm {REQUIRED_STATUS_CONTEXT}, which never reported for this head"],
+        cwd=wt_path,
+    )
+    if new_code != 0 or not new_sha.strip():
+        return False, f"re-arm commit failed: {new_err.strip()[:200]}"
+    new_sha = new_sha.strip()
+    # Move the branch only; the index and worktree are left exactly as they were.
+    reset_code, _, reset_err = run_cmd(["git", "reset", "--soft", new_sha], cwd=wt_path)
+    if reset_code != 0:
+        return False, f"could not move the branch onto the re-arm commit: {reset_err.strip()[:200]}"
+    # Spend the attempt before the push, keyed to the head the push will create.
+    # `new_sha` is the commit just built, so the key never depends on re-reading
+    # HEAD afterwards -- a failed `git rev-parse` there would key the attempt to the
+    # pre-push head and hand out a fresh budget on every cycle. Reserving first also
+    # means a crash cannot lose the spend.
+    _bump_rearm_count(pr_number, new_sha, base_count=count)
+    push_code, _, push_err = run_cmd(
+        ["git", "push", "origin", f"HEAD:refs/heads/{branch}"], cwd=wt_path, timeout=NETWORK_GIT_TIMEOUT,
+    )
+    if push_code != 0:
+        # Undo the branch move so the next attempt does not stack another commit.
+        run_cmd(["git", "reset", "--soft", old_head], cwd=wt_path)
+        # The head did not move, so re-key the spent attempt to it: a push that
+        # keeps failing must back off rather than retry every cycle forever.
+        _bump_rearm_count(pr_number, old_head, base_count=count)
+        return False, f"push failed: {push_err.strip()[:200]}"
+    return True, "pushed a re-arm commit to re-post the required check"
+
+
+def _handle_absent_required_check(pr_number, branch, reviewed_head, wt_path, rollup,
+                                  issue_number=None, empty_is_evidence=False) -> bool:
+    """Re-arm a PR whose required check was never posted, or report why not.
+
+    An absent required context is not a defect any diff can fix: GitHub never
+    received a status for it, so the merge is refused indefinitely. The runner
+    used to answer that with "Fix the blocker and push updates" missions -- on
+    #1340 that dispatched 40-minute missions against a phantom, holding the single
+    worktree slot, while an agent edited code that was already correct.
+
+    `rollup` must be the snapshot the decision was made against, not an earlier
+    one. Returns True when the situation has been handled and the caller must skip
+    this PR for this cycle (either re-armed, or reported as unblockable). Returns
+    False when the required check is present, so the caller carries on with its own
+    handling -- a *failed* required check is a real code problem and must keep the
+    repair path. A rollup with any failing check is also left to the caller:
+    re-arming publishes a new head, and doing that over a red build would discard
+    the diagnosis for a genuine regression.
+
+    An empty rollup is "no snapshot" by default, because a merge that returned no
+    snapshot (a moved head, a failed API call) is not evidence about the context.
+    `empty_is_evidence` is for the caller that does hold such evidence: two hours
+    of an unchanged authorized head reporting no checks at all means no run was
+    ever created, which is the same defect as a missing context. `None` always
+    means no snapshot.
+    """
+    if rollup is None or (not rollup and not empty_is_evidence):
+        return False
+    if rollup and _ci_status_from_rollup(rollup)[0] == "FAILED":
+        return False
+    if not _required_check_absent(rollup):
+        return False
+    rearmed, detail = _rearm_required_check(pr_number, branch, reviewed_head, wt_path,
+                                            issue_number=issue_number)
+    if rearmed:
+        print(f"Required check '{REQUIRED_STATUS_CONTEXT}' was absent from PR #{pr_number}'s "
+              f"rollup; {detail}. The new head re-runs every gate.")
+        return True
+    print(f"Required check '{REQUIRED_STATUS_CONTEXT}' is absent from PR #{pr_number}'s rollup "
+          f"and the re-arm did not apply ({detail}). Not dispatching a repair mission: no code "
+          f"change can post it.")
+    subject = f"[Runner] Blocked: PR #{pr_number} missing {REQUIRED_STATUS_CONTEXT}"
+    if _should_send_rate_limited(subject):
+        send_email(
+            subject,
+            f"<h3>PR <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">#{pr_number}</a> "
+            f"cannot merge because the required check <code>{REQUIRED_STATUS_CONTEXT}</code> "
+            f"was never posted for its head.</h3>"
+            f"<p><b>Reason:</b> {html.escape(detail)}</p>"
+            f"<p>Branch protection treats an unreported required context as missing, so no code "
+            f"change can unblock this, and the runner has stopped dispatching repair missions "
+            f"for it. Check the PR's workflow runs for a run held at <code>action_required</code>.</p>"
+            f"<p><b>Branch:</b> {branch}</p>"
+        )
+    return True
 
 
 def _injection_marker_path(issue_number: int) -> str:
@@ -3314,6 +3606,7 @@ def babysit_active_worktrees():
             if _remove_worktree(wt_path, branch, is_merged=is_merged, merged_head=merged_head):
                 _clear_pr_state(issue_number)
                 _clear_rerun_count(pr_number)
+                _clear_rearm_count(pr_number)
                 _clear_coderabbit_gate_failure(pr_number)
                 if pr_state == "CLOSED":
                     print(f"PR #{pr_number} closed without merge; retaining origin/{branch}.")
@@ -3480,7 +3773,8 @@ def babysit_active_worktrees():
                             print(f"Local CodeRabbit review skipped for PR #{pr_number} ({gate.detail}); "
                                   f"merging on the robot review gate alone.")
                         print(f"Robot review gate passed for PR #{pr_number}. Attempting to auto-merge...")
-                        merge_code, merge_out, merge_err = _merge_authorized_pr(pr_number, issue_number, reviewed_head)
+                        merge_code, merge_out, merge_err, merge_rollup = _merge_authorized_pr(
+                            pr_number, issue_number, reviewed_head)
                         is_merged = (merge_code == 0)
                         if not is_merged:
                             st_code, st_out, _ = run_cmd(["gh", "pr", "view", str(pr_number), "--json", "state", "--jq", ".state"], cwd=REPO_PATH)
@@ -3491,6 +3785,7 @@ def babysit_active_worktrees():
                             if _remove_worktree(wt_path, branch, is_merged=True, merged_head=reviewed_head):
                                 _clear_pr_state(issue_number)
                                 _clear_rerun_count(pr_number)
+                                _clear_rearm_count(pr_number)
                                 _clear_coderabbit_gate_failure(pr_number)
                                 run_cmd(["git", "push", "origin", "--delete", branch], cwd=REPO_PATH, timeout=NETWORK_GIT_TIMEOUT)
                                 _sync_main_after_merge()
@@ -3507,6 +3802,10 @@ def babysit_active_worktrees():
                                 print(f"Worktree {wt_path} or branch '{branch}' could not be safely removed after merge. Preserving.")
                                 continue
                         else:
+                            if _handle_absent_required_check(
+                                    pr_number, branch, reviewed_head, wt_path, merge_rollup,
+                                    issue_number):
+                                continue
                             print(
                                 f"Merge failed (blocked by branch protection / unresolved reviews / behind main). Triggering babysit.\n"
                                 f"stdout:\n{merge_out}\n"
@@ -3531,6 +3830,16 @@ def babysit_active_worktrees():
                     print(f"Failed to parse updatedAt: {e}")
 
             if is_hanging:
+                # Two hours of PENDING with the required context absent means no
+                # `pull_request` run was ever created for this head, so waiting
+                # longer cannot help -- re-arm rather than send an agent to
+                # investigate a run that does not exist. An empty rollup counts as
+                # evidence here, because two hours of an authorized unchanged head
+                # reporting no checks at all is itself the finding.
+                if _handle_absent_required_check(
+                        pr_number, branch, reviewed_head, wt_path, rollup, issue_number,
+                        empty_is_evidence=True):
+                    continue
                 print(f"PR #{pr_number} checks have been pending for > 2 hours. Triggering babysit.")
                 subject = f"[Runner] Hanging CI Alert: PR #{pr_number}"
                 if _should_send_rate_limited(subject):
@@ -3751,7 +4060,8 @@ def babysit_orphaned_issue_prs():
 
             print(f"[orphan-pr] Robot review gate passed for PR #{pr_num}. Auto-merging...")
             if not DRY_RUN:
-                merge_code, merge_out, merge_err = _merge_authorized_pr(pr_num, issue_num_str, reviewed_head)
+                merge_code, merge_out, merge_err, merge_rollup = _merge_authorized_pr(
+                    pr_num, issue_num_str, reviewed_head)
                 is_merged = (merge_code == 0)
                 if not is_merged:
                     st_code, st_out, _ = run_cmd(["gh", "pr", "view", str(pr_num), "--json", "state", "--jq", ".state"], cwd=REPO_PATH)
@@ -4249,7 +4559,8 @@ def babysit_dependabot_prs():
 
             print(f"[dependabot] Robot review gate passed for PR #{pr_num}. Auto-merging...")
             if not DRY_RUN:
-                merge_code, merge_out, merge_err = _merge_authorized_pr(pr_num, None, reviewed_head, delete_branch=True)
+                merge_code, merge_out, merge_err, merge_rollup = _merge_authorized_pr(
+                    pr_num, None, reviewed_head, delete_branch=True)
                 if merge_code == 0:
                     print(f"[dependabot] Successfully merged Dependabot PR #{pr_num} into main.")
                     _sync_main_after_merge()

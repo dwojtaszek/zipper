@@ -209,7 +209,7 @@ class MergeAuthorizationTests(unittest.TestCase):
                         self.assertEqual(subprocess.check_output(["git", "-C", str(worktree), "rev-parse", "HEAD"], text=True).strip(), head)
                 else:
                     reviewed = initial if scenario == "changed" else head
-                    code, _, _ = runner._merge_authorized_pr(99, "42", reviewed)
+                    code, _, _, _ = runner._merge_authorized_pr(99, "42", reviewed)
                     self.assertEqual(code == 0, expected)
             self.assertEqual(git("rev-parse", "main"), head if expected else initial)
             self.assertEqual((root / "merged").exists(), expected)
