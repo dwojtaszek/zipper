@@ -83,6 +83,9 @@ public class ArchiveTestSuiteContractTests
     /// <summary>The mixed-method one-unsupported-member case (ticket #935) housed in security.</summary>
     private static readonly string[] MixedUnsupportedSecurityCaseKeys = ["mixed-methods-one-unsupported-member"];
 
+    /// <summary>The Zip64 header-vs-extra size source case (ticket #1279) housed in security.</summary>
+    private static readonly string[] Zip64ExtraConflictSecurityCaseKeys = ["zip64-extra-without-sentinels"];
+
     /// <summary>The three legacy-codec trail-byte cases (ticket #887) housed in the encoding suite, in ordinal Case Key order.</summary>
     private static readonly string[] EncodingTrailByteCaseKeys =
     [
@@ -141,6 +144,7 @@ public class ArchiveTestSuiteContractTests
                 .Concat(MethodDataSecurityCaseKeys)
                 .Concat(SplitArchiveSecurityCaseKeys)
                 .Concat(MixedUnsupportedSecurityCaseKeys)
+                .Concat(Zip64ExtraConflictSecurityCaseKeys)
                 .Concat(PolicySecurityCaseKeys)
                 .Order(StringComparer.Ordinal);
 
@@ -162,6 +166,19 @@ public class ArchiveTestSuiteContractTests
     }
 
     // ---- compatibility and malformed: classification-based, plus pinned structure cases ----
+    [Fact]
+    public void ListSuite_Security_Zip64ExtraWithoutSentinelsIsPolicySensitiveAndSevenZipExtracts()
+    {
+        var definition = ArchiveTestCatalog.GetCase("zip64-extra-without-sentinels");
+        var adapterCheck = Assert.Single(definition.AdapterChecks!);
+
+        Assert.Equal(ArchiveTestCatalog.PolicySensitiveClassification, definition.Classification);
+        Assert.Equal(["malformed", "security"], definition.Suites);
+        Assert.Equal([ArchiveTestMutationKind.Zip64SentinelCleared], definition.Mutations!);
+        Assert.Equal(("7zip", "extract", "success"),
+            (adapterCheck.Adapter, adapterCheck.Action, adapterCheck.ExpectedOutcome));
+    }
+
 
     [Fact]
     public void ListSuite_Encoding_ContainsExactlyTheLegacyCodecTrailByteCases()
@@ -206,7 +223,8 @@ public class ArchiveTestSuiteContractTests
         // and the #935 mixed one-unsupported member, all policy-sensitive,
         // housed in malformed since ticket #840;
         // declared-size-oversized is already malformed-classified and arrives
-        // via the derived set).
+        // via the derived set; the #1279 Zip64 source-disagreement case is also
+        // policy-sensitive and housed here because readers may reject it).
         var expected = AllKeys()
             .Where(key => ArchiveTestCatalog.GetCase(key).Classification == "malformed")
             .Append("unsupported-method")
@@ -215,6 +233,7 @@ public class ArchiveTestSuiteContractTests
             .Append("multidisk-central-entry-declared")
             .Append("mixed-methods-one-unsupported-member")
             .Append("eocdr-ambiguity-comment")
+            .Append("zip64-extra-without-sentinels")
             .Order(StringComparer.Ordinal);
         Assert.Equal(expected, malformed);
     }
@@ -247,8 +266,8 @@ public class ArchiveTestSuiteContractTests
         // +1 for the #934 clean Unicode Path control, +1 for the #935 nested budget boundary,
         // +2 for the #935 mixed one-bad-member cases, +1 for #888, +1 for #870,
         // +2 for #878, +3 for the #887 legacy-codec encoding controls, +1 for #1276,
-        // +2 for #1277): a case
+        // +2 for #1277, +1 for #1279): a case
         // dropped from the catalogue or unlisted from every suite fails here.
-        Assert.Equal(109, AllKeys().Count);
+        Assert.Equal(110, AllKeys().Count);
     }
 }

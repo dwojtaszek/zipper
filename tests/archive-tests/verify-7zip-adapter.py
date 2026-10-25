@@ -25,7 +25,14 @@ def check_entry(seven, archive, entry, budget):
         [seven, "x", "-so", str(archive), name],
         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
     ) as process:
-        timer = threading.Timer(30, lambda: process.kill() if process.poll() is None else None)
+        timed_out = threading.Event()
+
+        def kill_after_timeout():
+            if process.poll() is None:
+                timed_out.set()
+                process.kill()
+
+        timer = threading.Timer(30, kill_after_timeout)
         timer.start()
         try:
             digest = hashlib.sha256()
@@ -35,10 +42,18 @@ def check_entry(seven, archive, entry, budget):
                 if size > expected_size:
                     raise ValueError(f"content size exceeded: {name!r}")
                 digest.update(chunk)
-            if process.wait(timeout=30) != 0:
-                raise ValueError(f"7-Zip extraction failed for {name!r}")
+            try:
+                return_code = process.wait(timeout=30)
+            except subprocess.TimeoutExpired as error:
+                raise ValueError(f"7-Zip timed out extracting {name!r}") from error
+            if timed_out.is_set():
+                raise ValueError(f"7-Zip timed out extracting {name!r}")
             if size != expected_size or digest.hexdigest() != entry["contentSha256"]:
                 raise ValueError(f"content hash mismatch: {name!r}")
+            # 7-Zip may report a warning for a malformed header even when the
+            # requested member is complete and matches the declared content.
+            if return_code not in (0, 1):
+                raise ValueError(f"7-Zip extraction failed for {name!r}")
         finally:
             timer.cancel()
             if process.poll() is None:

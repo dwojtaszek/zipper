@@ -551,6 +551,14 @@ internal static class ArchiveTestCatalog
             ArchiveTestMutationKind.Zip64MissingExtra, controlCaseKey: Zip64ControlCaseKey),
         ["zip64-truncated-extra"] = MutatedDefinition(
             ArchiveTestMutationKind.Zip64TruncatedExtra, controlCaseKey: Zip64ControlCaseKey),
+        // Ticket #1279: the non-sentinel header sizes win or lose against the
+        // still-present, conflicting Zip64 extended-information values.
+        ["zip64-extra-without-sentinels"] = MutatedDefinition(
+            ArchiveTestMutationKind.Zip64SentinelCleared,
+            controlCaseKey: Zip64ControlCaseKey,
+            classification: PolicySensitiveClassification,
+            suites: [MalformedSuite, SecuritySuite],
+            adapterChecks: SevenZipExtract),
         // Ticket #842 policy-sensitive cases: member names and metadata that exercise
         // extractor safety. All are direct recipes (no mutation, no construction): the
         // bytes are exactly what the standard writer emits for these names. They are

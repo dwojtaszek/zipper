@@ -261,6 +261,20 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
         ExecuteReaderOperations(testCase, archiveBytes, extractDir);
     }
 
+    [Fact]
+    public void ReadOperations_Zip64ExtraWithoutSentinels_UsesHeaderSizes()
+    {
+        var definition = ArchiveTestCatalog.GetCase("zip64-extra-without-sentinels");
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+        var testCase = ArchiveTestSuiteGenerator.BuildExpectationFile(artifact, definition, 42);
+
+        // Observed .NET behavior for #1279: it uses the 32-bit sizes and ignores
+        // the still-present Zip64 size values when no 32-bit field is a sentinel.
+        Assert.Equal("list-succeeds", NormalizeList(artifact.ArchiveBytes, testCase));
+        Assert.Equal("read-entry-content-matches", NormalizeReadEntry(artifact.ArchiveBytes, testCase));
+        Assert.Equal("integrity-passes", NormalizeIntegrityCheck(artifact.ArchiveBytes, testCase));
+    }
+
     [Theory]
     [InlineData("list")]
     [InlineData("read-entry")]

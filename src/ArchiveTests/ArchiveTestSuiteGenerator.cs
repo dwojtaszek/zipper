@@ -565,6 +565,20 @@ internal static class ArchiveTestSuiteGenerator
                 Expectation(IntegrityCheckOperation, StrictProfile, [OperationFails], [NoPartialWrites], ["open", IntegrityCheckOperation]),
                 Expectation(ExtractOperation, StrictProfile, [OperationFails], [NoPartialWrites], ["open", ReadEntryOperation, ExtractOperation]),
             ],
+            // The 32-bit header sizes are now real while both Zip64 extra fields
+            // retain larger, conflicting values (ticket #1279). Readers may use
+            // the headers, use the extras, or reject the nonconformant structure;
+            // every source-selection outcome is allowed, but the size lie and
+            // bounded-read invariants remain required. Observed here: CPython zipfile,
+            // .NET, and 7-Zip 26.04 use the real header sizes and read the content;
+            // 7-Zip reports a Headers Error warning but its test succeeds.
+            ArchiveTestMutationKind.Zip64SentinelCleared =>
+            [
+                Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [NoPartialWrites, "metadata-sources-disagree", "declared-sizes-are-lies", "no-allocation-from-declared-sizes"], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches", "read-entry-fails", "read-entry-returns-unverified-bytes"], [NoPartialWrites, "metadata-sources-disagree", "declared-sizes-are-lies", "no-allocation-from-declared-sizes"], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-fails", "integrity-unchecked", "integrity-passes"], [NoPartialWrites, "metadata-sources-disagree", "declared-sizes-are-lies", "no-allocation-from-declared-sizes"], ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-succeeds", "extract-fails"], [NoPartialWrites, "metadata-sources-disagree", "declared-sizes-are-lies", "no-allocation-from-declared-sizes"], ["open", ReadEntryOperation, ExtractOperation]),
+            ],
             // Declared uncompressed size beyond the 32 MiB expanded budget over tiny
             // physical bytes: readers must never allocate or read to the untrusted
             // declared size (ticket #843). Cross-implementation note (ticket #845):
