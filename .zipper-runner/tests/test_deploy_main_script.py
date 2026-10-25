@@ -252,6 +252,64 @@ class DeployMainScriptTests(unittest.TestCase):
         self.assertEqual((self.repo.checkout / "secret.txt").read_text(), "LOCAL PRECIOUS\n")
         self.assertIn("not a fast-forward", self.repo.logs())
 
+    def test_deploy_whenAFileSitsAtTheLockPath_shouldReclaimItAndDeploy(self):
+        """The protocol is mkdir, so a regular file at the lock path cannot belong to
+        any holder — yet every later mkdir fails with EEXIST, which reads as "held".
+        Observed on the host: one runner `--status` created such a file and the deploy
+        timer skipped every tick from 05:38 to 05:57."""
+        new_upstream = self.repo.push_upstream_commit("two\n", "c2")
+        self.repo.lock_path.touch()
+
+        result = self.repo.run_script()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.repo.head(), new_upstream,
+                         "a non-directory lock path must not block the deploy")
+        self.assertIn("non-directory main-checkout lock path", self.repo.logs())
+
+    def test_deploy_whenAFileSitsAtTheLockPath_shouldNotWaitForTheStaleBound(self):
+        """Age is irrelevant here: a fresh poison file is as unusable as an old one.
+
+        The wedge is not that one tick blocks — the script is non-blocking and returns
+        at once either way — it is that *every* later tick skips too, for the whole
+        stale bound. So this asserts the tick never takes the skip path at all, and
+        that a second tick is still able to deploy, which is what the bound would
+        prevent. An elapsed-time assertion cannot tell the two apart.
+        """
+        new_upstream = self.repo.push_upstream_commit("two\n", "c2")
+        self.repo.lock_path.touch()
+
+        result = self.repo.run_script()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.repo.head(), new_upstream)
+        self.assertNotIn("locked by the runner or another deploy", self.repo.logs(),
+                         "the poison path must be reclaimed, not reported as a held lock")
+        self.assertFalse(self.repo.lock_path.exists(),
+                         "the tick must release the lock it took, not leave it for the bound")
+
+        # The bound's whole effect is that the next ticks are still blocked. Prove they
+        # are not: a second tick must run normally and stay quiet.
+        second = self.repo.run_script()
+
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertNotIn("SKIP", self.repo.logs(),
+                         "no tick may end up skipping because of the stale bound")
+
+    def test_deploy_whenADanglingSymlinkSitsAtTheLockPath_shouldReclaimItAndDeploy(self):
+        """`-e` is false for a dangling symlink, so a check built only on `-e` leaves
+        the path reading as held and only the age bound clears it. mkdir fails on it
+        just the same, so it wedges the deploy for the full stale bound."""
+        new_upstream = self.repo.push_upstream_commit("two\n", "c2")
+        self.repo.lock_path.symlink_to(self.repo.root / "does-not-exist")
+
+        result = self.repo.run_script()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.repo.head(), new_upstream,
+                         "a dangling symlink must not block the deploy")
+        self.assertIn("non-directory main-checkout lock path", self.repo.logs())
+
     def test_deploy_whenLockIsHeldByAnotherRun_shouldSkipWithoutTouchingTheCheckout(self):
         self.repo.push_upstream_commit("two\n", "c2")
         before = self.repo.head()
@@ -262,8 +320,9 @@ class DeployMainScriptTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertEqual(self.repo.head(), before)
         self.assertIn("locked by the runner or another deploy", self.repo.logs())
-        self.assertTrue(self.repo.lock_path.exists(),
-                        "a skipped deploy must leave the other holder's lock alone")
+        self.assertTrue(self.repo.lock_path.is_dir(),
+                        "a skipped deploy must leave the other holder's lock alone, "
+                        "and it must still be the directory the protocol requires")
 
     def test_deploy_whenLockIsHeldByAStaleHolder_shouldReclaimItAndDeploy(self):
         """A crashed deploy must not wedge every later tick. The bound is longer

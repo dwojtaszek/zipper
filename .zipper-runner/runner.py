@@ -17,6 +17,7 @@ import fcntl
 import re
 import subprocess
 import signal
+import stat
 from datetime import datetime, timedelta, timezone
 from typing import NamedTuple
 import urllib.request
@@ -922,6 +923,33 @@ def _claim_repo_mutation_lock_for_removal(expected_identity: tuple[str, ...] | N
     return True
 
 
+def _remove_poisoned_repo_mutation_lock() -> bool:
+    """Remove a non-directory sitting where the main-checkout lock must be a directory.
+
+    The lock's protocol is `mkdir`, so a *file* at that path cannot be a held lock:
+    no process can be holding it, and every later `mkdir` fails with EEXIST, which
+    the caller reads as "another process holds it". Without this the checkout is
+    wedged for the full stale bound (20 minutes) on every run, and the deploy timer
+    skips every tick, which is exactly what a stray `--status` caused on the host.
+
+    A directory, or a symlink to one, is left alone — that is a real lock, and the
+    normal reclaim path owns it. Everything else is removed, and `os.remove` refuses
+    a directory, so this check-then-act can never delete a live holder's lock: a real
+    holder's `mkdir` remains the only atomic claim and the loser's `mkdir` fails. A
+    symlink is removed as the link it is, never its target.
+    """
+    if os.path.isdir(REPO_MUTATION_LOCK_PATH):
+        return False
+    try:
+        os.remove(REPO_MUTATION_LOCK_PATH)
+    except OSError:
+        # Absent, or something this process may not remove. Neither is a poison file.
+        return False
+    print("REPO LOCK: removed a non-directory at the main-checkout lock path; "
+          "the lock protocol requires a directory, so no holder can have owned it.")
+    return True
+
+
 def _steal_stale_repo_mutation_lock() -> bool:
     """Remove the main-checkout lock when its holder is provably gone or wedged.
 
@@ -935,6 +963,8 @@ def _steal_stale_repo_mutation_lock() -> bool:
     Both paths go through `_claim_repo_mutation_lock_for_removal`, which is what makes
     them safe against a second process reclaiming the same lock at the same time.
     """
+    if _remove_poisoned_repo_mutation_lock():
+        return True
     identity = _read_repo_mutation_lock_identity()
     if _lock_holder_pid_is_gone():
         if _claim_repo_mutation_lock_for_removal(identity):
@@ -4586,18 +4616,58 @@ def _sync_main_repo_locked():
 
 
 def _lock_is_held(lock_path: str) -> bool:
+    """Whether a lock at this path is currently held, creating nothing to find out.
+
+    Two lock protocols share this helper, and they are not interchangeable. The
+    runner, babysit, and worktree mission locks are `flock` files. The main-checkout
+    lock is a *directory*, because the shell side must take it too and `flock` is
+    absent on macOS where the runner suite runs in CI.
+
+    This used to open the path with "a", which creates the file. Against a
+    `flock` path that is harmless, but against the main-checkout lock's path it
+    manufactured a zero-byte regular file where the protocol requires a directory.
+    Every later `mkdir` then failed with EEXIST, which reads as "another process
+    holds it", so the runner deferred every main-checkout mutation and the deploy
+    timer skipped every tick until the 20-minute stale bound expired. Observed on
+    the host: one `--status` run wedged deploys for 20 minutes, and a second did it
+    again for 11.
+
+    The probe opens read-only and non-blocking, so it cannot create the path and
+    cannot hang on it. A creating open would still be a check-then-act bug: the path
+    is a *shared* lock that other processes remove routinely, so "it exists" now does
+    not mean it exists a microsecond later, and `open(..., "a")` would then recreate
+    the very file this function exists to stop making. Non-blocking matters because
+    opening a fifo for writing blocks until a reader appears, which would hang
+    `--status` forever instead of reporting.
+
+    The file type comes from `fstat` on the open descriptor rather than a second
+    path lookup, so there is no window between classifying the path and using it.
+    Only a regular file can hold a `flock`; anything else (a fifo, a device) is
+    reported free. That distinction has to be made here rather than left to `flock`,
+    because `flock` on a fifo fails on macOS with ENOTSUP while succeeding on Linux,
+    so trusting it would make `--status` platform-dependent.
+    """
+    if os.path.isdir(lock_path):
+        # Directory protocol: the directory's existence is the lock. Checked first so
+        # the answer does not depend on a platform that refuses to open a directory.
+        return True
     try:
-        test_lock = open(lock_path, "a")
+        handle = os.open(lock_path, os.O_RDONLY | os.O_NONBLOCK)
     except OSError:
+        # Absent, unreadable, or not something that can be locked: not held.
         return False
     try:
-        fcntl.flock(test_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        fcntl.flock(test_lock, fcntl.LOCK_UN)
+        if stat.S_ISDIR(os.fstat(handle).st_mode):
+            return True
+        if not stat.S_ISREG(os.fstat(handle).st_mode):
+            return False
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(handle, fcntl.LOCK_UN)
         return False
     except (IOError, OSError):
         return True
     finally:
-        test_lock.close()
+        os.close(handle)
 
 
 def _describe_worktree_mission_lock(wt_path: str) -> str:
