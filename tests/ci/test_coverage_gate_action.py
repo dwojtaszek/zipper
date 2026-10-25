@@ -64,16 +64,19 @@ class CoverageGateActionTests(unittest.TestCase):
         script = re.sub(r"\$\{\{[^}]+\}\}", "dummy_workspace", script)
 
         cases = [
-            # (name, line_cov, branch_cov, expected_exit, expected_err_pattern)
-            ("Passing both gates", "96.4%", "88.9%", 0, None),
-            ("Passing boundary gates", "80.0%", "85.0%", 0, None),
-            ("Fails line coverage floor", "79.9%", "88.9%", 1, r"ERROR: total coverage 79\.9% < 80%"),
-            ("Fails branch coverage floor", "96.4%", "84.9%", 1, r"ERROR: total branch coverage 84\.9% < 85%"),
-            ("Missing line coverage", None, "88.9%", 1, r"ERROR: could not extract line coverage from Summary\.txt"),
-            ("Missing branch coverage", "96.4%", None, 1, r"ERROR: could not extract branch coverage from Summary\.txt"),
+            # (name, line_cov, branch_cov, py_exit, expected_exit, expected_err_pattern)
+            ("Passing both gates", "96.4%", "88.9%", 0, 0, None),
+            ("Passing boundary gates", "80.0%", "85.0%", 0, 0, None),
+            ("Passing integer boundary gates", "80%", "85%", 0, 0, None),
+            ("Passing 100% coverage", "100%", "100%", 0, 0, None),
+            ("Fails line coverage floor", "79.9%", "88.9%", 0, 1, r"ERROR: total coverage 79\.9% < 80%"),
+            ("Fails branch coverage floor", "96.4%", "84.9%", 0, 1, r"ERROR: total branch coverage 84\.9% < 85%"),
+            ("Missing line coverage", None, "88.9%", 0, 1, r"ERROR: could not extract line coverage from Summary\.txt"),
+            ("Missing branch coverage", "96.4%", None, 0, 1, r"ERROR: could not extract branch coverage from Summary\.txt"),
+            ("Per-file coverage failure", "96.4%", "88.9%", 2, 2, None),
         ]
 
-        for name, line_cov, branch_cov, expected_exit, expected_err_pattern in cases:
+        for name, line_cov, branch_cov, py_exit, expected_exit, expected_err_pattern in cases:
             with self.subTest(case=name):
                 with tempfile.TemporaryDirectory() as td:
                     bin_dir = os.path.join(td, "bin")
@@ -96,10 +99,10 @@ class CoverageGateActionTests(unittest.TestCase):
                         f.write("#!/bin/sh\nexit 0\n")
                     os.chmod(mock_dotnet, 0o755)
 
-                    # Mock python3: check-per-file-coverage.py succeeds
+                    # Mock python3: check-per-file-coverage.py
                     mock_py = os.path.join(bin_dir, "python3")
                     with open(mock_py, "w", encoding="utf-8") as f:
-                        f.write("#!/bin/sh\nexit 0\n")
+                        f.write(f"#!/bin/sh\nexit {py_exit}\n")
                     os.chmod(mock_py, 0o755)
 
                     # Create dummy python script target so bash doesn't complain if checked

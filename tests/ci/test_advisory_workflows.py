@@ -269,7 +269,9 @@ class AdvisoryWorkflowExitClassificationTests(unittest.TestCase):
         for exit_code in (1, 2, 124):
             with self.subTest(exit_code=exit_code):
                 with tempfile.TemporaryDirectory() as td:
-                    proc = self._run_stryker_step(script, td, dotnet_rc=exit_code)
+                    proc = self._run_stryker_step(
+                        script, td, dotnet_rc=exit_code, python_output='echo "normalized on failure in $(pwd)"'
+                    )
                     self.assertEqual(
                         proc.returncode,
                         exit_code,
@@ -279,6 +281,11 @@ class AdvisoryWorkflowExitClassificationTests(unittest.TestCase):
                         f"::error::dotnet stryker exited with code {exit_code}",
                         proc.stdout + proc.stderr,
                         "Stryker failure must emit GitHub Actions error annotation",
+                    )
+                    self.assertIn(
+                        f"normalized on failure in {os.path.realpath(td)}",
+                        proc.stdout + proc.stderr,
+                        "normalize_report.py must execute even when Stryker exits with non-zero code (#1269)",
                     )
 
         # Test success case
@@ -327,6 +334,23 @@ class AdvisoryWorkflowExitClassificationTests(unittest.TestCase):
             self.assertIn("--mutate PathValidator.cs", args_text)
             self.assertIn("--mutate Validation/ProductionSetPostValidator.cs", args_text)
             self.assertIn("--break-at 65", args_text)
+            self.assertIn("--threshold-low 65", args_text)
+
+        with tempfile.TemporaryDirectory() as td:
+            proc = self._run_stryker_step(
+                script,
+                td,
+                dotnet_rc=0,
+                break_at="85",
+                record_dotnet_args=True,
+            )
+            self.assertEqual(proc.returncode, 0, f"Script failed: {proc.stdout}\n{proc.stderr}")
+            args_file = os.path.join(td, "dotnet_args.txt")
+            self.assertTrue(os.path.exists(args_file), "dotnet was not invoked")
+            args_text = Path(args_file).read_text(encoding="utf-8")
+            self.assertIn("--break-at 85", args_text)
+            self.assertIn("--threshold-low 85", args_text)
+            self.assertIn("--threshold-high 85", args_text)
 
     @unittest.skipIf(os.name == "nt" or shutil.which("bash") is None, "POSIX bash execution boundary")
     def test_issue_triage_step_exit_classification_under_bash_e(self):
