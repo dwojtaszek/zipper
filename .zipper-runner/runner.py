@@ -817,13 +817,54 @@ def _repo_mutation_lock_owner_file() -> str:
     return os.path.join(REPO_MUTATION_LOCK_PATH, "owner")
 
 
+def _lock_holder_pid_is_gone() -> bool:
+    """Whether the lock records a holder pid that is no longer running.
+
+    A holder killed without running its cleanup — SIGKILL, OOM, reboot — leaves the
+    lock behind, and age alone would keep every other process out for the whole
+    stale bound (20 minutes). The runner defers its main-sync and branch recovery
+    for that entire window, so a killed deploy silently stops the checkout from
+    being maintained. A recorded pid that is not alive is proof the holder is gone,
+    so the lock is reclaimed at once instead of at the age bound.
+
+    Conservative by construction: no pid file, a malformed one, a pid this process
+    may not signal, or one reused by an unrelated process all fall through to the
+    age bound rather than stealing a lock that may still be held.
+    """
+    try:
+        with open(os.path.join(REPO_MUTATION_LOCK_PATH, "pid")) as handle:
+            raw = handle.read().strip()
+    except OSError:
+        return False
+    if not raw.isdigit():
+        return False
+    pid = int(raw)
+    if pid == os.getpid():
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    except OSError:
+        # PermissionError and anything else unprovable: assume the holder lives.
+        return False
+    return False
+
+
 def _steal_stale_repo_mutation_lock() -> bool:
     """Remove the main-checkout lock when its holder is provably gone or wedged.
 
-    A holder only ever mutates under a bounded command (DEFAULT_CMD_TIMEOUT), so
-    the stale bound is set above that and an over-age lock cannot belong to a
-    process still legitimately working.
+    Two ways to be sure. A recorded pid that is no longer alive is direct proof and
+    is acted on immediately, because otherwise a killed holder blocks every other
+    process for the whole stale bound. Failing that, an age above
+    REPO_MUTATION_LOCK_STALE_SECONDS is the bound: a holder only ever mutates under
+    a bounded command (DEFAULT_CMD_TIMEOUT), so the stale bound is set above that
+    and an over-age lock cannot belong to a process still legitimately working.
     """
+    if _lock_holder_pid_is_gone():
+        print("REPO LOCK: stealing the main-checkout lock; its recorded holder is gone.")
+        shutil.rmtree(REPO_MUTATION_LOCK_PATH, ignore_errors=True)
+        return True
     try:
         age = time.time() - os.path.getmtime(REPO_MUTATION_LOCK_PATH)
     except OSError:
@@ -836,16 +877,19 @@ def _steal_stale_repo_mutation_lock() -> bool:
 
 
 def _write_repo_mutation_lock_metadata(token: str) -> bool:
-    """Record the holder's token and timestamp inside the lock directory.
+    """Record the holder's token, pid, and timestamp inside the lock directory.
 
-    `created` is what deploy-main.sh reads to report the holder's age, so the two
-    sides must both write it: the shell cannot judge staleness from a directory
-    that only the runner creates. Returns False when the metadata could not be
-    written, which the caller treats as having no verifiable identity.
+    `created` is what deploy-main.sh reads to report the holder's age, and `pid` is
+    what lets either side reclaim the lock the moment a killed holder is provably
+    gone, so the two sides must both write them: the shell cannot judge staleness
+    from a directory that only the runner creates. Returns False when the metadata
+    could not be written, which the caller treats as having no verifiable identity.
     """
     try:
         with open(os.path.join(REPO_MUTATION_LOCK_PATH, "created"), "w") as handle:
             handle.write(str(int(time.time())))
+        with open(os.path.join(REPO_MUTATION_LOCK_PATH, "pid"), "w") as handle:
+            handle.write(str(os.getpid()))
         with open(_repo_mutation_lock_owner_file(), "w") as handle:
             handle.write(token)
     except OSError as e:

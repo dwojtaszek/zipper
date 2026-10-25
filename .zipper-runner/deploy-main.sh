@@ -85,6 +85,27 @@ HOLDS_LOCK=0
 # Unique per process, so a release can tell "still mine" from "someone stole it".
 LOCK_TOKEN="$$-$RANDOM-$RANDOM"
 
+# Whether the lock records a holder pid that is no longer running. A holder killed
+# without its cleanup (SIGKILL, OOM, reboot) leaves the lock behind, and age alone
+# would keep this timer out for the whole stale bound — a full 20 minutes of missed
+# deploys. A recorded pid that is not alive is proof the holder is gone.
+#
+# Requires /proc, because `kill -0` alone cannot separate a dead process from a
+# live one this user may not signal. Where /proc is absent (macOS) this reports
+# nothing and the age bound decides, rather than risking a live holder's lock.
+lock_holder_pid_is_gone() {
+    local pid
+    [ -d /proc ] || return 1
+    pid="$(cat "$REPO_LOCK/pid" 2>/dev/null || true)"
+    case "$pid" in
+        ''|*[!0-9]*) return 1 ;;   # absent or malformed: not proof of anything
+    esac
+    [ "$pid" = "$$" ] && return 1
+    kill -0 "$pid" 2>/dev/null && return 1
+    [ -d "/proc/$pid" ] && return 1
+    return 0
+}
+
 # Seconds the current holder has held the lock, or empty when that cannot be told.
 # The holder's own `created` file is authoritative; the directory mtime is the
 # fallback for a lock whose holder died between mkdir and writing it — without
@@ -107,9 +128,22 @@ lock_age_seconds() {
 acquire_repo_lock() {
     if mkdir "$REPO_LOCK" 2>/dev/null; then
         now_epoch > "$REPO_LOCK/created"
+        echo "$$" > "$REPO_LOCK/pid"
         echo "$LOCK_TOKEN" > "$REPO_LOCK/owner"
         HOLDS_LOCK=1
         return 0
+    fi
+    if lock_holder_pid_is_gone; then
+        log "WARN: reclaiming the main-checkout lock; its recorded holder is gone."
+        rm -rf "$REPO_LOCK"
+        if mkdir "$REPO_LOCK" 2>/dev/null; then
+            now_epoch > "$REPO_LOCK/created"
+            echo "$$" > "$REPO_LOCK/pid"
+            echo "$LOCK_TOKEN" > "$REPO_LOCK/owner"
+            HOLDS_LOCK=1
+            return 0
+        fi
+        return 1
     fi
     age="$(lock_age_seconds)"
     if [ -n "$age" ] && [ "$age" -gt "$LOCK_STALE_SECONDS" ]; then
@@ -117,6 +151,7 @@ acquire_repo_lock() {
         rm -rf "$REPO_LOCK"
         if mkdir "$REPO_LOCK" 2>/dev/null; then
             now_epoch > "$REPO_LOCK/created"
+            echo "$$" > "$REPO_LOCK/pid"
             echo "$LOCK_TOKEN" > "$REPO_LOCK/owner"
             HOLDS_LOCK=1
             return 0

@@ -46,14 +46,35 @@ class RepoMutationLockTests(unittest.TestCase):
          runner.REPO_MUTATION_LOCK_STALE_SECONDS, runner.REPO_PATH,
          runner.DRY_RUN, runner._repo_mutation_lock_depth) = self._saved
 
-    def hold_lock_asAnotherProcess(self, age_seconds: int = 0) -> None:
+    def hold_lock_asAnotherProcess(self, age_seconds: int = 0, pid: int | None = None) -> None:
         """Take the lock the way deploy-main.sh does: an atomic mkdir on the path."""
         self.lock_path.mkdir()
         (self.lock_path / "created").write_text(str(int(time.time()) - age_seconds))
+        if pid is not None:
+            (self.lock_path / "pid").write_text(str(pid))
         # The runner judges staleness by the directory's mtime, the shell by the
         # `created` file, so an old holder must look old to both.
         stamp = time.time() - age_seconds
         os.utime(self.lock_path, (stamp, stamp))
+
+    @staticmethod
+    def _unused_pid() -> int:
+        """A pid that is provably not running, without spawning a process to find out."""
+        for candidate in range(40000, 40100):
+            try:
+                os.kill(candidate, 0)
+            except ProcessLookupError:
+                return candidate
+            except OSError:
+                continue
+        raise unittest.SkipTest("no unused pid available in the probe range")
+
+    def _live_pid(self) -> int:
+        """A pid that is provably running, cleaned up by the test."""
+        process = subprocess.Popen(["sleep", "60"])
+        self.addCleanup(process.wait)
+        self.addCleanup(process.kill)
+        return process.pid
 
     def _git_repo(self) -> Path:
         repo = self.root / "checkout"
@@ -122,6 +143,65 @@ class RepoMutationLockTests(unittest.TestCase):
             self.assertEqual((self.lock_path / "owner").read_text(),
                              runner._repo_mutation_lock_token)
             self.assertTrue(runner._repo_mutation_lock_token)
+            self.assertEqual((self.lock_path / "pid").read_text(), str(os.getpid()))
+
+    def test_lock_whenTheHolderWasKilled_shouldBeReclaimedImmediately(self):
+        """Age alone would keep every other process out for the whole 20-minute stale
+        bound, so a killed deploy stopped the checkout from being maintained: the
+        runner deferred its main-sync and branch recovery with `REPO LOCK: main
+        checkout busy for 120s` on every run for that entire window."""
+        self.hold_lock_asAnotherProcess(age_seconds=0, pid=self._unused_pid())
+
+        with runner._repo_mutation_lock() as locked:
+            self.assertTrue(locked, "a lock whose recorded holder is gone must be reclaimed at once")
+
+    def test_lock_whenTheRecordedHolderIsAlive_shouldNotBeReclaimedEarly(self):
+        """The pid check must not become a way to steal a live holder's lock."""
+        self.hold_lock_asAnotherProcess(age_seconds=0, pid=self._live_pid())
+
+        with runner._repo_mutation_lock() as locked:
+            self.assertFalse(locked, "a live holder must keep its lock until the age bound")
+
+    def test_lock_whenTheHolderIsThisProcess_shouldNotReclaimItsOwnLock(self):
+        """A re-entrant caller reaching the steal path must not delete its own lock."""
+        self.hold_lock_asAnotherProcess(age_seconds=0, pid=os.getpid())
+
+        with runner._repo_mutation_lock() as locked:
+            self.assertFalse(locked, "a process must not steal the lock it already holds")
+
+    def test_lock_whenThePidIsAbsentOrMalformed_shouldFallBackToTheAgeBound(self):
+        """An unverifiable holder is not a dead one: the lock must survive."""
+        for pid in (None, 0, -1, "not-a-pid", ""):
+            with self.subTest(pid=pid):
+                if self.lock_path.exists():
+                    shutil.rmtree(self.lock_path)
+                self.hold_lock_asAnotherProcess(age_seconds=0, pid=pid)
+                if pid is None:
+                    (self.lock_path / "pid").unlink(missing_ok=True)
+                elif not isinstance(pid, int) or pid <= 0:
+                    (self.lock_path / "pid").write_text(str(pid))
+
+                with runner._repo_mutation_lock() as locked:
+                    self.assertFalse(locked, f"pid={pid!r} is not proof the holder is gone")
+
+    def test_lockHolderPidIsGone_whenTheHolderWasKilled_shouldReportGone(self):
+        self.hold_lock_asAnotherProcess(pid=self._unused_pid())
+
+        self.assertTrue(runner._lock_holder_pid_is_gone())
+
+    def test_lockHolderPidIsGone_whenTheHolderIsAlive_shouldReportAlive(self):
+        self.hold_lock_asAnotherProcess(pid=self._live_pid())
+
+        self.assertFalse(runner._lock_holder_pid_is_gone())
+
+    def test_lockHolderPidIsGone_whenThereIsNoPidFile_shouldReportUnknown(self):
+        self.hold_lock_asAnotherProcess()
+
+        self.assertFalse(runner._lock_holder_pid_is_gone(),
+                         "an absent pid is unknown, not proof of death")
+
+    def test_lockHolderPidIsGone_whenTheLockIsAbsent_shouldReportUnknown(self):
+        self.assertFalse(runner._lock_holder_pid_is_gone())
 
     def test_lock_whenAnotherProcessStoleIt_shouldNotDeleteTheThiefsLock(self):
         """A stale steal leaves the lock to another process. Removing it on release

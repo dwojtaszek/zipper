@@ -63,17 +63,21 @@ class _Repo:
     def head(self) -> str:
         return self._git("rev-parse", "HEAD").stdout.strip()
 
-    def hold_lock(self, age_seconds: int = 0, with_created: bool = True) -> None:
+    def hold_lock(self, age_seconds: int = 0, with_created: bool = True,
+                  pid: int | None = None) -> None:
         """Take the shared main-checkout lock, as the runner or a peer deploy does.
 
         `with_created=False` models a holder that died between `mkdir` and writing
         its timestamp, which is the only case where the age has to come from the
-        directory mtime.
+        directory mtime. `pid` records the holder, which is what lets the lock be
+        reclaimed at once when that holder is provably gone.
         """
         self.lock_path.mkdir(exist_ok=True)
         if with_created:
             (self.lock_path / "created").write_text(str(int(time.time()) - age_seconds))
         (self.lock_path / "owner").write_text("someone-else")
+        if pid is not None:
+            (self.lock_path / "pid").write_text(str(pid))
         stamp = time.time() - age_seconds
         os.utime(self.lock_path, (stamp, stamp))
 
@@ -121,6 +125,25 @@ class DeployMainScriptTests(unittest.TestCase):
         self._tmp = tempfile.mkdtemp(prefix="zipper-deploy-test-")
         self.addCleanup(shutil.rmtree, self._tmp, ignore_errors=True)
         self.repo = _Repo(self._tmp)
+
+    @staticmethod
+    def _unused_pid() -> int:
+        """A pid that is provably not running, without spawning a process to find out."""
+        for candidate in range(41000, 41100):
+            try:
+                os.kill(candidate, 0)
+            except ProcessLookupError:
+                return candidate
+            except OSError:
+                continue
+        raise unittest.SkipTest("no unused pid available in the probe range")
+
+    def _live_pid(self) -> int:
+        """A pid that is provably running, cleaned up by the test."""
+        process = subprocess.Popen(["sleep", "60"])
+        self.addCleanup(process.wait)
+        self.addCleanup(process.kill)
+        return process.pid
 
     def test_deploy_whenBehind_shouldFastForwardAndLogTheMove(self):
         target = self.repo.push_upstream_commit("two\n", "c2")
@@ -253,6 +276,114 @@ class DeployMainScriptTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertEqual(self.repo.head(), new_upstream, "a stale lock must not block the deploy")
         self.assertIn("stealing a stale main-checkout lock", self.repo.logs())
+
+    def test_deploy_whenTheHolderWasKilled_shouldReclaimItWithoutWaitingForTheBound(self):
+        """Age alone would keep the timer out for the whole stale bound, so a killed
+        runner stopped deploys for 20 minutes — the window in which the runner
+        itself was logging `REPO LOCK: main checkout busy for 120s` on every run."""
+        if not os.path.isdir("/proc"):
+            self.skipTest("the pid check requires /proc, absent on macOS")
+        new_upstream = self.repo.push_upstream_commit("two\n", "c2")
+        self.repo.hold_lock(age_seconds=0, pid=self._unused_pid())
+
+        result = self.repo.run_script()
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(self.repo.head(), new_upstream,
+                         "a lock whose holder is gone must not block a deploy")
+        self.assertIn("its recorded holder is gone", self.repo.logs())
+
+    def test_deploy_whenTheHolderIsAlive_shouldNotReclaimItsLockEarly(self):
+        """The pid check must not become a way to steal a live holder's lock."""
+        if not os.path.isdir("/proc"):
+            self.skipTest("the pid check requires /proc, absent on macOS")
+        self.repo.push_upstream_commit("two\n", "c2")
+        before = self.repo.head()
+        self.repo.hold_lock(age_seconds=0, pid=self._live_pid())
+
+        result = self.repo.run_script()
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(self.repo.head(), before, "a live holder must keep its lock")
+        self.assertIn("locked by the runner or another deploy", self.repo.logs())
+
+    def test_deploy_whenTheLockRecordsNoPid_shouldNotReclaimItEarly(self):
+        """An unverifiable holder is not a dead one."""
+        self.repo.push_upstream_commit("two\n", "c2")
+        before = self.repo.head()
+        self.repo.hold_lock(age_seconds=0)
+
+        result = self.repo.run_script()
+
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(self.repo.head(), before)
+        self.assertIn("locked by the runner or another deploy", self.repo.logs())
+
+    def test_lockHolderPidIsGone_whenKillCannotSignalALiveProcess_shouldReportAlive(self):
+        """`kill -0` fails for a live process this user may not signal, so the pid
+        check must confirm against /proc before calling a holder gone. Otherwise a
+        deploy could steal a live runner's lock, which is the hazard the lock exists
+        to prevent.
+
+        Exercised directly rather than through the script, because the permission
+        case needs a process owned by another user."""
+        if not os.path.isdir("/proc"):
+            self.skipTest("the /proc fallback is Linux-only")
+        harness, env = self._pidCheckHarness(shadow_kill=True)
+        process = subprocess.Popen(["sleep", "60"])
+        self.addCleanup(process.wait)
+        self.addCleanup(process.kill)
+
+        # `kill` is stubbed to fail, standing in for a process this user cannot signal.
+        result = subprocess.run([str(harness), str(process.pid)], capture_output=True,
+                                text=True, env=env)
+
+        self.assertEqual(result.stdout.strip(), "alive",
+                         "a pid that still exists in /proc must not be called gone")
+
+    def test_lockHolderPidIsGone_whenTheProcessIsGoneFromProc_shouldReportGone(self):
+        if not os.path.isdir("/proc"):
+            self.skipTest("the /proc fallback is Linux-only")
+        harness, env = self._pidCheckHarness(shadow_kill=False)
+
+        result = subprocess.run([str(harness), str(self._unused_pid())],
+                                capture_output=True, text=True, env=env)
+
+        self.assertEqual(result.stdout.strip(), "gone")
+
+    def _pidCheckHarness(self, shadow_kill: bool) -> tuple[Path, dict]:
+        """A script that runs the real `lock_holder_pid_is_gone` against a fake lock.
+
+        The function is lifted from the installed script so the test cannot drift
+        from what ships; the extraction asserts it found the function rather than
+        silently testing an empty file.
+
+        With `shadow_kill`, `kill` is replaced by a function that always fails, so
+        the permission branch can be exercised without a second user. It is shadowed
+        by a shell function rather than a PATH stub because `kill` is a bash builtin:
+        a fake binary on PATH would never be reached and the harness would silently
+        test the opposite branch.
+        """
+        script = _SCRIPT.read_text()
+        start = script.index("lock_holder_pid_is_gone() {")
+        end = script.index("\n}\n", start) + len("\n}\n")
+        function = script[start:end]
+        self.assertIn("return 0", function, "extraction must capture the whole function")
+
+        harness_dir = Path(self._tmp) / "pid-harness"
+        harness_dir.mkdir(parents=True, exist_ok=True)
+        harness = harness_dir / "check.sh"
+        harness.write_text(
+            "#!/bin/bash\n"
+            f'REPO_LOCK="{harness_dir}/lock"\n'
+            'rm -rf "$REPO_LOCK"; mkdir -p "$REPO_LOCK"\n'
+            'printf "%s" "$1" > "$REPO_LOCK/pid"\n'
+            + ("kill() { return 1; }\n" if shadow_kill else "")
+            + f"{function}"
+            'if lock_holder_pid_is_gone; then echo gone; else echo alive; fi\n'
+        )
+        harness.chmod(0o755)
+        return harness, dict(os.environ)
 
     def test_deploy_whenStaleHolderWroteNoTimestamp_shouldStillReclaimIt(self):
         """The runner creates the lock with mkdir; a crash before it records its
