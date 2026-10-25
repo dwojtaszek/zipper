@@ -158,29 +158,43 @@ claim_repo_lock_for_removal() {
     return 0
 }
 
+# Create the lock directory and record this holder inside it. Returns non-zero
+# when the path is already taken.
+create_repo_lock() {
+    mkdir "$REPO_LOCK" 2>/dev/null || return 1
+    now_epoch > "$REPO_LOCK/created"
+    echo "$$" > "$REPO_LOCK/pid"
+    echo "$LOCK_TOKEN" > "$REPO_LOCK/owner"
+    HOLDS_LOCK=1
+    return 0
+}
+
 # Take the shared main-checkout lock, or report why not. Non-blocking on purpose:
 # waiting would hold this unit open behind a runner mutation, and the next tick
 # is a minute away.
 acquire_repo_lock() {
-    if mkdir "$REPO_LOCK" 2>/dev/null; then
-        now_epoch > "$REPO_LOCK/created"
-        echo "$$" > "$REPO_LOCK/pid"
-        echo "$LOCK_TOKEN" > "$REPO_LOCK/owner"
-        HOLDS_LOCK=1
+    if create_repo_lock; then
         return 0
+    fi
+    # The protocol is mkdir, so a path that is not a directory cannot belong to any
+    # holder — yet every later mkdir fails with EEXIST, which reads as "held", and
+    # the checkout then stays locked until the stale bound expires. Nothing can be
+    # holding it, so remove it at once instead of waiting 20 minutes. `-L` is tested
+    # as well as `-e`, because `-e` is false for a dangling symlink: without it the
+    # path would still read as held and only the age bound would clear it.
+    if { [ -e "$REPO_LOCK" ] || [ -L "$REPO_LOCK" ]; } && [ ! -d "$REPO_LOCK" ]; then
+        if rm -f "$REPO_LOCK" && create_repo_lock; then
+            log "WARN: removed a non-directory main-checkout lock path; the protocol requires a directory."
+            return 0
+        fi
+        return 1
     fi
     local identity
     identity="$(lock_identity)"
     if lock_holder_pid_is_gone; then
         if claim_repo_lock_for_removal "$identity"; then
             log "WARN: reclaiming the main-checkout lock; its recorded holder is gone."
-            if mkdir "$REPO_LOCK" 2>/dev/null; then
-                now_epoch > "$REPO_LOCK/created"
-                echo "$$" > "$REPO_LOCK/pid"
-                echo "$LOCK_TOKEN" > "$REPO_LOCK/owner"
-                HOLDS_LOCK=1
-                return 0
-            fi
+            create_repo_lock && return 0
         fi
         return 1
     fi
@@ -188,13 +202,7 @@ acquire_repo_lock() {
     if [ -n "$age" ] && [ "$age" -gt "$LOCK_STALE_SECONDS" ]; then
         if claim_repo_lock_for_removal "$identity"; then
             log "WARN: stealing a stale main-checkout lock (age ${age}s)."
-            if mkdir "$REPO_LOCK" 2>/dev/null; then
-                now_epoch > "$REPO_LOCK/created"
-                echo "$$" > "$REPO_LOCK/pid"
-                echo "$LOCK_TOKEN" > "$REPO_LOCK/owner"
-                HOLDS_LOCK=1
-                return 0
-            fi
+            create_repo_lock && return 0
         fi
     fi
     return 1
