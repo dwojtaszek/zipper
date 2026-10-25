@@ -835,7 +835,7 @@ internal static class ArchiveFixtureMutator
 
         var dataOffset = entry.DataOffset;
         var code = ArchiveTestMutationKind.StoredPayloadBitflip.ToCaseKey();
-        var contentSha256 = control.Entries.Count > 0 ? control.Entries[0].ContentSha256 : string.Empty;
+        var contentSha256 = control.Entries[entry.Ordinal].ContentSha256;
 
         return Patch(ArchiveTestMutationKind.StoredPayloadBitflip, before,
         [

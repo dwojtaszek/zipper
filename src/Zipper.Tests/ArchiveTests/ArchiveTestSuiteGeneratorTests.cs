@@ -15,6 +15,20 @@ public class ArchiveTestSuiteGeneratorTests : WorkingDirectoryTestBase
         await ArchiveTestSuiteGenerator.GenerateAsync(request, cancellationToken, afterStaging, beforeFixtureBuild, deadlineOverride);
 
     [Fact]
+    public void BuildExpectationFile_StoredPayloadBitflip_DeclaresCrcIntegrityProfile()
+    {
+        var definition = ArchiveTestCatalog.GetCase("stored-payload-bitflip");
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+
+        var testCase = ArchiveTestSuiteGenerator.BuildExpectationFile(artifact, definition);
+        var integrity = Assert.Single(testCase.Expectations, expectation => expectation.Operation == "integrity-check");
+
+        Assert.Equal("strict-integrity-v1", integrity.Profile);
+        Assert.Equal(["crc-mismatch-rejected", "integrity-fails"], integrity.AllowedOutcomes);
+        Assert.Equal("crc32", integrity.Capability);
+    }
+
+    [Fact]
     public async Task GenerateAsync_SmokeCases_PublishFlatPairsWithMatchingIds()
     {
         var request = ArchiveTestRequest.Create(

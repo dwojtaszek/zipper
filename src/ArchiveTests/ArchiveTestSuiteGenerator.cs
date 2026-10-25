@@ -400,7 +400,7 @@ internal static class ArchiveTestSuiteGenerator
             [
                 Expectation(ListOperation, StrictProfile, [ListSucceeds], [NoPartialWrites], ["open", ListOperation]),
                 Expectation(ReadEntryOperation, StrictProfile, ["read-entry-fails", "read-entry-returns-unverified-bytes"], [NoPartialWrites], ["open", ReadEntryOperation]),
-                Expectation(IntegrityCheckOperation, StrictProfile, ["crc-mismatch-rejected", "integrity-fails"], [NoPartialWrites], ["open", ReadEntryOperation, IntegrityCheckOperation], capability: "crc32"),
+                Expectation(IntegrityCheckOperation, "strict-integrity-v1", ["crc-mismatch-rejected", "integrity-fails"], [NoPartialWrites], ["open", ReadEntryOperation, IntegrityCheckOperation], capability: "crc32"),
                 Expectation(ExtractOperation, StrictProfile, ["extract-fails"], [NoPartialWrites], ["open", ReadEntryOperation, ExtractOperation]),
             ],
             // Local-header lies with an intact central directory: lenient central-based

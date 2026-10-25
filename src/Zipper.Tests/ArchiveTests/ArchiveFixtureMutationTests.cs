@@ -85,6 +85,9 @@ public class ArchiveFixtureMutationTests : WorkingDirectoryTestBase
         var mutation = mutated.Mutations[0];
         Assert.Equal(entry.DataOffset, mutation.Offset);
         Assert.Equal(control.ArchiveBytes[(int)entry.DataOffset] ^ 0x01, mutated.ArchiveBytes[(int)entry.DataOffset]);
+        Assert.Equal(
+            $"payload-byte-flip=bit0 data-offset={entry.DataOffset} original-content-sha256={control.Entries[0].ContentSha256}",
+            mutation.DeclaredValue);
 
         // Control payload != mutated payload:
         // .NET ZipArchive does not verify CRC when streaming stored content, so ReadEntryContent reads the corrupted payload.
@@ -114,6 +117,21 @@ public class ArchiveFixtureMutationTests : WorkingDirectoryTestBase
         var deflateControl = ArchiveFixtureBuilder.BuildControl("valid-deflate", 42, CancellationToken.None);
         Assert.Throws<InvalidOperationException>(() =>
             ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.StoredPayloadBitflip, deflateControl));
+    }
+
+    [Fact]
+    public void Apply_StoredPayloadBitflip_ZeroLengthStoredControl_ThrowsInvalidOperationException()
+    {
+        var definition = new ArchiveTestCaseDefinition(
+            "empty-stored-control", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [ArchiveTestCatalog.CompatibilitySuite],
+            Recipe: new ArchiveTestRecipe([ArchiveTestRecipeEntry.File("empty.txt", 0, "stored")]));
+        var control = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+
+        var error = Assert.Throws<InvalidOperationException>(
+            () => ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.StoredPayloadBitflip, control));
+
+        Assert.Contains("non-zero payload size", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]
