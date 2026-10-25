@@ -21,7 +21,25 @@ import shutil
 import tempfile
 import time
 
-MISSION_TIMEOUT = 2700
+# opencode emits no liveness output, so this bound is the only thing between a
+# silent hang and a wasted mission. 45 minutes was far too long: measured on the
+# host, one hang produced `Running mission` immediately followed by the kill 45
+# minutes later with zero progress lines in between, while the runner's whole
+# recovery budget for that issue was 116 minutes and the single worktree slot
+# stayed held. 15 minutes is long enough for a real mission to get going.
+#
+# What a cut preserves: the worktree and the runner's WIP checkpoint, so file work
+# survives and the next attempt continues from it. What it does NOT preserve: this
+# session's conversation context. Intake dispatches with `is_continue=False`
+# (runner.py), so the next attempt starts a *fresh* session -- only the babysit
+# path resumes, and it does so with `--session`, not agy's `--continue`. A cut
+# therefore costs the agent's context, not the files. The runner excludes a
+# WIP-only checkpoint from `work_done` so the slot goes to the next candidate
+# instead of ending the cycle.
+MISSION_TIMEOUT = 900
+_HUNG_KILL_MESSAGE = (
+    f"Error: Agent process hung and was forcefully killed after {MISSION_TIMEOUT // 60} minutes."
+)
 
 _CONTEXT_LENGTH_KEYWORDS = (
     "maximum context length",
@@ -354,7 +372,7 @@ def _invoke_opencode(cmd: list[str], abs_cwd: str) -> tuple[int, str, str]:
             env=_with_cwd_env(abs_cwd),
             start_new_session=True,
         )
-        # 45-minute hard timeout to prevent indefinite lockups
+        # Hard timeout to prevent indefinite lockups (see MISSION_TIMEOUT).
         stdout, stderr = p.communicate(timeout=MISSION_TIMEOUT)
         print(f"--- [opencode stdout] ---\n{stdout}")
         if stderr:
@@ -364,7 +382,10 @@ def _invoke_opencode(cmd: list[str], abs_cwd: str) -> tuple[int, str, str]:
             code = 1
         return code, stdout, stderr
     except subprocess.TimeoutExpired:
-        print("[opencode] CRITICAL: Agent process hung for over 45 minutes! Forcefully killing it.")
+        print(
+            f"[opencode] CRITICAL: Agent process hung for over "
+            f"{MISSION_TIMEOUT // 60} minutes! Forcefully killing it."
+        )
         if p:
             # Kill the whole process group: p.kill() alone leaves the CLI's
             # children (LSP servers, dotnet/MSBuild nodes) alive holding the
@@ -381,7 +402,7 @@ def _invoke_opencode(cmd: list[str], abs_cwd: str) -> tuple[int, str, str]:
             print(f"--- [opencode stdout (partial)] ---\n{stdout}")
             if stderr:
                 print(f"--- [opencode stderr (partial)] ---\n{stderr}")
-            return -1, stdout, "Error: Agent process hung and was forcefully killed after 45 minutes."
+            return -1, stdout, _HUNG_KILL_MESSAGE
         return -1, "", "Error: Timeout before process started."
     except Exception as e:
         return -1, "", str(e)

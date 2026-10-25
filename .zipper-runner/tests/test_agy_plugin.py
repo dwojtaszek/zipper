@@ -22,8 +22,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import runner  # noqa: E402
 
-# run_mission kills the process group after this many seconds.
-PLUGIN_KILL_SECONDS = 2700
+# run_mission kills the process group after this many seconds. Read it from the
+# plugin rather than repeating the number, so this test cannot keep passing
+# against a stale duplicate of the value it is meant to guard.
+PLUGIN_KILL_SECONDS = plugin.MISSION_TIMEOUT
 
 
 def _seconds(value: str) -> int:
@@ -49,6 +51,8 @@ class AgyMissionTimeoutTests(unittest.TestCase):
             args = json.loads(out.splitlines()[0])
             self.assertIn("--print-timeout", args)
             stated = _seconds(args[args.index("--print-timeout") + 1])
+            self.assertEqual(stated, plugin.PRINT_TIMEOUT_SECONDS,
+                             "the flag must carry PRINT_TIMEOUT_SECONDS, not a loose literal")
             self.assertLess(stated, PLUGIN_KILL_SECONDS)
             # Not so short that the agent is cut off while it still has budget.
             self.assertGreaterEqual(stated, PLUGIN_KILL_SECONDS - 600)

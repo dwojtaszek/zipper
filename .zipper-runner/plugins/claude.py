@@ -23,6 +23,13 @@ import subprocess
 import shutil
 import tempfile
 
+# claude writes to a temp file and is read only after exit, so the plugin sees no
+# output until the process ends: there is no liveness signal to tell a hang from
+# slow work, and the bound is the only guard. 15 minutes matches the other silent
+# agents (opencode, hermes). See opencode.py for the measurement behind it.
+MISSION_TIMEOUT = 900
+_HUNG_KILL_MESSAGE = f"Mission timed out after {MISSION_TIMEOUT // 60} minutes"
+
 
 def check_installation() -> bool:
     """Returns True if the Claude Code CLI is installed and on PATH."""
@@ -119,14 +126,14 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
                 env=env,
                 stdout=log_f,
                 stderr=subprocess.STDOUT,
-                timeout=2400,
+                timeout=MISSION_TIMEOUT,
             )
         with open(tmp_path, "r") as f:
             output = f.read()
         print(f"--- [claude output] ---\n{output}")
         return result.returncode, output, ""
     except subprocess.TimeoutExpired:
-        print("[claude] Mission timed out after 40 minutes")
+        print(f"[claude] {_HUNG_KILL_MESSAGE}")
         return -1, "", "Timeout"
     except Exception as e:
         return -1, "", str(e)
