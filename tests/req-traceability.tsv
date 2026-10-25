@@ -67,7 +67,8 @@ REQ-027	unit	CliModuleSetTests.Parse_AllBooleanFlags_SetCorrectly	--include-load
 REQ-027	unit	ZipArchiveServiceTests.CreateArchiveAsync_WithLoadFileIncluded_IncludesLoadFileInArchive	--include-load-file embeds Load File in Archive
 REQ-028	unit	ZipArchiveServiceTests.CreateArchiveAsync_WithLoadFileIncluded_IncludesLoadFileInArchive	Load File included in Archive root
 REQ-029	unit	GenerationModeTests.Main_StandardModeWithIncludeLoadFile_EmbedsLoadFileInArchive	No separate Load File on disk
-REQ-030	e2e	test-compute-version.sh	Semver MAJOR.MINOR.PATCH format via version computation
+REQ-030	e2e	test-build-version.sh	Semver MAJOR.MINOR.PATCH format verified via compiled metadata and CLI
+REQ-030	e2e	ci/test_release.py	Semver MAJOR.MINOR.PATCH format via release allocation and recovery
 REQ-031	exemption	-	CI auto-increment patch on PR merge (release process)
 REQ-032	exemption	-	Manual git tag version control (release process)
 REQ-033	exemption	-	CI embeds dev/tag InformationalVersion (CI build process)

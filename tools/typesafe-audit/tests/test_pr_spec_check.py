@@ -242,7 +242,7 @@ class CollectorTests(unittest.TestCase):
         self.assertIn("REQ-007", reqs)
         self.assertIn("REQ-010", reqs)
 
-        files_e2e = [{"path": "tests/test-compute-version.sh", "patch": "+ # clean change"}]
+        files_e2e = [{"path": "tests/test-build-version.sh", "patch": "+ # clean change"}]
         reqs_e2e = self.collect.affected_req_ids(
             files_e2e, pr_text=clean_pr_text, issue_texts=clean_issue_texts, repo_root=REPO_ROOT
         )
