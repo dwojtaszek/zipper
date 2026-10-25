@@ -661,6 +661,12 @@ internal static class ArchiveTestCatalog
             ArchiveTestMutationKind.DeclaredSizeOversized,
             controlCaseKey: DeflateControlCaseKey,
             suites: [MalformedSuite, SecuritySuite]),
+        // Ticket #1281 under-declares both sizes in both headers while keeping the
+        // complete DEFLATE payload intact. It is malformed and bounded-resource scoped.
+        ["declared-size-undersized"] = MutatedDefinition(
+            ArchiveTestMutationKind.DeclaredSizeUndersized,
+            controlCaseKey: DeflateControlCaseKey,
+            suites: [MalformedSuite, SecuritySuite]),
         // Ticket #843 combined chains: the audited field-level mutations composed in a
         // finite, explicit list; the chain order is the recipe, each mutation consumes
         // the previous result.
@@ -807,9 +813,9 @@ internal static class ArchiveTestCatalog
         ArchiveTestRecipeEntry.File("stored-block.txt", 65_536, "deflate"),
     ]);
 
-    // The deflate control for the declared-size-oversized, orphan-local-header,
-    // and deflate-invalid-btype mutations: one deflated entry whose compressed
-    // bytes are far smaller than its honest uncompressed size.
+    // The deflate control for the declared-size-oversized, declared-size-undersized,
+    // orphan-local-header, and deflate-invalid-btype mutations: one deflated entry
+    // whose compressed bytes are far smaller than its honest uncompressed size.
     private static ArchiveTestRecipe DeflateControlRecipe => new(
     [
         ArchiveTestRecipeEntry.File("doc.txt", 400, "deflate"),

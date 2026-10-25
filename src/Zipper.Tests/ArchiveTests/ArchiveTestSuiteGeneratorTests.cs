@@ -78,6 +78,41 @@ public class ArchiveTestSuiteGeneratorTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void BuildExpectationFile_DeclaredSizeUndersized_DeclaresBoundedReaderVariance()
+    {
+        var definition = ArchiveTestCatalog.GetCase("declared-size-undersized");
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+
+        var testCase = ArchiveTestSuiteGenerator.BuildExpectationFile(artifact, definition, 42);
+
+        Assert.Equal("malformed", testCase.Classification);
+        Assert.Equal(
+            ["list-succeeds", "list-fails"],
+            testCase.Expectations.Single(expectation => expectation.Operation == "list").AllowedOutcomes);
+        Assert.Equal(
+            ["read-entry-content-matches", "read-entry-fails", "read-entry-returns-unverified-bytes"],
+            testCase.Expectations.Single(expectation => expectation.Operation == "read-entry").AllowedOutcomes);
+        Assert.Equal(
+            ["crc-mismatch-rejected", "integrity-fails", "integrity-unchecked", "integrity-passes"],
+            testCase.Expectations.Single(expectation => expectation.Operation == "integrity-check").AllowedOutcomes);
+        Assert.Equal(
+            ["extract-fails", "extract-succeeds"],
+            testCase.Expectations.Single(expectation => expectation.Operation == "extract").AllowedOutcomes);
+        Assert.Contains(
+            "declared-sizes-are-lies",
+            testCase.Expectations.Single(expectation => expectation.Operation == "list").Invariants);
+        Assert.All(testCase.Expectations, expectation =>
+        {
+            Assert.Contains("no-partial-writes", expectation.Invariants);
+            if (expectation.Operation is "list" or "read-entry" or "integrity-check" or "extract")
+            {
+                Assert.Contains("no-allocation-from-declared-sizes", expectation.Invariants);
+            }
+        });
+        Assert.Empty(ArchiveTestCaseSemantics.Validate(testCase));
+    }
+
+    [Fact]
     public async Task GenerateAsync_SmokeCases_PublishFlatPairsWithMatchingIds()
     {
         var request = ArchiveTestRequest.Create(

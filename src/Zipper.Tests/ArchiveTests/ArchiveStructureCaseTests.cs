@@ -413,9 +413,10 @@ public class ArchiveStructureCaseTests : WorkingDirectoryTestBase
     {
         var malformed = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.MalformedSuite);
 
-        Assert.Equal(55, malformed.Count);
+        Assert.Equal(56, malformed.Count);
         Assert.Contains(malformed, c => c.CaseKey == "unsupported-method");
         Assert.Contains(malformed, c => c.CaseKey == "unsupported-method-deflate64");
+        Assert.Contains(malformed, c => c.CaseKey == "declared-size-undersized");
         Assert.Contains(malformed, c => c.CaseKey == "zip64-extra-without-sentinels");
         Assert.Contains(malformed, c => c.CaseKey == "zip64-locator-ambiguity");
         Assert.Contains(malformed, c => c.CaseKey == "orphan-local-header");
@@ -1053,7 +1054,7 @@ public class ArchiveStructureCaseTests : WorkingDirectoryTestBase
     public async Task GenerateAsync_AllSuites_PublishesUniqueValidatedPairsForEachCase()
     {
         var all = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.AllSuites);
-        Assert.Equal(111, all.Count);
+        Assert.Equal(112, all.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(all.Select(c => c.CaseKey).ToList(), 42, Path.Combine(TempDir, "all")),

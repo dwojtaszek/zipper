@@ -53,10 +53,11 @@ public class ArchiveTestSuiteContractTests
     /// <summary>The unsupported-feature cases (ticket #840, plus Deflate64 #877) the contract houses in security.</summary>
     private static readonly string[] UnsupportedFeatureSecurityCaseKeys = ["unsupported-method", "unsupported-method-deflate64"];
 
-    /// <summary>The bounded resource cases (ticket #843) the contract houses in security.</summary>
+    /// <summary>The bounded resource cases (tickets #843 and #1281) the contract houses in security.</summary>
     private static readonly string[] BoundedResourceSecurityCaseKeys =
     [
         "declared-size-oversized",
+        "declared-size-undersized",
         "high-ratio-bounded",
         "many-small-entries",
         "nested-archives-depth-two",
@@ -223,9 +224,10 @@ public class ArchiveTestSuiteContractTests
         // unsupported-method-deflate64, the #933 split-archive declarations,
         // and the #935 mixed one-unsupported member, all policy-sensitive,
         // housed in malformed since ticket #840;
-        // declared-size-oversized is already malformed-classified and arrives
-        // via the derived set; the #1279 Zip64 source-disagreement case is also
-        // policy-sensitive and housed here because readers may reject it).
+        // declared-size-oversized and declared-size-undersized are already
+        // malformed-classified and arrive via the derived set; the #1279 Zip64
+        // source-disagreement case is also policy-sensitive and housed here because
+        // readers may reject it).
         var expected = AllKeys()
             .Where(key => ArchiveTestCatalog.GetCase(key).Classification == "malformed")
             .Append("unsupported-method")
@@ -268,8 +270,8 @@ public class ArchiveTestSuiteContractTests
         // +1 for the #934 clean Unicode Path control, +1 for the #935 nested budget boundary,
         // +2 for the #935 mixed one-bad-member cases, +1 for #888, +1 for #870,
         // +2 for #878, +3 for the #887 legacy-codec encoding controls, +1 for #1276,
-        // +2 for #1277, +1 for #1279, +1 for #1280): a case
+        // +2 for #1277, +1 for #1279, +1 for #1280, +1 for #1281): a case
         // dropped from the catalogue or unlisted from every suite fails here.
-        Assert.Equal(111, AllKeys().Count);
+        Assert.Equal(112, AllKeys().Count);
     }
 }

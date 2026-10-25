@@ -276,6 +276,30 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void ReadOperations_DeclaredSizeUndersized_ReturnsUnverifiedBytesAtDeclaredCompressedSizeBoundary()
+    {
+        var definition = ArchiveTestCatalog.GetCase("declared-size-undersized");
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+        var testCase = ArchiveTestSuiteGenerator.BuildExpectationFile(artifact, definition, 42);
+
+        using (var archive = new ZipArchive(new MemoryStream(artifact.ArchiveBytes), ZipArchiveMode.Read))
+        using (var stream = Assert.Single(archive.Entries).Open())
+        using (var copy = new MemoryStream())
+        {
+            stream.CopyTo(copy);
+            var returnedContent = copy.ToArray();
+            Assert.InRange(returnedContent.Length, 1, artifact.Entries[0].Content.Length - 1);
+            Assert.Equal(
+                artifact.Entries[0].Content.AsSpan(0, returnedContent.Length).ToArray(),
+                returnedContent);
+        }
+
+        Assert.Equal("list-succeeds", NormalizeList(artifact.ArchiveBytes, testCase));
+        Assert.Equal("read-entry-returns-unverified-bytes", NormalizeReadEntry(artifact.ArchiveBytes, testCase));
+        Assert.Equal("integrity-fails", NormalizeIntegrityCheck(artifact.ArchiveBytes, testCase));
+    }
+
+    [Fact]
     public void ReadOperations_Zip64LocatorAmbiguity_UsesLengthAnchoredDirectory()
     {
         var definition = ArchiveTestCatalog.GetCase("zip64-locator-ambiguity");

@@ -233,3 +233,11 @@
 - **telemetry**: host=antigravity mode=branch specialists=4 bundle=~5500c
 - **lessons**: Statistical distribution tests benefit from checking distinct count to ensure constant mutants (even when in lower half or bounded) are rejected.
 - **suppressions**: none
+
+### 2026-10-26 droid:branch:feat/ISSUE-1281-declared-size-undersized
+
+- **findings**: 0 ACTION, 2 INFO across 5 specialists (correctness, testing, maintainability, security, adversarial) — .NET reader test did not assert a non-empty partial prefix; bounded-resource suite comment named only #843.
+- **outcome**: accepted and fixed both INFO findings; follow-up correctness review clean. Full fixture suite and validation gates passed.
+- **telemetry**: host=droid mode=branch specialists=5+1fast bundle=15-file/243-line diff
+- **lessons**: A normalized `read-entry-returns-unverified-bytes` outcome proves only a hash mismatch; assert returned byte length/content when the test name claims a partial boundary read.
+- **suppressions**: none
