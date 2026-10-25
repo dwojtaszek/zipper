@@ -85,6 +85,7 @@ internal static class ArchiveFixtureMutator
             ArchiveTestMutationKind.Utf8FlagCp437Name => SetUtf8FlagOnCp437Name(control, before),
             ArchiveTestMutationKind.UnicodePathCrcMismatch => MismatchUnicodePathCrc(control, before),
             ArchiveTestMutationKind.UnicodePathNameDivergence => DivergeUnicodePathName(control, before),
+            ArchiveTestMutationKind.StoredPayloadBitflip => FlipStoredPayloadByte(control, before),
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown Archive Test mutation kind."),
         };
     }
@@ -810,6 +811,40 @@ internal static class ArchiveFixtureMutator
                 after[centralCrcOffset] ^= 0x01;
             }
         });
+    }
+
+    /// <summary>
+    /// Flips the low bit of entry 0's stored payload byte while headers, CRC-32, sizes,
+    /// and central directory stay intact: decoders and integrity checks detect the corruption
+    /// through the recorded CRC-32 and content hash (ticket #1276).
+    /// </summary>
+    private static MutatedArchiveFixture FlipStoredPayloadByte(ArchiveFixtureArtifact control, byte[] before)
+    {
+        if (control.Layout.Entries.Count == 0 || control.Layout.Entries[0].Method != ArchiveTestCodec.Stored)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test mutation '{ArchiveTestMutationKind.StoredPayloadBitflip.ToCaseKey()}': the control's entry 0 must be a Stored entry.");
+        }
+
+        var entry = control.Layout.Entries[0];
+        if (entry.CompressedSize == 0)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test mutation '{ArchiveTestMutationKind.StoredPayloadBitflip.ToCaseKey()}': the control's entry 0 must have non-zero payload size.");
+        }
+
+        var dataOffset = entry.DataOffset;
+        var code = ArchiveTestMutationKind.StoredPayloadBitflip.ToCaseKey();
+        var contentSha256 = control.Entries.Count > 0 ? control.Entries[0].ContentSha256 : string.Empty;
+
+        return Patch(ArchiveTestMutationKind.StoredPayloadBitflip, before,
+        [
+            new MutationSpec(
+                code, "file-data", dataOffset,
+                "Flips bit 0 of the first entry's stored payload byte while headers, CRC-32, sizes, and central directory stay intact; decoders and integrity checks detect the corruption through the recorded CRC-32 and content hash.",
+                entry.Ordinal, 1, 1,
+                DeclaredValue: $"payload-byte-flip=bit0 data-offset={dataOffset} original-content-sha256={contentSha256}"),
+        ], after => after[dataOffset] ^= 0x01);
     }
 
     /// <summary>
@@ -1664,6 +1699,7 @@ internal enum ArchiveTestMutationKind
     UnicodePathNameDivergence,
     MixedMethodsOneCorruptMember,
     MixedMethodsOneUnsupportedMember,
+    StoredPayloadBitflip,
 }
 
 internal static class ArchiveTestMutationKindExtensions
@@ -1721,6 +1757,7 @@ internal static class ArchiveTestMutationKindExtensions
         ArchiveTestMutationKind.UnicodePathNameDivergence => "unicode-path-name-divergence",
         ArchiveTestMutationKind.MixedMethodsOneCorruptMember => "mixed-methods-one-corrupt-member",
         ArchiveTestMutationKind.MixedMethodsOneUnsupportedMember => "mixed-methods-one-unsupported-member",
+        ArchiveTestMutationKind.StoredPayloadBitflip => "stored-payload-bitflip",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown Archive Test mutation kind."),
     };
 }

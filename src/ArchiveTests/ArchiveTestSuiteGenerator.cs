@@ -393,6 +393,16 @@ internal static class ArchiveTestSuiteGenerator
                 Expectation(IntegrityCheckOperation, "strict-integrity-v1", ["crc-mismatch-rejected", "crc-mismatch-unchecked"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, IntegrityCheckOperation], capability: "crc32"),
                 Expectation(ExtractOperation, StrictProfile, ["extract-succeeds", "extract-fails"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, ExtractOperation]),
             ],
+            // Stored payload bitflip (ticket #1276): framing and directory stay intact,
+            // but one byte of entry 0's stored payload is corrupted while all declarations
+            // (CRC-32, sizes, headers) remain truthful to the original control.
+            ArchiveTestMutationKind.StoredPayloadBitflip =>
+            [
+                Expectation(ListOperation, StrictProfile, [ListSucceeds], [NoPartialWrites], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-fails", "read-entry-returns-unverified-bytes"], [NoPartialWrites], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["crc-mismatch-rejected", "integrity-fails"], [NoPartialWrites], ["open", ReadEntryOperation, IntegrityCheckOperation], capability: "crc32"),
+                Expectation(ExtractOperation, StrictProfile, ["extract-fails"], [NoPartialWrites], ["open", ReadEntryOperation, ExtractOperation]),
+            ],
             // Local-header lies with an intact central directory: lenient central-based
             // readers succeed; strict local-header validators reject (ticket #840).
             // The orphan hidden entry (ticket #869) keeps the visible central directory
