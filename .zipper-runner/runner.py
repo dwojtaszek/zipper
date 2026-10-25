@@ -3417,6 +3417,29 @@ def _reconcile_active_worktree(wt_path: str, branch: str, pr_number: int,
     return local_code, local_head, 1
 
 
+def _worktrees_we_may_drive(active_worktrees):
+    """Yield each worktree this run may touch, holding its mission lock while it does.
+
+    The lock is held for as long as the consumer's loop body runs for that worktree,
+    and released when the body finishes. Holding it around the whole body, not just
+    around a mission, is what makes it safe to drop the pass lock for a mission: the
+    body is not read-only, and `_reconcile_active_worktree` runs `git reset --hard`
+    and `git rebase` while the merged/closed path removes the worktree outright. With
+    the pass lock down, a second firing runs its pass concurrently, so without this
+    it could reset or delete a worktree another run's agent is writing.
+
+    A worktree another run is driving is skipped rather than waited on: a mission
+    runs for tens of minutes and this pass's caller retries within minutes.
+    """
+    for wt_path in active_worktrees:
+        with _worktree_mission_lock(wt_path) as may_drive:
+            if not may_drive:
+                print(f"[babysit] {os.path.basename(wt_path)} is being driven by another "
+                      f"run; skipping it this pass.")
+                continue
+            yield wt_path
+
+
 def babysit_active_worktrees():
     if not os.path.exists(WORKTREES_BASE):
         return 0
@@ -3429,7 +3452,7 @@ def babysit_active_worktrees():
 
     print(f"Found {len(active_worktrees)} active worktrees: {active_worktrees}")
 
-    for wt_path in active_worktrees:
+    for wt_path in _worktrees_we_may_drive(active_worktrees):
         folder_name = os.path.basename(wt_path)
         issue_number = folder_name.replace("issue-", "")
 
@@ -4112,6 +4135,15 @@ def babysit_active_worktrees():
 
         wait_for_tokens()
         _babysit_with_fallback(prompt, wt_path, branch, issue_number, pr_number, before_review_output=before_review_out)
+
+    # The orphan and Dependabot sweeps are the bounded work this lock exists to
+    # serialize. If a mission's drop-for-the-stretch handed the lock to another
+    # firing, that firing is running these same sweeps; running them here too would
+    # put two passes on the same PRs with neither holding the lock.
+    if not BABYSIT_LOCK.held:
+        print("[babysit] Another firing took the pass lock during a mission; "
+              "skipping the orphan and Dependabot sweeps this pass.")
+        return _active_worktree_count()
 
     babysit_orphaned_issue_prs()
     babysit_dependabot_prs()
@@ -5315,8 +5347,16 @@ def _heartbeat_path(kind: str = "runner") -> str:
     Per-lock, not global: a babysit run no longer holds the intake lock, so a
     shared heartbeat would let one kind's reclaim logic judge the other kind's
     holder and kill a healthy process.
+
+    The kind is lowercased here rather than at every call site. The writers pass
+    lowercase ("runner", "babysit") and `_acquire_lock` passes the display form
+    ("Runner", "Babysit"), so without this the watchdog looked for
+    `Babysit-heartbeat.json` while the writer created `babysit-heartbeat.json` --
+    no heartbeat was ever found, `_reclaim_stale_lock` failed closed on every lock,
+    and a wedged holder could not be reclaimed at all. Normalizing in the one place
+    that builds the path is what keeps the two sides from drifting apart again.
     """
-    return os.path.join(STATE_DIR, f"{kind}-heartbeat.json")
+    return os.path.join(STATE_DIR, f"{kind.lower()}-heartbeat.json")
 
 
 def _write_heartbeat(kind: str = "runner") -> None:
@@ -5422,6 +5462,10 @@ def _worktree_mission_lock(wt_path: str):
     holder's process group, which would kill a whole intake run for a worktree it
     is merely borrowing.
 
+    This is also where a babysit pass lets go of the babysit lock: a mission is the
+    unbounded part of a pass, and the pass lock only has to serialize the bounded
+    part. See `_BabysitLock`.
+
     Yields True when this process may drive the worktree, False when another process
     already is.
     """
@@ -5441,7 +5485,13 @@ def _worktree_mission_lock(wt_path: str):
         _write_worktree_mission_lock_metadata(lock_file)
         _worktree_mission_locks[path] = lock_file
         try:
-            yield True
+            # The worktree is ours for the duration, so the babysit pass lock is not
+            # needed for it: dropping it here is what lets a dedicated babysit firing
+            # run while this run's mission is in flight. Taken in this order --
+            # worktree lock first, pass lock dropped second -- so the worktree is
+            # never driven with neither lock held.
+            with BABYSIT_LOCK.released():
+                yield True
         finally:
             _worktree_mission_locks.pop(path, None)
     finally:
@@ -5511,6 +5561,71 @@ def _release_lock(lock_file) -> None:
         pass
 
 
+class _BabysitLock:
+    """The babysit lock, droppable for the length of an agent mission.
+
+    A babysit pass is not bounded work: it dispatches agent missions, and a mission
+    runs for tens of minutes (droid's bound is 45). Holding this lock across one
+    starves the 5-minute babysit timer for the whole mission, so its firings exit at
+    the lock having done nothing -- measured on the host at 23 of 24 firings over two
+    hours, the last productive one two hours before the measurement. Splitting the
+    lock away from the intake lock did not fix that: it moved the starvation from
+    `runner.lock` to this one, because the pass itself runs the mission.
+
+    The mission does not need this lock. `_worktree_mission_lock` already stops two
+    runs driving one worktree, and it is what the pass holds while a mission runs.
+    So this lock is dropped for that stretch and taken again afterwards, which keeps
+    the pass bookkeeping serialized without starving the timer.
+
+    Dropping it is safe in the same way: the only work that happens while it is down
+    is a mission, which the worktree lock covers. Whatever else the pass does -- the
+    orphan and Dependabot sweeps, state writes, merges -- happens with it held.
+    """
+
+    def __init__(self, path: str, timeout_sec: int):
+        self._path = path
+        self._timeout = timeout_sec
+        self._handle = None
+
+    @property
+    def held(self) -> bool:
+        return self._handle is not None
+
+    def acquire(self) -> bool:
+        """Take the lock, or report that someone else has it. Already-held is a success."""
+        if self._handle is not None:
+            return True
+        self._handle = _acquire_lock(self._path, self._timeout, "Babysit")
+        return self._handle is not None
+
+    def release(self) -> None:
+        handle, self._handle = self._handle, None
+        _release_lock(handle)
+
+    @contextlib.contextmanager
+    def released(self):
+        """Drop the lock for a stretch, then take it again if it is still free.
+
+        Losing it is not an error: another babysit firing taking it while this run
+        is mid-mission is exactly the outcome this exists to allow. The caller's
+        worktree lock is still held across the stretch, so nothing that needs
+        exclusion is left unguarded.
+        """
+        if not self.held:
+            yield
+            return
+        self.release()
+        try:
+            yield
+        finally:
+            if not self.acquire():
+                print("[babysit] Another babysit holds the lock after the mission; "
+                      "finishing this pass without it.")
+
+
+BABYSIT_LOCK = _BabysitLock(BABYSIT_LOCK_PATH, BABYSIT_LOCK_TIMEOUT)
+
+
 # Both intake prompts carry this. Measured on the host: agy hands a long command
 # (a test suite, a CI wait) to a background task, its turn then has nothing to do,
 # and it idles out the entire `--print-timeout` before returning partial output —
@@ -5537,14 +5652,16 @@ def main():
         # A babysit firing does not pick up new issues, so it must not contend with
         # the intake lock: that lock is held for a whole agent mission, which is why
         # most babysit firings used to exit having done nothing.
-        lock_file = _acquire_lock(BABYSIT_LOCK_PATH, BABYSIT_LOCK_TIMEOUT, "Babysit")
+        if not BABYSIT_LOCK.acquire():
+            print("Another instance of the runner is active. Exiting.")
+            sys.exit(0)
+        lock_file = None
     else:
         lock_file = _acquire_lock(
             LOCK_FILE_PATH, int(os.environ.get("RUNNER_LOCK_TIMEOUT", "120")), "Runner")
-
-    if lock_file is None:
-        print("Another instance of the runner is active. Exiting.")
-        sys.exit(0)
+        if lock_file is None:
+            print("Another instance of the runner is active. Exiting.")
+            sys.exit(0)
 
     _write_heartbeat("babysit" if BABYSIT_ONLY else "runner")
     _prune_stale_state_files()
@@ -5564,20 +5681,19 @@ def main():
         try:
             babysit_active_worktrees()
         finally:
-            _release_lock(lock_file)
+            BABYSIT_LOCK.release()
     else:
         # An intake run also babysits, but a dedicated babysit firing may hold the
         # lock right now. Skipping is correct and costs nothing: the timer retries
         # in minutes, and the intake run's remaining job is the mission, not this.
-        babysit_lock = _acquire_lock(BABYSIT_LOCK_PATH, BABYSIT_LOCK_TIMEOUT, "Babysit")
-        if babysit_lock is None:
-            print("Babysit pass skipped: another babysit is active.")
-        else:
+        if BABYSIT_LOCK.acquire():
             _write_heartbeat("babysit")
             try:
                 babysit_active_worktrees()
             finally:
-                _release_lock(babysit_lock)
+                BABYSIT_LOCK.release()
+        else:
+            print("Babysit pass skipped: another babysit is active.")
 
     # Recalculate after babysit — merged/closed PRs may have been cleaned up
     active_count = _active_worktree_count()
