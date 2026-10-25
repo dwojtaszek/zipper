@@ -136,6 +136,10 @@ jobs:
               MUTATE_ARGS+=(--mutate "$item")
             fi
           done
+          if [ "${#MUTATE_ARGS[@]}" -eq 0 ]; then
+            echo "::error::No mutation patterns resolved from scope: '$SCOPE'"
+            exit 2
+          fi
           mkdir -p results/mutation
           STRYKER_THRESHOLDS=()
           if [ "$BREAK_AT" -gt 60 ] 2>/dev/null; then

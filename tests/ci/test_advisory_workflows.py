@@ -352,6 +352,19 @@ class AdvisoryWorkflowExitClassificationTests(unittest.TestCase):
             self.assertIn("--threshold-low 85", args_text)
             self.assertIn("--threshold-high 85", args_text)
 
+        with tempfile.TemporaryDirectory() as td:
+            proc = self._run_stryker_step(
+                script,
+                td,
+                dotnet_rc=0,
+                scope=" ,  ,  src/ , ",
+                record_dotnet_args=True,
+            )
+            self.assertEqual(proc.returncode, 2, f"Empty scope must exit with code 2: {proc.stdout}\n{proc.stderr}")
+            self.assertIn("No mutation patterns resolved from scope", proc.stdout + proc.stderr)
+            args_file = os.path.join(td, "dotnet_args.txt")
+            self.assertFalse(os.path.exists(args_file), "dotnet should not be invoked when scope produces no patterns")
+
     @unittest.skipIf(os.name == "nt" or shutil.which("bash") is None, "POSIX bash execution boundary")
     def test_issue_triage_step_exit_classification_under_bash_e(self):
         """Issue triage step must handle exit codes 0, 2, and 3 correctly under bash -eo pipefail."""
