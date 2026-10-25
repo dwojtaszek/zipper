@@ -100,7 +100,12 @@ jobs:
   # and gives it its own checkout without the .NET build in the way.
   runner-tests:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 5
+    # This job runs two suites (.zipper-runner/tests + tests/ci) and macOS is ~3x
+    # slower than Ubuntu for both. Measured macOS totals span 123-250s, and one run
+    # did 303s of work before being cancelled at a 300s wall with every step green:
+    # a slow shared runner then fails a required check and blocks the PR. 12 minutes
+    # is ~2.4x the worst observed total, and still catches a genuinely hung suite.
+    timeout-minutes: 12
     strategy:
       fail-fast: false
       matrix:
