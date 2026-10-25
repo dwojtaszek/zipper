@@ -653,13 +653,14 @@ public class ArchivePathPolicyCaseTests : WorkingDirectoryTestBase
         // #884 bidi override case, the #889 zero-width collision case, the two
         // #899 method/data disagreement cases, the #900 high-ratio BZip2
         // case, the two #933 split-archive declaration cases, and the #935
-        // mixed one-unsupported-member case: every member publishes a safe
+        // mixed one-unsupported-member case, plus the #1279 Zip64 size-source
+        // differential: every member publishes a safe
         // Fixture ID pair. The #870 EOCD parser differential and the two #878
         // ADLS Gen2 segment-depth cases are also included.
         var securityKeys = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.SecuritySuite)
             .Select(c => c.CaseKey)
             .ToList();
-        Assert.Equal(40, securityKeys.Count);
+        Assert.Equal(41, securityKeys.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(securityKeys, 42, Path.Combine(TempDir, "security")),

@@ -1,0 +1,13 @@
+{
+  "adapter": "python-zipfile",
+  "adapterVersion": "cpython 3.14.8",
+  "directoryProblems": [
+    "missing prerequisite: pinned Ajv CLI not restored at /home/dom/repos/zipper/.worktrees/issue-1279/tests/archive-tests/node_modules/ajv-cli/dist/index.js (run `npm ci --ignore-scripts --prefix tests/archive-tests` once; verification never downloads, so a missing restore is a failure, not a skipped check)"
+  ],
+  "fixtureDirectory": "/home/dom/repos/zipper/.worktrees/issue-1279/.verify-check-ISSUE1279",
+  "fixtures": [],
+  "platforms": [
+    "linux"
+  ],
+  "schema": "/home/dom/repos/zipper/.worktrees/issue-1279/tests/fixtures/archive-test-case.schema.json"
+}

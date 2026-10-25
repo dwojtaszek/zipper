@@ -1,0 +1,146 @@
+{
+  "adapter": "python-zipfile",
+  "adapterVersion": "cpython 3.14.8",
+  "directoryProblems": [],
+  "fixtureDirectory": "/home/dom/repos/zipper/.worktrees/issue-1279/.verify-check-ISSUE1279-preserved-offset",
+  "fixtures": [
+    {
+      "adapter": "python-zipfile",
+      "adapterVersion": "cpython 3.14.8",
+      "bytesRead": 0,
+      "caseKey": "zip64-extra-without-sentinels",
+      "failure": null,
+      "fixtureId": "atc-a24748212db308afa5c96c8207e86248663186bb0c082dead660eefd14ef2145",
+      "operations": [
+        {
+          "allowedOutcomes": [
+            "list-fails",
+            "list-succeeds"
+          ],
+          "details": {
+            "declaredEntryCount": 1,
+            "entryCount": 1
+          },
+          "failureStage": null,
+          "invariantsChecked": [
+            "declared-sizes-are-lies",
+            "metadata-sources-disagree",
+            "no-allocation-from-declared-sizes",
+            "no-partial-writes"
+          ],
+          "normalizedOutcome": "list-succeeds",
+          "operation": "list",
+          "status": "pass"
+        },
+        {
+          "allowedOutcomes": [
+            "read-entry-content-matches",
+            "read-entry-fails",
+            "read-entry-returns-unverified-bytes"
+          ],
+          "details": {
+            "bytesRead": 0,
+            "entriesRead": 0,
+            "hashMatches": 0
+          },
+          "failureStage": "per-entry",
+          "invariantsChecked": [
+            "declared-sizes-are-lies",
+            "metadata-sources-disagree",
+            "no-allocation-from-declared-sizes",
+            "no-partial-writes"
+          ],
+          "normalizedOutcome": "read-entry-fails",
+          "operation": "read-entry",
+          "status": "pass"
+        },
+        {
+          "allowedOutcomes": [
+            "integrity-fails",
+            "integrity-passes",
+            "integrity-unchecked"
+          ],
+          "details": {
+            "bytesRead": 0,
+            "entriesRead": 0,
+            "hashMatches": 0
+          },
+          "failureStage": "per-entry",
+          "invariantsChecked": [
+            "declared-sizes-are-lies",
+            "metadata-sources-disagree",
+            "no-allocation-from-declared-sizes",
+            "no-partial-writes"
+          ],
+          "normalizedOutcome": "integrity-fails",
+          "operation": "integrity-check",
+          "status": "pass"
+        },
+        {
+          "details": {},
+          "failureStage": null,
+          "invariantsChecked": [
+            "declared-sizes-are-lies",
+            "metadata-sources-disagree",
+            "no-allocation-from-declared-sizes",
+            "no-partial-writes"
+          ],
+          "normalizedOutcome": "not-run",
+          "operation": "extract",
+          "reason": "extraction not exercised for policy-sensitive fixtures on ordinary hosts",
+          "status": "not-run"
+        }
+      ],
+      "status": "pass",
+      "structureChecks": [
+        {
+          "check": "json-bytes-budget",
+          "status": "pass"
+        },
+        {
+          "check": "expanded-bytes-budget",
+          "status": "pass"
+        },
+        {
+          "check": "schema",
+          "status": "pass"
+        },
+        {
+          "check": "archive-size-sha",
+          "status": "pass"
+        },
+        {
+          "check": "fixture-id",
+          "status": "pass"
+        },
+        {
+          "check": "entries-ordinals",
+          "status": "pass"
+        },
+        {
+          "check": "compression-methods",
+          "detail": "entries=1",
+          "status": "pass"
+        },
+        {
+          "check": "mutations",
+          "detail": "parallel, control-reconstructed",
+          "status": "pass"
+        }
+      ],
+      "subprocessCount": 1
+    }
+  ],
+  "platforms": [
+    "linux"
+  ],
+  "schema": "/home/dom/repos/zipper/.worktrees/issue-1279/tests/fixtures/archive-test-case.schema.json",
+  "summary": {
+    "bytesRead": 0,
+    "failed": 0,
+    "fixtures": 1,
+    "notRunOperations": 1,
+    "passed": 1,
+    "subprocessCount": 1
+  }
+}

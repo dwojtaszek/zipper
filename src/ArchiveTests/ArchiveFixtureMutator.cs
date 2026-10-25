@@ -55,6 +55,7 @@ internal static class ArchiveFixtureMutator
             ArchiveTestMutationKind.InvalidUtf8Name => InvalidateUtf8Name(control, before),
             ArchiveTestMutationKind.Zip64MissingExtra => HideZip64Extra(control, before),
             ArchiveTestMutationKind.Zip64TruncatedExtra => OverrunZip64Extra(control, before),
+            ArchiveTestMutationKind.Zip64SentinelCleared => ClearZip64SizeSentinels(control, before),
             ArchiveTestMutationKind.DeclaredSizeOversized => DeclareOversizedUncompressedSize(control, before),
             ArchiveTestMutationKind.OrphanLocalHeader => InsertOrphanLocalHeader(control, before),
             ArchiveTestMutationKind.PrefixUnrebased => InsertPrefixWithoutRebase(control, before),
@@ -776,6 +777,94 @@ internal static class ArchiveFixtureMutator
                 $"Rewrites the central Zip64 extra subfield's data size from 24 to {claimedSubfieldSize}, claiming 6 more bytes than the enclosing 28-byte extra area holds (4-byte subfield header + 24 data bytes); the enclosing header lengths stay intact so the overrun is the only defect. The claim stays tiny: a defensive reader must never allocate from it.",
                 entry.Ordinal, 2, 2, DeclaredValue: $"zip64-subfield-size={claimedSubfieldSize} enclosing-extra-area=28"),
         ], after => BinaryPrimitives.WriteUInt16LittleEndian(after.AsSpan((int)subfieldSizeOffset, 2), claimedSubfieldSize));
+    }
+
+    /// <summary>
+    /// Rewrites both headers' 32-bit compressed and uncompressed sizes to their real
+    /// values while the Zip64 extra fields claim 64 additional bytes. The central
+    /// local-header-offset sentinel and Zip64 EOCD offsets stay unchanged.
+    /// </summary>
+    private static MutatedArchiveFixture ClearZip64SizeSentinels(ArchiveFixtureArtifact control, byte[] before)
+    {
+        if (control.Layout.Entries.Count != 1 || control.Entries.Count != 1)
+        {
+            throw new InvalidOperationException(
+                "zip64-extra-without-sentinels expects a single-entry Zip64 control.");
+        }
+
+        var entry = control.Layout.Entries[0];
+        if (entry.LocalExtraLength != 20 || entry.CentralExtraLength != 28)
+        {
+            throw new InvalidOperationException(
+                $"zip64-extra-without-sentinels expects 20-byte local and 28-byte central Zip64 extra fields; found {entry.LocalExtraLength} and {entry.CentralExtraLength}.");
+        }
+
+        var actualSize = checked((uint)control.Entries[0].Content.Length);
+        if (entry.CompressedSize != actualSize || entry.UncompressedSize != actualSize)
+        {
+            throw new InvalidOperationException(
+                "zip64-extra-without-sentinels expects a Stored Zip64 control whose compressed and uncompressed sizes equal its content length.");
+        }
+
+        var localCompressedOffset = entry.LocalHeaderOffset + 18;
+        var localUncompressedOffset = entry.LocalHeaderOffset + 22;
+        var centralCompressedOffset = entry.CentralDirectoryOffset + 20;
+        var centralUncompressedOffset = entry.CentralDirectoryOffset + 24;
+        var centralLocalHeaderOffset = entry.CentralDirectoryOffset + 42;
+        var localExtraOffset = entry.LocalHeaderOffset + 30 + entry.LocalNameLength;
+        var centralExtraOffset = entry.CentralDirectoryOffset + 46 + entry.CentralNameLength;
+        var conflictingSize = checked((ulong)actualSize + 64);
+        var code = ArchiveTestMutationKind.Zip64SentinelCleared.ToCaseKey();
+
+        if (BinaryPrimitives.ReadUInt32LittleEndian(before.AsSpan((int)localCompressedOffset, 4)) != ArchiveFixtureLayout.Zip64SizeSentinel
+            || BinaryPrimitives.ReadUInt32LittleEndian(before.AsSpan((int)localUncompressedOffset, 4)) != ArchiveFixtureLayout.Zip64SizeSentinel
+            || BinaryPrimitives.ReadUInt32LittleEndian(before.AsSpan((int)centralCompressedOffset, 4)) != ArchiveFixtureLayout.Zip64SizeSentinel
+            || BinaryPrimitives.ReadUInt32LittleEndian(before.AsSpan((int)centralUncompressedOffset, 4)) != ArchiveFixtureLayout.Zip64SizeSentinel
+            || BinaryPrimitives.ReadUInt32LittleEndian(before.AsSpan((int)centralLocalHeaderOffset, 4)) != ArchiveFixtureLayout.Zip64SizeSentinel
+            || BinaryPrimitives.ReadUInt16LittleEndian(before.AsSpan((int)localExtraOffset, 2)) != ArchiveFixtureLayout.Zip64ExtraFieldId
+            || BinaryPrimitives.ReadUInt16LittleEndian(before.AsSpan((int)localExtraOffset + 2, 2)) != 16
+            || BinaryPrimitives.ReadUInt16LittleEndian(before.AsSpan((int)centralExtraOffset, 2)) != ArchiveFixtureLayout.Zip64ExtraFieldId
+            || BinaryPrimitives.ReadUInt16LittleEndian(before.AsSpan((int)centralExtraOffset + 2, 2)) != 24
+            || BinaryPrimitives.ReadUInt64LittleEndian(before.AsSpan((int)localExtraOffset + 4, 8)) != actualSize
+            || BinaryPrimitives.ReadUInt64LittleEndian(before.AsSpan((int)localExtraOffset + 12, 8)) != actualSize
+            || BinaryPrimitives.ReadUInt64LittleEndian(before.AsSpan((int)centralExtraOffset + 4, 8)) != actualSize
+            || BinaryPrimitives.ReadUInt64LittleEndian(before.AsSpan((int)centralExtraOffset + 12, 8)) != actualSize
+            || BinaryPrimitives.ReadUInt64LittleEndian(before.AsSpan((int)centralExtraOffset + 20, 8)) != (ulong)entry.LocalHeaderOffset)
+        {
+            throw new InvalidOperationException(
+                "zip64-extra-without-sentinels requires the valid Zip64 control's size sentinels and matching extended-information values.");
+        }
+
+        var declaredSizes = $"header-compressed-size={actualSize} header-uncompressed-size={actualSize} zip64-extra-compressed-size={conflictingSize} zip64-extra-uncompressed-size={conflictingSize}";
+        return Patch(ArchiveTestMutationKind.Zip64SentinelCleared, before,
+        [
+            new MutationSpec(
+                code, "local-header", localCompressedOffset,
+                $"Rewrites the local header's compressed and uncompressed 32-bit sizes from 0xFFFFFFFF to {actualSize}; the local Zip64 extra field remains present and declares {conflictingSize} for both sizes.",
+                entry.Ordinal, 8, 8, DeclaredValue: declaredSizes),
+            new MutationSpec(
+                code, "local-header", localExtraOffset + 4,
+                $"Changes only the local Zip64 extra field's uncompressed and compressed size values from {actualSize} to {conflictingSize}; the subfield ID, length, and remaining header bytes stay intact.",
+                entry.Ordinal, 16, 16, DeclaredValue: declaredSizes),
+            new MutationSpec(
+                code, "central-header", centralCompressedOffset,
+                $"Rewrites the central header's compressed and uncompressed 32-bit sizes from 0xFFFFFFFF to {actualSize}; the Zip64 extra field remains present and declares {conflictingSize} for both sizes.",
+                entry.Ordinal, 8, 8, DeclaredValue: declaredSizes),
+            new MutationSpec(
+                code, "central-header", centralExtraOffset + 4,
+                $"Changes only the central Zip64 extra field's uncompressed and compressed size values from {actualSize} to {conflictingSize}; the subfield ID, length, and local-header offset value stay intact.",
+                entry.Ordinal, 16, 16, DeclaredValue: declaredSizes),
+        ], after =>
+        {
+            BinaryPrimitives.WriteUInt32LittleEndian(after.AsSpan((int)localCompressedOffset, 4), actualSize);
+            BinaryPrimitives.WriteUInt32LittleEndian(after.AsSpan((int)localUncompressedOffset, 4), actualSize);
+            BinaryPrimitives.WriteUInt64LittleEndian(after.AsSpan((int)localExtraOffset + 4, 8), conflictingSize);
+            BinaryPrimitives.WriteUInt64LittleEndian(after.AsSpan((int)localExtraOffset + 12, 8), conflictingSize);
+            BinaryPrimitives.WriteUInt32LittleEndian(after.AsSpan((int)centralCompressedOffset, 4), actualSize);
+            BinaryPrimitives.WriteUInt32LittleEndian(after.AsSpan((int)centralUncompressedOffset, 4), actualSize);
+            BinaryPrimitives.WriteUInt64LittleEndian(after.AsSpan((int)centralExtraOffset + 4, 8), conflictingSize);
+            BinaryPrimitives.WriteUInt64LittleEndian(after.AsSpan((int)centralExtraOffset + 12, 8), conflictingSize);
+        });
     }
 
     private static MutatedArchiveFixture FlipCrc(ArchiveTestMutationKind kind, ArchiveFixtureArtifact control, byte[] before)
@@ -1764,6 +1853,7 @@ internal enum ArchiveTestMutationKind
     InvalidUtf8Name,
     Zip64MissingExtra,
     Zip64TruncatedExtra,
+    Zip64SentinelCleared,
     DeclaredSizeOversized,
     OrphanLocalHeader,
     PrefixUnrebased,
@@ -1823,6 +1913,7 @@ internal static class ArchiveTestMutationKindExtensions
         ArchiveTestMutationKind.InvalidUtf8Name => "invalid-utf8-name",
         ArchiveTestMutationKind.Zip64MissingExtra => "zip64-missing-extra",
         ArchiveTestMutationKind.Zip64TruncatedExtra => "zip64-truncated-extra",
+        ArchiveTestMutationKind.Zip64SentinelCleared => "zip64-extra-without-sentinels",
         ArchiveTestMutationKind.DeclaredSizeOversized => "declared-size-oversized",
         ArchiveTestMutationKind.OrphanLocalHeader => "orphan-local-header",
         ArchiveTestMutationKind.PrefixUnrebased => "prefix-unrebased",

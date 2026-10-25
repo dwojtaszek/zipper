@@ -440,6 +440,72 @@ public class ArchiveFixtureMutationTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void Apply_Zip64ExtraWithoutSentinels_PreservesExtraStructureAndDisagreesWithHeaderSizes()
+    {
+        const string CaseKey = "zip64-extra-without-sentinels";
+        var control = ArchiveFixtureBuilder.BuildControl("valid-zip64-small", 42, CancellationToken.None);
+        var definition = ArchiveTestCatalog.GetCase(CaseKey);
+
+        var mutated = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+
+        var entry = Assert.Single(control.Layout.Entries);
+        var localExtraOffset = entry.LocalHeaderOffset + 30 + entry.LocalNameLength;
+        var centralExtraOffset = entry.CentralDirectoryOffset + 46 + entry.CentralNameLength;
+        var expectedHeaderSize = checked((uint)control.Entries[0].Content.Length);
+        var conflictingExtraSize = checked((ulong)expectedHeaderSize + 64);
+        var actualLayout = ArchiveFixtureLayout.Read(mutated.ArchiveBytes);
+
+        Assert.Equal(control.ArchiveBytes.Length, mutated.ArchiveBytes.Length);
+        Assert.Equal(control.Layout.EocdOffset, actualLayout.EocdOffset);
+        Assert.Equal(expectedHeaderSize, BinaryPrimitives.ReadUInt32LittleEndian(
+            mutated.ArchiveBytes.AsSpan((int)entry.LocalHeaderOffset + 18, 4)));
+        Assert.Equal(expectedHeaderSize, BinaryPrimitives.ReadUInt32LittleEndian(
+            mutated.ArchiveBytes.AsSpan((int)entry.LocalHeaderOffset + 22, 4)));
+        Assert.Equal(expectedHeaderSize, BinaryPrimitives.ReadUInt32LittleEndian(
+            mutated.ArchiveBytes.AsSpan((int)entry.CentralDirectoryOffset + 20, 4)));
+        Assert.Equal(expectedHeaderSize, BinaryPrimitives.ReadUInt32LittleEndian(
+            mutated.ArchiveBytes.AsSpan((int)entry.CentralDirectoryOffset + 24, 4)));
+        Assert.Equal(ArchiveFixtureLayout.Zip64SizeSentinel, BinaryPrimitives.ReadUInt32LittleEndian(
+            mutated.ArchiveBytes.AsSpan((int)entry.CentralDirectoryOffset + 42, 4)));
+        Assert.Equal(expectedHeaderSize, actualLayout.Entries[0].CompressedSize);
+        Assert.Equal(expectedHeaderSize, actualLayout.Entries[0].UncompressedSize);
+
+        // Keep both 0x0001 subfields intact, but make their size values disagree with
+        // the real 32-bit header fields. The extra ID/length bytes and local-header
+        // offset value stay unchanged; only the size-field sentinels are cleared.
+        Assert.Equal((ushort)0x0001, BinaryPrimitives.ReadUInt16LittleEndian(
+            mutated.ArchiveBytes.AsSpan((int)localExtraOffset, 2)));
+        Assert.Equal((ushort)16, BinaryPrimitives.ReadUInt16LittleEndian(
+            mutated.ArchiveBytes.AsSpan((int)localExtraOffset + 2, 2)));
+        Assert.Equal((ushort)0x0001, BinaryPrimitives.ReadUInt16LittleEndian(
+            mutated.ArchiveBytes.AsSpan((int)centralExtraOffset, 2)));
+        Assert.Equal((ushort)24, BinaryPrimitives.ReadUInt16LittleEndian(
+            mutated.ArchiveBytes.AsSpan((int)centralExtraOffset + 2, 2)));
+        Assert.Equal(conflictingExtraSize, BinaryPrimitives.ReadUInt64LittleEndian(
+            mutated.ArchiveBytes.AsSpan((int)localExtraOffset + 4, 8)));
+        Assert.Equal(conflictingExtraSize, BinaryPrimitives.ReadUInt64LittleEndian(
+            mutated.ArchiveBytes.AsSpan((int)localExtraOffset + 12, 8)));
+        Assert.Equal(conflictingExtraSize, BinaryPrimitives.ReadUInt64LittleEndian(
+            mutated.ArchiveBytes.AsSpan((int)centralExtraOffset + 4, 8)));
+        Assert.Equal(conflictingExtraSize, BinaryPrimitives.ReadUInt64LittleEndian(
+            mutated.ArchiveBytes.AsSpan((int)centralExtraOffset + 12, 8)));
+        Assert.Equal((ulong)entry.LocalHeaderOffset, BinaryPrimitives.ReadUInt64LittleEndian(
+            mutated.ArchiveBytes.AsSpan((int)centralExtraOffset + 20, 8)));
+
+        Assert.Equal(
+            [
+                entry.LocalHeaderOffset + 18,
+                localExtraOffset + 4,
+                entry.CentralDirectoryOffset + 20,
+                centralExtraOffset + 4,
+            ],
+            mutated.Mutations.Select(mutation => mutation.Offset));
+        Assert.Equal([8, 16, 8, 16], mutated.Mutations.Select(mutation => mutation.DeletedLength));
+        Assert.Equal(20, CountDifferingBytes(control.ArchiveBytes, mutated.ArchiveBytes));
+        Assert.All(mutated.Mutations, mutation => Assert.Equal(CaseKey, mutation.Code));
+    }
+
+    [Fact]
     public void Apply_Zip64LocatorDiskMismatch_RecordsTotalDisks()
     {
         var control = ArchiveFixtureBuilder.BuildControl("valid-zip64-small", 42, CancellationToken.None);

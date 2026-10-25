@@ -261,6 +261,20 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
         ExecuteReaderOperations(testCase, archiveBytes, extractDir);
     }
 
+    [Fact]
+    public void ReadOperations_Zip64ExtraWithoutSentinels_ListsButRejectsEntryRead()
+    {
+        var definition = ArchiveTestCatalog.GetCase("zip64-extra-without-sentinels");
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+        var testCase = ArchiveTestSuiteGenerator.BuildExpectationFile(artifact, definition, 42);
+
+        // Observed .NET behavior for #1279: listing succeeds, but reading and
+        // integrity checking reject the conflicting Zip64 size declarations.
+        Assert.Equal("list-succeeds", NormalizeList(artifact.ArchiveBytes, testCase));
+        Assert.Equal("read-entry-fails", NormalizeReadEntry(artifact.ArchiveBytes, testCase));
+        Assert.Equal("integrity-fails", NormalizeIntegrityCheck(artifact.ArchiveBytes, testCase));
+    }
+
     [Theory]
     [InlineData("list")]
     [InlineData("read-entry")]

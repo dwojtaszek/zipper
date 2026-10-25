@@ -72,6 +72,10 @@ To generate the malformed `deflate-payload-bitflip` Archive Test Fixture, which 
 ```bash
 zipper --archive-test-suite malformed --archive-test-cases deflate-payload-bitflip --seed 42 --output-path ./deflate-payload-corruption
 ```
+To generate the policy-sensitive `zip64-extra-without-sentinels` Archive Test Fixture, which tests conflicting 32-bit header and Zip64 extended-information sizes:
+```bash
+zipper --archive-test-suite malformed --archive-test-cases zip64-extra-without-sentinels --seed 42 --output-path ./zip64-extra-conflict
+```
 
 #### 7. Choose the Archive compression method
 `--compression` sets the ZIP compression method for every Archive the run produces (Standard mode, `--include-load-file`, and `--production-zip`) and defaults to `deflate`:
