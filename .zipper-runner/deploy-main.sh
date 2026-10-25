@@ -85,6 +85,27 @@ HOLDS_LOCK=0
 # Unique per process, so a release can tell "still mine" from "someone stole it".
 LOCK_TOKEN="$$-$RANDOM-$RANDOM"
 
+# Whether the lock records a holder pid that is no longer running. A holder killed
+# without its cleanup (SIGKILL, OOM, reboot) leaves the lock behind, and age alone
+# would keep this timer out for the whole stale bound — a full 20 minutes of missed
+# deploys. A recorded pid that is not alive is proof the holder is gone.
+#
+# Requires /proc, because `kill -0` alone cannot separate a dead process from a
+# live one this user may not signal. Where /proc is absent (macOS) this reports
+# nothing and the age bound decides, rather than risking a live holder's lock.
+lock_holder_pid_is_gone() {
+    local pid
+    [ -d /proc ] || return 1
+    pid="$(cat "$REPO_LOCK/pid" 2>/dev/null || true)"
+    case "$pid" in
+        ''|*[!0-9]*) return 1 ;;   # absent or malformed: not proof of anything
+    esac
+    [ "$pid" = "$$" ] && return 1
+    kill -0 "$pid" 2>/dev/null && return 1
+    [ -d "/proc/$pid" ] && return 1
+    return 0
+}
+
 # Seconds the current holder has held the lock, or empty when that cannot be told.
 # The holder's own `created` file is authoritative; the directory mtime is the
 # fallback for a lock whose holder died between mkdir and writing it — without
@@ -101,25 +122,79 @@ lock_age_seconds() {
     [ -n "$mtime" ] && echo "$(( $(now_epoch) - mtime ))"
 }
 
+# What a lock currently records: pid, created, owner. A reclaim compares this
+# before and after moving the lock aside, so it cannot delete a lock that was
+# replaced in between. A missing file reads as empty, so a lock created before
+# every field existed is still comparable.
+lock_identity() {
+    local dir="${1:-$REPO_LOCK}"
+    printf '%s|%s|%s' \
+        "$(cat "$dir/pid" 2>/dev/null || true)" \
+        "$(cat "$dir/created" 2>/dev/null || true)" \
+        "$(cat "$dir/owner" 2>/dev/null || true)"
+}
+
+# Remove the lock, but only if it is still the one that was judged reclaimable.
+#
+# Judging a lock reclaimable and then removing it is a check-then-act race: two
+# processes can judge the same lock, and the slower one then deletes the lock the
+# faster one has already created in its place, leaving both believing they own the
+# checkout. The move is the atomic claim (the filesystem permits only one process
+# to move a given path), and the identity is re-read after the move, so a lock
+# replaced in between is put back rather than deleted.
+claim_repo_lock_for_removal() {
+    local expected="$1" claimed="$REPO_LOCK.claimed.$$-$RANDOM"
+    mv "$REPO_LOCK" "$claimed" 2>/dev/null || return 1
+    if [ "$(lock_identity "$claimed")" != "$expected" ]; then
+        if mv "$claimed" "$REPO_LOCK" 2>/dev/null; then
+            log "WARN: the lock was replaced while reclaiming it; restored the new holder's lock."
+        else
+            log "WARN: a replaced lock could not be restored; discarding it."
+            rm -rf "$claimed"
+        fi
+        return 1
+    fi
+    rm -rf "$claimed"
+    return 0
+}
+
 # Take the shared main-checkout lock, or report why not. Non-blocking on purpose:
 # waiting would hold this unit open behind a runner mutation, and the next tick
 # is a minute away.
 acquire_repo_lock() {
     if mkdir "$REPO_LOCK" 2>/dev/null; then
         now_epoch > "$REPO_LOCK/created"
+        echo "$$" > "$REPO_LOCK/pid"
         echo "$LOCK_TOKEN" > "$REPO_LOCK/owner"
         HOLDS_LOCK=1
         return 0
     fi
+    local identity
+    identity="$(lock_identity)"
+    if lock_holder_pid_is_gone; then
+        if claim_repo_lock_for_removal "$identity"; then
+            log "WARN: reclaiming the main-checkout lock; its recorded holder is gone."
+            if mkdir "$REPO_LOCK" 2>/dev/null; then
+                now_epoch > "$REPO_LOCK/created"
+                echo "$$" > "$REPO_LOCK/pid"
+                echo "$LOCK_TOKEN" > "$REPO_LOCK/owner"
+                HOLDS_LOCK=1
+                return 0
+            fi
+        fi
+        return 1
+    fi
     age="$(lock_age_seconds)"
     if [ -n "$age" ] && [ "$age" -gt "$LOCK_STALE_SECONDS" ]; then
-        log "WARN: stealing a stale main-checkout lock (age ${age}s)."
-        rm -rf "$REPO_LOCK"
-        if mkdir "$REPO_LOCK" 2>/dev/null; then
-            now_epoch > "$REPO_LOCK/created"
-            echo "$LOCK_TOKEN" > "$REPO_LOCK/owner"
-            HOLDS_LOCK=1
-            return 0
+        if claim_repo_lock_for_removal "$identity"; then
+            log "WARN: stealing a stale main-checkout lock (age ${age}s)."
+            if mkdir "$REPO_LOCK" 2>/dev/null; then
+                now_epoch > "$REPO_LOCK/created"
+                echo "$$" > "$REPO_LOCK/pid"
+                echo "$LOCK_TOKEN" > "$REPO_LOCK/owner"
+                HOLDS_LOCK=1
+                return 0
+            fi
         fi
     fi
     return 1
@@ -129,12 +204,17 @@ release_repo_lock() {
     [ "$HOLDS_LOCK" = 1 ] || return 0
     # Only remove the lock while this process is still its recorded owner. After a
     # stale steal the lock belongs to another process, and removing it here would
-    # let a third one in while the thief is mid-merge.
+    # let a third one in while the thief is mid-merge. The removal goes through the
+    # same atomic claim, because a steal can otherwise move this lock aside and
+    # create its own between the owner check and the delete.
+    local identity
+    identity="$(lock_identity)"
     if [ "$(cat "$REPO_LOCK/owner" 2>/dev/null || true)" != "$LOCK_TOKEN" ]; then
         log "WARN: lock was reclaimed by another process; leaving it alone."
         return 0
     fi
-    rm -rf "$REPO_LOCK" 2>/dev/null || true
+    claim_repo_lock_for_removal "$identity" \
+        || log "WARN: the lock was reclaimed while releasing it; leaving the new holder's lock."
 }
 trap release_repo_lock EXIT
 

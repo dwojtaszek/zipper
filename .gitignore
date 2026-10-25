@@ -92,8 +92,11 @@ graphify_audit/
 .zipper-runner/deploy.lock
 # The lock the runner and deploy-main.sh share around main-checkout mutations. It
 # lives in the checkout by design (next to runner.lock) and must stay ignored for
-# the same reason.
+# the same reason. A reclaim briefly moves the lock aside to a `.claimed.<pid>`
+# sibling before deleting it; that path is ignored too, so a process killed inside
+# that window cannot leave the runner believing its own checkout is dirty.
 .zipper-runner/repo-mutation.lock
+.zipper-runner/repo-mutation.lock.*
 .zipper-runner/**/__pycache__/
 __pycache__/
 *.pyc
