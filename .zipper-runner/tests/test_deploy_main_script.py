@@ -398,6 +398,130 @@ class DeployMainScriptTests(unittest.TestCase):
         self.assertEqual(self.repo.head(), new_upstream, "the mtime fallback must reclaim it")
         self.assertIn("stealing a stale main-checkout lock", self.repo.logs())
 
+    def _claimHarness(self, body: str) -> tuple[Path, Path]:
+        """A script that runs the real reclaim helpers against a fake lock.
+
+        `lock_identity` and `claim_repo_lock_for_removal` are lifted from the
+        installed script so the test cannot drift from what ships; the extraction
+        asserts it found each function rather than silently testing an empty file.
+        """
+        script = _SCRIPT.read_text()
+        extracted = []
+        for signature, marker in (("lock_identity() {", "printf"),
+                                  ("claim_repo_lock_for_removal() {", "return 1")):
+            start = script.index(signature)
+            end = script.index("\n}\n", start) + len("\n}\n")
+            function = script[start:end]
+            self.assertTrue(function.endswith("}\n") and marker in function,
+                            f"extraction must capture all of {signature}")
+            extracted.append(function)
+
+        harness_dir = Path(self._tmp) / f"claim-harness-{len(body)}"
+        harness_dir.mkdir(parents=True, exist_ok=True)
+        harness = harness_dir / "claim.sh"
+        harness.write_text(
+            "#!/bin/bash\n"
+            f'REPO_LOCK="{harness_dir}/lock"\n'
+            f'log() {{ printf "%s\\n" "$*" >> "{harness_dir}/log"; }}\n'
+            f'MARKER="{harness_dir}/substituted"\n'
+            + "".join(extracted)
+            + body
+        )
+        harness.chmod(0o755)
+        return harness, harness_dir / "log"
+
+    @staticmethod
+    def _harness_lock(harness: Path) -> Path:
+        return harness.parent / "lock"
+
+    def test_claimRepoLockForRemoval_whenTheLockIsUnchanged_shouldRemoveIt(self):
+        """The claim must not break the ordinary reclaim it exists to guard."""
+        harness, _ = self._claimHarness(
+            'mkdir -p "$REPO_LOCK"\n'
+            'printf "%s" "someone-else" > "$REPO_LOCK/owner"\n'
+            'printf "%s" "$1" > "$REPO_LOCK/pid"\n'
+            'date +%s > "$REPO_LOCK/created"\n'
+            'identity="$(lock_identity)"\n'
+            'if claim_repo_lock_for_removal "$identity"; then echo removed; else echo kept; fi\n'
+        )
+        result = subprocess.run([str(harness), str(self._unused_pid())],
+                                capture_output=True, text=True)
+
+        self.assertEqual(result.stdout.strip(), "removed", result.stderr)
+        self.assertFalse(self._harness_lock(harness).exists(), "the judged lock must be gone")
+
+    def test_claimRepoLockForRemoval_whenTheLockWasReplaced_shouldRestoreIt(self):
+        """The identity read after the move is what makes the claim safe: a lock
+        replaced between the judgement and the move belongs to a live holder, and
+        deleting it would let a third process mutate the checkout alongside it."""
+        harness, _ = self._claimHarness(
+            'mkdir -p "$REPO_LOCK"\n'
+            'printf "%s" "the-judged" > "$REPO_LOCK/owner"\n'
+            'date +%s > "$REPO_LOCK/created"\n'
+            'identity="$(lock_identity)"\n'
+            '# A peer wins the race inside the claim window: it removes the judged lock\n'
+            '# and takes the lock for itself before the move happens.\n'
+            'mv() {\n'
+            '  if [ ! -e "$MARKER" ]; then\n'
+            '    : > "$MARKER"\n'
+            '    rm -rf "$REPO_LOCK"; mkdir -p "$REPO_LOCK"\n'
+            '    printf "%s" "the-winner" > "$REPO_LOCK/owner"\n'
+            '    date +%s > "$REPO_LOCK/created"\n'
+            '  fi\n'
+            '  command mv "$@"\n'
+            '}\n'
+            'if claim_repo_lock_for_removal "$identity"; then echo removed; else echo kept; fi\n'
+            'echo "owner=$(cat "$REPO_LOCK/owner" 2>/dev/null || echo none)"\n'
+            'echo "leftovers=$(ls -d "$REPO_LOCK".claimed.* 2>/dev/null | wc -l)"\n'
+        )
+        result = subprocess.run([str(harness)], capture_output=True, text=True)
+
+        self.assertIn("kept", result.stdout, result.stderr)
+        self.assertIn("owner=the-winner", result.stdout,
+                      "the lock the peer took must survive the reclaim")
+        self.assertIn("leftovers=0", result.stdout,
+                      "a restored lock must not leave the moved-aside copy behind")
+
+    def test_deploy_whenTheLockIsReplacedDuringTheReclaim_shouldSkipAndKeepTheLiveLock(self):
+        """The same window through the real script: it judges the dead holder's lock
+        reclaimable, a peer takes the lock inside the claim, and the deploy must hand
+        the checkout back instead of deleting the peer's lock and fast-forwarding
+        under it."""
+        new_upstream = self.repo.push_upstream_commit("two\n", "c2")
+        self.repo.hold_lock(pid=self._unused_pid())
+
+        fake_bin = self.repo.root / "fakebin-reclaim"
+        fake_bin.mkdir(exist_ok=True)
+        (fake_bin / "mv").write_text(
+            "#!/bin/bash\n"
+            f'if [ "$1" = "$REPO_MUTATION_LOCK_PATH" ] && [ ! -e "{self.repo.root}/substituted" ]; then\n'
+            f'  : > "{self.repo.root}/substituted"\n'
+            '  rm -rf "$REPO_MUTATION_LOCK_PATH"\n'
+            '  mkdir -p "$REPO_MUTATION_LOCK_PATH"\n'
+            f'  printf "%s" "{self._live_pid()}" > "$REPO_MUTATION_LOCK_PATH/pid"\n'
+            '  date +%s > "$REPO_MUTATION_LOCK_PATH/created"\n'
+            '  printf "%s" "the-winner" > "$REPO_MUTATION_LOCK_PATH/owner"\n'
+            "fi\n"
+            'exec /bin/mv "$@"\n'
+        )
+        (fake_bin / "mv").chmod(0o755)
+
+        env = dict(os.environ)
+        env["REPO_PATH"] = str(self.repo.checkout)
+        env["DEPLOY_LOGS_DIR"] = str(self.repo.root / "logs")
+        env["REPO_MUTATION_LOCK_PATH"] = str(self.repo.lock_path)
+        env["PATH"] = f"{fake_bin}:{env['PATH']}"
+
+        result = subprocess.run([str(self.repo.installed)], capture_output=True, text=True, env=env)
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("SKIP: the main checkout is locked", self.repo.logs())
+        self.assertNotEqual(self.repo.head(), new_upstream,
+                            "the deploy must not fast-forward under a lock it did not take")
+        self.assertEqual((self.repo.lock_path / "owner").read_text(), "the-winner",
+                         "the peer's live lock must survive the reclaim")
+        self.assertEqual(list(self.repo.root.glob("repo-mutation.lock.claimed.*")), [])
+
     def test_deploy_whenTheLockIsStolenMidRun_shouldNotDeleteTheNewOwnersLock(self):
         """A steal can only happen after the stale bound, but the release must still
         verify ownership: removing a lock another process now holds would let a third

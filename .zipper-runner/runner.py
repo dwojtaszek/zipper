@@ -851,6 +851,70 @@ def _lock_holder_pid_is_gone() -> bool:
     return False
 
 
+# The files that identify a lock holder. `_read_repo_mutation_lock_identity` reads
+# them as a tuple, and a reclaim compares the tuple before and after moving the
+# lock aside so it cannot delete a lock that was replaced in between.
+_REPO_LOCK_IDENTITY_FILES = ("pid", "created", "owner")
+
+
+def _read_repo_mutation_lock_identity(path: str | None = None) -> tuple[str, ...] | None:
+    """What a lock currently records: (pid, created, owner), or None if it is gone.
+
+    A missing file reads as an empty string rather than None, so a lock created
+    before every field existed is still comparable: the comparison only has to
+    distinguish "the same lock" from "a different one".
+    """
+    directory = path or REPO_MUTATION_LOCK_PATH
+    if not os.path.isdir(directory):
+        return None
+    values = []
+    for name in _REPO_LOCK_IDENTITY_FILES:
+        try:
+            with open(os.path.join(directory, name)) as handle:
+                values.append(handle.read().strip())
+        except OSError:
+            values.append("")
+    return tuple(values)
+
+
+def _claim_repo_mutation_lock_for_removal(expected_identity: tuple[str, ...] | None) -> bool:
+    """Remove the main-checkout lock, but only if it is still the one judged stale.
+
+    Judging a lock reclaimable and then removing it is a check-then-act race: two
+    processes can judge the same lock, and the slower one then deletes the lock the
+    faster one has already created in its place, leaving both believing they own the
+    checkout and mutating it concurrently, which is the exact hazard this lock exists
+    to prevent.
+
+    The move is the atomic claim: the filesystem permits only one process to move a
+    given path, so of the processes that judged the same lock reclaimable exactly one
+    proceeds. The identity is re-read *after* the move, so a lock that was replaced
+    between the judgement and the move is put back rather than deleted.
+
+    Returns True when this process removed the judged lock, False when another
+    process claimed it first or a different, live lock was restored.
+    """
+    claimed = f"{REPO_MUTATION_LOCK_PATH}.claimed.{os.getpid()}.{time.time_ns()}"
+    try:
+        os.rename(REPO_MUTATION_LOCK_PATH, claimed)
+    except OSError:
+        # Another process claimed it first, or it is already gone. Either way this
+        # process must not remove anything: the caller retries the normal mkdir.
+        return False
+    if expected_identity is not None and _read_repo_mutation_lock_identity(claimed) != expected_identity:
+        try:
+            os.rename(claimed, REPO_MUTATION_LOCK_PATH)
+            print("REPO LOCK: the lock was replaced while reclaiming it; restored the new holder's lock.")
+        except OSError as e:
+            # The path is occupied again, so the lock moved aside is not the live one
+            # and removing it cannot strand a holder.
+            print(f"REPO LOCK: WARNING a replaced lock could not be restored ({e}); discarding it.")
+            shutil.rmtree(claimed, ignore_errors=True)
+        return False
+    shutil.rmtree(claimed, ignore_errors=True)
+    return True
+
+
 def _steal_stale_repo_mutation_lock() -> bool:
     """Remove the main-checkout lock when its holder is provably gone or wedged.
 
@@ -860,20 +924,26 @@ def _steal_stale_repo_mutation_lock() -> bool:
     REPO_MUTATION_LOCK_STALE_SECONDS is the bound: a holder only ever mutates under
     a bounded command (DEFAULT_CMD_TIMEOUT), so the stale bound is set above that
     and an over-age lock cannot belong to a process still legitimately working.
+
+    Both paths go through `_claim_repo_mutation_lock_for_removal`, which is what makes
+    them safe against a second process reclaiming the same lock at the same time.
     """
+    identity = _read_repo_mutation_lock_identity()
     if _lock_holder_pid_is_gone():
-        print("REPO LOCK: stealing the main-checkout lock; its recorded holder is gone.")
-        shutil.rmtree(REPO_MUTATION_LOCK_PATH, ignore_errors=True)
-        return True
+        if _claim_repo_mutation_lock_for_removal(identity):
+            print("REPO LOCK: stole the main-checkout lock; its recorded holder is gone.")
+            return True
+        return False
     try:
         age = time.time() - os.path.getmtime(REPO_MUTATION_LOCK_PATH)
     except OSError:
         return False
     if age <= REPO_MUTATION_LOCK_STALE_SECONDS:
         return False
-    print(f"REPO LOCK: stealing a stale main-checkout lock (age {int(age)}s).")
-    shutil.rmtree(REPO_MUTATION_LOCK_PATH, ignore_errors=True)
-    return True
+    if _claim_repo_mutation_lock_for_removal(identity):
+        print(f"REPO LOCK: stole a stale main-checkout lock (age {int(age)}s).")
+        return True
+    return False
 
 
 def _write_repo_mutation_lock_metadata(token: str) -> bool:
@@ -909,19 +979,22 @@ def _release_repo_mutation_lock() -> None:
     An empty token means no identity was ever recorded, so there is nothing to
     confirm against and the lock is removed: a steal requires the holder to exceed
     the stale bound, which a holder whose every command is bounded cannot do.
+
+    The removal itself goes through the same atomic claim as a steal. Checking the
+    owner and then deleting is the mirror of the reclaim race: a steal can move this
+    lock aside and create its own between the check and the delete, and the delete
+    would then remove the thief's live lock.
     """
     global _repo_mutation_lock_token
     token, _repo_mutation_lock_token = _repo_mutation_lock_token, ""
-    if token:
-        try:
-            with open(_repo_mutation_lock_owner_file()) as handle:
-                owner = handle.read().strip()
-        except OSError:
-            owner = ""
-        if owner != token:
-            print("REPO LOCK: lock was reclaimed by another process; leaving it alone.")
-            return
-    shutil.rmtree(REPO_MUTATION_LOCK_PATH, ignore_errors=True)
+    identity = _read_repo_mutation_lock_identity()
+    if identity is None:
+        return
+    if token and identity[_REPO_LOCK_IDENTITY_FILES.index("owner")] != token:
+        print("REPO LOCK: lock was reclaimed by another process; leaving it alone.")
+        return
+    if not _claim_repo_mutation_lock_for_removal(identity):
+        print("REPO LOCK: lock was reclaimed while releasing it; leaving the new holder's lock.")
 
 
 @contextlib.contextmanager

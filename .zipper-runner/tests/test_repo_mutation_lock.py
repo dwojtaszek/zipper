@@ -230,6 +230,95 @@ class RepoMutationLockTests(unittest.TestCase):
 
         self.assertFalse(self.lock_path.exists())
 
+    def test_claimLockForRemoval_whenTheLockIsUnchanged_shouldRemoveIt(self):
+        """The claim must not break the ordinary reclaim it exists to guard."""
+        self.hold_lock_asAnotherProcess(pid=self._unused_pid())
+        identity = runner._read_repo_mutation_lock_identity()
+
+        self.assertTrue(runner._claim_repo_mutation_lock_for_removal(identity))
+        self.assertFalse(self.lock_path.exists())
+
+    def test_claimLockForRemoval_whenTheLockWasReplaced_shouldRestoreIt(self):
+        """The identity read after the move is what makes the claim safe: a lock
+        replaced between the judgement and the move is a live holder's lock, and
+        deleting it would admit a third process while that holder mutates."""
+        self.hold_lock_asAnotherProcess(pid=self._unused_pid())
+        judged = runner._read_repo_mutation_lock_identity()
+        # The other contender won the race: it removed the judged lock and created
+        # its own at the same path before this process moved anything.
+        shutil.rmtree(self.lock_path)
+        self.hold_lock_asAnotherProcess(pid=self._live_pid())
+        (self.lock_path / "owner").write_text("the-winner")
+
+        self.assertFalse(runner._claim_repo_mutation_lock_for_removal(judged),
+                         "the claim must report that it did not remove the judged lock")
+        self.assertTrue(self.lock_path.is_dir(), "the winner's lock must be restored")
+        self.assertEqual((self.lock_path / "owner").read_text(), "the-winner")
+        self.assertEqual(list(self.root.glob("repo-mutation.lock.claimed.*")), [],
+                         "a restored lock must not leave the moved-aside copy behind")
+
+    def test_stealStaleLock_whenTheLockIsReplacedDuringTheClaim_shouldNotDeleteTheReplacement(self):
+        """The window between judging a lock stale and removing it is where the race
+        lives. Here another process substitutes its own lock inside that window; the
+        reclaim must notice and hand the checkout back instead of deleting it."""
+        self.hold_lock_asAnotherProcess(pid=self._unused_pid())
+        real_rename = os.rename
+
+        def substitute_then_rename(src, dst):
+            if src == str(self.lock_path) and not (self.lock_path / "owner").exists():
+                shutil.rmtree(self.lock_path)
+                self.hold_lock_asAnotherProcess(pid=self._live_pid())
+                (self.lock_path / "owner").write_text("the-winner")
+            return real_rename(src, dst)
+
+        with patch.object(runner.os, "rename", side_effect=substitute_then_rename):
+            self.assertFalse(runner._steal_stale_repo_mutation_lock(),
+                             "the reclaim must not report stealing a lock it did not remove")
+
+        self.assertTrue(self.lock_path.is_dir(), "the live holder's lock must survive")
+        self.assertEqual((self.lock_path / "owner").read_text(), "the-winner")
+
+    def test_stealStaleLock_whenTheLockIsReplacedDuringAStaleSteal_shouldNotDeleteTheReplacement(self):
+        """The same window on the age-based path, which judges by mtime rather than
+        by the recorded pid."""
+        self.hold_lock_asAnotherProcess(age_seconds=9999)
+        real_rename = os.rename
+
+        def substitute_then_rename(src, dst):
+            if src == str(self.lock_path) and not (self.lock_path / "owner").exists():
+                shutil.rmtree(self.lock_path)
+                self.hold_lock_asAnotherProcess(pid=self._live_pid())
+                (self.lock_path / "owner").write_text("the-winner")
+            return real_rename(src, dst)
+
+        with patch.object(runner.os, "rename", side_effect=substitute_then_rename):
+            self.assertFalse(runner._steal_stale_repo_mutation_lock())
+
+        self.assertTrue(self.lock_path.is_dir(), "the live holder's lock must survive")
+        self.assertEqual((self.lock_path / "owner").read_text(), "the-winner")
+
+    def test_releaseLock_whenItIsReplacedBetweenTheOwnerCheckAndTheDelete_shouldNotDeleteTheReplacement(self):
+        """Release is the mirror of the reclaim race: checking the owner and then
+        deleting lets a steal move this lock aside and create its own in between,
+        and the delete would then remove the thief's live lock."""
+        runner._repo_mutation_lock_token = "our-token"
+        self.hold_lock_asAnotherProcess(pid=self._unused_pid())
+        (self.lock_path / "owner").write_text("our-token")
+        real_rename = os.rename
+
+        def substitute_then_rename(src, dst):
+            if src == str(self.lock_path) and (self.lock_path / "owner").read_text() == "our-token":
+                shutil.rmtree(self.lock_path)
+                self.hold_lock_asAnotherProcess(pid=self._live_pid())
+                (self.lock_path / "owner").write_text("the-winner")
+            return real_rename(src, dst)
+
+        with patch.object(runner.os, "rename", side_effect=substitute_then_rename):
+            runner._release_repo_mutation_lock()
+
+        self.assertTrue(self.lock_path.is_dir(), "the new holder's lock must survive")
+        self.assertEqual((self.lock_path / "owner").read_text(), "the-winner")
+
     def test_cleanupGitState_whenLockUnavailable_shouldNotRemoveTheIndexLock(self):
         """This is the exact hazard the lock exists for: removing a live index.lock
         would let two processes mutate the same index."""
