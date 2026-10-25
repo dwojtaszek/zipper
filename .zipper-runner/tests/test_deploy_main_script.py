@@ -472,7 +472,10 @@ class DeployMainScriptTests(unittest.TestCase):
             '}\n'
             'if claim_repo_lock_for_removal "$identity"; then echo removed; else echo kept; fi\n'
             'echo "owner=$(cat "$REPO_LOCK/owner" 2>/dev/null || echo none)"\n'
-            'echo "leftovers=$(ls -d "$REPO_LOCK".claimed.* 2>/dev/null | wc -l)"\n'
+            '# `wc -l` pads its count on BSD, so strip the padding rather than\n'
+            '# asserting on a platform-specific rendering of the same number.\n'
+            'leftovers="$(ls -d "$REPO_LOCK".claimed.* 2>/dev/null | wc -l)"\n'
+            'echo "leftovers=${leftovers// /}"\n'
         )
         result = subprocess.run([str(harness)], capture_output=True, text=True)
 
@@ -483,12 +486,17 @@ class DeployMainScriptTests(unittest.TestCase):
                       "a restored lock must not leave the moved-aside copy behind")
 
     def test_deploy_whenTheLockIsReplacedDuringTheReclaim_shouldSkipAndKeepTheLiveLock(self):
-        """The same window through the real script: it judges the dead holder's lock
+        """The same window through the real script: it judges the holder's lock
         reclaimable, a peer takes the lock inside the claim, and the deploy must hand
         the checkout back instead of deleting the peer's lock and fast-forwarding
-        under it."""
+        under it.
+
+        The reclaim is driven by age rather than by a recorded dead pid so the test
+        exercises the claim on every platform: the pid check needs `/proc`, which
+        macOS does not have.
+        """
         new_upstream = self.repo.push_upstream_commit("two\n", "c2")
-        self.repo.hold_lock(pid=self._unused_pid())
+        self.repo.hold_lock(age_seconds=3600)
 
         fake_bin = self.repo.root / "fakebin-reclaim"
         fake_bin.mkdir(exist_ok=True)
