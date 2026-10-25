@@ -18,6 +18,62 @@ VERIFIER = runpy.run_path(str(SCRIPT))
 
 
 class SevenZipAdapterTests(unittest.TestCase):
+    def test_check_entry_rejects_watchdog_timeout_after_matching_output(self):
+        expected = b"expected content"
+
+        class BlockingStdout:
+            def __init__(self, killed):
+                self.killed = killed
+                self.output = expected
+
+            def read(self, _size):
+                if self.output:
+                    output, self.output = self.output, b""
+                    return output
+                self.killed.wait(timeout=5)
+                return b""
+
+        class HangingProcess:
+            def __init__(self):
+                self.killed = VERIFIER["threading"].Event()
+                self.stdout = BlockingStdout(self.killed)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return None
+
+            def poll(self):
+                return 1 if self.killed.is_set() else None
+
+            def kill(self):
+                self.killed.set()
+
+            def wait(self, timeout):
+                if not self.killed.wait(timeout):
+                    raise subprocess.TimeoutExpired("fake-7zip", timeout)
+                return 1
+
+            def communicate(self):
+                return b"", b""
+
+        process = HangingProcess()
+        original_timer = VERIFIER["threading"].Timer
+
+        def short_timer(_interval, function, *args, **kwargs):
+            return original_timer(0.01, function, *args, **kwargs)
+
+        entry = {
+            "readableName": "a.txt",
+            "contentSize": len(expected),
+            "contentSha256": hashlib.sha256(expected).hexdigest(),
+        }
+        with patch.object(VERIFIER["threading"], "Timer", side_effect=short_timer):
+            with patch.object(VERIFIER["subprocess"], "Popen", return_value=process):
+                with self.assertRaisesRegex(ValueError, "7-Zip timed out extracting"):
+                    VERIFIER["check_entry"]("fake-7zip", Path("archive.zip"), entry, len(expected))
+
     def test_check_entry_accepts_warning_when_expected_content_matches(self):
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp)
