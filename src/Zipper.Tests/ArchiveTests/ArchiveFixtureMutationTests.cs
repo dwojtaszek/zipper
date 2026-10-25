@@ -183,6 +183,7 @@ public class ArchiveFixtureMutationTests : WorkingDirectoryTestBase
 
     [Theory]
     [InlineData("btype", "non-stored block")]
+    [InlineData("short-len-nlen", "a stored block is missing LEN/NLEN")]
     [InlineData("len-nlen", "inconsistent LEN/NLEN")]
     [InlineData("missing-final", "stream ends before a final block")]
     [InlineData("literal-overrun", "literal data exceeds the compressed payload")]
@@ -200,6 +201,17 @@ public class ArchiveFixtureMutationTests : WorkingDirectoryTestBase
         {
             case "btype":
                 malformedBytes[compressedOffset] |= 0x02;
+                break;
+            case "short-len-nlen":
+                malformedBytes[compressedOffset] |= 0x01;
+                malformedControl = control with
+                {
+                    ArchiveBytes = malformedBytes,
+                    Layout = control.Layout with
+                    {
+                        Entries = [entry with { CompressedSize = 3 }],
+                    },
+                };
                 break;
             case "len-nlen":
                 malformedBytes[compressedOffset + 3] ^= 0x01;
