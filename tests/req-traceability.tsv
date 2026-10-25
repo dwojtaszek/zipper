@@ -507,6 +507,7 @@ REQ-217	unit	ArchiveStructureCaseTests.Build_CodedControls_RecordExpectedMethods
 REQ-217	unit	ArchiveFixtureLayoutTests.Read_RecordsCrcAndSizesFromCentralHeader	Layout reader records CRC32 and sizes for Expectation File schema
 REQ-217	unit	ArchiveTestCodecTests.WireCode_KnownPayloadCodec_MapsHeaderVersionAndName	Payload codec and wire method header version mapping for Expectation Files
 REQ-217	unit	ArchiveTestJsonTests.Serialize_ValidCase_RoundTripsThroughBytes	Expectation File JSON serialization round-trips through draft-07 schema
+REQ-217	unit	ArchiveFixturePropertyTests.ArchiveFixtureBuilder_Build_ShouldRoundTripMethod8StoredBlockStream	Property: method-8 stored-block DEFLATE serialization validates LEN/NLEN and decodes to the recipe payload across empty and varied small inputs
 REQ-217	unit	ArchiveFixturePropertyTests.ArchiveTestCaseSemantics_EvaluateReaderOperations_ShouldEnforceFourReaderOperationsIndependently	Property: Expectation File schema and semantics validate reader operation expectations
 REQ-218	unit	ArchiveCombinedCaseTests.Build_CombinedCrcAndName_AppliesBothFieldMutationsInOrder	Ordered field mutation composition and hash chain validation
 REQ-218	unit	ArchiveFixtureMutationTests.Apply_StoredPayloadBitflip_ChangesOnlyPayloadByteAtDataOffset	Stored payload bitflip changes one byte at DataOffset while preserving the control content hash and structural declarations

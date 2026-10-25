@@ -190,6 +190,12 @@ public readonly record struct ArchiveFixturePropertyInput(
     ArchiveEntrySpec[] Entries);
 
 /// <summary>
+/// Bounded seed and payload length for method-8 stored-block serialization properties.
+/// </summary>
+[StructLayout(LayoutKind.Auto)]
+public readonly record struct DeflateStoredBlockPropertyInput(int Seed, int PayloadLength);
+
+/// <summary>
 /// Bounded input for Ordering Window admission, blocking, and cancellation property tests.
 /// </summary>
 [StructLayout(LayoutKind.Auto)]
@@ -559,6 +565,16 @@ public static class ZipperArbitraries
         return Arb.From(gen, ShrinkArchiveFixturePropertyInput);
     }
 
+    public static Arbitrary<DeflateStoredBlockPropertyInput> DeflateStoredBlockPropertyInputArb()
+    {
+        var gen =
+            from seed in Gen.Choose(0, 100_000)
+            from payloadLength in Gen.Choose(0, 512)
+            select new DeflateStoredBlockPropertyInput(seed, payloadLength);
+
+        return Arb.From(gen, ShrinkDeflateStoredBlockPropertyInput);
+    }
+
     /// <summary>
     /// Strict-prefix delimiter flags exercised by the delimiter property tests. The order is a
     /// stable draw order for the properties; it does not mirror the order
@@ -924,6 +940,21 @@ public static class ZipperArbitraries
         {
             yield return input with { SuiteCaseIndex = input.SuiteCaseIndex / 2 };
             yield return input with { SuiteCaseIndex = 0 };
+        }
+    }
+
+    private static IEnumerable<DeflateStoredBlockPropertyInput> ShrinkDeflateStoredBlockPropertyInput(
+        DeflateStoredBlockPropertyInput input)
+    {
+        if (input.PayloadLength > 0)
+        {
+            yield return input with { PayloadLength = input.PayloadLength / 2 };
+            yield return input with { PayloadLength = 0 };
+        }
+
+        if (input.Seed > 0)
+        {
+            yield return input with { Seed = 0 };
         }
     }
 

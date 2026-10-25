@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.IO.Compression;
 using FsCheck.Xunit;
 using Xunit;
 using Zipper.ArchiveTests;
@@ -105,6 +106,35 @@ public sealed class ArchiveFixturePropertyTests
         Assert.Equal(
             ArchiveFixtureLayout.EocdSignature,
             BinaryPrimitives.ReadUInt32LittleEndian(artifact.ArchiveBytes.AsSpan((int)layout.EocdOffset, 4)));
+    }
+
+    [Property]
+    public void ArchiveFixtureBuilder_Build_ShouldRoundTripMethod8StoredBlockStream(DeflateStoredBlockPropertyInput input)
+    {
+        const string CaseKey = "deflate-stored-block-property";
+        var definition = new ArchiveTestCaseDefinition(
+            CaseKey,
+            CaseRevision: 1,
+            ExpectationRevision: 1,
+            Classification: "valid",
+            Suites: [ArchiveTestCatalog.CompatibilitySuite],
+            Recipe: new ArchiveTestRecipe(
+            [
+                ArchiveTestRecipeEntry.File("stored-block.bin", input.PayloadLength, "deflate"),
+            ]),
+            Construction: ArchiveControlConstruction.DeflateStoredBlock);
+
+        var artifact = ArchiveFixtureBuilder.Build(definition, input.Seed, CancellationToken.None);
+        var entry = Assert.Single(artifact.Layout.Entries);
+        Assert.Equal((ushort)8, entry.Method);
+
+        using var archive = new ZipArchive(new MemoryStream(artifact.ArchiveBytes), ZipArchiveMode.Read);
+        using var stream = Assert.Single(archive.Entries).Open();
+        using var copy = new MemoryStream();
+        stream.CopyTo(copy);
+
+        Assert.Equal(artifact.Entries[0].Content, copy.ToArray());
+        Assert.Equal((uint)artifact.Entries[0].Content.Length, entry.UncompressedSize);
     }
 
     [Property]
