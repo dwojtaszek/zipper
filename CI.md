@@ -66,11 +66,12 @@ After creating a PR — and after every subsequent push — run the review-wait 
 bash tests/wait-for-reviews.sh <PR-number> [timeout-minutes]   # default timeout: 20
 ```
 
-The script blocks until each expected bot (CodeRabbit, Codex) has posted a review or declared a rate-limit skip, then lists every unresolved review thread and exits non-zero while any remain. Fix or reply-with-reason on each thread, resolve it, and re-run until exit 0. A bot that stays silent past the timeout produces a warning, not a failure.
+The script blocks until each expected bot (CodeRabbit, Codex) has posted a review, posted a completion marker, or declared a rate-limit skip, then lists every unresolved review thread and exits non-zero while any remain. Fix or reply-with-reason on each thread, resolve it, and re-run until exit 0. A bot that stays silent past the timeout produces a warning, not a failure.
 
 Caveats:
 - A "pass" check status from a review bot can mean "review skipped" (rate limit) — never treat check status as approval.
 - Resolving a thread without a reply is prohibited; the thread must carry a fix reference or a skip reason.
+- Codex sometimes reports a finished review as a summary issue comment carrying a `codex-review-state:v1` marker instead of a formal review object. The gate counts that marker in either carrier, because it cannot otherwise see such a review at all and waits out its entire timeout on a PR the bot has already reviewed — measured at 20 minutes on PR #1328.
 
 Server-side enforcement: `main` has branch protection with **required conversation resolution** and a **required status check** — GitHub refuses the merge while any review thread is unresolved or the `ci-gate` check is red. `ci-gate` (aggregate job in `pr.yml`) always runs, even on docs-only PRs where the other jobs are skipped, and fails if any needed job (`docs-only`, `ci`, `goldens`) failed or was cancelled. `ci` is the reusable workflow [ci.yml](.github/workflows/ci.yml) — `lint`, `runner-tests`, `version-metadata`, and the three `build-and-test` matrix legs running the full E2E suite — so a red leg inside it still fails the caller job and therefore `ci-gate`. The required check context is always posted. `enforce_admins` is on — no one merges red CI. One-time setup (admin):
 

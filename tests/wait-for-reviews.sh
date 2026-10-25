@@ -26,6 +26,11 @@ EXPECTED_BOTS=(
 # Matches both explicit skip declarations (rate limits, repo star threshold) and
 # CodeRabbit's walkthrough-only responses, which carry no formal review object.
 SKIP_PATTERN='usage limit|rate limit|review limit|Review skipped|skip review|Review available on request|Walkthrough|fewer than 10 stars|does not receive automatic reviews'
+# Codex reports some finished reviews as a summary issue comment carrying a
+# machine-readable completion marker instead of a formal review object. Without
+# this the gate cannot see that review at all and waits out its whole timeout on a
+# PR Codex has already finished — measured at 20 minutes on PR #1328.
+CODEX_COMPLETION_PATTERN='codex-review-state:v1'
 POLL_SECONDS=30
 
 # --- Prerequisites ---
@@ -102,6 +107,17 @@ bot_accounted_for() {
     # Declared a skip / rate limit / walkthrough in an issue comment?
     if jq -r --arg bot "$bot" '.[] | select(.user.login == $bot) | .body' <<<"$comments_json" 2>/dev/null \
         | grep -qiE "$SKIP_PATTERN"; then
+        return 0
+    fi
+    # Reported a finished review through a completion marker rather than a review
+    # object? Codex does this, so the marker is checked in both carriers: it posts
+    # the marker as an issue comment and has also posted it as a review body.
+    if jq -r --arg bot "$bot" '.[] | select(.user.login == $bot) | .body' <<<"$reviews_json" 2>/dev/null \
+        | grep -qE "$CODEX_COMPLETION_PATTERN"; then
+        return 0
+    fi
+    if jq -r --arg bot "$bot" '.[] | select(.user.login == $bot) | .body' <<<"$comments_json" 2>/dev/null \
+        | grep -qE "$CODEX_COMPLETION_PATTERN"; then
         return 0
     fi
     return 1
