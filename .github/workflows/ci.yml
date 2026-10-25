@@ -349,7 +349,7 @@ jobs:
               sys.exit(1)
           '''))"
 
-      - name: Coverage report + 80% gate (Linux)
+      - name: Coverage report + 80% line / 85% branch gate (Linux)
         if: matrix.coverage == true
         uses: ./.github/actions/coverage-gate
 

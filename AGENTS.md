@@ -85,6 +85,7 @@ dotnet test src/Zipper.Tests/Zipper.Tests.csproj --filter "Category=Property" # 
 dotnet test src/Zipper.Tests/Zipper.Tests.csproj --filter "FullyQualifiedName~ClassName"  # Single test class
 dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj          # Analyzer tests (must pass when touching src/Zipper.Analyzers/)
 bash tests/run-mutation-smoke.sh                                             # Mutation smoke on changed source lines (must pass before push)
+dotnet test src/Zipper.Tests/Zipper.Tests.csproj --collect:"XPlat Code Coverage" --results-directory ./TestResults && dotnet reportgenerator -reports:TestResults/*/coverage.cobertura.xml -targetdir:TestResults/coverage-report -reporttypes:TextSummary # Coverage report generation (inspect line ≥ 80%, branch ≥ 85%, per-file ≥ 50% in Summary.txt)
 
 # Lint
 dotnet format --verify-no-changes src/   # Required final format gate

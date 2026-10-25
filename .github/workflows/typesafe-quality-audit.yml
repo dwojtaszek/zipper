@@ -11,9 +11,13 @@ on:
   workflow_dispatch:
     inputs:
       scope:
-        description: "Mutation shard scope (--mutate glob, relative to project root src/)"
+        description: "Mutation shard scope (--mutate globs, comma-separated, relative to project root src/)"
         required: false
-        default: "LoadFiles/**"
+        default: "LoadFiles/**,PathValidator.cs,Validation/ProductionSetPostValidator.cs,ProductionSetOrchestrator.cs,ManifestComparison/ProductionManifestComparer.cs,ZipArchiveSink.cs,Emails/EmailFactory.cs,ChaosSampler.cs,DatAnomalyApplier.cs,OptAnomalyApplier.cs"
+      break_at:
+        description: "Mutation break threshold (0-100)"
+        required: false
+        default: "50"
       shard:
         description: "Per-shard mutation timeout in minutes"
         required: false
@@ -114,22 +118,41 @@ jobs:
         if: steps.secret.outputs.available == 'true'
         timeout-minutes: ${{ fromJSON(github.event.inputs.shard || '45') }}
         env:
-          SCOPE: ${{ github.event.inputs.scope || 'LoadFiles/**' }}
+          SCOPE: ${{ github.event.inputs.scope || 'LoadFiles/**,PathValidator.cs,Validation/ProductionSetPostValidator.cs,ProductionSetOrchestrator.cs,ManifestComparison/ProductionManifestComparer.cs,ZipArchiveSink.cs,Emails/EmailFactory.cs,ChaosSampler.cs,DatAnomalyApplier.cs,OptAnomalyApplier.cs' }}
+          BREAK_AT: ${{ github.event.inputs.break_at || '50' }}
           SHARD_TIMEOUT: ${{ github.event.inputs.shard || '45' }}
         run: |
-          # Runtime/cost budget: one bounded shard per run until measured
-          # runtimes justify widening (issue #959 Phase 2).
-          # Scope is relative to project root src/; strip leading src/ if provided.
-          MUTATE_SCOPE="${SCOPE#src/}"
+          # Scope is relative to project root src/; split comma-separated globs.
+          MUTATE_ARGS=()
+          IFS=',' read -ra ADDR <<< "$SCOPE"
+          for item in "${ADDR[@]}"; do
+            # Pure bash whitespace trimming and path prefix stripping (./, src/)
+            item="${item#"${item%%[![:space:]]*}"}"
+            item="${item%"${item##*[![:space:]]}"}"
+            item="${item#./}"
+            item="${item#src/}"
+            item="${item#./}"
+            if [ -n "$item" ]; then
+              MUTATE_ARGS+=(--mutate "$item")
+            fi
+          done
           mkdir -p results/mutation
+          STRYKER_THRESHOLDS=()
+          if [ "$BREAK_AT" -gt 60 ] 2>/dev/null; then
+            STRYKER_THRESHOLDS+=(--threshold-low "$BREAK_AT")
+          fi
+          if [ "$BREAK_AT" -gt 80 ] 2>/dev/null; then
+            STRYKER_THRESHOLDS+=(--threshold-high "$BREAK_AT")
+          fi
           STRYKER_RC=0
           (cd src && timeout "${SHARD_TIMEOUT}m" dotnet stryker \
             --project Zipper.csproj \
             --test-project Zipper.Tests/Zipper.Tests.csproj \
-            --mutate "$MUTATE_SCOPE" \
+            "${MUTATE_ARGS[@]}" \
+            "${STRYKER_THRESHOLDS[@]}" \
             --reporter json \
             --output "../results/mutation" \
-            --break-at 0 \
+            --break-at "$BREAK_AT" \
             --concurrency 4 \
             --skip-version-check) || STRYKER_RC=$?
           if [ "$STRYKER_RC" -ne 0 ]; then
@@ -139,7 +162,7 @@ jobs:
           python3 tools/typesafe-audit/quality/normalize_report.py \
             --input results/mutation \
             --output results/mutation/mutation-report.json \
-            --scope "$MUTATE_SCOPE" \
+            --scope "$SCOPE" \
             --repo-root .
 
       - name: Run TypeSafe quality ranking (advisory)

@@ -1,7 +1,8 @@
 name: Coverage gate
 description: >
   Restore reportgenerator (cached), build the coverage report from the
-  cobertura output under TestResults/, and enforce the 80% line-coverage gate.
+  cobertura output under TestResults/, and enforce the 80% line-coverage and
+  85% branch-coverage gate.
   Shared by pr.yml and build-and-test.yml (#397). Assumes a prior step already
   produced TestResults/*/coverage.cobertura.xml.
 
@@ -16,7 +17,7 @@ runs:
         key: ${{ runner.os }}-reportgen-${{ hashFiles('.config/dotnet-tools.json') }}
         restore-keys: ${{ runner.os }}-reportgen-
 
-    - name: Coverage report + 80% gate
+    - name: Coverage report + 80% line / 85% branch gate
       shell: bash
       env:
         DOTNET_CLI_HOME: ${{ github.workspace }}/.dotnet-tools
@@ -27,10 +28,24 @@ runs:
           -targetdir:TestResults/coverage-report \
           -reporttypes:"Html;TextSummary"
         cat TestResults/coverage-report/Summary.txt
-        COVERAGE=$(grep "Line coverage:" TestResults/coverage-report/Summary.txt | grep -oP '\d+(\.\d+)?%' | head -1 | sed 's/%//')
+        COVERAGE=$(grep "Line coverage:" TestResults/coverage-report/Summary.txt | grep -oE '[0-9]+(\.[0-9]+)?%' | head -1 | sed 's/%//' || true)
+        if [ -z "$COVERAGE" ]; then
+          echo "ERROR: could not extract line coverage from Summary.txt"
+          exit 1
+        fi
         echo "Coverage: ${COVERAGE}%"
         awk -v c="$COVERAGE" 'BEGIN { exit (c+0 < 80) ? 1 : 0 }' || {
           echo "ERROR: total coverage ${COVERAGE}% < 80%"
+          exit 1
+        }
+        BRANCH_COVERAGE=$(grep "Branch coverage:" TestResults/coverage-report/Summary.txt | grep -oE '[0-9]+(\.[0-9]+)?%' | head -1 | sed 's/%//' || true)
+        if [ -z "$BRANCH_COVERAGE" ]; then
+          echo "ERROR: could not extract branch coverage from Summary.txt"
+          exit 1
+        fi
+        echo "Branch coverage: ${BRANCH_COVERAGE}%"
+        awk -v c="$BRANCH_COVERAGE" 'BEGIN { exit (c+0 < 85) ? 1 : 0 }' || {
+          echo "ERROR: total branch coverage ${BRANCH_COVERAGE}% < 85%"
           exit 1
         }
         echo "==> Enforcing per-file coverage floor (50%)..."

@@ -111,6 +111,42 @@ class AdvisoryWorkflowExitClassificationTests(unittest.TestCase):
             "run_check.py in typesafe-issue-triage.yml must be guarded with || rc=$?",
         )
 
+    def test_quality_audit_mutation_break_threshold_is_meaningful(self):
+        """Mutation threshold in typesafe-quality-audit.yml must not be --break-at 0 and must enforce a floor (#1269)."""
+        self.assertNotIn(
+            "--break-at 0",
+            self.quality_wf_text,
+            "typesafe-quality-audit.yml must not contain --break-at 0; a meaningful mutation threshold is required (#1269)",
+        )
+        self.assertRegex(
+            self.quality_wf_text,
+            r"--break-at\s+[\"']?(\$BREAK_AT|50)[\"']?",
+            "typesafe-quality-audit.yml must enforce a calibrated mutation break threshold (#1269)",
+        )
+
+    def test_quality_audit_mutation_scope_widened_to_gap_files(self):
+        """Weekly mutation scope in typesafe-quality-audit.yml must include LoadFiles and the 9 companion gap files (#1269)."""
+        required_gap_files = [
+            "LoadFiles/**",
+            "PathValidator.cs",
+            "Validation/ProductionSetPostValidator.cs",
+            "ProductionSetOrchestrator.cs",
+            "ManifestComparison/ProductionManifestComparer.cs",
+            "ZipArchiveSink.cs",
+            "Emails/EmailFactory.cs",
+            "ChaosSampler.cs",
+            "DatAnomalyApplier.cs",
+            "OptAnomalyApplier.cs",
+        ]
+        for gap_file in required_gap_files:
+            with self.subTest(gap_file=gap_file):
+                self.assertIn(
+                    gap_file,
+                    self.quality_wf_text,
+                    f"typesafe-quality-audit.yml mutation scope must include '{gap_file}' (#1269)",
+                )
+
+
     def _assert_advisory_exit_classification(self, step_run: str, summary_phrase: str):
         """Verify advisory step exit code classification (0 success, 3 neutral, 2 failure) under bash -eo pipefail."""
         script = re.sub(r"\$\{\{[^}]+\}\}", "dummy_val", step_run)
@@ -165,7 +201,16 @@ class AdvisoryWorkflowExitClassificationTests(unittest.TestCase):
                             f"Exit code {mock_rc} must not append '{summary_phrase}'",
                         )
 
-    def _run_stryker_step(self, script: str, td: str, dotnet_rc: int, python_output: str = ""):
+    def _run_stryker_step(
+        self,
+        script: str,
+        td: str,
+        dotnet_rc: int,
+        python_output: str = "",
+        scope: str = "LoadFiles/**",
+        break_at: str = "50",
+        record_dotnet_args: bool = False,
+    ):
         """Execute the Stryker workflow step in a temporary directory with mocked tools."""
         bin_dir = os.path.join(td, "bin")
         os.makedirs(bin_dir)
@@ -178,7 +223,11 @@ class AdvisoryWorkflowExitClassificationTests(unittest.TestCase):
 
         mock_dotnet = os.path.join(bin_dir, "dotnet")
         with open(mock_dotnet, "w", encoding="utf-8") as f:
-            f.write(f"#!/bin/sh\nexit {dotnet_rc}\n")
+            if record_dotnet_args:
+                args_log = os.path.join(td, "dotnet_args.txt")
+                f.write(f'#!/bin/sh\necho "$@" > "{args_log}"\nexit {dotnet_rc}\n')
+            else:
+                f.write(f"#!/bin/sh\nexit {dotnet_rc}\n")
         os.chmod(mock_dotnet, 0o755)
 
         mock_py = os.path.join(bin_dir, "python3")
@@ -188,7 +237,8 @@ class AdvisoryWorkflowExitClassificationTests(unittest.TestCase):
 
         env = os.environ.copy()
         env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
-        env["SCOPE"] = "LoadFiles/**"
+        env["SCOPE"] = scope
+        env["BREAK_AT"] = break_at
         env["SHARD_TIMEOUT"] = "45"
 
         return subprocess.run(
@@ -251,6 +301,32 @@ class AdvisoryWorkflowExitClassificationTests(unittest.TestCase):
                 proc.stdout + proc.stderr,
                 "normalize_report.py must execute in the repo root directory",
             )
+
+    @unittest.skipIf(os.name == "nt" or shutil.which("bash") is None, "POSIX bash execution boundary")
+    def test_quality_audit_stryker_step_scope_parsing_and_break_at(self):
+        """Stryker step must expand comma-separated scopes into individual --mutate flags and pass --break-at (#1269)."""
+        step_run = self._get_step_run(self.quality_wf_text, "Mutation testing shard (Phase 2)")
+        self.assertTrue(step_run, "Could not locate 'Mutation testing shard (Phase 2)' step script")
+        script = re.sub(r"\$\{\{[^}]+\}\}", "dummy_val", step_run)
+
+        with tempfile.TemporaryDirectory() as td:
+            scope = "LoadFiles/**, ./src/PathValidator.cs,  Validation/ProductionSetPostValidator.cs , "
+            proc = self._run_stryker_step(
+                script,
+                td,
+                dotnet_rc=0,
+                scope=scope,
+                break_at="65",
+                record_dotnet_args=True,
+            )
+            self.assertEqual(proc.returncode, 0, f"Script failed: {proc.stdout}\n{proc.stderr}")
+            args_file = os.path.join(td, "dotnet_args.txt")
+            self.assertTrue(os.path.exists(args_file), "dotnet was not invoked")
+            args_text = Path(args_file).read_text(encoding="utf-8")
+            self.assertIn("--mutate LoadFiles/**", args_text)
+            self.assertIn("--mutate PathValidator.cs", args_text)
+            self.assertIn("--mutate Validation/ProductionSetPostValidator.cs", args_text)
+            self.assertIn("--break-at 65", args_text)
 
     @unittest.skipIf(os.name == "nt" or shutil.which("bash") is None, "POSIX bash execution boundary")
     def test_issue_triage_step_exit_classification_under_bash_e(self):
