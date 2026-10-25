@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Security.Cryptography;
+using System.Text;
 using ICSharpCode.SharpZipLib.BZip2;
 using Xunit;
 using Zipper.ArchiveTests;
@@ -535,6 +536,89 @@ public class ArchiveFixtureMutationTests : WorkingDirectoryTestBase
         var locatorOffset = control.Layout.EocdOffset - 20;
         Assert.Equal(locatorOffset + 16, mutation.Offset);
         Assert.Equal(2U, BitConverter.ToUInt32(mutated.ArchiveBytes, (int)mutation.Offset));
+    }
+
+    [Fact]
+    public void Apply_Zip64LocatorAmbiguity_PlacesFakeRecordsInsideCentralDirectoryComment()
+    {
+        var control = ArchiveFixtureBuilder.BuildControl("valid-signatures-in-comment", 42, CancellationToken.None);
+        var entry = Assert.Single(control.Layout.Entries);
+
+        var mutated = ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.Zip64LocatorAmbiguity, control);
+
+        Assert.Equal(2, mutated.Mutations.Count);
+        var mutation = mutated.Mutations[0];
+        var commentLengthMutation = mutated.Mutations[1];
+        var commentLength = ushort.MaxValue - (46 + entry.CentralNameLength + entry.CentralExtraLength);
+        var eocdOffset = control.Layout.EocdOffset + commentLength;
+        const int FakeCentralNameLength = 13;
+        const int FakeCentralLength = 46 + FakeCentralNameLength;
+        const int Zip64EocdLength = 56;
+        const int Zip64LocatorLength = 20;
+        var fileCommentOffset = entry.CentralDirectoryOffset + 46 + entry.CentralNameLength + entry.CentralExtraLength;
+        var paddingLength = commentLength - FakeCentralLength - Zip64EocdLength - Zip64LocatorLength;
+        var fakeCentralOffset = fileCommentOffset + paddingLength;
+        var zip64EocdOffset = fakeCentralOffset + FakeCentralLength;
+        var locatorOffset = zip64EocdOffset + Zip64EocdLength;
+
+        uint ReadUInt32(long offset) =>
+            BinaryPrimitives.ReadUInt32LittleEndian(mutated.ArchiveBytes.AsSpan((int)offset, 4));
+        ushort ReadUInt16(long offset) =>
+            BinaryPrimitives.ReadUInt16LittleEndian(mutated.ArchiveBytes.AsSpan((int)offset, 2));
+        ulong ReadUInt64(long offset) =>
+            BinaryPrimitives.ReadUInt64LittleEndian(mutated.ArchiveBytes.AsSpan((int)offset, 8));
+
+        Assert.Equal("zip64-locator-ambiguity", mutation.Code);
+        Assert.Equal("whole-archive", mutation.Structure);
+        Assert.Equal(control.Layout.CentralDirectoryOffset, mutation.Offset);
+        Assert.Equal(control.ArchiveBytes.Length - mutation.Offset, mutation.DeletedLength);
+        Assert.Equal(mutated.ArchiveBytes.Length - mutation.Offset, mutation.InsertedLength);
+        Assert.Contains($"file-comment-offset={fileCommentOffset}", mutation.DeclaredValue, StringComparison.Ordinal);
+        Assert.Contains($"file-comment-length={commentLength}", mutation.DeclaredValue, StringComparison.Ordinal);
+        Assert.Contains($"fake-central-header-offset={fakeCentralOffset}", mutation.DeclaredValue, StringComparison.Ordinal);
+        Assert.Contains($"fake-zip64-eocd-offset={zip64EocdOffset}", mutation.DeclaredValue, StringComparison.Ordinal);
+        Assert.Contains($"fake-zip64-locator-offset={locatorOffset}", mutation.DeclaredValue, StringComparison.Ordinal);
+        Assert.Equal("central-header", commentLengthMutation.Structure);
+        Assert.Equal(entry.CentralDirectoryOffset + 32, commentLengthMutation.Offset);
+        Assert.Contains($"central-directory-size={ushort.MaxValue}", commentLengthMutation.DeclaredValue, StringComparison.Ordinal);
+
+        Assert.Equal(ArchiveFixtureLayout.CentralHeaderSignature, ReadUInt32(fakeCentralOffset));
+        Assert.Equal("fake_file.txt", Encoding.ASCII.GetString(
+            mutated.ArchiveBytes.AsSpan((int)fakeCentralOffset + 46, FakeCentralNameLength)));
+        Assert.Equal(ArchiveFixtureLayout.Zip64EocdSignature, ReadUInt32(zip64EocdOffset));
+        Assert.Equal(44UL, ReadUInt64(zip64EocdOffset + 4));
+        Assert.Equal((ulong)FakeCentralLength, ReadUInt64(zip64EocdOffset + 40));
+        Assert.Equal((ulong)fakeCentralOffset, ReadUInt64(zip64EocdOffset + 48));
+        Assert.Equal(ArchiveFixtureLayout.Zip64LocatorSignature, ReadUInt32(locatorOffset));
+        Assert.Equal((ulong)zip64EocdOffset, ReadUInt64(locatorOffset + 8));
+        Assert.Equal(1U, ReadUInt32(locatorOffset + 16));
+        Assert.Equal(eocdOffset - 20, locatorOffset);
+
+        Assert.Equal(commentLength, ReadUInt16(entry.CentralDirectoryOffset + 32));
+        Assert.Equal(ArchiveFixtureLayout.CentralHeaderSignature, ReadUInt32(entry.CentralDirectoryOffset));
+        Assert.Equal((uint)ushort.MaxValue, ReadUInt32(eocdOffset + 12));
+        Assert.Equal((uint)control.Layout.CentralDirectoryOffset, ReadUInt32(eocdOffset + 16));
+        Assert.Equal(1, ReadUInt16(eocdOffset + 8));
+        Assert.Equal(1, ReadUInt16(eocdOffset + 10));
+        Assert.Equal(ArchiveFixtureLayout.EocdSignature, ReadUInt32(eocdOffset));
+        Assert.NotEqual(
+            ArchiveFixtureLayout.Zip64LocatorSignature,
+            BinaryPrimitives.ReadUInt32LittleEndian(
+                control.ArchiveBytes.AsSpan((int)control.Layout.EocdOffset - 20, 4)));
+
+        var originalEocd = control.ArchiveBytes.AsSpan((int)control.Layout.EocdOffset, 22).ToArray();
+        BinaryPrimitives.WriteUInt32LittleEndian(originalEocd.AsSpan(12), ushort.MaxValue);
+        Assert.Equal(originalEocd, mutated.ArchiveBytes.AsSpan((int)eocdOffset, 22).ToArray());
+        Assert.Equal(
+            control.ArchiveBytes.AsSpan((int)control.Layout.EocdOffset + 22).ToArray(),
+            mutated.ArchiveBytes.AsSpan((int)eocdOffset + 22, ArchiveTestCatalog.SignatureCommentLength).ToArray());
+
+        var lengthAnchored = ArchiveFixtureLayout.Read(mutated.ArchiveBytes, ArchiveTestCatalog.SignatureCommentLength);
+        Assert.Equal(eocdOffset, lengthAnchored.EocdOffset);
+        Assert.Equal((uint)ushort.MaxValue, lengthAnchored.CentralDirectorySize);
+        var parsedEntry = Assert.Single(lengthAnchored.Entries);
+        Assert.Equal("note.txt", parsedEntry.Name);
+        Assert.Equal(commentLength, parsedEntry.CentralCommentLength);
     }
 
     [Fact]

@@ -78,6 +78,7 @@ internal static class ArchiveFixtureMutator
             ArchiveTestMutationKind.EocdEntryCountMismatch => DeclareEocdEntryCountMismatch(control, before),
             ArchiveTestMutationKind.Zip64EocdEntryCountMismatch => DeclareZip64EocdEntryCountMismatch(control, before),
             ArchiveTestMutationKind.Zip64LocatorDiskMismatch => DeclareZip64LocatorDiskMismatch(control, before),
+            ArchiveTestMutationKind.Zip64LocatorAmbiguity => InjectZip64LocatorAmbiguity(control, before),
             ArchiveTestMutationKind.EocdAmbiguityComment => InjectEocdAmbiguityComment(control, before),
             ArchiveTestMutationKind.DescriptorCrcDisagreement => DisagreeDescriptorCrc(control, before),
             ArchiveTestMutationKind.DescriptorSizeDisagreement => DisagreeDescriptorSize(control, before),
@@ -325,6 +326,122 @@ internal static class ArchiveFixtureMutator
         {
             BinaryPrimitives.WriteUInt32LittleEndian(after.AsSpan((int)totalDisksOffset, 4), DeclaredDisks);
         });
+    }
+
+    /// <summary>
+    /// Extends the final central-header comment to 0xFFFF bytes and plants a plausible
+    /// fake central directory, Zip64 EOCD, and locator at its end (ticket #1280). The
+    /// EOCD remains length-anchored and advertises the real 32-bit central-directory
+    /// size; heuristic Zip64 detectors can mistake the comment bytes for real records.
+    /// </summary>
+    private static MutatedArchiveFixture InjectZip64LocatorAmbiguity(
+        ArchiveFixtureArtifact control,
+        byte[] before)
+    {
+        const uint HeuristicZip64DirectorySize = ushort.MaxValue;
+        const int CentralHeaderLength = 46;
+        const int Zip64EocdLength = 56;
+        const int Zip64LocatorLength = 20;
+        const int Zip64Version = 45;
+
+        var code = ArchiveTestMutationKind.Zip64LocatorAmbiguity.ToCaseKey();
+        if (control.Layout.Entries.Count != 1)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test mutation '{code}': the control must contain exactly one entry.");
+        }
+
+        var entry = control.Layout.Entries[0];
+        var eocdOffset = control.Layout.EocdOffset;
+        var commentOffset = checked(entry.CentralDirectoryOffset + CentralHeaderLength
+            + entry.CentralNameLength + entry.CentralExtraLength);
+        var declaredArchiveCommentLength = BinaryPrimitives.ReadUInt16LittleEndian(
+            before.AsSpan((int)eocdOffset + 20, 2));
+        if (entry.CentralCommentLength != 0
+            || commentOffset != eocdOffset
+            || checked(control.Layout.CentralDirectoryOffset + control.Layout.CentralDirectorySize) != eocdOffset
+            || declaredArchiveCommentLength != ArchiveTestCatalog.SignatureCommentLength)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test mutation '{code}': the control must have an un-commented final central header followed by the declared Archive comment.");
+        }
+
+        var fakeCentralName = Encoding.ASCII.GetBytes("fake_file.txt");
+        var fakeCentralLength = checked(CentralHeaderLength + fakeCentralName.Length);
+        var commentLength = checked((int)HeuristicZip64DirectorySize
+            - CentralHeaderLength - entry.CentralNameLength - entry.CentralExtraLength);
+        var paddingLength = commentLength - fakeCentralLength - Zip64EocdLength - Zip64LocatorLength;
+        if (paddingLength < 0)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test mutation '{code}': the fake Zip64 records do not fit in the central-header comment.");
+        }
+
+        var fakeCentralOffset = checked(commentOffset + paddingLength);
+        var fakeZip64EocdOffset = checked(fakeCentralOffset + fakeCentralLength);
+        var fakeZip64LocatorOffset = checked(fakeZip64EocdOffset + Zip64EocdLength);
+        var after = new byte[checked(before.Length + commentLength)];
+
+        before.AsSpan(0, (int)commentOffset).CopyTo(after);
+        before.AsSpan((int)eocdOffset).CopyTo(after.AsSpan((int)eocdOffset + commentLength));
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            after.AsSpan((int)entry.CentralDirectoryOffset + 32, 2),
+            checked((ushort)commentLength));
+
+        var fakeCentralHeader = after.AsSpan((int)fakeCentralOffset, fakeCentralLength);
+        BinaryPrimitives.WriteUInt32LittleEndian(fakeCentralHeader, ArchiveFixtureLayout.CentralHeaderSignature);
+        BinaryPrimitives.WriteUInt16LittleEndian(fakeCentralHeader[6..], 20);
+        BinaryPrimitives.WriteUInt16LittleEndian(fakeCentralHeader[28..], checked((ushort)fakeCentralName.Length));
+        fakeCentralName.CopyTo(fakeCentralHeader[CentralHeaderLength..]);
+
+        var fakeZip64Eocd = after.AsSpan((int)fakeZip64EocdOffset, Zip64EocdLength);
+        BinaryPrimitives.WriteUInt32LittleEndian(fakeZip64Eocd, ArchiveFixtureLayout.Zip64EocdSignature);
+        BinaryPrimitives.WriteUInt64LittleEndian(fakeZip64Eocd[4..], 44);
+        BinaryPrimitives.WriteUInt16LittleEndian(fakeZip64Eocd[12..], Zip64Version);
+        BinaryPrimitives.WriteUInt16LittleEndian(fakeZip64Eocd[14..], Zip64Version);
+        BinaryPrimitives.WriteUInt64LittleEndian(fakeZip64Eocd[24..], 1);
+        BinaryPrimitives.WriteUInt64LittleEndian(fakeZip64Eocd[32..], 1);
+        BinaryPrimitives.WriteUInt64LittleEndian(fakeZip64Eocd[40..], checked((ulong)fakeCentralLength));
+        BinaryPrimitives.WriteUInt64LittleEndian(fakeZip64Eocd[48..], checked((ulong)fakeCentralOffset));
+
+        var fakeZip64Locator = after.AsSpan((int)fakeZip64LocatorOffset, Zip64LocatorLength);
+        BinaryPrimitives.WriteUInt32LittleEndian(fakeZip64Locator, ArchiveFixtureLayout.Zip64LocatorSignature);
+        BinaryPrimitives.WriteUInt64LittleEndian(fakeZip64Locator[8..], checked((ulong)fakeZip64EocdOffset));
+        BinaryPrimitives.WriteUInt32LittleEndian(fakeZip64Locator[16..], 1);
+
+        var shiftedEocdOffset = checked(eocdOffset + commentLength);
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            after.AsSpan((int)shiftedEocdOffset + 12, 4),
+            HeuristicZip64DirectorySize);
+
+        return Finalize(ArchiveTestMutationKind.Zip64LocatorAmbiguity, before, after,
+        [
+            Record(
+                new MutationSpec(
+                    code,
+                    "whole-archive",
+                    control.Layout.CentralDirectoryOffset,
+                    $"Rebuilds the Archive tail to extend the final central-header comment to {commentLength} bytes, placing fake Zip64 records at heuristic-sensitive offsets while retaining a valid single-disk EOCD and its original Archive comment.",
+                    null,
+                    before.Length - (int)control.Layout.CentralDirectoryOffset,
+                    after.Length - (int)control.Layout.CentralDirectoryOffset,
+                    DeclaredValue:
+                        $"file-comment-offset={commentOffset} file-comment-length={commentLength} fake-central-header-offset={fakeCentralOffset} fake-zip64-eocd-offset={fakeZip64EocdOffset} fake-zip64-locator-offset={fakeZip64LocatorOffset}"),
+                before,
+                after),
+            Record(
+                new MutationSpec(
+                    code,
+                    "central-header",
+                    entry.CentralDirectoryOffset + 32,
+                    $"Sets the final central header's comment length to {commentLength}, making the physical central-directory size 0xFFFF.",
+                    entry.Ordinal,
+                    2,
+                    2,
+                    DeclaredValue: $"central-header-comment-length={commentLength} central-directory-size={HeuristicZip64DirectorySize}"),
+                before,
+                after),
+        ]);
     }
 
     /// <summary>
@@ -1882,6 +1999,7 @@ internal enum ArchiveTestMutationKind
     EocdEntryCountMismatch,
     Zip64EocdEntryCountMismatch,
     Zip64LocatorDiskMismatch,
+    Zip64LocatorAmbiguity,
     EocdAmbiguityComment,
     DescriptorCrcDisagreement,
     DescriptorSizeDisagreement,
@@ -1942,6 +2060,7 @@ internal static class ArchiveTestMutationKindExtensions
         ArchiveTestMutationKind.EocdEntryCountMismatch => "eocd-entry-count-mismatch",
         ArchiveTestMutationKind.Zip64EocdEntryCountMismatch => "zip64-eocd-entry-count-mismatch",
         ArchiveTestMutationKind.Zip64LocatorDiskMismatch => "zip64-locator-disk-mismatch",
+        ArchiveTestMutationKind.Zip64LocatorAmbiguity => "zip64-locator-ambiguity",
         ArchiveTestMutationKind.EocdAmbiguityComment => "eocdr-ambiguity-comment",
         ArchiveTestMutationKind.DescriptorCrcDisagreement => "descriptor-crc-disagreement",
         ArchiveTestMutationKind.DescriptorSizeDisagreement => "descriptor-size-disagreement",

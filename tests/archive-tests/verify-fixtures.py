@@ -110,6 +110,7 @@ STRUCTURAL_INVARIANT_CHECKS = {
     "declared-sizes-are-lies": "mutations",
     "declared-counts-disagree": "mutations",
     "metadata-sources-disagree": "mutations",
+    "comment-bytes-are-pure-data": "mutations",
     "one-member-fails": "mutations",
     "one-member-unsupported": "mutations",
     "spanning-declared-single-file": "mutations",

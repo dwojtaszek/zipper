@@ -308,6 +308,17 @@ internal static class ArchiveTestSuiteGenerator
             ];
         }
 
+        if (definition.CaseKey == "zip64-locator-ambiguity")
+        {
+            return
+            [
+                Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], ["comment-bytes-are-pure-data"], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches", "read-entry-fails", "read-entry-returns-unverified-bytes"], ["comment-bytes-are-pure-data"], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-passes", "integrity-fails", "integrity-unchecked"], ["comment-bytes-are-pure-data"], ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-succeeds", "extract-fails"], ["comment-bytes-are-pure-data"], ["open", ReadEntryOperation, ExtractOperation]),
+            ];
+        }
+
         // Legacy-codec trail-byte 0x5C names (ticket #887): valid single entries
         // whose raw name bytes contain 0x5C only as a CP932/Big5/GBK character's
         // trail byte. Decoding-aware readers keep one member; separator-normalizing

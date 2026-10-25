@@ -656,11 +656,12 @@ public class ArchivePathPolicyCaseTests : WorkingDirectoryTestBase
         // mixed one-unsupported-member case, plus the #1279 Zip64 size-source
         // differential: every member publishes a safe
         // Fixture ID pair. The #870 EOCD parser differential and the two #878
-        // ADLS Gen2 segment-depth cases are also included.
+        // ADLS Gen2 segment-depth cases, plus the #1280 Zip64 detection
+        // differential, are also included.
         var securityKeys = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.SecuritySuite)
             .Select(c => c.CaseKey)
             .ToList();
-        Assert.Equal(41, securityKeys.Count);
+        Assert.Equal(42, securityKeys.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(securityKeys, 42, Path.Combine(TempDir, "security")),
