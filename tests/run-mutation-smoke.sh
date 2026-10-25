@@ -2,37 +2,53 @@
 # tests/run-mutation-smoke.sh — Lightweight mutation smoke for pre-push.
 #
 # Applies simple operator mutations to changed lines in .cs source files
-# (vs merge-base with main), builds and runs unit tests to check if the
-# mutation is caught.  Not a replacement for full Stryker analysis (which
-# runs weekly in CI via typesafe-quality-audit.yml).
+# (vs merge-base with main) plus string-literal mutations to value producers,
+# builds and runs unit tests to check if the mutation is caught.  Not a
+# replacement for full Stryker analysis (which runs weekly in CI via
+# typesafe-quality-audit.yml).
+#
+# Value producers are SyntheticRowValues, Load File composers, collection
+# metadata values, column value generators, and profile data tables.  Mutating
+# a literal there exposes tests that only assert a column exists instead of
+# asserting its value.
 #
 # Speed:  0 s when no source .cs files changed.
-#         ~3 s per compile-error mutation; ~20 s per test-run mutation.
-#         Default max 3 mutations → worst case ~60 s.
+#         ~3 s per compile-error mutation; ~45 s per test-run mutation.
+#         Default max 3 mutations → worst case ~2.5 min.
 #
 # Exit:   0  all killed / nothing to mutate / skipped
 #         1  surviving mutants found
 #
 # Env:    MUTATION_SMOKE_MAX=N       max mutations (default 3)
-#         MUTATION_SMOKE_TIMEOUT=N   overall timeout in seconds (default 120)
+#         MUTATION_SMOKE_TIMEOUT=N   overall timeout in seconds (default 240)
 #         MUTATION_SMOKE_CACHE=0|1   enable content-hash mutant cache (default 1)
 #         MUTATION_CACHE_DIR=PATH    override cache directory (default .git/zipper-hooks/mutation-cache)
 #         MUTATION_SMOKE_BUILD_TIMEOUT=N  per-mutant build timeout in seconds (default 30)
-#         MUTATION_SMOKE_TEST_TIMEOUT=N   per-mutant test timeout in seconds (default 30)
+#         MUTATION_SMOKE_TEST_TIMEOUT=N   per-mutant test timeout in seconds (default 60)
+#
+# Args:   --list-candidates   print the selected candidates and exit (no build)
+#         --max N             max mutations (default 3)
+#         --base REF          explicit merge base
+#         --no-cache          bypass the mutant result cache
 
 set -u
 
 MAX="${MUTATION_SMOKE_MAX:-3}"
-OVERALL_TIMEOUT="${MUTATION_SMOKE_TIMEOUT:-120}"
+OVERALL_TIMEOUT="${MUTATION_SMOKE_TIMEOUT:-240}"
 USE_CACHE="${MUTATION_SMOKE_CACHE:-1}"
 BUILD_TIMEOUT="${MUTATION_SMOKE_BUILD_TIMEOUT:-30}"
-TEST_TIMEOUT="${MUTATION_SMOKE_TEST_TIMEOUT:-30}"
+TEST_TIMEOUT="${MUTATION_SMOKE_TEST_TIMEOUT:-60}"
 EXPLICIT_BASE="${MUTATION_SMOKE_BASE:-}"
+LIST_CANDIDATES=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --no-cache)
             USE_CACHE=0
+            shift
+            ;;
+        --list-candidates)
+            LIST_CANDIDATES=1
             shift
             ;;
         --max)
@@ -170,8 +186,23 @@ DESCS=(
     '<= → <'
 )
 
+OPERATOR_COUNT=${#PATTERNS[@]}
+PATTERNS+=('s/"(\\"|[^"])*"/"MUTATED"/')
+DESCS+=('string literal → "MUTATED"')
+STRING_IDX=$(( ${#PATTERNS[@]} - 1 ))
+
+# String-literal mutants only make sense for value producers. Mutating a log
+# line or an unscoped file would report a survivor that no test should kill.
+is_value_producer_file() {
+    case "$1" in
+        src/LoadFiles/SyntheticRowValues.cs|src/LoadFiles/*Composer*.cs|src/LoadFiles/CollectionMetadataValues.cs|src/Profiles/Generation/*.cs|src/Profiles/Data/*.cs) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 # ── Collect candidates ────────────────────────────────────────
 CANDIDATES=()
+STRING_CANDIDATES=()
 for file in "${FILES[@]}"; do
     [[ -f "$file" ]] || continue
     LINES=()
@@ -193,24 +224,60 @@ for file in "${FILES[@]}"; do
         trimmed="${code_only// /}"
         [[ -z "$trimmed" ]] && continue
 
-        for idx in "${!PATTERNS[@]}"; do
+        for ((idx = 0; idx < OPERATOR_COUNT; idx++)); do
             mutated=$(printf '%s\n' "$code_only" | sed -E "${PATTERNS[$idx]}" 2>/dev/null) || continue
             if [[ "$mutated" != "$code_only" ]]; then
                 CANDIDATES+=("${file}|${ln}|${idx}")
             fi
         done
+
+        if is_value_producer_file "$file" && [[ "$code_only" == *'"'* ]]; then
+            case "$code_only" in
+                *'"""'*|*Console.*|*"throw "*|*Debug.*|*Trace.*|*".Log"*|*"nameof("*|*Assert.*) ;;
+                *)
+                    # A bare continuation literal (e.g. a multi-line throw message) is not a
+                    # value producer and no test asserts it.
+                    if [[ "$trimmed" != \"* ]]; then
+                        mutated=$(printf '%s\n' "$code_only" | sed -E "${PATTERNS[$STRING_IDX]}" 2>/dev/null) || continue
+                        if [[ "$mutated" != "$code_only" ]]; then
+                            STRING_CANDIDATES+=("${file}|${ln}|${STRING_IDX}")
+                        fi
+                    fi
+                    ;;
+            esac
+        fi
     done
 done
 
-if [[ ${#CANDIDATES[@]} -eq 0 ]]; then
+if [[ ${#CANDIDATES[@]} -eq 0 && ${#STRING_CANDIDATES[@]} -eq 0 ]]; then
     echo "  ✓ No mutable patterns on changed lines; mutation smoke skipped."
     exit 0
 fi
 
-TOTAL=${#CANDIDATES[@]}
-if [[ $TOTAL -gt $MAX ]]; then
-    CANDIDATES=("${CANDIDATES[@]:0:$MAX}")
+TOTAL=$(( ${#CANDIDATES[@]} + ${#STRING_CANDIDATES[@]} ))
+
+# Reserve a slot for string-literal value mutants, so a weak "column exists"
+# test cannot hide behind operator candidates, then fill the remaining budget.
+SELECTED=()
+if [[ ${#STRING_CANDIDATES[@]} -gt 0 && $MAX -ge 1 ]]; then
+    SELECTED+=("${STRING_CANDIDATES[0]}")
 fi
+for ((i = 0; i < ${#CANDIDATES[@]} && ${#SELECTED[@]} < MAX; i++)); do
+    SELECTED+=("${CANDIDATES[$i]}")
+done
+for ((i = 1; i < ${#STRING_CANDIDATES[@]} && ${#SELECTED[@]} < MAX; i++)); do
+    SELECTED+=("${STRING_CANDIDATES[$i]}")
+done
+CANDIDATES=(${SELECTED[@]+"${SELECTED[@]}"})
+
+if [[ "$LIST_CANDIDATES" == "1" ]]; then
+    for candidate in "${CANDIDATES[@]}"; do
+        IFS='|' read -r file ln idx <<< "$candidate"
+        printf '%s:%s %s\n' "$file" "$ln" "${DESCS[$idx]}"
+    done
+    exit 0
+fi
+
 echo "  Testing ${#CANDIDATES[@]} of $TOTAL candidate mutations (max $MAX)"
 
 # ── Timeout command (portable: Linux timeout / macOS gtimeout) ─
@@ -463,7 +530,7 @@ for candidate in "${CANDIDATES[@]}"; do
         continue
     fi
 
-    # Phase 2b: fallback to full unit test suite (~16 s)
+    # Phase 2b: fallback to full unit test suite (~31 s)
     TEST=(dotnet test "$TEST_PROJ" --nologo --no-build)
     [[ -n "$TCMD" ]] && TEST=("$TCMD" "$TEST_TIMEOUT" "${TEST[@]}")
     set +e

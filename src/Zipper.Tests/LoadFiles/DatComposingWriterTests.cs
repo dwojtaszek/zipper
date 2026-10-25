@@ -253,12 +253,17 @@ public class DatComposingWriterTests : TempDirectoryTestBase
     public async Task WriteAsync_WithMetadata_WritesMetadataValues()
     {
         var request = DefaultRequest();
-        request.Metadata = request.Metadata with { WithMetadata = true };
+        request.Metadata = request.Metadata with { WithMetadata = true, Seed = 42 };
         var files = new List<FileData> { MakeFileData(1) };
 
-        var output = await WriteAndCaptureOutput(request, files);
-        Assert.Contains("Custodian 1", output, StringComparison.Ordinal);
-        Assert.Contains("File Size", output, StringComparison.Ordinal);
+        var (_, lines) = await WriteAndCapture(request, files);
+        var header = lines[0].Split('\x14').Select(h => h.Trim('þ')).ToArray();
+        var row = lines[1].Split('\x14').Select(v => v.Trim('þ')).ToArray();
+
+        Assert.Equal("Custodian 1", row[Array.IndexOf(header, "Custodian")]);
+        Assert.Equal("2024-05-02", row[Array.IndexOf(header, "Date Sent")]);
+        Assert.Equal("Author 014", row[Array.IndexOf(header, "Author")]);
+        Assert.Equal("7", row[Array.IndexOf(header, "File Size")]);
     }
 
     [Fact]

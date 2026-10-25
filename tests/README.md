@@ -7,10 +7,10 @@
 | `run-tests.sh` / `.bat` | Before push (full) | Orchestrates all E2E suites below in sequence |
 | `run-e2e-basic.sh` / `.bat` | Pre-push hook (fast) | Smoke subset — Standard mode only, no load-file variants |
 | `run-e2e-loadfile.sh` / `.bat` | Included by `run-tests` | Loadfile-only + Chaos Engine scenarios |
-| `run-mutation-smoke.sh` | Pre-push hook (fast) | Lightweight operator mutation smoke on changed source lines |
+| `run-mutation-smoke.sh` | Pre-push hook (fast) | Lightweight operator + value-literal mutation smoke on changed source lines |
 | `test-mutation-smoke.sh` / `.bat` | Manual only | Bounded integration smoke for pinned Stryker CLI (#1110) |
 
-Core cross-platform E2E suites (called by both `run-tests.sh` and `run-tests.bat`) have `.bat` counterparts for Windows CI. Utility scripts (`test-autoreview-validator.sh`, `test-build-version.sh`, `test-compute-version.sh`, `test-perf-measure.sh`, `test-stress-harness.sh`, `test-zip64-boundary.sh`, `validate-e2e-parity.sh`, `validate-req-traceability.sh`, `wait-for-reviews.sh`) are Linux-only. `test-mutation-smoke.sh` / `.bat` is a standalone, manual-only integration smoke for the pinned Stryker CLI and report normalizer (#1110), omitted from `run-tests` due to runtime cost. `validate-e2e-parity.sh` runs in PR CI (strict mode) and fails if the inline test cases or invoked sub-script suites drift between `run-tests.sh` and `run-tests.bat` (#624); platform-specific suites need a documented exemption in the script.
+Core cross-platform E2E suites (called by both `run-tests.sh` and `run-tests.bat`) have `.bat` counterparts for Windows CI. Utility scripts (`test-autoreview-validator.sh`, `test-build-version.sh`, `test-compute-version.sh`, `test-mutation-smoke-operators.sh`, `test-perf-measure.sh`, `test-stress-harness.sh`, `test-zip64-boundary.sh`, `validate-e2e-parity.sh`, `validate-req-traceability.sh`, `wait-for-reviews.sh`) are Linux-only. `test-mutation-smoke.sh` / `.bat` is a standalone, manual-only integration smoke for the pinned Stryker CLI and report normalizer (#1110), omitted from `run-tests` due to runtime cost. `validate-e2e-parity.sh` runs in PR CI (strict mode) and fails if the inline test cases or invoked sub-script suites drift between `run-tests.sh` and `run-tests.bat` (#624); platform-specific suites need a documented exemption in the script.
 
 ## Subdirectories
 
