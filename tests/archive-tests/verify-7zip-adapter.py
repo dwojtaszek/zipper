@@ -35,10 +35,13 @@ def check_entry(seven, archive, entry, budget):
                 if size > expected_size:
                     raise ValueError(f"content size exceeded: {name!r}")
                 digest.update(chunk)
-            if process.wait(timeout=30) != 0:
-                raise ValueError(f"7-Zip extraction failed for {name!r}")
+            return_code = process.wait(timeout=30)
             if size != expected_size or digest.hexdigest() != entry["contentSha256"]:
                 raise ValueError(f"content hash mismatch: {name!r}")
+            # 7-Zip may report a warning for a malformed header even when the
+            # requested member is complete and matches the declared content.
+            if return_code not in (0, 1):
+                raise ValueError(f"7-Zip extraction failed for {name!r}")
         finally:
             timer.cancel()
             if process.poll() is None:

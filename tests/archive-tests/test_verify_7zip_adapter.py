@@ -18,6 +18,47 @@ VERIFIER = runpy.run_path(str(SCRIPT))
 
 
 class SevenZipAdapterTests(unittest.TestCase):
+    def test_check_entry_accepts_warning_when_expected_content_matches(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            archive = directory / "archive.zip"
+            archive.write_bytes(b"archive")
+            script = directory / "fake_runner.py"
+            if sys.platform == "win32":
+                adapter = directory / "fake_adapter.cmd"
+                adapter.write_text(f'@"{sys.executable}" "{script}" %*\n', encoding="utf-8")
+            else:
+                adapter = directory / "fake_adapter"
+                adapter.write_text(
+                    f'#!/bin/sh\nexec {shlex.quote(sys.executable)} {shlex.quote(str(script))} "$@"\n',
+                    encoding="utf-8",
+                )
+                adapter.chmod(0o755)
+
+            expected = b"expected content"
+
+            def write_fake_output(content, exit_code):
+                script.write_text(
+                    f"import sys\nsys.stdout.buffer.write({content!r})\nsys.exit({exit_code})\n",
+                    encoding="utf-8",
+                )
+
+            entry = {
+                "readableName": "a.txt",
+                "contentSize": len(expected),
+                "contentSha256": hashlib.sha256(expected).hexdigest(),
+            }
+            write_fake_output(expected, 1)
+            VERIFIER["check_entry"](str(adapter), archive, entry, len(expected))
+
+            write_fake_output(b"x" * len(expected), 1)
+            with self.assertRaisesRegex(ValueError, "content hash mismatch"):
+                VERIFIER["check_entry"](str(adapter), archive, entry, len(expected))
+
+            write_fake_output(expected, 2)
+            with self.assertRaisesRegex(ValueError, "7-Zip extraction failed"):
+                VERIFIER["check_entry"](str(adapter), archive, entry, len(expected))
+
     def test_check_archive_rejection_timeout_reports_classified_failure(self):
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp)
