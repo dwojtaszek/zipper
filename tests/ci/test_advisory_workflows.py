@@ -123,6 +123,16 @@ class AdvisoryWorkflowExitClassificationTests(unittest.TestCase):
             r"--break-at\s+[\"']?(\$BREAK_AT|50)[\"']?",
             "typesafe-quality-audit.yml must enforce a calibrated mutation break threshold (#1269)",
         )
+        self.assertRegex(
+            self.quality_wf_text,
+            r"break_at:\s+description:[^\n]+\n\s+required:[^\n]+\n\s+default:\s+[\"']?([1-9][0-9]*)[\"']?",
+            "typesafe-quality-audit.yml break_at dispatch input must declare a nonzero default floor (#1269)",
+        )
+        self.assertRegex(
+            self.quality_wf_text,
+            r"BREAK_AT:\s*\$\{\{\s*github\.event\.inputs\.break_at\s*\|\|\s*['\"]([1-9][0-9]*)['\"]\s*\}\}",
+            "typesafe-quality-audit.yml BREAK_AT env must fall back to a nonzero default floor (#1269)",
+        )
 
     def test_quality_audit_mutation_scope_widened_to_gap_files(self):
         """Weekly mutation scope in typesafe-quality-audit.yml must include LoadFiles and the 9 companion gap files (#1269)."""
@@ -225,7 +235,7 @@ class AdvisoryWorkflowExitClassificationTests(unittest.TestCase):
         with open(mock_dotnet, "w", encoding="utf-8") as f:
             if record_dotnet_args:
                 args_log = os.path.join(td, "dotnet_args.txt")
-                f.write(f'#!/bin/sh\necho "$@" > "{args_log}"\nexit {dotnet_rc}\n')
+                f.write(f'#!/bin/sh\nfor arg in "$@"; do printf "%s\\n" "$arg"; done > "{args_log}"\nexit {dotnet_rc}\n')
             else:
                 f.write(f"#!/bin/sh\nexit {dotnet_rc}\n")
         os.chmod(mock_dotnet, 0o755)
@@ -329,12 +339,13 @@ class AdvisoryWorkflowExitClassificationTests(unittest.TestCase):
             self.assertEqual(proc.returncode, 0, f"Script failed: {proc.stdout}\n{proc.stderr}")
             args_file = os.path.join(td, "dotnet_args.txt")
             self.assertTrue(os.path.exists(args_file), "dotnet was not invoked")
-            args_text = Path(args_file).read_text(encoding="utf-8")
-            self.assertIn("--mutate LoadFiles/**", args_text)
-            self.assertIn("--mutate PathValidator.cs", args_text)
-            self.assertIn("--mutate Validation/ProductionSetPostValidator.cs", args_text)
-            self.assertIn("--break-at 65", args_text)
-            self.assertIn("--threshold-low 65", args_text)
+            args_list = Path(args_file).read_text(encoding="utf-8").splitlines()
+            pairs = list(zip(args_list, args_list[1:]))
+            self.assertIn(("--mutate", "LoadFiles/**"), pairs)
+            self.assertIn(("--mutate", "PathValidator.cs"), pairs)
+            self.assertIn(("--mutate", "Validation/ProductionSetPostValidator.cs"), pairs)
+            self.assertIn(("--break-at", "65"), pairs)
+            self.assertIn(("--threshold-low", "65"), pairs)
 
         with tempfile.TemporaryDirectory() as td:
             proc = self._run_stryker_step(
@@ -347,10 +358,11 @@ class AdvisoryWorkflowExitClassificationTests(unittest.TestCase):
             self.assertEqual(proc.returncode, 0, f"Script failed: {proc.stdout}\n{proc.stderr}")
             args_file = os.path.join(td, "dotnet_args.txt")
             self.assertTrue(os.path.exists(args_file), "dotnet was not invoked")
-            args_text = Path(args_file).read_text(encoding="utf-8")
-            self.assertIn("--break-at 85", args_text)
-            self.assertIn("--threshold-low 85", args_text)
-            self.assertIn("--threshold-high 85", args_text)
+            args_list = Path(args_file).read_text(encoding="utf-8").splitlines()
+            pairs = list(zip(args_list, args_list[1:]))
+            self.assertIn(("--break-at", "85"), pairs)
+            self.assertIn(("--threshold-low", "85"), pairs)
+            self.assertIn(("--threshold-high", "85"), pairs)
 
         with tempfile.TemporaryDirectory() as td:
             proc = self._run_stryker_step(
