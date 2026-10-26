@@ -78,6 +78,27 @@ public class ArchiveTestSuiteGeneratorTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void BuildExpectationFile_EncodingLocalCentralCodecDivergence_DeclaresPolicyAndContainment()
+    {
+        var definition = ArchiveTestCatalog.GetCase("encoding-local-central-codec-divergence");
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+
+        var testCase = ArchiveTestSuiteGenerator.BuildExpectationFile(artifact, definition);
+
+        Assert.Equal(ArchiveTestCatalog.PolicySensitiveClassification, testCase.Classification);
+        Assert.Equal(
+            ["listed-count-matches-entries"],
+            testCase.Expectations.Single(expectation => expectation.Operation == "list").AllowedOutcomes);
+        Assert.Equal(
+            ["read-entry-content-matches"],
+            testCase.Expectations.Single(expectation => expectation.Operation == "read-entry").AllowedOutcomes);
+        var extract = testCase.Expectations.Single(expectation => expectation.Operation == "extract");
+        Assert.Contains("containment-required", extract.Invariants);
+        Assert.Contains("no-writes-outside-root", extract.Invariants);
+        Assert.Empty(ArchiveTestCaseSemantics.Validate(testCase));
+    }
+
+    [Fact]
     public void BuildExpectationFile_DeclaredSizeUndersized_DeclaresBoundedReaderVariance()
     {
         var definition = ArchiveTestCatalog.GetCase("declared-size-undersized");

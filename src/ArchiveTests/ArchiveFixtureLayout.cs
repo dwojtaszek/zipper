@@ -33,6 +33,7 @@ internal sealed record ArchiveFixtureEntryLayout(
     long DataDescriptorOffset,
     string Name,
     string NameHex,
+    string LocalNameHex,
     string? UnicodePathNameHex = null);
 
 internal sealed record ArchiveFixtureLayout(
@@ -58,7 +59,10 @@ internal sealed record ArchiveFixtureLayout(
     /// length when it constructed one (ticket #841): the EOCD sits at
     /// <c>length - 22 - expectedCommentLength</c>, located by length, never by search.
     /// </summary>
-    internal static ArchiveFixtureLayout Read(ReadOnlySpan<byte> archive, int expectedCommentLength = 0)
+    internal static ArchiveFixtureLayout Read(
+        ReadOnlySpan<byte> archive,
+        int expectedCommentLength = 0,
+        bool allowLocalCentralNameDivergence = false)
     {
         const int EocdLength = 22;
 
@@ -153,7 +157,8 @@ internal sealed record ArchiveFixtureLayout(
 
         for (var ordinal = 0; ordinal < totalEntries; ordinal++)
         {
-            entries[ordinal] = AttachLocalHeader(archive, entries[ordinal]);
+            entries[ordinal] = AttachLocalHeader(
+                archive, entries[ordinal], allowLocalCentralNameDivergence);
         }
 
         return new ArchiveFixtureLayout(
@@ -231,10 +236,14 @@ internal sealed record ArchiveFixtureLayout(
             HasDataDescriptor: false,
             DataDescriptorOffset: 0,
             Name: Encoding.UTF8.GetString(nameBytes),
-            NameHex: Convert.ToHexStringLower(nameBytes));
+            NameHex: Convert.ToHexStringLower(nameBytes),
+            LocalNameHex: Convert.ToHexStringLower(nameBytes));
     }
 
-    private static ArchiveFixtureEntryLayout AttachLocalHeader(ReadOnlySpan<byte> archive, ArchiveFixtureEntryLayout entry)
+    private static ArchiveFixtureEntryLayout AttachLocalHeader(
+        ReadOnlySpan<byte> archive,
+        ArchiveFixtureEntryLayout entry,
+        bool allowLocalCentralNameDivergence)
     {
         var offset = entry.LocalHeaderOffset;
         if (BinaryPrimitives.ReadUInt32LittleEndian(Slice(archive, offset, 4, $"entry {entry.Ordinal} local signature")) != LocalHeaderSignature)
@@ -253,7 +262,8 @@ internal sealed record ArchiveFixtureLayout(
         var nameLength = ReadUInt16(archive, offset + 26, $"entry {entry.Ordinal} local name length");
         var extraLength = ReadUInt16(archive, offset + 28, $"entry {entry.Ordinal} local extra length");
         var localNameBytes = Slice(archive, offset + 30, nameLength, $"entry {entry.Ordinal} local name");
-        if (!localNameBytes.SequenceEqual(Convert.FromHexString(entry.NameHex)))
+        if (!allowLocalCentralNameDivergence
+            && !localNameBytes.SequenceEqual(Convert.FromHexString(entry.NameHex)))
         {
             throw new InvalidDataException($"Entry {entry.Ordinal} name mismatch between local and central headers.");
         }
@@ -266,6 +276,7 @@ internal sealed record ArchiveFixtureLayout(
         {
             LocalNameLength = nameLength,
             LocalExtraLength = extraLength,
+            LocalNameHex = Convert.ToHexStringLower(localNameBytes),
             DataOffset = dataOffset,
             HasDataDescriptor = hasDescriptor,
             DataDescriptorOffset = descriptorOffset,

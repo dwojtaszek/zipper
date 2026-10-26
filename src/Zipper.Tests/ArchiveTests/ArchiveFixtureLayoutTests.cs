@@ -119,6 +119,17 @@ public class ArchiveFixtureLayoutTests
     }
 
     [Fact]
+    public void Read_LocalCentralNameMismatch_ThrowsByDefault()
+    {
+        var archive = BuildSingleStoredEntry(40);
+        archive[30] = (byte)'b';
+
+        var error = Assert.Throws<InvalidDataException>(() => ArchiveFixtureLayout.Read(archive));
+
+        Assert.Contains("name mismatch between local and central headers", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Read_EmptyArchive_EocdOnlyLayout()
     {
         var layout = ArchiveFixtureLayout.Read(Convert.FromHexString("504b0506000000000000000000000000000000000000"));

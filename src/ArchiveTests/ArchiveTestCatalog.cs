@@ -129,6 +129,10 @@ internal enum ArchiveControlConstruction
     /// decoded name must survive separator handling (ticket #887).</summary>
     EncodingTrailByteName,
 
+    /// <summary>Rewrites one UTF-8 local name to CP932 and clears local bit 11 while
+    /// leaving the UTF-8 central name and flag intact (ticket #1283).</summary>
+    LocalCodecRewrite,
+
     /// <summary>Appends an archive comment containing signature-like bytes; the comment
     /// length field, not a signature search, determines the layout.</summary>
     ArchiveComment,
@@ -383,6 +387,15 @@ internal static class ArchiveTestCatalog
             Suites: [EncodingSuite],
             Recipe: EncodingTrailByteControlRecipe,
             Construction: ArchiveControlConstruction.EncodingTrailByteName),
+        // Ticket #1283: the local name uses CP932 with bit 11 clear while the
+        // central name stays UTF-8 with bit 11 set. Both codecs render the same
+        // logical name, and equal byte lengths keep every following offset fixed.
+        ["encoding-local-central-codec-divergence"] = new(
+            "encoding-local-central-codec-divergence", CaseRevision: 1, ExpectationRevision: 1,
+            Classification: PolicySensitiveClassification,
+            Suites: [EncodingSuite],
+            Recipe: EncodingCodecDivergenceControlRecipe,
+            Construction: ArchiveControlConstruction.LocalCodecRewrite),
         ["valid-signatures-in-comment"] = new(
             "valid-signatures-in-comment", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite],
@@ -856,6 +869,13 @@ internal static class ArchiveTestCatalog
     private static ArchiveTestRecipe EncodingTrailByteControlRecipe => new(
     [
         ArchiveTestRecipeEntry.File("ab.txt", 60, "stored"),
+    ]);
+
+    // § has equal-width but different CP932/UTF-8 encodings (8198 vs c2a7),
+    // so LocalCodecRewrite can keep the Archive's offsets in place.
+    private static ArchiveTestRecipe EncodingCodecDivergenceControlRecipe => new(
+    [
+        ArchiveTestRecipeEntry.File("§.txt", 60, "stored"),
     ]);
 
     // The entry payload itself begins with signature-like bytes (pure data), and the

@@ -357,6 +357,10 @@ internal static class ArchiveFixtureBuilder
         {
             archiveBytes = SwapEncodingNameTrailByte(archiveBytes, definition.CaseKey);
         }
+        else if (definition.Construction is ArchiveControlConstruction.LocalCodecRewrite)
+        {
+            archiveBytes = RewriteLocalNameToCp932(archiveBytes, definition.CaseKey);
+        }
         else if (definition.Construction is ArchiveControlConstruction.ArchiveComment)
         {
             archiveBytes = AppendSignatureComment(archiveBytes, definition.CaseKey);
@@ -370,7 +374,10 @@ internal static class ArchiveFixtureBuilder
         var expectedCommentLength = definition.Construction is ArchiveControlConstruction.ArchiveComment
             ? ArchiveTestCatalog.SignatureCommentLength
             : 0;
-        var layout = ArchiveFixtureLayout.Read(archiveBytes, expectedCommentLength);
+        var allowLocalCentralNameDivergence =
+            definition.Construction is ArchiveControlConstruction.LocalCodecRewrite;
+        var layout = ArchiveFixtureLayout.Read(
+            archiveBytes, expectedCommentLength, allowLocalCentralNameDivergence);
         // Host-dependent Unix metadata (ticket #842, issue #1178): the standard writer
         // records the build host in the central version-made-by host byte, so pin it to
         // the Unix host — or a recipe's declared host system (also Unix) — for every
@@ -777,6 +784,50 @@ internal static class ArchiveFixtureBuilder
         archiveBytes[(int)first.LocalHeaderOffset + 31] = 0x5C;
         archiveBytes[(int)first.CentralDirectoryOffset + 46] = spec.LeadByte;
         archiveBytes[(int)first.CentralDirectoryOffset + 47] = 0x5C;
+        return archiveBytes;
+    }
+
+    /// <summary>
+    /// Rewrites the local name of the #1283 control to CP932 bytes and clears its
+    /// UTF-8 flag, leaving the equal-length UTF-8 central name and its bit 11 untouched.
+    /// </summary>
+    private static byte[] RewriteLocalNameToCp932(byte[] archiveBytes, string caseKey)
+    {
+        const string LogicalName = "§.txt";
+        const ushort Utf8NameFlag = 0x0800;
+
+        var layout = ArchiveFixtureLayout.Read(archiveBytes);
+        if (layout.Entries.Count != 1)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test case '{caseKey}': the local codec rewrite expects exactly one entry.");
+        }
+
+        var entry = layout.Entries[0];
+        var localName = CodePagesEncodingProvider.Instance.GetEncoding(932)!.GetBytes(LogicalName);
+        var centralName = Encoding.UTF8.GetBytes(LogicalName);
+        var localFlagsOffset = (int)entry.LocalHeaderOffset + 6;
+        var centralFlagsOffset = (int)entry.CentralDirectoryOffset + 8;
+        var localFlags = BinaryPrimitives.ReadUInt16LittleEndian(
+            archiveBytes.AsSpan(localFlagsOffset, 2));
+        var centralFlags = BinaryPrimitives.ReadUInt16LittleEndian(
+            archiveBytes.AsSpan(centralFlagsOffset, 2));
+        if (entry.Name != LogicalName
+            || entry.LocalNameLength != localName.Length
+            || entry.CentralNameLength != centralName.Length
+            || (localFlags & Utf8NameFlag) == 0
+            || (centralFlags & Utf8NameFlag) == 0
+            || !archiveBytes.AsSpan((int)entry.CentralDirectoryOffset + 46, entry.CentralNameLength)
+                .SequenceEqual(centralName))
+        {
+            throw new InvalidOperationException(
+                $"Archive Test case '{caseKey}': the local codec rewrite expects the equal-length UTF-8 name '{LogicalName}'.");
+        }
+
+        localName.CopyTo(archiveBytes.AsSpan((int)entry.LocalHeaderOffset + 30, entry.LocalNameLength));
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            archiveBytes.AsSpan(localFlagsOffset, 2),
+            (ushort)(localFlags & ~Utf8NameFlag));
         return archiveBytes;
     }
 
