@@ -495,11 +495,13 @@ REQ-226	unit	ProductionMetadataValidationTests.Validate_WithMultipleViolations_R
 REQ-226	unit	ChaosAndComparisonPropertyTests.ProductionMetadataBudget_SanitizeAndValidate_ShouldEnforceAsciiAndByteBudget	Property: ProductionMetadataBudget validates sanitized blocks and enforces 8,192-byte budget
 REQ-208	unit	ArchiveCompatibilityCaseTests.Build_ValidZip64Small_RoundTripsThroughTwoImplementations	Compatibility suite Zip64 case selection and round-trip verification
 REQ-208	unit	ArchiveStructureCaseTests.ListSuite_Malformed_IncludesAllStructureCases	Malformed suite includes extra-field-truncated and crc-both-mismatch-deflate, and leaves the frozen smoke suite unchanged
-REQ-208	unit	ArchiveTestSuiteContractTests.Catalogue_ContainsExactlyTheFrozenCaseKeys	Archive Test Fixture catalog contains 118 unique Case Keys
+REQ-208	unit	ArchiveTestSuiteContractTests.Catalogue_ContainsExactlyTheFrozenCaseKeys	Archive Test Fixture catalog contains 119 unique Case Keys
 REQ-208	unit	ArchiveTestSuiteContractTests.Catalogue_CrcBothMismatchDeflate_UsesDeflateControlAndStaysOutOfSmoke	DEFLATE CRC Case Key uses the valid-deflate control and remains outside the frozen smoke suite
+REQ-208	unit	ArchiveTestSuiteContractTests.ListSuite_Security_SiblingPrefixTraversalUsesHostileNameConstruction	Sibling-prefix traversal Case Key is policy-sensitive, constructed from name placeholders, and included in security
 REQ-208	unit	ArchiveFixtureBuilderTests.BuildControl_EncodingLocalCentralCodecDivergence_RewritesLocalNameWithCp932	New encoding Case Key carries same logical name as CP932 local and UTF-8 central bytes
+REQ-208	unit	ArchiveFixtureBuilderTests.BuildControl_NameSiblingPrefixTraversal_PreservesBothRawNames	Normalization-sensitive hostile-name Case Key preserves both raw names in both ZIP headers
 REQ-208	unit	ArchiveTestModuleTests.RunAsync_EncodingSuiteNoSelection_PublishesExpectedCaseKeys	Encoding suite publishes the local/central codec divergence Case Key
-REQ-208	e2e	test-archive-test-suites.sh	Encoding suite publishes four Archive Test Fixture pairs and the full catalog contains 118 Case Keys
+REQ-208	e2e	test-archive-test-suites.sh	Encoding suite publishes four Archive Test Fixture pairs and the full catalog contains 119 Case Keys
 REQ-208	unit	Deflate64LongMatchTests.Catalog_ContainsDeflate64LongMatchControl	Archive test catalog includes Deflate64 long match case key
 REQ-208	unit	ArchiveFixturePropertyTests.ArchiveTestModule_TryApplyAndTryBuild_ShouldAcceptAllCanonicalSuitesAndRejectUnknownSuites	Property: ArchiveTestModule parses CLI suite flags and resolves canonical suite names
 REQ-210	unit	ArchiveFixtureLayoutTests.Read_SingleStoredControl_CapturesExactOffsets	Layout reader parses local/central directory offsets for fixture ID computation
@@ -516,6 +518,7 @@ REQ-212	unit	Deflate64LongMatchTests.Build_OrdinaryDeflateDecoderCannotDecodeStr
 REQ-212	unit	ArchiveFixturePropertyTests.ArchiveTestCaseSemantics_EvaluateReaderOperations_ShouldEnforceFourReaderOperationsIndependently	Property: ArchiveTestCaseSemantics enforces four reader operations and profile monotonicity
 REQ-212	unit	ArchiveTestSuiteGeneratorTests.BuildExpectationFile_DeclaredSizeUndersized_DeclaresBoundedReaderVariance	Undersized declaration expectation contract allows observed reader variance and requires bounded handling
 REQ-212	unit	ArchiveReferenceReaderTests.ReadOperations_DeclaredSizeUndersized_ReturnsUnverifiedBytesAtDeclaredCompressedSizeBoundary	.NET reference reader returns partial unverified bytes and fails integrity checking
+REQ-212	unit	ArchiveReferenceReaderTests.ReadOperations_NameSiblingPrefixTraversal_PreservesNamesAndPayloads	.NET reference reader preserves sibling-prefix names and verifies both payloads
 REQ-212	unit	ArchiveTestSuiteGeneratorTests.BuildExpectationFile_UndeclaredTrailingData_DeclaresReaderVarianceAndInvariant	Expectation File allows reader variance while requiring proof that 16 trailing bytes are outside the zero-comment EOCD
 REQ-212	unit	ArchiveReferenceReaderTests.ReadOperations_UndeclaredTrailingData_PinsDotNetReaderOutcomes	.NET reference reader lists, reads, integrity-checks, and extracts the Archive with undeclared trailing bytes
 REQ-212	unit	ArchiveTestSuiteGeneratorTests.BuildExpectationFile_ExtraFieldTruncated_DeclaresReaderVarianceAndInvariants	Expectation File allows reader variance and requires proof of a central extra-field overrun past EOF
@@ -525,6 +528,7 @@ REQ-212	e2e	archive-tests/test_verify_fixtures.py	Independent Python verifier pr
 REQ-213	unit	ArchiveResourceCaseTests.Build_EntriesOneOverCap_ThrowsDescriptively	Archive test fixture 1000-entry budget cap enforcement
 REQ-213	unit	ArchiveResourceCaseTests.Build_PhysicalBytesOneOver_ThrowsDescriptively	Archive test fixture 16 MiB physical size budget cap enforcement
 REQ-213	unit	ArchiveResourceCaseTests.Build_ExpandedBytesOneOver_ThrowsDescriptively	Archive test fixture 32 MiB expanded recipe content budget cap enforcement
+REQ-213	unit	ArchiveTestSuiteContractTests.ListSuite_Security_SiblingPrefixTraversalUsesHostileNameConstruction	Policy-sensitive traversal names explicitly use the hostile-name path-depth exemption
 REQ-213	unit	ArchiveResourceCaseTests.Build_DeclaredSizeUndersized_RewritesBothHeaderSizesWithoutMovingPayload	Undersized compressed and uncompressed declarations leave payload, offsets, and Archive length unchanged
 REQ-217	unit	ArchiveStructureCaseTests.Build_CodedControls_RecordExpectedMethodsAndPayloadCodecs	Structure cases wire method and payload codec schema expectations
 REQ-217	unit	ArchiveFixtureLayoutTests.Read_RecordsCrcAndSizesFromCentralHeader	Layout reader records CRC32 and sizes for Expectation File schema

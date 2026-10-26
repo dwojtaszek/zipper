@@ -747,10 +747,10 @@ internal static class ArchiveTestSuiteGenerator
             // Containment hazards that exist on every platform.
             "path-parent-traversal" or "path-posix-absolute" or "unicode-path-extra-mismatch" =>
                 new PolicyExpectationProfile(null, []),
-            // Hostile filename bytes (ticket #876): NUL and C0 bytes in member
-            // names. Extraction stays contained and never materializes the raw
-            // bytes as ambient filenames on ordinary hosts.
-            "filename-null-byte" or "filename-c0-control" =>
+            // Hostile filename bytes (ticket #876) and normalization-sensitive
+            // traversal names (ticket #1290). The Expectation File requires
+            // containment; extraction remains not-run on ordinary hosts.
+            "filename-null-byte" or "filename-c0-control" or "name-sibling-prefix-traversal" =>
                 new PolicyExpectationProfile(null, []),
             // Entry-type confusion (ticket #875): a directory marker or attribute
             // carrying a payload. Extraction must stay contained; the directory/file

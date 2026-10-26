@@ -104,6 +104,10 @@ To generate the policy-sensitive `encoding-local-central-codec-divergence` Archi
 ```bash
 zipper --archive-test-suite encoding --archive-test-cases encoding-local-central-codec-divergence --seed 42 --output-path ./encoding-divergence
 ```
+To generate the policy-sensitive `name-sibling-prefix-traversal` Archive Test Fixture from the security suite:
+```bash
+zipper --archive-test-suite security --archive-test-cases name-sibling-prefix-traversal --seed 42 --output-path ./sibling-prefix-traversal
+```
 
 #### 7. Choose the Archive compression method
 `--compression` sets the ZIP compression method for every Archive the run produces (Standard mode, `--include-load-file`, and `--production-zip`) and defaults to `deflate`:
@@ -196,7 +200,7 @@ All command-line flags recognized by Zipper:
 | `--hash-mode` | none | `actual`, `simulated`, `none` | Document hash computation mode |
 | `--hash-algorithms` | `md5` | `md5`, `sha1`, `sha256` | Comma-separated hash algorithms |
 | `--benchmark` | `false` | flag | Run performance benchmark suite and exit |
-| `--archive-test-suite` | none | `smoke`, `compatibility`, `malformed`, `security`, `encoding`, `all` | Publish an Archive Test Fixture suite (the `encoding` suite includes local/central codec divergence; closed flag set: requires `--output-path` pointing to a new directory; accepts only `--archive-test-suite`, `--archive-test-cases`, `--seed`, `--output-path`; see [Archive Test Suites](docs/archive-test-suites.md)) |
+| `--archive-test-suite` | none | `smoke`, `compatibility`, `malformed`, `security`, `encoding`, `all` | Publish an Archive Test Fixture suite (the `security` suite includes `name-sibling-prefix-traversal`; the `encoding` suite includes local/central codec divergence; closed flag set: requires `--output-path` pointing to a new directory; accepts only `--archive-test-suite`, `--archive-test-cases`, `--seed`, `--output-path`; see [Archive Test Suites](docs/archive-test-suites.md)) |
 | `--archive-test-cases` | none | comma-separated Case Keys | Filter the suite to the named cases (closed flag set; requires `--archive-test-suite`) |
 | `--version` | `false` | flag | Print full embedded version string and exit |
 
@@ -222,7 +226,7 @@ In Standard generation mode (no custom `--column-profile`), Load File columns ar
 | `Extracted Text` | `EXTRACTED TEXT` | `TEXT_PATH` | `--with-text` |
 | `BEGATTACH`, `ENDATTACH`, `PARENTDOCID` | `BEGATTACH`, `ENDATTACH`, `PARENTDOCID` | `BEGATTACH`, `ENDATTACH`, `PARENTDOCID` | `--with-families` |
 
-For in-depth explanations, delimiter syntax, argument interaction rules, and audit schemas, see the [Advanced CLI & Reference Guide](docs/advanced-guide.md). Argument interactions for `--compression` are in [§7 Argument Interactions Reference](docs/advanced-guide.md#7-argument-interactions-reference).
+For in-depth explanations, delimiter syntax, argument interaction rules, and audit schemas, see the [Advanced CLI & Reference Guide](docs/advanced-guide.md). Argument interactions for `--compression` and the exclusive `--archive-test-suite` workflow are in [§7 Argument Interactions Reference](docs/advanced-guide.md#7-argument-interactions-reference).
 
 ---
 

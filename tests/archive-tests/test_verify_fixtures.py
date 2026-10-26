@@ -1718,6 +1718,44 @@ class EncodingLocalCentralCodecDivergenceTests(unittest.TestCase):
         self.assertIn("readableName", str(caught.exception))
 
 
+class HostileNameTests(unittest.TestCase):
+    NAMES = ("x/../../docs../e.txt", "..%2f..%2fescape.txt")
+
+    @classmethod
+    def make_case(cls):
+        contents = (b"sibling-prefix", b"encoded-traversal")
+        archive = make_zip(list(zip(cls.NAMES, contents)))
+        entries = [
+            entry_record(ordinal, name, content)
+            for ordinal, (name, content) in enumerate(zip(cls.NAMES, contents))
+        ]
+        return {"caseKey": "name-sibling-prefix-traversal", "entries": entries}, archive
+
+    def test_sibling_prefix_names_match_sidecar_and_both_raw_headers(self):
+        case, archive = self.make_case()
+
+        detail = vf.verify_hostile_name(case, archive)
+
+        self.assertIn("entries=2", detail)
+        self.assertIn("local-central-equal", detail)
+
+    def test_sibling_prefix_name_byte_mismatch_fails(self):
+        case, archive = self.make_case()
+        eocd_offset = len(archive) - 22
+        cd_offset = struct.unpack_from("<I", archive, eocd_offset + 16)[0]
+
+        for offset, expected_detail in ((30, "local name 0"), (cd_offset + 46, "central name 0")):
+            with self.subTest(header=expected_detail):
+                tampered = bytearray(archive)
+                tampered[offset] ^= 1
+
+                with self.assertRaises(vf.VerificationError) as caught:
+                    vf.verify_hostile_name(case, bytes(tampered))
+
+                self.assertEqual("hostile-name", caught.exception.check)
+                self.assertIn(expected_detail, str(caught.exception))
+
+
 class PositiveControlTests(TempDirTest):
     def test_committed_valid_empty_vector_passes(self):
         with open(os.path.join(VECTOR_DIR, "valid-empty.json"), "r", encoding="utf-8") as handle:

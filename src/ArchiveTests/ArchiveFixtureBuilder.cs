@@ -355,6 +355,25 @@ internal static class ArchiveFixtureBuilder
                 name[2] = 0x03;
             });
         }
+        else if (definition.Construction is ArchiveControlConstruction.HostileNameSiblingPrefix)
+        {
+            archiveBytes = PatchHostileName(archiveBytes, definition.CaseKey, static name =>
+            {
+                if (name.AsSpan().SequenceEqual("sibling-placeholderx"u8))
+                {
+                    "x/../../docs../e.txt"u8.CopyTo(name);
+                }
+                else if (name.AsSpan().SequenceEqual("encoded-placeholderx"u8))
+                {
+                    "..%2f..%2fescape.txt"u8.CopyTo(name);
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        "The sibling-prefix baseline expects the 20-byte name placeholders 'sibling-placeholderx' and 'encoded-placeholderx'.");
+                }
+            });
+        }
         else if (definition.Construction is ArchiveControlConstruction.StripDescriptorSignature)
         {
             archiveBytes = StripDescriptorSignature(archiveBytes, definition.CaseKey);
@@ -655,33 +674,36 @@ internal static class ArchiveFixtureBuilder
     }
 
     /// <summary>
-    /// Baseline construction for the hostile-name cases (ticket #876): rewrites the
-    /// standard header name bytes in place, identically in the local and the central
-    /// header, via the .NET writer's placeholder name. Same-length only: no structure
-    /// moves, so the captured layout stays valid and the sidecar records the exact
-    /// hostile raw bytes. The writer itself would reject these names, which is why
-    /// the raw-name path exists.
+    /// Baseline construction for hostile-name cases (tickets #876 and #1290):
+    /// rewrites each standard header name in place, identically in the local and
+    /// central header, via the .NET writer's placeholder name. Same-length only: no
+    /// structure moves, so the captured layout stays valid and the sidecar records the
+    /// exact hostile raw bytes. The writer itself would reject some of these names,
+    /// which is why the raw-name path exists.
     /// </summary>
     private static byte[] PatchHostileName(byte[] archiveBytes, string caseKey, Action<byte[]> patch)
     {
         var layout = ArchiveFixtureLayout.Read(archiveBytes);
-        if (layout.Entries.Count != 1)
+        if (layout.Entries.Count == 0)
         {
             throw new InvalidOperationException(
-                $"Archive Test case '{caseKey}': the hostile-name baseline expects exactly one entry.");
+                $"Archive Test case '{caseKey}': the hostile-name baseline expects at least one entry.");
         }
 
-        var entry = layout.Entries[0];
-        if (entry.LocalNameLength != entry.CentralNameLength)
+        foreach (var entry in layout.Entries)
         {
-            throw new InvalidOperationException(
-                $"Archive Test case '{caseKey}': the hostile-name baseline expects agreeing local and central name lengths.");
+            if (entry.LocalNameLength != entry.CentralNameLength)
+            {
+                throw new InvalidOperationException(
+                    $"Archive Test case '{caseKey}': the hostile-name baseline expects agreeing local and central name lengths.");
+            }
+
+            var name = archiveBytes.AsSpan((int)entry.LocalHeaderOffset + 30, entry.LocalNameLength).ToArray();
+            patch(name);
+            name.CopyTo(archiveBytes.AsSpan((int)entry.LocalHeaderOffset + 30));
+            name.CopyTo(archiveBytes.AsSpan((int)entry.CentralDirectoryOffset + 46));
         }
 
-        var name = archiveBytes.AsSpan((int)entry.LocalHeaderOffset + 30, entry.LocalNameLength).ToArray();
-        patch(name);
-        name.CopyTo(archiveBytes.AsSpan((int)entry.LocalHeaderOffset + 30));
-        name.CopyTo(archiveBytes.AsSpan((int)entry.CentralDirectoryOffset + 46));
         return archiveBytes;
     }
 

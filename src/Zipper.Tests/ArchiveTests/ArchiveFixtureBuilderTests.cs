@@ -102,6 +102,46 @@ public class ArchiveFixtureBuilderTests
     }
 
     [Fact]
+    public void BuildControl_NameSiblingPrefixTraversal_PreservesBothRawNames()
+    {
+        string[] expectedNames = ["x/../../docs../e.txt", "..%2f..%2fescape.txt"];
+        var artifact = ArchiveFixtureBuilder.BuildControl(
+            "name-sibling-prefix-traversal", 42, CancellationToken.None);
+
+        Assert.Equal(expectedNames, artifact.Layout.Entries.Select(entry => entry.Name));
+        Assert.Empty(artifact.Mutations);
+
+        for (var ordinal = 0; ordinal < expectedNames.Length; ordinal++)
+        {
+            var entry = artifact.Layout.Entries[ordinal];
+            var expectedRawName = Encoding.UTF8.GetBytes(expectedNames[ordinal]);
+            var localName = artifact.ArchiveBytes.AsSpan(
+                (int)entry.LocalHeaderOffset + 30, entry.LocalNameLength);
+            var centralName = artifact.ArchiveBytes.AsSpan(
+                (int)entry.CentralDirectoryOffset + 46, entry.CentralNameLength);
+
+            Assert.Equal(expectedRawName.Length, entry.LocalNameLength);
+            Assert.Equal(expectedRawName.Length, entry.CentralNameLength);
+            Assert.Equal(expectedRawName, localName.ToArray());
+            Assert.Equal(expectedRawName, centralName.ToArray());
+            Assert.Equal(artifact.Entries[ordinal].Content, ReadEntryContent(artifact.ArchiveBytes, entry.Name));
+        }
+
+        var testCase = ArchiveTestSuiteGenerator.BuildExpectationFile(
+            artifact, ArchiveTestCatalog.GetCase("name-sibling-prefix-traversal"));
+        Assert.Equal(expectedNames, testCase.Entries.Select(entry => entry.ReadableName));
+        Assert.Equal(
+            expectedNames.Select(name => Convert.ToHexStringLower(Encoding.UTF8.GetBytes(name))),
+            testCase.Entries.Select(entry => entry.LocalNameRaw));
+        Assert.Equal(testCase.Entries.Select(entry => entry.LocalNameRaw), testCase.Entries.Select(entry => entry.CentralNameRaw));
+
+        var extractionRoot = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "docs"));
+        var resolvedName = Path.GetFullPath(Path.Combine(extractionRoot, expectedNames[0]));
+        Assert.Equal(Path.Combine("..", "docs..", "e.txt"), Path.GetRelativePath(extractionRoot, resolvedName));
+        Assert.StartsWith(extractionRoot, resolvedName, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildControl_ValidDeflate_EmitsDeflateMethodAndKnownContent()
     {
         var artifact = ArchiveFixtureBuilder.BuildControl("valid-deflate", 42, CancellationToken.None);
