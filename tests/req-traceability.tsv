@@ -515,8 +515,7 @@ REQ-212	unit	ArchiveReferenceReaderTests.ReadOperations_DeclaredSizeUndersized_R
 REQ-212	unit	ArchiveTestSuiteGeneratorTests.BuildExpectationFile_UndeclaredTrailingData_DeclaresReaderVarianceAndInvariant	Expectation File allows reader variance while requiring proof that 16 trailing bytes are outside the zero-comment EOCD
 REQ-212	unit	ArchiveReferenceReaderTests.ReadOperations_UndeclaredTrailingData_PinsDotNetReaderOutcomes	.NET reference reader lists, reads, integrity-checks, and extracts the Archive with undeclared trailing bytes
 REQ-212	e2e	test-archive-test-suites.sh	Archive Test E2E runs the independent Python verifier suite and validates generated fixtures
-REQ-212	e2e	Zip64EocdOffsetDisagreementTests.test_full_verification_proves_regular_eocd_finds_intact_central_directory	Independent Python verifier accepts the new fixture only when the regular EOCD finds the intact central directory
-REQ-212	e2e	Zip64EocdOffsetDisagreementTests.test_regular_eocd_offset_must_still_find_central_directory	Independent verifier rejects a regular EOCD offset that no longer finds the intact central directory
+REQ-212	e2e	archive-tests/test_verify_fixtures.py	Independent Python verifier tests validate the Zip64 offset disagreement and reject tampered offsets
 REQ-213	unit	ArchiveResourceCaseTests.Build_EntriesOneOverCap_ThrowsDescriptively	Archive test fixture 1000-entry budget cap enforcement
 REQ-213	unit	ArchiveResourceCaseTests.Build_PhysicalBytesOneOver_ThrowsDescriptively	Archive test fixture 16 MiB physical size budget cap enforcement
 REQ-213	unit	ArchiveResourceCaseTests.Build_ExpandedBytesOneOver_ThrowsDescriptively	Archive test fixture 32 MiB expanded recipe content budget cap enforcement
