@@ -249,3 +249,11 @@
 - **telemetry**: host=droid mode=branch specialists=5 bundle=25702c
 - **lessons**: none
 - **suppressions**: none
+
+### 2026-10-26 droid:branch:1282-version-local-central-mismatch-followup
+
+- **findings**: 0 ACTION, 0 INFO across 5 reviewers (correctness, testing, maintainability, adversarial, API contract).
+- **outcome**: clean review after adding the missing local-header MutationSpec and regression assertions; the test failed first against the single-record implementation. Focused tests, independent fixture verification, format, mutation smoke, and the pre-commit full unit suite passed.
+- **telemetry**: host=droid mode=branch specialists=5 bundle=27519c
+- **lessons**: none
+- **suppressions**: none
