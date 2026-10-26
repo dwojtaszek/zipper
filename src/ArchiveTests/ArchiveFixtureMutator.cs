@@ -50,6 +50,7 @@ internal static class ArchiveFixtureMutator
             ArchiveTestMutationKind.OffsetOutsideArchive => PointCentralOffsetOutsideArchive(control, before),
             ArchiveTestMutationKind.OffsetIntoPayload => PointCentralOffsetIntoPayload(control, before),
             ArchiveTestMutationKind.ExtraFieldLengthOverrun => OverrunExtraFieldLength(control, before),
+            ArchiveTestMutationKind.CentralExtraLengthOverrun => OverrunCentralExtraLength(control, before),
             ArchiveTestMutationKind.UnsupportedMethod => DeclareUnsupportedMethod(control, before),
             ArchiveTestMutationKind.EncryptionFlagWithPlaintext => SetEncryptionFlagOnPlaintext(control, before),
             ArchiveTestMutationKind.OverlappingEntryRanges => OverlapEntryRanges(control, before),
@@ -1452,6 +1453,38 @@ internal static class ArchiveFixtureMutator
     }
 
     /// <summary>
+    /// Rewrites the first central header's extra-field length from zero to 1024 bytes,
+    /// extending its declared field beyond the physical Archive end (#1288).
+    /// </summary>
+    private static MutatedArchiveFixture OverrunCentralExtraLength(ArchiveFixtureArtifact control, byte[] before)
+    {
+        const ushort declaredExtraLength = 0x0400;
+        var entry = control.Layout.Entries[0];
+        if (entry.CentralExtraLength != 0)
+        {
+            throw new InvalidOperationException(
+                $"extra-field-truncated expects the control's entry 0 to have no central extra-field bytes; found {entry.CentralExtraLength}.");
+        }
+
+        var centralExtraOffset = checked(entry.CentralDirectoryOffset + 46 + entry.CentralNameLength);
+        var availableThroughEof = before.Length - centralExtraOffset;
+        if (declaredExtraLength <= availableThroughEof)
+        {
+            throw new InvalidOperationException(
+                $"extra-field-truncated requires a declared central extra-field length beyond physical EOF; {declaredExtraLength} bytes fit in the remaining {availableThroughEof}.");
+        }
+
+        var extraLengthOffset = entry.CentralDirectoryOffset + 30;
+        return Patch(ArchiveTestMutationKind.CentralExtraLengthOverrun, before,
+        [
+            new MutationSpec(
+                ArchiveTestMutationKind.CentralExtraLengthOverrun.ToCaseKey(), "central-header", extraLengthOffset,
+                $"Rewrites entry 0's Central Directory extra-field length from 0 to {declaredExtraLength} bytes; the claimed field starts after the name and extends past physical EOF.",
+                entry.Ordinal, 2, 2, DeclaredValue: $"declared-extra={declaredExtraLength} actual-extra=0"),
+        ], after => BinaryPrimitives.WriteUInt16LittleEndian(after.AsSpan((int)extraLengthOffset, 2), declaredExtraLength));
+    }
+
+    /// <summary>
     /// Rewrites the compression method in both the local and the central header to the
     /// reserved code 98 (PPMd): the codes are consistent, the payload bytes stay the
     /// stored control bytes, and the reader simply has no codec for the declared method.
@@ -2132,6 +2165,7 @@ internal enum ArchiveTestMutationKind
     OffsetOutsideArchive,
     OffsetIntoPayload,
     ExtraFieldLengthOverrun,
+    CentralExtraLengthOverrun,
     UnsupportedMethod,
     EncryptionFlagWithPlaintext,
     OverlappingEntryRanges,
@@ -2197,6 +2231,7 @@ internal static class ArchiveTestMutationKindExtensions
         ArchiveTestMutationKind.OffsetOutsideArchive => "offset-outside-archive",
         ArchiveTestMutationKind.OffsetIntoPayload => "offset-into-payload",
         ArchiveTestMutationKind.ExtraFieldLengthOverrun => "extra-field-length-overrun",
+        ArchiveTestMutationKind.CentralExtraLengthOverrun => "extra-field-truncated",
         ArchiveTestMutationKind.UnsupportedMethod => "unsupported-method",
         ArchiveTestMutationKind.EncryptionFlagWithPlaintext => "encryption-flag-with-plaintext",
         ArchiveTestMutationKind.OverlappingEntryRanges => "overlapping-entry-ranges",

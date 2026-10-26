@@ -37,6 +37,7 @@ import os
 import re
 import shlex
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -119,6 +120,7 @@ STRUCTURAL_INVARIANT_CHECKS = {
     "declared-counts-disagree": "mutations",
     "metadata-sources-disagree": "mutations",
     "central-directory-is-findable": "zip64-eocd-offset-disagreement",
+    "central-extra-length-overruns-archive": "central-extra-length-overrun",
     "comment-bytes-are-pure-data": "zip64-locator-ambiguity",
     "trailing-bytes-are-undeclared": "undeclared-trailing-data",
     "one-member-fails": "mutations",
@@ -471,6 +473,13 @@ class FixtureVerifier:
         # Mutation chain linkage, offset arithmetic, and raw byte comparison.
         mutation_note = verify_mutations(case, zip_bytes, actual_sha)
         checks.append({"check": "mutations", "status": "pass", "detail": mutation_note})
+
+        # Central Directory extra-field length overrun (ticket #1288): the
+        # declared field starts at the next entry and extends past physical EOF.
+        if case.get("caseKey") == "extra-field-truncated":
+            extra_note = verify_central_extra_length_overrun(case, zip_bytes)
+            checks.append({"check": "central-extra-length-overrun", "status": "pass",
+                           "detail": extra_note})
 
         if case.get("caseKey") == "zip64-eocd-offset-disagreement":
             zip64_note = verify_zip64_eocd_offset_disagreement(case, zip_bytes)
@@ -1726,6 +1735,74 @@ def verify_zip64_eocd_offset_disagreement(case, zip_bytes):
 
     return ("regular-cd=%d+%d zip64-cd=%d intact-central-header=true"
             % (cd_offset, cd_size, zip64_cd_offset))
+
+
+def verify_central_extra_length_overrun(case, zip_bytes):
+    """Prove the first central header claims 1024 extra bytes where none exist."""
+    check = "central-extra-length-overrun"
+    entries = case.get("entries", [])
+    if len(entries) != 2:
+        raise VerificationError(check, "the valid-stored control must declare exactly two entries")
+
+    eocd_offset = len(zip_bytes) - ZIP_EOCD_FIXED_SIZE
+    if eocd_offset < 0 or zip_bytes[eocd_offset:eocd_offset + 4] != b"PK\x05\x06":
+        raise VerificationError(check, "length-anchored EOCD signature is missing")
+    disk, cd_disk, disk_entries, total_entries, cd_size, cd_offset, comment_length = \
+        struct.unpack_from("<HHHHIIH", zip_bytes, eocd_offset + 4)
+    if ((disk, cd_disk) != (0, 0) or disk_entries != total_entries
+            or total_entries != len(entries) or comment_length != 0
+            or cd_offset + cd_size != eocd_offset):
+        raise VerificationError(check, "the Stored control's EOCD fields or directory span changed")
+
+    if (cd_offset + ZIP_CENTRAL_HEADER_FIXED_SIZE > eocd_offset
+            or zip_bytes[cd_offset:cd_offset + 4] != b"PK\x01\x02"):
+        raise VerificationError(check, "first central-directory header is missing")
+    name_length, declared_extra_length, entry_comment_length = struct.unpack_from(
+        "<HHH", zip_bytes, cd_offset + 28)
+    name_start = cd_offset + ZIP_CENTRAL_HEADER_FIXED_SIZE
+    extra_start = name_start + name_length
+    if (entries[0].get("centralDirectoryOffset") != cd_offset
+            or zip_bytes[name_start:extra_start].hex() != entries[0].get("centralNameRaw")
+            or entry_comment_length != 0):
+        raise VerificationError(check, "first central-directory name or comment disagrees with the Expectation File")
+    if (declared_extra_length != 0x0400
+            or extra_start + ZIP_CENTRAL_HEADER_FIXED_SIZE > eocd_offset
+            or zip_bytes[extra_start:extra_start + 4] != b"PK\x01\x02"
+            or entries[1].get("centralDirectoryOffset") != extra_start):
+        raise VerificationError(check, "the first central header does not claim past the immediately following entry")
+
+    declared_end = extra_start + declared_extra_length
+    if declared_end <= len(zip_bytes):
+        raise VerificationError(check, "the declared extra-field region does not extend past physical EOF")
+
+    mutations = case.get("mutations") or []
+    if len(mutations) != 1:
+        raise VerificationError(check, "expected one central extra-field length mutation")
+    mutation = mutations[0]
+    field_offset = cd_offset + 30
+    before_hex = mutation.get("beforeHex") or ""
+    after_hex = mutation.get("afterHex") or ""
+    try:
+        before_length = struct.unpack_from("<H", bytes.fromhex(before_hex))[0]
+        after_length = struct.unpack_from("<H", bytes.fromhex(after_hex))[0]
+    except (ValueError, struct.error):
+        raise VerificationError(check, "mutation inline hex does not contain the central extra-field length") from None
+    if (mutation.get("code") != "extra-field-truncated"
+            or mutation.get("structure") != "central-header"
+            or mutation.get("offset") != field_offset
+            or mutation.get("deletedLength") != 2
+            or mutation.get("insertedLength") != 2
+            or mutation.get("beforeSize") != len(zip_bytes)
+            or mutation.get("afterSize") != len(zip_bytes)
+            or mutation.get("declaredValue") != "declared-extra=1024 actual-extra=0"
+            or before_length != 0
+            or after_length != declared_extra_length
+            or struct.unpack_from("<H", zip_bytes, field_offset)[0] != declared_extra_length):
+        raise VerificationError(check, "mutation record does not describe the exact central extra-field length rewrite")
+
+    overflow = declared_end - len(zip_bytes)
+    return ("central-directory=%d declared-extra=%d actual-extra=0 beyond-eof=%d bytes"
+            % (cd_offset, declared_extra_length, overflow))
 
 
 def verify_undeclared_trailing_data(case, zip_bytes):

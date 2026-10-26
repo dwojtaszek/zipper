@@ -372,6 +372,18 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
         Assert.Equal("extract-succeeds", NormalizeExtract(artifact.ArchiveBytes, testCase, extractDirectory));
     }
 
+    [Fact]
+    public void ReadOperations_ExtraFieldTruncated_PinsDotNetReaderOutcomes()
+    {
+        var definition = ArchiveTestCatalog.GetCase("extra-field-truncated");
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+        var testCase = ArchiveTestSuiteGenerator.BuildExpectationFile(artifact, definition, 42);
+
+        Assert.Equal("list-fails", NormalizeList(artifact.ArchiveBytes, testCase));
+        Assert.Equal("read-entry-fails", NormalizeReadEntry(artifact.ArchiveBytes, testCase));
+        Assert.Equal("integrity-fails", NormalizeIntegrityCheck(artifact.ArchiveBytes, testCase));
+    }
+
     [Theory]
     [InlineData("list")]
     [InlineData("read-entry")]
