@@ -289,3 +289,11 @@
 - **telemetry**: host=droid mode=branch specialists=8 bundle=68066c
 - **lessons**: none
 - **suppressions**: none
+
+### 2026-10-26 droid:branch:issue-1284-net11-crc-canary
+
+- **findings**: 2 initial documentation-outcome findings (maintainability + adversarial, same issue); 0 after correction.
+- **outcome**: accepted and fixed by distinguishing the current normalized outcomes for CRC-declaration mismatches (`crc-mismatch-unchecked`) and payload flips (`integrity-fails`), then documenting their .NET 11 transition. Focused reader tests (123) and full solution tests (3,547) passed; format verification passed. .NET 11 behavior branch could not be run because only .NET 10 runtimes are installed.
+- **telemetry**: host=droid mode=branch specialists=5 bundle=5104c
+- **lessons**: Document each affected case's current normalized outcome before describing runtime-upgrade transitions.
+- **suppressions**: none

@@ -25,6 +25,9 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
 
     private sealed record ReaderOutcome(string Operation, string NormalizedOutcome, bool Applicable, bool Allowed);
 
+    private const string RuntimeCrcBehaviorChangedMessage =
+        "Runtime CRC behavior changed — bump Expectation Revisions for all CRC-declaring cases and update NormalizeIntegrityCheck per docs/archive-test-suites.md before updating this canary.";
+
     /// <summary>
     /// Catalog success vocabulary aliases of the reader's canonical success tokens
     /// (e.g. the verifier emits 'list-succeeds' where the catalog records
@@ -259,6 +262,35 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
 
         var extractDir = Path.Combine(TempDir, caseKey + "-extract");
         ExecuteReaderOperations(testCase, archiveBytes, extractDir);
+    }
+
+    [Fact]
+    public void ReadOperations_CrcBothMismatch_PinsRuntimeCrcValidationBehavior()
+    {
+        var definition = ArchiveTestCatalog.GetCase("crc-both-mismatch");
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+        var testCase = ArchiveTestSuiteGenerator.BuildExpectationFile(artifact, definition, 42);
+
+        var exception = Record.Exception(() =>
+        {
+            using var archive = new ZipArchive(new MemoryStream(artifact.ArchiveBytes), ZipArchiveMode.Read);
+            using var stream = archive.Entries[0].Open();
+            stream.CopyTo(Stream.Null);
+        });
+
+        if (Environment.Version.Major >= 11)
+        {
+            Assert.True(
+                exception is InvalidDataException crcException
+                    && crcException.Message.Contains("crc", StringComparison.OrdinalIgnoreCase),
+                RuntimeCrcBehaviorChangedMessage);
+            Assert.Fail(RuntimeCrcBehaviorChangedMessage);
+        }
+
+        Assert.True(exception is null, RuntimeCrcBehaviorChangedMessage);
+        Assert.True(
+            NormalizeIntegrityCheck(artifact.ArchiveBytes, testCase) == "crc-mismatch-unchecked",
+            RuntimeCrcBehaviorChangedMessage);
     }
 
     [Fact]
