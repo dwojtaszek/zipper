@@ -900,6 +900,112 @@ class Zip64EocdOffsetDisagreementTests(TempDirTest):
         self.assertIn("regular EOCD central-directory span", str(caught.exception))
 
 
+class CentralExtraLengthOverrunTests(TempDirTest):
+    EXPECTATIONS = [
+        {"operation": "list", "profile": "strict",
+         "allowedOutcomes": ["list-succeeds", "list-fails"],
+         "invariants": ["central-extra-length-overruns-archive",
+                        "no-allocation-from-declared-sizes"],
+         "failureStages": ["open", "list"]},
+        {"operation": "read-entry", "profile": "strict",
+         "allowedOutcomes": ["read-entry-content-matches", "read-entry-fails",
+                             "read-entry-returns-unverified-bytes"],
+         "invariants": ["central-extra-length-overruns-archive",
+                        "no-allocation-from-declared-sizes"],
+         "failureStages": ["open", "read-entry"]},
+        {"operation": "integrity-check", "profile": "strict",
+         "allowedOutcomes": ["integrity-passes", "integrity-fails",
+                             "integrity-unchecked"],
+         "invariants": ["central-extra-length-overruns-archive",
+                        "no-allocation-from-declared-sizes"],
+         "failureStages": ["open", "read-entry", "integrity-check"]},
+        {"operation": "extract", "profile": "strict",
+         "allowedOutcomes": ["extract-succeeds", "extract-fails"],
+         "invariants": ["central-extra-length-overruns-archive",
+                        "no-allocation-from-declared-sizes"],
+         "failureStages": ["open", "read-entry", "extract"]},
+    ]
+
+    @classmethod
+    def make_case(cls):
+        contents = [("a.txt", b"A" * 100), ("b.bin", b"B" * 40)]
+        control = make_zip(contents)
+        archive = bytearray(control)
+        eocd_offset = len(control) - vf.ZIP_EOCD_FIXED_SIZE
+        central_offset = struct.unpack_from("<I", control, eocd_offset + 16)[0]
+        name_length = struct.unpack_from("<H", control, central_offset + 28)[0]
+        field_offset = central_offset + 30
+        struct.pack_into("<H", archive, field_offset, 0x0400)
+        archive = bytes(archive)
+
+        mutation = {
+            "code": "extra-field-truncated",
+            "structure": "central-header",
+            "offsetBasis": "before-mutation",
+            "offset": field_offset,
+            "explanation": "first central header claims 1024 extra-field bytes beyond EOF",
+            "deletedLength": 2,
+            "insertedLength": 2,
+            "beforeSize": len(control),
+            "afterSize": len(archive),
+            "beforeSha256": sha256_hex(control),
+            "afterSha256": sha256_hex(archive),
+            "beforeHex": control[field_offset:field_offset + 4].hex(),
+            "afterHex": archive[field_offset:field_offset + 4].hex(),
+            "declaredValue": "declared-extra=1024 actual-extra=0",
+        }
+        entries = [
+            entry_record(ordinal, name, content) | {
+                "localHeaderOffset": 0 if ordinal == 0 else
+                    struct.unpack_from("<I", control, central_offset + 46 + name_length + 42)[0],
+                "centralDirectoryOffset": central_offset if ordinal == 0 else
+                    central_offset + 46 + name_length,
+            }
+            for ordinal, (name, content) in enumerate(contents)
+        ]
+        case = case_for(
+            "extra-field-truncated", "malformed", archive, entries,
+            [mutation], cls.EXPECTATIONS)
+        return case, archive, field_offset
+
+    def test_full_verification_accepts_and_reports_the_overlong_central_extra_field(self):
+        case, archive, _ = self.make_case()
+        write_pair(self.dir, case, archive)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(0, exit_code, report["fixtures"][0].get("failure"))
+        fixture = report["fixtures"][0]
+        audit = next(check for check in fixture["structureChecks"]
+                     if check["check"] == "central-extra-length-overrun")
+        self.assertIn("declared-extra=1024", audit["detail"])
+        self.assertIn("beyond-eof=", audit["detail"])
+        operations = {operation["operation"]: operation
+                      for operation in fixture["operations"]}
+        self.assertEqual("list-fails", operations["list"]["normalizedOutcome"])
+        self.assertEqual("read-entry-fails", operations["read-entry"]["normalizedOutcome"])
+        self.assertEqual("integrity-fails",
+                         operations["integrity-check"]["normalizedOutcome"])
+        self.assertEqual("not-run", operations["extract"]["normalizedOutcome"])
+        for operation in operations.values():
+            self.assertEqual(
+                "not-run" if operation["operation"] == "extract" else "pass",
+                operation["status"])
+            self.assertIn("central-extra-length-overruns-archive",
+                          operation["invariantsChecked"])
+
+    def test_verifier_rejects_a_length_that_no_longer_overruns_the_archive(self):
+        case, archive, field_offset = self.make_case()
+        tampered = bytearray(archive)
+        struct.pack_into("<H", tampered, field_offset, 0)
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_central_extra_length_overrun(case, bytes(tampered))
+
+        self.assertEqual("central-extra-length-overrun", caught.exception.check)
+        self.assertIn("does not claim past", str(caught.exception))
+
+
 class UndeclaredTrailingDataTests(TempDirTest):
     TRAILING = b"zipper-tail-data"
     EXPECTATIONS = [

@@ -135,6 +135,34 @@ public class ArchiveTestSuiteGeneratorTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void BuildExpectationFile_ExtraFieldTruncated_DeclaresReaderVarianceAndInvariants()
+    {
+        var definition = ArchiveTestCatalog.GetCase("extra-field-truncated");
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+
+        var testCase = ArchiveTestSuiteGenerator.BuildExpectationFile(artifact, definition, 42);
+
+        Assert.Equal("malformed", testCase.Classification);
+        Assert.Equal(
+            ["list-succeeds", "list-fails"],
+            testCase.Expectations.Single(expectation => expectation.Operation == "list").AllowedOutcomes);
+        Assert.Equal(
+            ["read-entry-content-matches", "read-entry-fails", "read-entry-returns-unverified-bytes"],
+            testCase.Expectations.Single(expectation => expectation.Operation == "read-entry").AllowedOutcomes);
+        Assert.Equal(
+            ["integrity-passes", "integrity-fails", "integrity-unchecked"],
+            testCase.Expectations.Single(expectation => expectation.Operation == "integrity-check").AllowedOutcomes);
+        Assert.Equal(
+            ["extract-succeeds", "extract-fails"],
+            testCase.Expectations.Single(expectation => expectation.Operation == "extract").AllowedOutcomes);
+        Assert.All(testCase.Expectations, expectation =>
+            Assert.Equal(
+                ["central-extra-length-overruns-archive", "no-allocation-from-declared-sizes"],
+                expectation.Invariants));
+        Assert.Empty(ArchiveTestCaseSemantics.Validate(testCase));
+    }
+
+    [Fact]
     public void BuildExpectationFile_EncodingLocalCentralCodecDivergence_DeclaresPolicyAndContainment()
     {
         var definition = ArchiveTestCatalog.GetCase("encoding-local-central-codec-divergence");

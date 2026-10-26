@@ -462,6 +462,7 @@ REQ-217	unit	ArchiveTestCaseSchemaTests.Load_SchemaFile_DeclaresDraft07Contract	
 REQ-218	unit	ArchiveFixtureMutationTests.Apply_Truncation_RemovesTailBytesAndRecordsThem	Mutation records with before-mutation offsets, before/after hashes/sizes, and declared values; ordered combined chains in ArchiveCombinedCaseTests prove each mutation consumes the previous result
 REQ-218	unit	ArchiveFixtureMutationTests.Apply_Zip64ExtraWithoutSentinels_PreservesExtraStructureAndDisagreesWithHeaderSizes	Size sentinels change in place while both Zip64 extra fields stay present and claim conflicting size values
 REQ-218	unit	ArchiveFixtureMutationTests.Apply_Zip64EocdOffsetDisagreement_RewritesOnlyZip64CentralDirectoryOffset	Zip64 EOCD moves 16 bytes while the regular EOCD and central directory remain unchanged; inline mutation windows reconstruct the control
+REQ-218	unit	ArchiveFixtureMutationTests.Build_ExtraFieldTruncated_ChangesOnlyCentralExtraLengthPastEndOfArchive	Only the central-header extra-field length changes to 0x0400; following headers and payload bytes remain unchanged
 REQ-219	unit	ParallelFileGeneratorTests.GenerateFilesAsync_SequentialSameSecondCalls_AllocateDistinctBasenamesAndPreserveFirstArchive	Collision-resistant basenames, exclusive file creation, upfront Production Set collision rejection, and owned-artifact cleanup on fault/cancellation
 REQ-220	unit	OutputModuleTests.TryBuild_Compression_ValidMethods_Succeeds	--compression flag parsing and case-insensitive mapping for store, deflate, deflate64, bzip2
 REQ-221	unit	OutputModuleTests.TryBuild_Compression_Omitted_DefaultsToDeflate	Default compression method is deflate when --compression is omitted
@@ -491,11 +492,11 @@ REQ-226	unit	ProductionMetadataValidationTests.Validate_WithMetadataOneByteOverB
 REQ-226	unit	ProductionMetadataValidationTests.Validate_WithMultipleViolations_ReportsOneFindingPerViolation	One finding per violation accumulates
 REQ-226	unit	ChaosAndComparisonPropertyTests.ProductionMetadataBudget_SanitizeAndValidate_ShouldEnforceAsciiAndByteBudget	Property: ProductionMetadataBudget validates sanitized blocks and enforces 8,192-byte budget
 REQ-208	unit	ArchiveCompatibilityCaseTests.Build_ValidZip64Small_RoundTripsThroughTwoImplementations	Compatibility suite Zip64 case selection and round-trip verification
-REQ-208	unit	ArchiveStructureCaseTests.ListSuite_Malformed_IncludesAllStructureCases	Malformed suite includes stored-payload-bitflip and excludes the frozen smoke suite
-REQ-208	unit	ArchiveTestSuiteContractTests.Catalogue_ContainsExactlyTheFrozenCaseKeys	Archive test fixture catalog contains frozen case keys
+REQ-208	unit	ArchiveStructureCaseTests.ListSuite_Malformed_IncludesAllStructureCases	Malformed suite includes extra-field-truncated and leaves the frozen smoke suite unchanged
+REQ-208	unit	ArchiveTestSuiteContractTests.Catalogue_ContainsExactlyTheFrozenCaseKeys	Archive Test Fixture catalog contains 117 unique Case Keys
 REQ-208	unit	ArchiveFixtureBuilderTests.BuildControl_EncodingLocalCentralCodecDivergence_RewritesLocalNameWithCp932	New encoding Case Key carries same logical name as CP932 local and UTF-8 central bytes
 REQ-208	unit	ArchiveTestModuleTests.RunAsync_EncodingSuiteNoSelection_PublishesExpectedCaseKeys	Encoding suite publishes the local/central codec divergence Case Key
-REQ-208	e2e	test-archive-test-suites.sh	Encoding suite publishes four Archive Test Fixture pairs and the full catalog contains 116 Case Keys
+REQ-208	e2e	test-archive-test-suites.sh	Encoding suite publishes four Archive Test Fixture pairs and the full catalog contains 117 Case Keys
 REQ-208	unit	Deflate64LongMatchTests.Catalog_ContainsDeflate64LongMatchControl	Archive test catalog includes Deflate64 long match case key
 REQ-208	unit	ArchiveFixturePropertyTests.ArchiveTestModule_TryApplyAndTryBuild_ShouldAcceptAllCanonicalSuitesAndRejectUnknownSuites	Property: ArchiveTestModule parses CLI suite flags and resolves canonical suite names
 REQ-210	unit	ArchiveFixtureLayoutTests.Read_SingleStoredControl_CapturesExactOffsets	Layout reader parses local/central directory offsets for fixture ID computation
@@ -514,8 +515,10 @@ REQ-212	unit	ArchiveTestSuiteGeneratorTests.BuildExpectationFile_DeclaredSizeUnd
 REQ-212	unit	ArchiveReferenceReaderTests.ReadOperations_DeclaredSizeUndersized_ReturnsUnverifiedBytesAtDeclaredCompressedSizeBoundary	.NET reference reader returns partial unverified bytes and fails integrity checking
 REQ-212	unit	ArchiveTestSuiteGeneratorTests.BuildExpectationFile_UndeclaredTrailingData_DeclaresReaderVarianceAndInvariant	Expectation File allows reader variance while requiring proof that 16 trailing bytes are outside the zero-comment EOCD
 REQ-212	unit	ArchiveReferenceReaderTests.ReadOperations_UndeclaredTrailingData_PinsDotNetReaderOutcomes	.NET reference reader lists, reads, integrity-checks, and extracts the Archive with undeclared trailing bytes
+REQ-212	unit	ArchiveTestSuiteGeneratorTests.BuildExpectationFile_ExtraFieldTruncated_DeclaresReaderVarianceAndInvariants	Expectation File allows reader variance and requires proof of a central extra-field overrun past EOF
+REQ-212	unit	ArchiveReferenceReaderTests.ReadOperations_ExtraFieldTruncated_PinsDotNetReaderOutcomes	.NET reference reader rejects the overlong central extra-field length during listing, reading, and integrity-check
 REQ-212	e2e	test-archive-test-suites.sh	Archive Test E2E runs the independent Python verifier suite and validates generated fixtures
-REQ-212	e2e	archive-tests/test_verify_fixtures.py	Independent Python verifier tests validate the Zip64 offset disagreement and reject tampered offsets
+REQ-212	e2e	archive-tests/test_verify_fixtures.py	Independent Python verifier proves the declared central extra-field extends past EOF and rejects a shortened overrun
 REQ-213	unit	ArchiveResourceCaseTests.Build_EntriesOneOverCap_ThrowsDescriptively	Archive test fixture 1000-entry budget cap enforcement
 REQ-213	unit	ArchiveResourceCaseTests.Build_PhysicalBytesOneOver_ThrowsDescriptively	Archive test fixture 16 MiB physical size budget cap enforcement
 REQ-213	unit	ArchiveResourceCaseTests.Build_ExpandedBytesOneOver_ThrowsDescriptively	Archive test fixture 32 MiB expanded recipe content budget cap enforcement

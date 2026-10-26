@@ -506,6 +506,10 @@ internal static class ArchiveTestCatalog
             ArchiveTestMutationKind.OffsetIntoPayload, controlCaseKey: SignaturePayloadControlCaseKey),
         ["extra-field-length-overrun"] = MutatedDefinition(
             ArchiveTestMutationKind.ExtraFieldLengthOverrun, controlCaseKey: ExtraFieldControlCaseKey),
+        // Ticket #1288: the enclosing central-header extra-field length itself
+        // extends beyond the physical Archive, unlike the local subfield overrun above.
+        ["extra-field-truncated"] = MutatedDefinition(
+            ArchiveTestMutationKind.CentralExtraLengthOverrun, controlCaseKey: StoredControlCaseKey),
         // Unsupported-feature case: classification policy-sensitive; housed in the
         // security suite per #834 alongside the policy recipes, and in malformed as
         // the structure-case home pinned since ticket #840.

@@ -80,6 +80,10 @@ To generate the malformed `version-local-central-mismatch` Archive Test Fixture,
 ```bash
 zipper --archive-test-suite malformed --archive-test-cases version-local-central-mismatch --seed 42 --output-path ./version-local-central-mismatch
 ```
+To generate the malformed `extra-field-truncated` Archive Test Fixture, whose first central header declares 1,024 extra-field bytes past the Archive's physical end:
+```bash
+zipper --archive-test-suite malformed --archive-test-cases extra-field-truncated --seed 42 --output-path ./extra-field-truncated
+```
 To generate the policy-sensitive `zip64-extra-without-sentinels` Archive Test Fixture, which tests conflicting 32-bit header and Zip64 extended-information sizes:
 ```bash
 zipper --archive-test-suite malformed --archive-test-cases zip64-extra-without-sentinels --seed 42 --output-path ./zip64-extra-conflict

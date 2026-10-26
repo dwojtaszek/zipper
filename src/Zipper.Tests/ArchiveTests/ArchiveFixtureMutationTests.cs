@@ -183,6 +183,77 @@ public class ArchiveFixtureMutationTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void Build_ExtraFieldTruncated_ChangesOnlyCentralExtraLengthPastEndOfArchive()
+    {
+        const ushort DeclaredExtraLength = 0x0400;
+        var control = BuildControl();
+        var definition = ArchiveTestCatalog.GetCase("extra-field-truncated");
+
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+
+        var entry = control.Layout.Entries[0];
+        var extraLengthOffset = entry.CentralDirectoryOffset + 30;
+        Assert.Equal(0, entry.CentralExtraLength);
+        Assert.Equal((ushort)0, BinaryPrimitives.ReadUInt16LittleEndian(
+            control.ArchiveBytes.AsSpan((int)extraLengthOffset, 2)));
+        Assert.Equal(DeclaredExtraLength, BinaryPrimitives.ReadUInt16LittleEndian(
+            artifact.ArchiveBytes.AsSpan((int)extraLengthOffset, 2)));
+        Assert.True(
+            entry.CentralDirectoryOffset + 46 + entry.CentralNameLength + DeclaredExtraLength
+                > artifact.ArchiveBytes.Length);
+        Assert.Equal(control.ArchiveBytes.Length, artifact.ArchiveBytes.Length);
+        Assert.Equal(1, CountDifferingBytes(control.ArchiveBytes, artifact.ArchiveBytes));
+        Assert.Equal(control.ArchiveBytes[..(int)extraLengthOffset],
+            artifact.ArchiveBytes[..(int)extraLengthOffset]);
+        Assert.Equal(control.ArchiveBytes[((int)extraLengthOffset + 2)..],
+            artifact.ArchiveBytes[((int)extraLengthOffset + 2)..]);
+
+        foreach (var payload in control.Layout.Entries)
+        {
+            Assert.Equal(
+                control.ArchiveBytes.AsSpan((int)payload.DataOffset, (int)payload.CompressedSize).ToArray(),
+                artifact.ArchiveBytes.AsSpan((int)payload.DataOffset, (int)payload.CompressedSize).ToArray());
+        }
+
+        var mutation = Assert.Single(artifact.Mutations);
+        Assert.Equal("extra-field-truncated", mutation.Code);
+        Assert.Equal("central-header", mutation.Structure);
+        Assert.Equal(extraLengthOffset, mutation.Offset);
+        Assert.Equal(entry.Ordinal, mutation.Ordinal);
+        Assert.Equal(2, mutation.DeletedLength);
+        Assert.Equal(2, mutation.InsertedLength);
+        Assert.Equal("declared-extra=1024 actual-extra=0", mutation.DeclaredValue);
+    }
+
+    [Fact]
+    public void Apply_CentralExtraLengthOverrun_WhenDeclaredLengthExactlyFitsToEof_RejectsMutation()
+    {
+        const int DeclaredExtraLength = 0x0400;
+        var control = BuildControl();
+        var entry = control.Layout.Entries[0];
+        var centralExtraOffset = entry.CentralDirectoryOffset + 46 + entry.CentralNameLength;
+        var commentLength = checked((int)(centralExtraOffset + DeclaredExtraLength - control.ArchiveBytes.Length));
+        Assert.InRange(commentLength, 1, ushort.MaxValue);
+
+        var archiveBytes = new byte[checked(control.ArchiveBytes.Length + commentLength)];
+        control.ArchiveBytes.CopyTo(archiveBytes, 0);
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            archiveBytes.AsSpan((int)control.Layout.EocdOffset + 20, 2),
+            checked((ushort)commentLength));
+        var boundaryControl = control with
+        {
+            ArchiveBytes = archiveBytes,
+            ArchiveSha256 = Convert.ToHexStringLower(SHA256.HashData(archiveBytes)),
+            Layout = ArchiveFixtureLayout.Read(archiveBytes, commentLength),
+        };
+
+        Assert.Equal(DeclaredExtraLength, archiveBytes.Length - centralExtraOffset);
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.CentralExtraLengthOverrun, boundaryControl));
+        Assert.Contains("1024 bytes fit in the remaining 1024", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Apply_VersionLocalCentralMismatch_PinsLocalTwoPointZeroAndCentralFourPointFive()
     {
         var control = ArchiveFixtureBuilder.BuildControl("valid-deflate", 42, CancellationToken.None);

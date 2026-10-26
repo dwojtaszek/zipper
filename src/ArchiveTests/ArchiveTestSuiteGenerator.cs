@@ -439,6 +439,25 @@ internal static class ArchiveTestSuiteGenerator
             // strict readers may reject mismatched fields, and forward-scanning readers
             // may discover orphan local headers omitted by the central directory.
             // Cross-method disagreements (ticket #899) use non-Stored/Deflate codes.
+            // The central extra-field length on ticket #1288 also extends past physical
+            // EOF, so even a reader that accepts the entry metadata may fail on reads.
+            ArchiveTestMutationKind.CentralExtraLengthOverrun =>
+            [
+                Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails],
+                    ["central-extra-length-overruns-archive", "no-allocation-from-declared-sizes"],
+                    ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile,
+                    ["read-entry-content-matches", "read-entry-fails", "read-entry-returns-unverified-bytes"],
+                    ["central-extra-length-overruns-archive", "no-allocation-from-declared-sizes"],
+                    ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, StrictProfile,
+                    ["integrity-passes", "integrity-fails", "integrity-unchecked"],
+                    ["central-extra-length-overruns-archive", "no-allocation-from-declared-sizes"],
+                    ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-succeeds", "extract-fails"],
+                    ["central-extra-length-overruns-archive", "no-allocation-from-declared-sizes"],
+                    ["open", ReadEntryOperation, ExtractOperation]),
+            ],
             ArchiveTestMutationKind.NameLocalCentralMismatch
                 or ArchiveTestMutationKind.MethodLocalCentralMismatch
                 or ArchiveTestMutationKind.SizeLocalCentralMismatch
