@@ -257,3 +257,11 @@
 - **telemetry**: host=droid mode=branch specialists=5 bundle=27519c
 - **lessons**: none
 - **suppressions**: none
+
+### 2026-10-26 droid:branch:1282-resume-validation
+
+- **findings**: 0 ACTION, 0 INFO across 6 reviewers (correctness, adversarial, testing, maintainability, performance, API contract).
+- **outcome**: clean review. Focused Archive Test Fixture tests (259), replay tests (2), single-fixture verification, complete 113-case Archive Test E2E, format, and mutation smoke gate passed.
+- **telemetry**: host=droid mode=branch specialists=6 bundle=28141c
+- **lessons**: none
+- **suppressions**: none
