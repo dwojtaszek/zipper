@@ -466,18 +466,25 @@ def _email_delivery_permitted() -> bool:
 
 
 def send_email(subject, body_html):
+    """Deliver one message. Returns False only when delivery was attempted and failed.
+
+    A suppressed send (dry run, or an import that never configured delivery) counts
+    as success: nothing was attempted, so there is no failure to report. Callers that
+    record having told a human rely on that distinction, because a recorded send that
+    never arrived silences the alert it was meant to raise.
+    """
     print(f"Sending email: {subject}")
     print(f"Email body:\n{body_html}")
     if DRY_RUN:
         print(f"[DRY RUN] Bypassed sending email to {EMAIL_RECIPIENT}")
-        return
+        return True
     if not _email_delivery_permitted():
         # Importing the module must never be enough to mail a human. The test
         # suite imports this file, so a test that exercises an email path used to
         # deliver real mail on every run; tests that assert delivery opt in.
         print(f"[email] Suppressed '{subject}' for {EMAIL_RECIPIENT}: "
               f"runner.py was imported, not executed.")
-        return
+        return True
     msg = f"To: {EMAIL_RECIPIENT}\nSubject: {subject}\nContent-Type: text/html\n\n{body_html}"
     try:
         p = subprocess.Popen(["msmtp", EMAIL_RECIPIENT], stdin=subprocess.PIPE, text=True)
@@ -485,12 +492,16 @@ def send_email(subject, body_html):
             p.communicate(msg, timeout=10)
             if p.returncode != 0:
                 print(f"msmtp failed with exit code {p.returncode}")
+                return False
         except subprocess.TimeoutExpired:
             p.kill()
             p.communicate()
             print("WARNING: msmtp timed out and was killed")
+            return False
     except Exception as e:
         print(f"Failed to send email via msmtp: {e}")
+        return False
+    return True
 
 
 def _rate_key(subject: str) -> str:
@@ -652,6 +663,92 @@ def _should_send_rate_limited(subject: str, *, min_consecutive: int = 3, cooldow
     with open(path, "w") as f:
         json.dump(state, f)
     return True
+
+
+def _escalation_head_path(pr_number) -> str:
+    return os.path.join(STATE_DIR, f"pr-{pr_number}-escalated.json")
+
+
+def _escalation_key(subject: str, detail: str = "") -> str:
+    """Identity of one alert: its subject, plus the blocker it names.
+
+    A subject alone is not enough. One PR can raise several different alerts at the
+    same head -- an unauthorized draft that is then marked ready and trips the
+    review gate -- and one alert can name different blockers at the same head: an
+    adopted PR whose CI first fails and then passes, exposing an unsatisfied robot
+    review gate. Those need different action, so the blocker is part of the key.
+    """
+    return subject if not detail else f"{subject} | {detail}"
+
+
+def _escalation_head_already_sent(pr_number, head_sha: str, key: str) -> bool:
+    """True when this exact escalation for this head has already been delivered.
+
+    The orphan scanner runs from both the intake and the babysit entry point, so
+    one unchanging condition reached the subject rate limit twice per cycle -- 42
+    seconds apart on PR #1362 -- and its first-three-always-send grace spent all
+    three before any cooldown applied. Keying on the head mails once per distinct
+    state of the PR: a new commit is the point at which a human has something new
+    to read, and an unchanged head is not news.
+
+    An unreadable head cannot key the record, because storing it would suppress
+    every later escalation for that PR -- including the one that matters once the
+    head is readable again -- so it falls back to the rate limit instead.
+    """
+    if DRY_RUN:
+        return True
+    if not re.fullmatch(r"[0-9a-f]{40}", head_sha or ""):
+        return not _should_send_rate_limited(key)
+    try:
+        with open(_escalation_head_path(pr_number)) as f:
+            record = json.load(f) or {}
+        return record.get("head") == head_sha and key in (record.get("keys") or [])
+    except (OSError, ValueError, AttributeError, TypeError):
+        return False
+
+
+def _record_escalation_head(pr_number, head_sha: str, key: str) -> None:
+    """Remember the head and alert just reported, so the next cycle stays quiet.
+
+    The alert list is reset whenever the head moves: the new head is a new state of
+    the PR, so every alert is once again eligible.
+    """
+    if DRY_RUN or not re.fullmatch(r"[0-9a-f]{40}", head_sha or ""):
+        return
+    keys: list[str] = []
+    try:
+        with open(_escalation_head_path(pr_number)) as f:
+            previous = json.load(f) or {}
+        if previous.get("head") == head_sha:
+            keys = list(previous.get("keys") or [])
+    except (OSError, ValueError, AttributeError, TypeError):
+        pass
+    if key not in keys:
+        keys.append(key)
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        with open(_escalation_head_path(pr_number), "w") as f:
+            json.dump({"head": head_sha, "keys": keys}, f)
+    except OSError as e:
+        # A repeated mail is the lesser failure, so never lose the signal to this.
+        print(f"[escalation] Could not record the escalated head for PR #{pr_number}: {e}")
+
+
+def _send_pr_escalation(pr_number, head_sha: str, subject: str, body_html: str, *, detail: str = "") -> None:
+    """Send a per-PR escalation once per head and blocker, and only once it went out.
+
+    The head is recorded after the send rather than before it: send_email reports
+    a failed delivery, and recording first would silence the alert permanently for
+    that head after a transient msmtp failure. A repeated mail is recoverable; an
+    alert nobody ever received is not.
+    """
+    key = _escalation_key(subject, detail)
+    if _escalation_head_already_sent(pr_number, head_sha, key):
+        return
+    if send_email(subject, body_html) is False:
+        return
+    _record_escalation_head(pr_number, head_sha, key)
+
 
 def run_cmd(args, cwd=None, timeout=None, env=None):
     """Runs a system command, returning exit code, stdout, and stderr.
@@ -2261,6 +2358,11 @@ def _authorized_pr(pr_number, issue_number=None, expected_head=None):
     Authorization is bound to the PR, not to a frozen SHA: a recorded PR authored
     by a trusted user is authorized on whatever head it currently has. expected_head
     is the merge path's own pin, which is checked separately.
+
+    Provenance comes from one of three sources: a record the runner wrote when it
+    opened the PR, a signed Dependabot bot identity, or the maintainer-applied
+    'automated' label for a PR the repository's own automation opened. Everything
+    else needs a maintainer's explicit approval of the exact head.
     """
     code, out, _ = run_cmd(["gh", "api", f"repos/{GITHUB_REPOSITORY}/pulls/{pr_number}"], cwd=REPO_PATH)
     try:
@@ -2303,6 +2405,16 @@ def _authorized_pr(pr_number, issue_number=None, expected_head=None):
         # time (--match-head-commit) and re-gated by CI and the robot reviews, so a
         # moved head is re-verified rather than trusted on sight.
         if user.get("login") in TRUSTED_AUTHORS and _pr_state_matches(state, pr_number, branch):
+            return pr
+        # A PR the repository's own automation opened names no issue by
+        # construction -- the perf-baseline workflow sets its branch from the run
+        # id and its body from the generated report -- so no record can ever
+        # authorize it and every weekly refresh escalated as unauthorized (#1362).
+        # The maintainer-applied 'automated' label stands in for that record. The
+        # structural checks above still bind the PR to this repository's main, the
+        # author check keeps it to the maintainer's own PRs, and CI and the robot
+        # review gate are re-run before the merge as they are for every other PR.
+        if user.get("login") in TRUSTED_AUTHORS and _has_automated_label(pr):
             return pr
         # Unknown/legacy origins need a maintainer's explicit approval of this SHA.
         code, out, _ = run_cmd(
@@ -2378,15 +2490,66 @@ def _pr_head_ref(pr: dict) -> str:
     return (head.get("ref") or "") if isinstance(head, dict) else ""
 
 
+def _pr_head_sha(pr: dict) -> str:
+    """gh pr list exposes 'headRefOid'; gh api exposes head.sha.
+
+    The escalation guard keys on this, so both shapes have to yield the same
+    value or the two entry points would dedupe against different heads.
+    """
+    sha = pr.get("headRefOid")
+    if isinstance(sha, str) and sha:
+        return sha
+    head = pr.get("head")
+    return (head.get("sha") or "") if isinstance(head, dict) else ""
+
+
+AUTOMATED_LABEL = "automated"
+
+
+def _has_automated_label(pr: dict) -> bool:
+    """True when the PR carries the maintainer-applied 'automated' label.
+
+    Labels are repository state, not contributor input: only a user with write
+    access can apply one, so a fork PR cannot carry one. A bare string is accepted
+    alongside gh's [{'name': ...}] shape so a caller that already flattened the
+    list does not silently fail closed.
+    """
+    labels = pr.get("labels")
+    if not isinstance(labels, list):
+        return False
+    for label in labels:
+        name = label.get("name") if isinstance(label, dict) else label
+        if isinstance(name, str) and name.strip().lower() == AUTOMATED_LABEL:
+            return True
+    return False
+
+
 # GitHub refuses a review on your own pull request ("Can not approve your own
-# pull request"), so an APPROVED review is only reachable when a maintainer other
-# than the PR author is configured. It is the recovery for a PR the runner holds
-# no record for: a recorded PR authored by the maintainer needs no review, and its
-# head is re-verified at merge time instead.
-_APPROVE_REMEDIATION = (
-    "add an APPROVED review from a merge maintainer on the current head — or, if you authored the PR, "
-    "merge it directly, because GitHub blocks self-approval"
-)
+# pull request"), so an APPROVED review is only reachable when a merge maintainer
+# other than the PR author is configured. Advising it unconditionally is what made
+# the escalation for PR #1362 unactionable: the sole merge maintainer authored the
+# PR, main requires no approvals at all, and the unresolved review thread that
+# actually blocked the merge went unmentioned. _unblock_steps reads the blocker
+# from the PR's live state instead of asserting one.
+def _unblock_steps(pr_number, *, provenance: str | None = None) -> str:
+    """The concrete steps that unblock this PR, read from its current state.
+
+    An unreadable thread count is reported as unreadable rather than as zero, so
+    the operator is never told a blocker is absent when the runner merely failed
+    to look.
+    """
+    steps = []
+    if provenance:
+        steps.append(provenance)
+    threads = _count_review_threads(pr_number)
+    if threads > 0:
+        noun = "thread" if threads == 1 else "threads"
+        steps.append(f"resolve the {threads} unresolved review {noun} on the PR")
+    elif threads < 0:
+        steps.append("check the PR for unresolved review threads, which this run could not read")
+    if not steps:
+        steps.append("review the PR by hand")
+    return " and ".join(steps)
 
 
 def _authorization_refusal(pr: dict, branch):
@@ -2465,10 +2628,8 @@ def _escalate_blocked_worktree(pr_number, issue_number, branch, *, require_green
     reason, remediation = refusal
     current = (pr.get("head") or {}).get("sha") or ""
     subject = f"[Runner] PR #{pr_number} Needs Manual Authorization"
-    if not _should_send_rate_limited(subject):
-        return
-    send_email(
-        subject,
+    _send_pr_escalation(
+        pr_number, current, subject,
         f"<h3>PR <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">#{pr_number}</a> "
         f"(Issue #{html.escape(str(issue_number))}) cannot be authorized automatically.</h3>"
         f"<p><b>Branch:</b> {html.escape(str(branch))}<br>"
@@ -2478,11 +2639,12 @@ def _escalate_blocked_worktree(pr_number, issue_number, branch, *, require_green
         f"<p>The runner only acts on an open, non-draft PR in this repository whose record names this exact "
         f"PR and branch, so this PR keeps its worktree slot and no repair missions are dispatched for it.</p>"
         f"<p><b>To unblock:</b> {html.escape(remediation)}. The runner then re-checks the PR state, CI, and "
-        f"the robot-review gate, and pins the head it reviewed when it merges.</p>"
+        f"the robot-review gate, and pins the head it reviewed when it merges.</p>",
+        detail=reason,
     )
 
 
-def _escalate_unrecoverable_pr(pr_number, issue_number, branch) -> None:
+def _escalate_unrecoverable_pr(pr_number, issue_number, branch, *, head: str = "") -> None:
     """Tell a human that an orphan PR cannot be babied any further.
 
     The orphan path merges without a worktree, so a PR whose gate cannot be
@@ -2491,18 +2653,39 @@ def _escalate_unrecoverable_pr(pr_number, issue_number, branch) -> None:
     every cycle. Without this the operator never hears about it.
     """
     subject = f"[Runner] PR #{pr_number} Cannot Be Babied"
-    if not _should_send_rate_limited(subject):
-        return
-    send_email(
-        subject,
+    _send_pr_escalation(
+        pr_number, head, subject,
         f"<h3>PR <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">#{pr_number}</a> "
         f"(Issue #{html.escape(str(issue_number))}) needs manual recovery.</h3>"
         f"<p><b>Branch:</b> {html.escape(str(branch))}</p>"
         f"<p>The orphan scanner could not recreate a worktree to resolve this PR, so the runner cannot "
         f"babysit it. That normally means a local branch is parked at a different head than the PR, or the "
         f"branch could not be fetched.</p>"
-        f"<p><b>To unblock:</b> reconcile the local branch or worktree by hand. The runner retries the PR on "
-        f"the next cycle once a worktree can be created.</p>"
+        f"<p><b>To unblock:</b> {html.escape(_unblock_steps(pr_number, provenance='reconcile the local branch or worktree by hand'))}. "
+        f"The runner retries the PR on the next cycle once a worktree can be created.</p>"
+    )
+
+
+def _escalate_automated_pr(pr_number, branch, *, head: str, reason: str) -> None:
+    """Tell a human that a labeled-automated PR cannot be merged unattended.
+
+    The runner adopts such a PR on its label alone, so it holds no issue to
+    dispatch a repair mission against: when a gate is not satisfied there is
+    nothing it can do but report it. It never falls back to creating a worktree,
+    because a worktree is named by issue and this PR has none — inventing one
+    would occupy the single runner slot for work no issue asked for.
+    """
+    subject = f"[Runner] PR #{pr_number} Cannot Be Merged"
+    _send_pr_escalation(
+        pr_number, head, subject,
+        f"<h3>PR <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">#{pr_number}</a> "
+        f"cannot be merged automatically.</h3>"
+        f"<p><b>Branch:</b> {html.escape(str(branch))}<br>"
+        f"<b>Reason:</b> {html.escape(reason)}</p>"
+        f"<p>The runner adopted this PR on its <code>{AUTOMATED_LABEL}</code> label, so it holds no issue "
+        f"record for it and cannot dispatch a repair mission.</p>"
+        f"<p><b>To unblock:</b> {html.escape(_unblock_steps(pr_number))}.</p>",
+        detail=reason,
     )
 
 
@@ -4238,11 +4421,9 @@ def _escalate_unrecorded_pr(pr: dict, *, require_green_and_stale: bool = True) -
             return
     pr_num = pr.get("number")
     subject = f"[Runner] PR #{pr_num} Cannot Be Authorized"
-    if not _should_send_rate_limited(subject):
-        return
     waited = f" It has been waiting longer than {STALLED_PR_HOURS:g}h." if require_green_and_stale else ""
-    send_email(
-        subject,
+    _send_pr_escalation(
+        pr_num, _pr_head_sha(pr), subject,
         f"<h3>PR <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_num}\">#{pr_num}</a> "
         f"({html.escape(str(pr.get('title') or ''))}) cannot be authorized.</h3>"
         f"<p><b>Branch:</b> {html.escape(_pr_head_ref(pr))}<br>"
@@ -4250,15 +4431,29 @@ def _escalate_unrecorded_pr(pr: dict, *, require_green_and_stale: bool = True) -
         f"<p>The runner has no authorization record for this PR, so it cannot verify where the PR came from "
         f"and will not merge it automatically. That happens when the branch, title, and body carry no issue "
         f"reference, or when they name an issue the runner never recorded work for.{waited}</p>"
-        f"<p><b>To unblock:</b> name the issue the PR serves in its body or branch if it does not already, "
-        f"and {html.escape(_APPROVE_REMEDIATION)}.</p>"
+        f"<p><b>To unblock:</b> "
+        f"{html.escape(_unblock_steps(pr_num, provenance='name the issue the PR serves in its body or branch if it does not already'))}.</p>"
     )
+
+
+def _hand_orphan_pr_back(pr_num, issue_num_str, head_branch, reviewed_head, reason) -> None:
+    """Recreate a worktree to babysit an orphan PR, or report why it cannot be.
+
+    An adopted automated PR has no issue, so there is no worktree to recreate and
+    no mission to dispatch: it reports the blocker instead of occupying the single
+    runner slot for work no issue asked for.
+    """
+    if issue_num_str:
+        if not _recreate_worktree_for_pr(issue_num_str, head_branch, pr_num, reviewed_head):
+            _escalate_unrecoverable_pr(pr_num, issue_num_str, head_branch, head=reviewed_head)
+        return
+    _escalate_automated_pr(pr_num, head_branch, head=reviewed_head, reason=reason)
 
 
 def babysit_orphaned_issue_prs():
     """Scans open issue PRs on GitHub without local worktrees, checking CI and review gates, and auto-merging or recreating worktrees."""
     print("Scanning for open issue PRs without local worktrees...")
-    code, out, _ = run_cmd(["gh", "pr", "list", "--state", "open", "--json", "number,title,author,headRefName,statusCheckRollup,url,updatedAt,body,isDraft"], cwd=REPO_PATH)
+    code, out, _ = run_cmd(["gh", "pr", "list", "--state", "open", "--json", "number,title,author,headRefName,headRefOid,statusCheckRollup,url,updatedAt,body,isDraft,labels"], cwd=REPO_PATH)
     if code != 0 or not out.strip():
         return
 
@@ -4294,10 +4489,23 @@ def babysit_orphaned_issue_prs():
             m = re.search(r"#(\d+)", body)
 
         issue_num_str = m.group(1) if m else None
-        if issue_num_str and issue_num_str in existing_wt_issues:
-            continue
-        if not issue_num_str:
-            _escalate_unrecorded_pr(pr)
+        # Whether this PR is the runner's work for an issue is a question about its
+        # record, not about the text of its body: a generated body that happens to
+        # mention a number must never make the runner create a worktree for, or
+        # clear the state of, an issue it never recorded work for.
+        record_matches = bool(issue_num_str) and _pr_state_matches(
+            _load_pr_state(issue_num_str), pr_num, head_branch)
+        # A PR the repository's automation opened carries no issue reference, so no
+        # record can ever authorize it and there is no issue to dispatch a mission
+        # against. The maintainer-applied label is what identifies it; the author
+        # check keeps it to the maintainer's own PRs.
+        automated_pr = (not record_matches and _pr_author_login(pr) in TRUSTED_AUTHORS
+                        and _has_automated_label(pr))
+        # The issue this PR is genuinely the runner's work for, or None when it is
+        # not issue-linked. Every action below that names an issue uses this, so an
+        # adopted PR can never be driven against an unrelated issue.
+        linked_issue = issue_num_str if record_matches else None
+        if linked_issue and linked_issue in existing_wt_issues:
             continue
         authorized = _authorized_pr(pr_num, issue_num_str)
         if not authorized or authorized["head"]["ref"] != head_branch:
@@ -4308,7 +4516,12 @@ def babysit_orphaned_issue_prs():
             # here and the escalation's own guard cannot disagree. The list entry
             # is passed to the unrecorded report because only it carries CI state
             # and updatedAt; a gh api body has neither.
-            if _pr_state_matches(_load_pr_state(issue_num_str), pr_num, head_branch):
+            if automated_pr:
+                # It has no issue, so a worktree cannot be created for it and no
+                # mission can be dispatched; report the blocker instead.
+                _escalate_automated_pr(pr_num, head_branch, head=_pr_head_sha(pr),
+                                       reason="the PR is not authorized for automated action right now")
+            elif record_matches:
                 _escalate_blocked_worktree(pr_num, issue_num_str, head_branch)
             else:
                 _escalate_unrecorded_pr(pr)
@@ -4330,15 +4543,15 @@ def babysit_orphaned_issue_prs():
                       f"retrying next cycle.\n{review.detail}")
                 continue
             if not review.ok:
-                print(f"[orphan-pr] Review gate not yet satisfied for PR #{pr_num}. Recreating worktree for babysitting.\n{review.detail}")
-                if not _recreate_worktree_for_pr(issue_num_str, head_branch, pr_num, reviewed_head):
-                    _escalate_unrecoverable_pr(pr_num, issue_num_str, head_branch)
+                print(f"[orphan-pr] Review gate not yet satisfied for PR #{pr_num}; handing back for babysitting.\n{review.detail}")
+                _hand_orphan_pr_back(pr_num, linked_issue, head_branch, reviewed_head,
+                                     "the robot review gate is not satisfied")
                 continue
 
             print(f"[orphan-pr] Robot review gate passed for PR #{pr_num}. Auto-merging...")
             if not DRY_RUN:
                 merge_code, merge_out, merge_err, merge_rollup = _merge_authorized_pr(
-                    pr_num, issue_num_str, reviewed_head)
+                    pr_num, linked_issue, reviewed_head)
                 is_merged = (merge_code == 0)
                 if not is_merged:
                     st_code, st_out, _ = run_cmd(["gh", "pr", "view", str(pr_num), "--json", "state", "--jq", ".state"], cwd=REPO_PATH)
@@ -4347,8 +4560,8 @@ def babysit_orphaned_issue_prs():
 
                 if is_merged:
                     print(f"[orphan-pr] Successfully merged PR #{pr_num} into main.")
-                    if issue_num_str:
-                        _clear_pr_state(issue_num_str)
+                    if linked_issue:
+                        _clear_pr_state(linked_issue)
                     run_cmd(["git", "push", "origin", "--delete", head_branch], cwd=REPO_PATH, timeout=NETWORK_GIT_TIMEOUT)
                     _sync_main_after_merge()
                     send_email(
@@ -4358,14 +4571,14 @@ def babysit_orphaned_issue_prs():
                     )
                 else:
                     print(f"[orphan-pr] Auto-merge failed for PR #{pr_num}: {merge_err.strip()}")
-                    if not _recreate_worktree_for_pr(issue_num_str, head_branch, pr_num, reviewed_head):
-                        _escalate_unrecoverable_pr(pr_num, issue_num_str, head_branch)
+                    _hand_orphan_pr_back(pr_num, linked_issue, head_branch, reviewed_head,
+                                         "the merge was refused by branch protection")
             else:
                 print(f"[DRY RUN] Would auto-merge PR #{pr_num} ({head_branch})")
         elif ci_status == "FAILED":
-            print(f"[orphan-pr] PR #{pr_num} has failing CI checks: {', '.join(ci_failures)}. Recreating worktree for babysitting.")
-            if not _recreate_worktree_for_pr(issue_num_str, head_branch, pr_num, reviewed_head):
-                _escalate_unrecoverable_pr(pr_num, issue_num_str, head_branch)
+            print(f"[orphan-pr] PR #{pr_num} has failing CI checks: {', '.join(ci_failures)}; handing back for babysitting.")
+            _hand_orphan_pr_back(pr_num, linked_issue, head_branch, reviewed_head,
+                                 f"CI is failing: {', '.join(ci_failures)}")
         else:
             print(f"[orphan-pr] PR #{pr_num} CI checks still pending...")
 

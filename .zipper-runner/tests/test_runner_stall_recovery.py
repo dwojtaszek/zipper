@@ -259,17 +259,19 @@ class _WorktreePassTests(unittest.TestCase):
 class BlockedWorktreeEscalationTests(_WorktreePassTests):
     """An unauthorized PR must escalate, never fail silent or dispatch a run."""
 
-    def test_escalation_firstThreeSendsThenRateLimited(self):
+    def test_escalation_mailsOncePerHeadAndAgainAfterAHeadMove(self):
         # A draft is a refusal reason that holds without a head move, so it drives
-        # the rate limiter the same way a moved head used to.
+        # the guard the same way a moved head used to.
         self._write_pr(draft=True)
         runner = self.runner
         for _ in range(3):
             runner._escalate_blocked_worktree(99, "42", "fix/ISSUE-42-proof")
-        self.assertEqual(len(self.fixture.emails.messages), 3)
-        runner._escalate_blocked_worktree(99, "42", "fix/ISSUE-42-proof")
-        self.assertEqual(len(self.fixture.emails.messages), 3)
+        self.assertEqual(len(self.fixture.emails.messages), 1)
         self.assertIn("#99", self.fixture.emails.subjects()[0])
+        # A new commit is the point at which a human has something new to read.
+        self._write_pr(draft=True, head=dict(self.fixture.pr["head"], sha="b" * 40))
+        runner._escalate_blocked_worktree(99, "42", "fix/ISSUE-42-proof")
+        self.assertEqual(len(self.fixture.emails.messages), 2)
 
     def test_escalation_offersOnlyAWorkingRemediation(self):
         """Deleting the issue state cannot re-capture a head: provenance is read
@@ -282,15 +284,18 @@ class BlockedWorktreeEscalationTests(_WorktreePassTests):
         self.assertNotIn("delete", body)
         self.assertNotIn("issue-42.json", body)
 
-    def test_unrecordedEscalation_offersTheMaintainerReview(self):
-        """A PR with no record has no reason to name, so the only remediation that
-        can authorize it is a maintainer review of its current head — which GitHub
-        refuses on your own pull request, so the text says so."""
+    def test_unrecordedEscalation_namesTheLiveBlockerNotAnUnreachableApproval(self):
+        """A PR with no record has no reason to name, so the remediation has to come
+        from the PR's own state. An APPROVED review is unreachable here — the sole
+        merge maintainer authored the PR and GitHub refuses self-approval — so the
+        text must not offer one, and must name the thread that actually blocks."""
         self._make_green_and_stale()
         (self.root / "state" / "issue-42.json").unlink()
-        self.runner._escalate_blocked_worktree(99, "42", "fix/ISSUE-42-proof")
+        with patch.object(self.runner, "_query_review_thread_count", return_value=1):
+            self.runner._escalate_blocked_worktree(99, "42", "fix/ISSUE-42-proof")
         _subject, body = self.fixture.emails.messages[0]
-        self.assertIn("APPROVED", body)
+        self.assertIn("1 unresolved review thread", body)
+        self.assertNotIn("APPROVED", body)
         self.assertNotIn("delete", body)
         self.assertNotIn("issue-42.json", body)
 
@@ -469,13 +474,13 @@ class BlockedWorktreeEscalationTests(_WorktreePassTests):
         self.assertEqual(len(self.fixture.emails.messages), 1)
         self.assertIn("Cannot Be Authorized", self.fixture.emails.subjects()[0])
 
-    def test_activeWorktree_unauthorizedPr_rateLimited(self):
+    def test_activeWorktree_unauthorizedPr_mailsOncePerHead(self):
         """A stalled worktree must not mail on every cycle."""
         self._write_pr(draft=True)
         runner = self.runner
         for _ in range(4):
             runner.babysit_active_worktrees()
-        self.assertEqual(len(self.fixture.emails.messages), 3)
+        self.assertEqual(len(self.fixture.emails.messages), 1)
 
 
 class WorktreeDivergenceTests(unittest.TestCase):
@@ -851,6 +856,7 @@ class UnreferencedPrEscalationTests(unittest.TestCase):
             "number": 1258, "title": "chore: refresh perf baselines",
             "body": "## Perf Baseline Refresh", "author": {"login": author},
             "headRefName": "perf/baseline-refresh-39231950265", "updatedAt": updated_at,
+            "headRefOid": "c" * 40,
             "url": "https://github.com/dwojtaszek/zipper/pull/1258",
             "statusCheckRollup": [{"__typename": "CheckRun", "name": "ci-gate",
                                    "status": "COMPLETED", "conclusion": "SUCCESS"}],
@@ -904,13 +910,13 @@ class UnreferencedPrEscalationTests(unittest.TestCase):
         fixture = self._scan([self._green_pr("not-a-timestamp")])
         self.assertEqual(fixture.emails.messages, [])
 
-    def test_orphanScan_repeatedCycles_rateLimitTheEscalation(self):
+    def test_orphanScan_repeatedCycles_mailsOncePerHead(self):
         """A persistent stall must not mail on every cycle."""
         fixture = _RunnerFixture(self.root, pr_list=[self._green_pr(self._stale())])
         self.addCleanup(fixture.close)
         for _ in range(5):
             fixture.runner.babysit_orphaned_issue_prs()
-        self.assertEqual(len(fixture.emails.messages), 3)
+        self.assertEqual(len(fixture.emails.messages), 1)
 
 
 class OrphanRecoveryEscalationTests(unittest.TestCase):
@@ -1038,12 +1044,12 @@ class OrphanRecoveryEscalationTests(unittest.TestCase):
         self.assertEqual(len(self.fixture.emails.messages), 1)
         self.assertIn("no authorization record", self.fixture.emails.messages[0][1])
 
-    def test_orphanScan_unrecoverablePr_repeatedCycles_rateLimited(self):
+    def test_orphanScan_unrecoverablePr_mailsOncePerHead(self):
         """A worktree that stays unrecreatable must not mail every cycle."""
         self._authorize_current_head(block_recreation=True)
         for _ in range(5):
             self._scan(self._orphan_pr(conclusion="FAILURE"))
-        self.assertEqual(len(self.fixture.emails.messages), 3)
+        self.assertEqual(len(self.fixture.emails.messages), 1)
         self.assertIn("Cannot Be Babied", self.fixture.emails.subjects()[0])
 
 
