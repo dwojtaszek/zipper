@@ -531,6 +531,43 @@ public class ArchiveFixtureMutationTests : WorkingDirectoryTestBase
         Assert.Equal(mutated.ArchiveSha256, mutation.AfterSha256);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Apply_Zip64EocdOffsetDisagreement_RejectsControlWhenEitherOffsetIsWrong(bool regularEocdOffset)
+    {
+        var definition = ArchiveTestCatalog.GetCase("zip64-eocd-offset-disagreement");
+        var controlConstruction = definition.ControlConstruction
+            ?? throw new InvalidOperationException("The Zip64 EOCD disagreement case must select its real-value control.");
+        var controlDefinition = ArchiveTestCatalog.GetCase(definition.ControlCaseKey!) with
+        {
+            Construction = controlConstruction,
+        };
+        var control = ArchiveFixtureBuilder.Build(controlDefinition, 42, CancellationToken.None);
+        var zip64EocdOffset = checked((int)BinaryPrimitives.ReadUInt64LittleEndian(
+            control.ArchiveBytes.AsSpan((int)control.Layout.EocdOffset - 20 + 8, 8)));
+        var malformedControlBytes = control.ArchiveBytes.ToArray();
+        if (regularEocdOffset)
+        {
+            BinaryPrimitives.WriteUInt32LittleEndian(
+                malformedControlBytes.AsSpan((int)control.Layout.EocdOffset + 16, 4),
+                checked((uint)control.Layout.CentralDirectoryOffset + 1));
+        }
+        else
+        {
+            BinaryPrimitives.WriteUInt64LittleEndian(
+                malformedControlBytes.AsSpan(zip64EocdOffset + 48, 8),
+                checked((ulong)control.Layout.CentralDirectoryOffset + 1));
+        }
+
+        var malformedControl = control with { ArchiveBytes = malformedControlBytes };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.Zip64EocdOffsetDisagreement, malformedControl));
+
+        Assert.Contains("requires matching", exception.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Apply_Zip64ExtraWithoutSentinels_PreservesExtraStructureAndDisagreesWithHeaderSizes()
     {

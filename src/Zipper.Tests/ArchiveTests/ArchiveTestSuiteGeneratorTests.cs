@@ -103,7 +103,7 @@ public class ArchiveTestSuiteGeneratorTests : WorkingDirectoryTestBase
                 ["metadata-sources-disagree", "central-directory-is-findable"],
                 expectation.Invariants));
         var adapterCheck = Assert.Single(testCase.AdapterChecks!);
-        Assert.Equal(("7zip", "test", "failure"),
+        Assert.Equal(("7zip", "extract", "success"),
             (adapterCheck.Adapter, adapterCheck.Action, adapterCheck.ExpectedOutcome));
         Assert.Empty(ArchiveTestCaseSemantics.Validate(testCase));
     }
@@ -585,7 +585,7 @@ public class ArchiveTestSuiteGeneratorTests : WorkingDirectoryTestBase
     [InlineData("multidisk-central-entry-declared", "test", "failure", 3)]
     [InlineData("eocd-entry-count-mismatch", "test", "failure", 3)]
     [InlineData("zip64-eocd-entry-count-mismatch", "test", "failure", 3)]
-    [InlineData("zip64-eocd-offset-disagreement", "test", "failure", 3)]
+    [InlineData("zip64-eocd-offset-disagreement", "extract", "success", 3)]
     [InlineData("zip64-locator-disk-mismatch", "presence", "present", 3)]
     public void BuildExpectationFile_AdapterCase_DeclaresExpectedAction(string caseKey, string action, string outcome, int revision)
     {

@@ -872,8 +872,10 @@ internal static class ArchiveFixtureBuilder
     /// compressed size, in specification order), a central header with size and offset
     /// sentinels resolved by its Zip64 extra field (uncompressed, compressed, local
     /// header offset), and a coherent Zip64 EOCD (56 bytes) plus locator (20 bytes)
-    /// before the EOCD, whose counts and span fields are sentinels. Required version
-    /// fields are 45 throughout. The physical content stays tiny (ticket #841 step 6).
+    /// before the EOCD. The default construction uses sentinels for the regular EOCD
+    /// counts and span; the #1286 variant writes their real small values while keeping
+    /// both Zip64 records. Required version fields are 45 throughout. The physical
+    /// content stays tiny (ticket #841 step 6).
     /// </summary>
     private static ArchiveFixtureArtifact BuildHandBuiltZip64(
         ArchiveTestCaseDefinition definition,

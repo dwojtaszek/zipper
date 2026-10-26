@@ -885,6 +885,20 @@ class Zip64EocdOffsetDisagreementTests(TempDirTest):
         self.assertEqual("zip64-eocd-offset-disagreement", caught.exception.check)
         self.assertIn("16 bytes past", str(caught.exception))
 
+    def test_regular_eocd_offset_must_still_find_central_directory(self):
+        case, archive, central_offset = self.make_case()
+        tampered = bytearray(archive)
+        eocd_offset = len(tampered) - 22
+        zip64_eocd_offset = struct.unpack_from("<Q", tampered, eocd_offset - 20 + 8)[0]
+        struct.pack_into("<I", tampered, eocd_offset + 16, central_offset + 1)
+        struct.pack_into("<Q", tampered, zip64_eocd_offset + 48, central_offset + 17)
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_zip64_eocd_offset_disagreement(case, bytes(tampered))
+
+        self.assertEqual("zip64-eocd-offset-disagreement", caught.exception.check)
+        self.assertIn("regular EOCD central-directory span", str(caught.exception))
+
 
 class UndeclaredTrailingDataTests(TempDirTest):
     TRAILING = b"zipper-tail-data"

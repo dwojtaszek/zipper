@@ -480,7 +480,7 @@ internal static class ArchiveTestCatalog
             controlCaseKey: Zip64ControlCaseKey,
             classification: PolicySensitiveClassification,
             suites: [MalformedSuite, SecuritySuite],
-            adapterChecks: SevenZipTestFailure,
+            adapterChecks: SevenZipExtract,
             controlConstruction: ArchiveControlConstruction.Zip64HandBuiltWithRealEocdValues),
         ["zip64-locator-disk-mismatch"] = MutatedDefinition(
             ArchiveTestMutationKind.Zip64LocatorDiskMismatch, controlCaseKey: Zip64ControlCaseKey, adapterChecks: SevenZipPresence),

@@ -413,7 +413,7 @@ public class ArchiveStructureCaseTests : WorkingDirectoryTestBase
     {
         var malformed = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.MalformedSuite);
 
-        Assert.Equal(58, malformed.Count);
+        Assert.Equal(59, malformed.Count);
         Assert.Contains(malformed, c => c.CaseKey == "unsupported-method");
         Assert.Contains(malformed, c => c.CaseKey == "unsupported-method-deflate64");
         Assert.Contains(malformed, c => c.CaseKey == "version-local-central-mismatch");
@@ -421,6 +421,7 @@ public class ArchiveStructureCaseTests : WorkingDirectoryTestBase
         Assert.Contains(malformed, c => c.CaseKey == "zip64-extra-without-sentinels");
         Assert.Contains(malformed, c => c.CaseKey == "zip64-locator-ambiguity");
         Assert.Contains(malformed, c => c.CaseKey == "trailing-data-undeclared");
+        Assert.Contains(malformed, c => c.CaseKey == "zip64-eocd-offset-disagreement");
         Assert.Contains(malformed, c => c.CaseKey == "orphan-local-header");
         Assert.Contains(malformed, c => c.CaseKey == "eocdr-ambiguity-comment");
         Assert.Contains(malformed, c => c.CaseKey == "prefix-unrebased");
@@ -439,6 +440,7 @@ public class ArchiveStructureCaseTests : WorkingDirectoryTestBase
         Assert.Equal("malformed", ArchiveTestCatalog.GetCase("orphan-local-header").Classification);
         Assert.Equal("policy-sensitive", ArchiveTestCatalog.GetCase("eocdr-ambiguity-comment").Classification);
         Assert.Equal("policy-sensitive", ArchiveTestCatalog.GetCase("zip64-locator-ambiguity").Classification);
+        Assert.Equal("policy-sensitive", ArchiveTestCatalog.GetCase("zip64-eocd-offset-disagreement").Classification);
         Assert.Equal("policy-sensitive", ArchiveTestCatalog.GetCase("trailing-data-undeclared").Classification);
         Assert.Equal("malformed", ArchiveTestCatalog.GetCase("prefix-unrebased").Classification);
 

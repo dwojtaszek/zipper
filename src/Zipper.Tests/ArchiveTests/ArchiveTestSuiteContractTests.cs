@@ -187,7 +187,7 @@ public class ArchiveTestSuiteContractTests
     }
 
     [Fact]
-    public void ListSuite_Security_Zip64EocdOffsetDisagreementIsPolicySensitiveAndSevenZipRejects()
+    public void ListSuite_Security_Zip64EocdOffsetDisagreementIsPolicySensitiveAndSevenZipExtracts()
     {
         var definition = ArchiveTestCatalog.GetCase("zip64-eocd-offset-disagreement");
         var adapterCheck = Assert.Single(definition.AdapterChecks!);
@@ -198,7 +198,7 @@ public class ArchiveTestSuiteContractTests
         Assert.Equal(
             ArchiveControlConstruction.Zip64HandBuiltWithRealEocdValues,
             definition.ControlConstruction);
-        Assert.Equal(("7zip", "test", "failure"),
+        Assert.Equal(("7zip", "extract", "success"),
             (adapterCheck.Adapter, adapterCheck.Action, adapterCheck.ExpectedOutcome));
     }
 
