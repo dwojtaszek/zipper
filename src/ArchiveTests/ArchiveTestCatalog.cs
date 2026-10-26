@@ -75,7 +75,8 @@ internal sealed record ArchiveTestCaseDefinition(
     string? ControlCaseKey = null,
     IReadOnlyList<ArchiveTestMutationKind>? Mutations = null,
     ArchiveControlConstruction? Construction = null,
-    IReadOnlyList<ArchiveTestAdapterCheck>? AdapterChecks = null)
+    IReadOnlyList<ArchiveTestAdapterCheck>? AdapterChecks = null,
+    ArchiveControlConstruction? ControlConstruction = null)
 {
     public bool IsMutation => Mutations is { Count: > 0 };
 }
@@ -141,6 +142,10 @@ internal enum ArchiveControlConstruction
     /// specification order, Zip64 EOCD and locator); the standard writer cannot select
     /// Zip64 for small Archives.</summary>
     Zip64HandBuilt,
+
+    /// <summary>Builds the tiny Zip64 control with real values in the regular EOCD,
+    /// preserving a meaningful disagreement against its Zip64 counterpart (ticket #1286).</summary>
+    Zip64HandBuiltWithRealEocdValues,
 
     /// <summary>Serializes one real DEFLATE stream with many identical central headers
     /// all pointing at the single local header (ticket #872); the standard writer
@@ -470,6 +475,13 @@ internal static class ArchiveTestCatalog
         ["eocd-entry-count-mismatch"] = MutatedDefinition(ArchiveTestMutationKind.EocdEntryCountMismatch, adapterChecks: SevenZipTestFailure),
         ["zip64-eocd-entry-count-mismatch"] = MutatedDefinition(
             ArchiveTestMutationKind.Zip64EocdEntryCountMismatch, controlCaseKey: Zip64ControlCaseKey, adapterChecks: SevenZipTestFailure),
+        ["zip64-eocd-offset-disagreement"] = MutatedDefinition(
+            ArchiveTestMutationKind.Zip64EocdOffsetDisagreement,
+            controlCaseKey: Zip64ControlCaseKey,
+            classification: PolicySensitiveClassification,
+            suites: [MalformedSuite, SecuritySuite],
+            adapterChecks: SevenZipTestFailure,
+            controlConstruction: ArchiveControlConstruction.Zip64HandBuiltWithRealEocdValues),
         ["zip64-locator-disk-mismatch"] = MutatedDefinition(
             ArchiveTestMutationKind.Zip64LocatorDiskMismatch, controlCaseKey: Zip64ControlCaseKey, adapterChecks: SevenZipPresence),
         // Descriptor, extra-field, and encoding conflict matrix (ticket #934):
@@ -719,13 +731,15 @@ internal static class ArchiveTestCatalog
         string classification = MalformedClassification,
         IReadOnlyList<string>? suites = null,
         int expectationRevision = 2,
-        IReadOnlyList<ArchiveTestAdapterCheck>? adapterChecks = null) => new(
+        IReadOnlyList<ArchiveTestAdapterCheck>? adapterChecks = null,
+        ArchiveControlConstruction? controlConstruction = null) => new(
         mutation.ToCaseKey(), CaseRevision: 1, ExpectationRevision: expectationRevision + (adapterChecks is null ? 0 : 1), Classification: classification,
         Suites: suites ?? [MalformedSuite],
         Recipe: ControlRecipe(controlCaseKey),
         ControlCaseKey: controlCaseKey,
         Mutations: [mutation],
-        AdapterChecks: adapterChecks);
+        AdapterChecks: adapterChecks,
+        ControlConstruction: controlConstruction);
 
     /// <summary>An ordered mutation chain (ticket #843): a finite, explicit combination
     /// over the stored control; each mutation consumes the previous result.</summary>

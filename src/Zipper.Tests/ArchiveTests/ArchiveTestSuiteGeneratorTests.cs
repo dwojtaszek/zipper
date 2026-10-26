@@ -78,6 +78,37 @@ public class ArchiveTestSuiteGeneratorTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void BuildExpectationFile_Zip64EocdOffsetDisagreement_DeclaresReaderVarianceAndInvariants()
+    {
+        var definition = ArchiveTestCatalog.GetCase("zip64-eocd-offset-disagreement");
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+
+        var testCase = ArchiveTestSuiteGenerator.BuildExpectationFile(artifact, definition);
+
+        Assert.Equal(ArchiveTestCatalog.PolicySensitiveClassification, testCase.Classification);
+        Assert.Equal(
+            ["list-succeeds", "list-fails"],
+            testCase.Expectations.Single(expectation => expectation.Operation == "list").AllowedOutcomes);
+        Assert.Equal(
+            ["read-entry-content-matches", "read-entry-fails"],
+            testCase.Expectations.Single(expectation => expectation.Operation == "read-entry").AllowedOutcomes);
+        Assert.Equal(
+            ["integrity-passes", "integrity-fails", "integrity-unchecked"],
+            testCase.Expectations.Single(expectation => expectation.Operation == "integrity-check").AllowedOutcomes);
+        Assert.Equal(
+            ["extract-succeeds", "extract-fails"],
+            testCase.Expectations.Single(expectation => expectation.Operation == "extract").AllowedOutcomes);
+        Assert.All(testCase.Expectations, expectation =>
+            Assert.Equal(
+                ["metadata-sources-disagree", "central-directory-is-findable"],
+                expectation.Invariants));
+        var adapterCheck = Assert.Single(testCase.AdapterChecks!);
+        Assert.Equal(("7zip", "test", "failure"),
+            (adapterCheck.Adapter, adapterCheck.Action, adapterCheck.ExpectedOutcome));
+        Assert.Empty(ArchiveTestCaseSemantics.Validate(testCase));
+    }
+
+    [Fact]
     public void BuildExpectationFile_UndeclaredTrailingData_DeclaresReaderVarianceAndInvariant()
     {
         var definition = ArchiveTestCatalog.GetCase("trailing-data-undeclared");
@@ -554,6 +585,7 @@ public class ArchiveTestSuiteGeneratorTests : WorkingDirectoryTestBase
     [InlineData("multidisk-central-entry-declared", "test", "failure", 3)]
     [InlineData("eocd-entry-count-mismatch", "test", "failure", 3)]
     [InlineData("zip64-eocd-entry-count-mismatch", "test", "failure", 3)]
+    [InlineData("zip64-eocd-offset-disagreement", "test", "failure", 3)]
     [InlineData("zip64-locator-disk-mismatch", "presence", "present", 3)]
     public void BuildExpectationFile_AdapterCase_DeclaresExpectedAction(string caseKey, string action, string outcome, int revision)
     {

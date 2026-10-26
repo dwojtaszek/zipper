@@ -769,6 +769,123 @@ class Zip64LocatorAmbiguityTests(TempDirTest):
         self.assertIn("local name", failure["message"])
 
 
+class Zip64EocdOffsetDisagreementTests(TempDirTest):
+    EXPECTATIONS = [
+        {"operation": "list", "profile": "strict",
+         "allowedOutcomes": ["list-succeeds", "list-fails"],
+         "invariants": ["metadata-sources-disagree", "central-directory-is-findable"],
+         "failureStages": ["open", "list"]},
+        {"operation": "read-entry", "profile": "strict",
+         "allowedOutcomes": ["read-entry-content-matches", "read-entry-fails"],
+         "invariants": ["metadata-sources-disagree", "central-directory-is-findable"],
+         "failureStages": ["open", "read-entry"]},
+        {"operation": "integrity-check", "profile": "strict",
+         "allowedOutcomes": ["integrity-passes", "integrity-fails", "integrity-unchecked"],
+         "invariants": ["metadata-sources-disagree", "central-directory-is-findable"],
+         "failureStages": ["open", "read-entry", "integrity-check"]},
+        {"operation": "extract", "profile": "strict",
+         "allowedOutcomes": ["extract-succeeds", "extract-fails"],
+         "invariants": ["metadata-sources-disagree", "central-directory-is-findable"],
+         "failureStages": ["open", "read-entry", "extract"]},
+    ]
+
+    @classmethod
+    def make_case(cls):
+        import binascii
+
+        name = b"z64.txt"
+        content = b"zip64 offset disagreement"
+        crc = binascii.crc32(content) & 0xFFFFFFFF
+        local_extra = struct.pack("<HHQQ", 0x0001, 16, len(content), len(content))
+        local = struct.pack(
+            "<IHHHHHIIIHH", 0x04034B50, 45, 0, 0, 0, 0, crc,
+            0xFFFFFFFF, 0xFFFFFFFF, len(name), len(local_extra))
+        local += name + local_extra + content
+
+        central_offset = len(local)
+        central_extra = struct.pack(
+            "<HHQQQ", 0x0001, 24, len(content), len(content), 0)
+        central = struct.pack(
+            "<IHHHHHHIIIHHHHHII", 0x02014B50, 45, 45, 0, 0, 0, 0,
+            crc, 0xFFFFFFFF, 0xFFFFFFFF, len(name), len(central_extra),
+            0, 0, 0, 0, 0xFFFFFFFF)
+        central += name + central_extra
+        zip64_eocd_offset = central_offset + len(central)
+        zip64_eocd = struct.pack(
+            "<IQHHIIQQQQ", 0x06064B50, 44, 45, 45, 0, 0,
+            1, 1, len(central), central_offset)
+        locator = struct.pack("<IIQI", 0x07064B50, 0, zip64_eocd_offset, 1)
+        eocd = struct.pack(
+            "<IHHHHIIH", 0x06054B50, 0, 0, 1, 1,
+            len(central), central_offset, 0)
+        control = local + central + zip64_eocd + locator + eocd
+        archive = bytearray(control)
+        zip64_offset_field = zip64_eocd_offset + 48
+        struct.pack_into("<Q", archive, zip64_offset_field, central_offset + 16)
+        archive = bytes(archive)
+
+        mutation = {
+            "code": "zip64-eocd-offset-disagreement",
+            "structure": "zip64-eocd",
+            "offsetBasis": "before-mutation",
+            "offset": zip64_offset_field,
+            "explanation": "Zip64 EOCD central-directory offset is 16 bytes past the regular EOCD value",
+            "deletedLength": 8,
+            "insertedLength": 8,
+            "beforeSize": len(control),
+            "afterSize": len(archive),
+            "beforeSha256": sha256_hex(control),
+            "afterSha256": sha256_hex(archive),
+            "beforeHex": struct.pack("<Q", central_offset).hex(),
+            "afterHex": struct.pack("<Q", central_offset + 16).hex(),
+            "declaredValue": "zip64-cd-offset=+16",
+        }
+        entry = entry_record(0, name.decode(), content) | {
+            "localHeaderOffset": 0,
+            "dataOffset": 30 + len(name) + len(local_extra),
+            "centralDirectoryOffset": central_offset,
+        }
+        case = case_for(
+            "zip64-eocd-offset-disagreement", "policy-sensitive", archive,
+            [entry], [mutation], cls.EXPECTATIONS)
+        return case, archive, central_offset
+
+    def test_full_verification_proves_regular_eocd_finds_intact_central_directory(self):
+        case, archive, central_offset = self.make_case()
+        write_pair(self.dir, case, archive)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(0, exit_code, report["fixtures"][0]["failure"])
+        fixture = report["fixtures"][0]
+        audit = next(check for check in fixture["structureChecks"]
+                     if check["check"] == "zip64-eocd-offset-disagreement")
+        self.assertIn("regular-cd=%d" % central_offset, audit["detail"])
+        operations = {operation["operation"]: operation
+                      for operation in fixture["operations"]}
+        for operation in operations.values():
+            if operation["operation"] == "extract":
+                self.assertEqual("not-run", operation["normalizedOutcome"])
+            else:
+                self.assertEqual("pass", operation["status"])
+                self.assertIn(operation["normalizedOutcome"], operation["allowedOutcomes"])
+        for operation in operations.values():
+            self.assertIn("central-directory-is-findable",
+                          operation["invariantsChecked"])
+
+    def test_zip64_offset_must_be_exactly_sixteen_bytes_past_regular_eocd(self):
+        case, archive, _ = self.make_case()
+        tampered = bytearray(archive)
+        zip64_eocd_offset = struct.unpack_from("<Q", tampered, len(tampered) - 22 - 20 + 8)[0]
+        struct.pack_into("<Q", tampered, zip64_eocd_offset + 48, case["entries"][0]["centralDirectoryOffset"] + 17)
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_zip64_eocd_offset_disagreement(case, bytes(tampered))
+
+        self.assertEqual("zip64-eocd-offset-disagreement", caught.exception.check)
+        self.assertIn("16 bytes past", str(caught.exception))
+
+
 class UndeclaredTrailingDataTests(TempDirTest):
     TRAILING = b"zipper-tail-data"
     EXPECTATIONS = [

@@ -482,6 +482,56 @@ public class ArchiveFixtureMutationTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void Apply_Zip64EocdOffsetDisagreement_RewritesOnlyZip64CentralDirectoryOffset()
+    {
+        var definition = ArchiveTestCatalog.GetCase("zip64-eocd-offset-disagreement");
+        var controlConstruction = definition.ControlConstruction
+            ?? throw new InvalidOperationException("The Zip64 EOCD disagreement case must select its real-value control.");
+        var controlDefinition = ArchiveTestCatalog.GetCase(definition.ControlCaseKey!) with
+        {
+            Construction = controlConstruction,
+        };
+        var control = ArchiveFixtureBuilder.Build(controlDefinition, 42, CancellationToken.None);
+        var eocdOffset = control.Layout.EocdOffset;
+        var locatorOffset = eocdOffset - 20;
+        var zip64EocdOffset = checked((long)BinaryPrimitives.ReadUInt64LittleEndian(
+            control.ArchiveBytes.AsSpan((int)locatorOffset + 8, 8)));
+        var regularCentralDirectoryOffset = BinaryPrimitives.ReadUInt32LittleEndian(
+            control.ArchiveBytes.AsSpan((int)eocdOffset + 16, 4));
+        Assert.Equal(
+            (ulong)regularCentralDirectoryOffset,
+            BinaryPrimitives.ReadUInt64LittleEndian(
+                control.ArchiveBytes.AsSpan((int)zip64EocdOffset + 48, 8)));
+
+        var mutated = ArchiveFixtureMutator.Apply(
+            ArchiveTestMutationKind.Zip64EocdOffsetDisagreement, control);
+
+        var mutation = Assert.Single(mutated.Mutations);
+        Assert.Equal("zip64-eocd-offset-disagreement", mutation.Code);
+        Assert.Equal("zip64-eocd", mutation.Structure);
+        Assert.Equal(zip64EocdOffset + 48, mutation.Offset);
+        Assert.Equal(8, mutation.DeletedLength);
+        Assert.Equal(8, mutation.InsertedLength);
+        Assert.Equal("zip64-cd-offset=+16", mutation.DeclaredValue);
+        Assert.Equal(
+            checked((ulong)regularCentralDirectoryOffset + 16),
+            BinaryPrimitives.ReadUInt64LittleEndian(mutated.ArchiveBytes.AsSpan((int)mutation.Offset, 8)));
+        Assert.Equal(
+            regularCentralDirectoryOffset,
+            BinaryPrimitives.ReadUInt32LittleEndian(mutated.ArchiveBytes.AsSpan((int)eocdOffset + 16, 4)));
+        Assert.Equal(
+            control.ArchiveBytes.AsSpan((int)regularCentralDirectoryOffset, (int)control.Layout.CentralDirectorySize).ToArray(),
+            mutated.ArchiveBytes.AsSpan((int)regularCentralDirectoryOffset, (int)control.Layout.CentralDirectorySize).ToArray());
+        Assert.Equal(control.ArchiveBytes.Length, mutated.ArchiveBytes.Length);
+
+        var reconstructedControl = mutated.ArchiveBytes.ToArray();
+        Convert.FromHexString(mutation.BeforeHex!).CopyTo(reconstructedControl, (int)mutation.Offset);
+        Assert.Equal(control.ArchiveBytes, reconstructedControl);
+        Assert.Equal(control.ArchiveSha256, mutation.BeforeSha256);
+        Assert.Equal(mutated.ArchiveSha256, mutation.AfterSha256);
+    }
+
+    [Fact]
     public void Apply_Zip64ExtraWithoutSentinels_PreservesExtraStructureAndDisagreesWithHeaderSizes()
     {
         const string CaseKey = "zip64-extra-without-sentinels";

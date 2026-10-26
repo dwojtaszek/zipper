@@ -88,6 +88,9 @@ public class ArchiveTestSuiteContractTests
     /// <summary>The Zip64 header-vs-extra size source case (ticket #1279) housed in security.</summary>
     private static readonly string[] Zip64ExtraConflictSecurityCaseKeys = ["zip64-extra-without-sentinels"];
 
+    /// <summary>The Zip64 EOCD offset-source disagreement case (ticket #1286) housed in security.</summary>
+    private static readonly string[] Zip64EocdDisagreementSecurityCaseKeys = ["zip64-eocd-offset-disagreement"];
+
     /// <summary>The four policy-sensitive name-encoding cases housed in the encoding suite, in ordinal Case Key order.</summary>
     private static readonly string[] EncodingCaseKeys =
     [
@@ -148,6 +151,7 @@ public class ArchiveTestSuiteContractTests
                 .Concat(SplitArchiveSecurityCaseKeys)
                 .Concat(MixedUnsupportedSecurityCaseKeys)
                 .Concat(Zip64ExtraConflictSecurityCaseKeys)
+                .Concat(Zip64EocdDisagreementSecurityCaseKeys)
                 .Concat(PolicySecurityCaseKeys)
                 .Order(StringComparer.Ordinal);
 
@@ -179,6 +183,22 @@ public class ArchiveTestSuiteContractTests
         Assert.Equal(["malformed", "security"], definition.Suites);
         Assert.Equal([ArchiveTestMutationKind.Zip64SentinelCleared], definition.Mutations!);
         Assert.Equal(("7zip", "extract", "success"),
+            (adapterCheck.Adapter, adapterCheck.Action, adapterCheck.ExpectedOutcome));
+    }
+
+    [Fact]
+    public void ListSuite_Security_Zip64EocdOffsetDisagreementIsPolicySensitiveAndSevenZipRejects()
+    {
+        var definition = ArchiveTestCatalog.GetCase("zip64-eocd-offset-disagreement");
+        var adapterCheck = Assert.Single(definition.AdapterChecks!);
+
+        Assert.Equal(ArchiveTestCatalog.PolicySensitiveClassification, definition.Classification);
+        Assert.Equal(["malformed", "security"], definition.Suites);
+        Assert.Equal([ArchiveTestMutationKind.Zip64EocdOffsetDisagreement], definition.Mutations!);
+        Assert.Equal(
+            ArchiveControlConstruction.Zip64HandBuiltWithRealEocdValues,
+            definition.ControlConstruction);
+        Assert.Equal(("7zip", "test", "failure"),
             (adapterCheck.Adapter, adapterCheck.Action, adapterCheck.ExpectedOutcome));
     }
 
@@ -226,8 +246,8 @@ public class ArchiveTestSuiteContractTests
         // housed in malformed since ticket #840;
         // declared-size-oversized and declared-size-undersized are already
         // malformed-classified and arrive via the derived set; the #1279 Zip64
-        // source-disagreement case is also policy-sensitive and housed here because
-        // readers may reject it).
+        // source-disagreement case and #1286 Zip64 EOCD offset disagreement are also
+        // policy-sensitive and housed here because readers may reject them).
         var expected = AllKeys()
             .Where(key => ArchiveTestCatalog.GetCase(key).Classification == "malformed")
             .Append("unsupported-method")
@@ -238,6 +258,7 @@ public class ArchiveTestSuiteContractTests
             .Append("eocdr-ambiguity-comment")
             .Append("zip64-locator-ambiguity")
             .Append("zip64-extra-without-sentinels")
+            .Append("zip64-eocd-offset-disagreement")
             .Append("trailing-data-undeclared")
             .Order(StringComparer.Ordinal);
         Assert.Equal(expected, malformed);
@@ -272,9 +293,10 @@ public class ArchiveTestSuiteContractTests
         // +2 for the #935 mixed one-bad-member cases, +1 for #888, +1 for #870,
         // +2 for #878, +3 for the #887 legacy-codec encoding controls, +1 for #1276,
         // +2 for #1277, +1 for #1279, +1 for #1280, +1 for #1281, +1 for #1282,
-        // +1 for #1283 encoding codec divergence, +1 for #1285 undeclared trailing
+        // +1 for #1283 encoding codec divergence, +1 for #1285 undeclared trailing,
+        // +1 for #1286 Zip64 EOCD offset disagreement
         // data): any case dropped from the catalog
         // or unlisted from every suite fails here.
-        Assert.Equal(115, AllKeys().Count);
+        Assert.Equal(116, AllKeys().Count);
     }
 }

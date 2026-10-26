@@ -133,6 +133,11 @@ internal static class ArchiveFixtureBuilder
                     $"Archive Test case '{definition.CaseKey}': its control '{controlCaseKey}' is itself a mutation case; controls must be valid cases.");
             }
 
+            if (definition.ControlConstruction is { } controlConstruction)
+            {
+                controlDefinition = controlDefinition with { Construction = controlConstruction };
+            }
+
             // The control's own comment expectation carries over to every re-read: a
             // comment-bearing control must not be misread mid-chain.
             var controlExpectedCommentLength = controlDefinition.Construction is ArchiveControlConstruction.ArchiveComment
@@ -176,9 +181,14 @@ internal static class ArchiveFixtureBuilder
             return current with { Mutations = records };
         }
 
-        if (definition.Construction is ArchiveControlConstruction.Zip64HandBuilt)
+        if (definition.Construction is ArchiveControlConstruction.Zip64HandBuilt
+            or ArchiveControlConstruction.Zip64HandBuiltWithRealEocdValues)
         {
-            return BuildHandBuiltZip64(definition, seed, cancellationToken);
+            return BuildHandBuiltZip64(
+                definition,
+                seed,
+                cancellationToken,
+                useRealEocdValues: definition.Construction is ArchiveControlConstruction.Zip64HandBuiltWithRealEocdValues);
         }
 
         if (definition.Construction is ArchiveControlConstruction.OverlappingEntries)
@@ -866,7 +876,10 @@ internal static class ArchiveFixtureBuilder
     /// fields are 45 throughout. The physical content stays tiny (ticket #841 step 6).
     /// </summary>
     private static ArchiveFixtureArtifact BuildHandBuiltZip64(
-        ArchiveTestCaseDefinition definition, int seed, CancellationToken cancellationToken)
+        ArchiveTestCaseDefinition definition,
+        int seed,
+        CancellationToken cancellationToken,
+        bool useRealEocdValues)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (definition.Recipe.Entries.Count != 1 || definition.Recipe.Entries[0].IsDirectory || definition.Recipe.Entries[0].PayloadCodec != "stored")
@@ -972,6 +985,17 @@ internal static class ArchiveFixtureBuilder
         BinaryPrimitives.WriteUInt16LittleEndian(b.Slice(e + 20), 0);                 // comment length
 
         var layout = ArchiveFixtureLayout.Read(bytes);
+        if (useRealEocdValues)
+        {
+            // Keep the Zip64 records, but put their real small values in the regular
+            // EOCD too so readers may legitimately select either end record (#1286).
+            var eocdOffset = checked((int)layout.EocdOffset);
+            BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(eocdOffset + 8, 2), checked((ushort)layout.EntryCount));
+            BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(eocdOffset + 10, 2), checked((ushort)layout.EntryCount));
+            BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(eocdOffset + 12, 4), layout.CentralDirectorySize);
+            BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(eocdOffset + 16, 4), checked((uint)layout.CentralDirectoryOffset));
+        }
+
         return new ArchiveFixtureArtifact(
             ArchiveBytes: bytes,
             ArchiveSha256: Convert.ToHexStringLower(SHA256.HashData(bytes)),

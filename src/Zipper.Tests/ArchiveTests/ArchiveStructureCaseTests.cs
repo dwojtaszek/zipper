@@ -476,6 +476,7 @@ public class ArchiveStructureCaseTests : WorkingDirectoryTestBase
     [InlineData("multidisk-central-entry-declared")]
     [InlineData("eocd-entry-count-mismatch")]
     [InlineData("zip64-eocd-entry-count-mismatch")]
+    [InlineData("zip64-eocd-offset-disagreement")]
     [InlineData("zip64-locator-disk-mismatch")]
     [InlineData("zip64-locator-ambiguity")]
     [InlineData("descriptor-crc-disagreement")]
@@ -1058,7 +1059,7 @@ public class ArchiveStructureCaseTests : WorkingDirectoryTestBase
     public async Task GenerateAsync_AllSuites_PublishesUniqueValidatedPairsForEachCase()
     {
         var all = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.AllSuites);
-        Assert.Equal(115, all.Count);
+        Assert.Equal(116, all.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(all.Select(c => c.CaseKey).ToList(), 42, Path.Combine(TempDir, "all")),

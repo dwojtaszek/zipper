@@ -79,6 +79,7 @@ internal static class ArchiveFixtureMutator
             ArchiveTestMutationKind.MultidiskCentralEntryDeclared => DeclareMultidiskCentralEntry(control, before),
             ArchiveTestMutationKind.EocdEntryCountMismatch => DeclareEocdEntryCountMismatch(control, before),
             ArchiveTestMutationKind.Zip64EocdEntryCountMismatch => DeclareZip64EocdEntryCountMismatch(control, before),
+            ArchiveTestMutationKind.Zip64EocdOffsetDisagreement => DisagreeZip64EocdOffset(control, before),
             ArchiveTestMutationKind.Zip64LocatorDiskMismatch => DeclareZip64LocatorDiskMismatch(control, before),
             ArchiveTestMutationKind.Zip64LocatorAmbiguity => InjectZip64LocatorAmbiguity(control, before),
             ArchiveTestMutationKind.EocdAmbiguityComment => InjectEocdAmbiguityComment(control, before),
@@ -348,6 +349,44 @@ internal static class ArchiveFixtureMutator
         ], after =>
         {
             BinaryPrimitives.WriteUInt64LittleEndian(after.AsSpan((int)totalOffset, 8), DeclaredTotal);
+        });
+    }
+
+    /// <summary>
+    /// Makes the classic and Zip64 end records disagree on a shared field (ticket
+    /// #1286): the Zip64 central-directory offset moves 16 bytes past the real
+    /// directory while the non-sentinel classic EOCD offset remains truthful.
+    /// </summary>
+    private static MutatedArchiveFixture DisagreeZip64EocdOffset(
+        ArchiveFixtureArtifact control,
+        byte[] before)
+    {
+        var code = ArchiveTestMutationKind.Zip64EocdOffsetDisagreement.ToCaseKey();
+        var zip64EocdOffset = Zip64EocdOffset(control, code);
+        var trueCentralDirectoryOffset = checked((uint)control.Layout.CentralDirectoryOffset);
+        var eocdCentralDirectoryOffset = BinaryPrimitives.ReadUInt32LittleEndian(
+            before.AsSpan((int)control.Layout.EocdOffset + 16, 4));
+        var zip64CentralDirectoryOffset = BinaryPrimitives.ReadUInt64LittleEndian(
+            before.AsSpan((int)zip64EocdOffset + 48, 8));
+        if (eocdCentralDirectoryOffset != trueCentralDirectoryOffset
+            || zip64CentralDirectoryOffset != trueCentralDirectoryOffset)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test case '{code}' requires matching, non-sentinel regular and Zip64 EOCD central-directory offsets.");
+        }
+
+        var declaredOffset = checked((ulong)trueCentralDirectoryOffset + 16);
+        var offset = zip64EocdOffset + 48;
+
+        return Patch(ArchiveTestMutationKind.Zip64EocdOffsetDisagreement, before,
+        [
+            new MutationSpec(
+                code, "zip64-eocd", offset,
+                $"Rewrites the Zip64 EOCD central-directory offset from {trueCentralDirectoryOffset} to {declaredOffset} while the regular EOCD retains the true offset.",
+                null, 8, 8, DeclaredValue: "zip64-cd-offset=+16"),
+        ], after =>
+        {
+            BinaryPrimitives.WriteUInt64LittleEndian(after.AsSpan((int)offset, 8), declaredOffset);
         });
     }
 
@@ -2120,6 +2159,7 @@ internal enum ArchiveTestMutationKind
     MultidiskCentralEntryDeclared,
     EocdEntryCountMismatch,
     Zip64EocdEntryCountMismatch,
+    Zip64EocdOffsetDisagreement,
     Zip64LocatorDiskMismatch,
     Zip64LocatorAmbiguity,
     EocdAmbiguityComment,
@@ -2184,6 +2224,7 @@ internal static class ArchiveTestMutationKindExtensions
         ArchiveTestMutationKind.MultidiskCentralEntryDeclared => "multidisk-central-entry-declared",
         ArchiveTestMutationKind.EocdEntryCountMismatch => "eocd-entry-count-mismatch",
         ArchiveTestMutationKind.Zip64EocdEntryCountMismatch => "zip64-eocd-entry-count-mismatch",
+        ArchiveTestMutationKind.Zip64EocdOffsetDisagreement => "zip64-eocd-offset-disagreement",
         ArchiveTestMutationKind.Zip64LocatorDiskMismatch => "zip64-locator-disk-mismatch",
         ArchiveTestMutationKind.Zip64LocatorAmbiguity => "zip64-locator-ambiguity",
         ArchiveTestMutationKind.EocdAmbiguityComment => "eocdr-ambiguity-comment",
