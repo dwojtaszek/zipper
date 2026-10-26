@@ -119,6 +119,7 @@ STRUCTURAL_INVARIANT_CHECKS = {
     "declared-counts-disagree": "mutations",
     "metadata-sources-disagree": "mutations",
     "comment-bytes-are-pure-data": "zip64-locator-ambiguity",
+    "trailing-bytes-are-undeclared": "undeclared-trailing-data",
     "one-member-fails": "mutations",
     "one-member-unsupported": "mutations",
     "spanning-declared-single-file": "mutations",
@@ -469,6 +470,11 @@ class FixtureVerifier:
         # Mutation chain linkage, offset arithmetic, and raw byte comparison.
         mutation_note = verify_mutations(case, zip_bytes, actual_sha)
         checks.append({"check": "mutations", "status": "pass", "detail": mutation_note})
+
+        if case.get("caseKey") == "trailing-data-undeclared":
+            trailing_note = verify_undeclared_trailing_data(case, zip_bytes)
+            checks.append({"check": "undeclared-trailing-data", "status": "pass",
+                           "detail": trailing_note})
 
         # Orphan hidden entry (ticket #869): the hidden LFH at offset 0 has no CDH;
         # CD-driven readers list only visibles while a forward LFH scan sees more.
@@ -1635,6 +1641,63 @@ def verify_zip64_locator_ambiguity(case, zip_bytes):
             "fake-zip64-eocd=%d fake-locator=%d" %
             (eocd_offset, comment_offset, comment_length, fake_cd_offset,
              fake_zip64_eocd_offset, fake_locator_offset))
+
+
+def verify_undeclared_trailing_data(case, zip_bytes):
+    """Audit the Stored Archive's EOCD and prove its 16-byte suffix is undeclared."""
+    import struct
+
+    check = "undeclared-trailing-data"
+    trailing = b"zipper-tail-data"
+    eocd_offset = len(zip_bytes) - len(trailing) - ZIP_EOCD_FIXED_SIZE
+    if eocd_offset < 0 or zip_bytes[eocd_offset:eocd_offset + 4] != b"PK\x05\x06":
+        raise VerificationError(check, "length-anchored EOCD signature is missing")
+
+    disk, cd_disk, disk_entries, total_entries, cd_size, cd_offset, comment_length = \
+        struct.unpack_from("<HHHHIIH", zip_bytes, eocd_offset + 4)
+    expected_count = len(case.get("entries", []))
+    if (disk, cd_disk) != (0, 0) or disk_entries != total_entries \
+            or total_entries != expected_count:
+        raise VerificationError(check, "EOCD disk or entry-count fields disagree")
+    if comment_length != 0:
+        raise VerificationError(check, "EOCD comment length must remain zero")
+    if cd_offset + cd_size != eocd_offset:
+        raise VerificationError(check, "central directory does not end at the EOCD")
+    if zip_bytes[eocd_offset + ZIP_EOCD_FIXED_SIZE:] != trailing:
+        raise VerificationError(check, "the exact 16-byte undeclared suffix is missing")
+
+    mutations = case.get("mutations") or []
+    if len(mutations) != 1:
+        raise VerificationError(check, "expected one trailing-data mutation record")
+    mutation = mutations[0]
+    if (mutation.get("code") != "trailing-data-undeclared"
+            or mutation.get("structure") != "whole-archive"
+            or mutation.get("offset") != eocd_offset + ZIP_EOCD_FIXED_SIZE
+            or mutation.get("deletedLength") != 0
+            or mutation.get("insertedLength") != len(trailing)
+            or mutation.get("beforeSize") != eocd_offset + ZIP_EOCD_FIXED_SIZE
+            or mutation.get("afterSize") != len(zip_bytes)
+            or mutation.get("beforeSha256") != sha256_hex(zip_bytes[:eocd_offset + ZIP_EOCD_FIXED_SIZE])
+            or mutation.get("afterSha256") != sha256_hex(zip_bytes)
+            or mutation.get("afterHex") != trailing.hex()
+            or mutation.get("declaredValue") != "trailing-bytes=16 undeclared=true"):
+        raise VerificationError(check, "mutation record does not describe the exact undeclared suffix")
+
+    cursor = cd_offset
+    cd_end = cd_offset + cd_size
+    for _ in range(total_entries):
+        if cursor + ZIP_CENTRAL_HEADER_FIXED_SIZE > cd_end \
+                or zip_bytes[cursor:cursor + 4] != b"PK\x01\x02":
+            raise VerificationError(check, "central-directory entry is missing or truncated")
+        name_length, extra_length, entry_comment_length = struct.unpack_from(
+            "<HHH", zip_bytes, cursor + 28)
+        cursor += ZIP_CENTRAL_HEADER_FIXED_SIZE + name_length + extra_length + entry_comment_length
+        if cursor > cd_end:
+            raise VerificationError(check, "central-directory entry exceeds the declared span")
+    if cursor != cd_end:
+        raise VerificationError(check, "central-directory span does not match its entry records")
+
+    return "eocd=%d suffix=%d-bytes comment-length=0" % (eocd_offset, len(trailing))
 
 
 def verify_adls_segments(case):

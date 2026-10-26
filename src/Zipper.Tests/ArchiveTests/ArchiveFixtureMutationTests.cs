@@ -664,6 +664,41 @@ public class ArchiveFixtureMutationTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void Apply_UndeclaredTrailingData_AppendsBytesWithoutDeclaringThem()
+    {
+        const string TrailingData = "zipper-tail-data";
+        var control = BuildControl();
+        var eocdOffset = control.Layout.EocdOffset;
+
+        var mutated = ArchiveFixtureMutator.Apply(
+            ArchiveTestMutationKind.UndeclaredTrailingData, control);
+
+        var mutation = Assert.Single(mutated.Mutations);
+        Assert.Equal("trailing-data-undeclared", mutation.Code);
+        Assert.Equal("whole-archive", mutation.Structure);
+        Assert.Equal(control.ArchiveBytes.Length, mutation.Offset);
+        Assert.Equal(0, mutation.DeletedLength);
+        Assert.Equal(TrailingData.Length, mutation.InsertedLength);
+        Assert.Equal($"trailing-bytes={TrailingData.Length} undeclared=true", mutation.DeclaredValue);
+        Assert.Equal(control.ArchiveBytes.Length + TrailingData.Length, mutated.ArchiveBytes.Length);
+        Assert.Equal(
+            control.ArchiveBytes,
+            mutated.ArchiveBytes.AsSpan(0, control.ArchiveBytes.Length).ToArray());
+        Assert.Equal(
+            Encoding.ASCII.GetBytes(TrailingData),
+            mutated.ArchiveBytes.AsSpan(control.ArchiveBytes.Length).ToArray());
+        Assert.Equal(
+            control.ArchiveBytes.AsSpan((int)eocdOffset, 22).ToArray(),
+            mutated.ArchiveBytes.AsSpan((int)eocdOffset, 22).ToArray());
+        Assert.Equal(
+            (ushort)0,
+            BinaryPrimitives.ReadUInt16LittleEndian(
+                mutated.ArchiveBytes.AsSpan((int)eocdOffset + 20, 2)));
+        Assert.Equal(control.ArchiveSha256, mutation.BeforeSha256);
+        Assert.Equal(mutated.ArchiveSha256, mutation.AfterSha256);
+    }
+
+    [Fact]
     public void Apply_DescriptorCrcDisagreement_FlipsDescriptorCrcOnly()
     {
         var control = ArchiveFixtureBuilder.BuildControl("valid-descriptor-signature", 42, CancellationToken.None);

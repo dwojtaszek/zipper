@@ -82,6 +82,7 @@ internal static class ArchiveFixtureMutator
             ArchiveTestMutationKind.Zip64LocatorDiskMismatch => DeclareZip64LocatorDiskMismatch(control, before),
             ArchiveTestMutationKind.Zip64LocatorAmbiguity => InjectZip64LocatorAmbiguity(control, before),
             ArchiveTestMutationKind.EocdAmbiguityComment => InjectEocdAmbiguityComment(control, before),
+            ArchiveTestMutationKind.UndeclaredTrailingData => AppendUndeclaredTrailingData(control, before),
             ArchiveTestMutationKind.DescriptorCrcDisagreement => DisagreeDescriptorCrc(control, before),
             ArchiveTestMutationKind.DescriptorSizeDisagreement => DisagreeDescriptorSize(control, before),
             ArchiveTestMutationKind.DuplicateZip64Extra => DuplicateZip64ExtraField(control, before),
@@ -178,6 +179,50 @@ internal static class ArchiveFixtureMutator
         BinaryPrimitives.WriteUInt32LittleEndian(destination[12..], centralDirectorySize);
         BinaryPrimitives.WriteUInt32LittleEndian(destination[16..], centralDirectoryOffset);
         BinaryPrimitives.WriteUInt16LittleEndian(destination[20..], commentLength);
+    }
+
+    /// <summary>
+    /// Appends sixteen bytes after a valid Stored Archive's zero-comment EOCD
+    /// without changing any declared Archive structure (ticket #1285).
+    /// </summary>
+    private static MutatedArchiveFixture AppendUndeclaredTrailingData(
+        ArchiveFixtureArtifact control,
+        byte[] before)
+    {
+        const int EocdLength = 22;
+        ReadOnlySpan<byte> trailingBytes = "zipper-tail-data"u8;
+        var eocdOffset = control.Layout.EocdOffset;
+        if (control.Layout.Entries.Count == 0
+            || control.Layout.Entries.Any(entry => entry.Method != 0)
+            || eocdOffset != before.Length - EocdLength
+            || BinaryPrimitives.ReadUInt16LittleEndian(before.AsSpan((int)eocdOffset + 20, 2)) != 0)
+        {
+            throw new InvalidOperationException(
+                "The undeclared trailing-data mutation requires a non-empty Stored control with a zero-comment EOCD at end of file.");
+        }
+
+        var after = new byte[checked(before.Length + trailingBytes.Length)];
+        before.CopyTo(after, 0);
+        trailingBytes.CopyTo(after.AsSpan(before.Length));
+
+        var code = ArchiveTestMutationKind.UndeclaredTrailingData.ToCaseKey();
+        var mutation = new ArchiveTestMutation(
+            Code: code,
+            Structure: "whole-archive",
+            OffsetBasis: "before-mutation",
+            Offset: before.Length,
+            Explanation: "Appends the 16-byte ASCII sequence 'zipper-tail-data' after the zero-comment EOCD without changing the EOCD comment-length field.",
+            Ordinal: null,
+            DeletedLength: 0,
+            InsertedLength: trailingBytes.Length,
+            BeforeSize: before.Length,
+            AfterSize: after.Length,
+            BeforeSha256: Hash(before),
+            AfterSha256: Hash(after),
+            BeforeHex: null,
+            AfterHex: Convert.ToHexStringLower(trailingBytes),
+            DeclaredValue: $"trailing-bytes={trailingBytes.Length} undeclared=true");
+        return Finalize(ArchiveTestMutationKind.UndeclaredTrailingData, before, after, [mutation]);
     }
 
     /// <summary>
@@ -2078,6 +2123,7 @@ internal enum ArchiveTestMutationKind
     Zip64LocatorDiskMismatch,
     Zip64LocatorAmbiguity,
     EocdAmbiguityComment,
+    UndeclaredTrailingData,
     DescriptorCrcDisagreement,
     DescriptorSizeDisagreement,
     DuplicateZip64Extra,
@@ -2141,6 +2187,7 @@ internal static class ArchiveTestMutationKindExtensions
         ArchiveTestMutationKind.Zip64LocatorDiskMismatch => "zip64-locator-disk-mismatch",
         ArchiveTestMutationKind.Zip64LocatorAmbiguity => "zip64-locator-ambiguity",
         ArchiveTestMutationKind.EocdAmbiguityComment => "eocdr-ambiguity-comment",
+        ArchiveTestMutationKind.UndeclaredTrailingData => "trailing-data-undeclared",
         ArchiveTestMutationKind.DescriptorCrcDisagreement => "descriptor-crc-disagreement",
         ArchiveTestMutationKind.DescriptorSizeDisagreement => "descriptor-size-disagreement",
         ArchiveTestMutationKind.DuplicateZip64Extra => "duplicate-zip64-extra",

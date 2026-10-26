@@ -252,6 +252,7 @@ internal static class ArchiveTestSuiteGenerator
     private const string ReadEntryOperation = "read-entry";
     private const string IntegrityCheckOperation = "integrity-check";
     private const string ExtractOperation = "extract";
+    private const string TrailingBytesAreUndeclared = "trailing-bytes-are-undeclared";
     private const string NoPartialWrites = "no-partial-writes";
     private const string PayloadBytesUnchanged = "payload-bytes-unchanged";
     private const string OperationFails = "operation-fails";
@@ -316,6 +317,17 @@ internal static class ArchiveTestSuiteGenerator
                 Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches", "read-entry-fails", "read-entry-returns-unverified-bytes"], ["comment-bytes-are-pure-data"], ["open", ReadEntryOperation]),
                 Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-passes", "integrity-fails", "integrity-unchecked"], ["comment-bytes-are-pure-data"], ["open", ReadEntryOperation, IntegrityCheckOperation]),
                 Expectation(ExtractOperation, StrictProfile, ["extract-succeeds", "extract-fails"], ["comment-bytes-are-pure-data"], ["open", ReadEntryOperation, ExtractOperation]),
+            ];
+        }
+
+        if (definition.CaseKey == "trailing-data-undeclared")
+        {
+            return
+            [
+                Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [TrailingBytesAreUndeclared], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches", "read-entry-fails"], [TrailingBytesAreUndeclared], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, StrictProfile, [IntegrityPasses, "integrity-unchecked", "integrity-fails"], [TrailingBytesAreUndeclared], ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-succeeds", "extract-fails"], [TrailingBytesAreUndeclared], ["open", ReadEntryOperation, ExtractOperation]),
             ];
         }
 

@@ -769,6 +769,116 @@ class Zip64LocatorAmbiguityTests(TempDirTest):
         self.assertIn("local name", failure["message"])
 
 
+class UndeclaredTrailingDataTests(TempDirTest):
+    TRAILING = b"zipper-tail-data"
+    EXPECTATIONS = [
+        {"operation": "list", "profile": "strict",
+         "allowedOutcomes": ["list-succeeds", "list-fails"],
+         "invariants": ["trailing-bytes-are-undeclared"],
+         "failureStages": ["open", "list"]},
+        {"operation": "read-entry", "profile": "strict",
+         "allowedOutcomes": ["read-entry-content-matches", "read-entry-fails"],
+         "invariants": ["trailing-bytes-are-undeclared"],
+         "failureStages": ["open", "read-entry"]},
+        {"operation": "integrity-check", "profile": "strict",
+         "allowedOutcomes": ["integrity-passes", "integrity-unchecked",
+                             "integrity-fails"],
+         "invariants": ["trailing-bytes-are-undeclared"],
+         "failureStages": ["open", "read-entry", "integrity-check"]},
+        {"operation": "extract", "profile": "strict",
+         "allowedOutcomes": ["extract-succeeds", "extract-fails"],
+         "invariants": ["trailing-bytes-are-undeclared"],
+         "failureStages": ["open", "read-entry", "extract"]},
+    ]
+
+    @classmethod
+    def make_case(cls, archive=None):
+        content = b"trailing data control"
+        if archive is None:
+            control = make_zip([("a.txt", content)])
+            archive = control + cls.TRAILING
+        else:
+            control = archive[:-len(cls.TRAILING)]
+        eocd_offset = len(control) - vf.ZIP_EOCD_FIXED_SIZE
+        mutation = {
+            "code": "trailing-data-undeclared",
+            "structure": "whole-archive",
+            "offsetBasis": "before-mutation",
+            "offset": len(control),
+            "explanation": "synthetic undeclared trailing data",
+            "deletedLength": 0,
+            "insertedLength": len(cls.TRAILING),
+            "beforeSize": len(control),
+            "afterSize": len(archive),
+            "beforeSha256": sha256_hex(control),
+            "afterSha256": sha256_hex(archive),
+            "afterHex": cls.TRAILING.hex(),
+            "declaredValue": "trailing-bytes=16 undeclared=true",
+        }
+        case = case_for(
+            "trailing-data-undeclared", "policy-sensitive", archive,
+            [entry_record(0, "a.txt", content)], [mutation], cls.EXPECTATIONS)
+        return case, archive, eocd_offset
+
+    def test_verifier_proves_the_length_anchored_zero_comment_eocd_and_suffix(self):
+        case, archive, eocd_offset = self.make_case()
+
+        detail = vf.verify_undeclared_trailing_data(case, archive)
+
+        self.assertIn("eocd=%d" % eocd_offset, detail)
+        self.assertIn("suffix=16-bytes comment-length=0", detail)
+
+    def test_full_verification_checks_the_declared_invariant(self):
+        case, archive, _ = self.make_case()
+        write_pair(self.dir, case, archive)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(0, exit_code, report["fixtures"][0]["failure"])
+        fixture = report["fixtures"][0]
+        self.assertIn(
+            "undeclared-trailing-data",
+            [check["check"] for check in fixture["structureChecks"]])
+        operations = {operation["operation"]: operation
+                      for operation in fixture["operations"]}
+        for operation in operations.values():
+            self.assertIn("trailing-bytes-are-undeclared",
+                          operation["invariantsChecked"])
+
+    def test_eocd_comment_length_must_remain_zero(self):
+        case, archive, eocd_offset = self.make_case()
+        tampered = bytearray(archive)
+        struct.pack_into("<H", tampered, eocd_offset + 20, 1)
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_undeclared_trailing_data(case, bytes(tampered))
+
+        self.assertEqual("undeclared-trailing-data", caught.exception.check)
+        self.assertIn("comment length", str(caught.exception))
+
+    def test_suffix_must_be_exactly_sixteen_bytes_after_eocd(self):
+        case, archive, _ = self.make_case()
+        tampered = archive + b"x"
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_undeclared_trailing_data(case, tampered)
+
+        self.assertEqual("undeclared-trailing-data", caught.exception.check)
+        self.assertIn("length-anchored EOCD", str(caught.exception))
+
+    def test_central_directory_must_end_at_eocd(self):
+        case, archive, eocd_offset = self.make_case()
+        tampered = bytearray(archive)
+        cd_size = struct.unpack_from("<I", tampered, eocd_offset + 12)[0]
+        struct.pack_into("<I", tampered, eocd_offset + 12, cd_size + 1)
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_undeclared_trailing_data(case, bytes(tampered))
+
+        self.assertEqual("undeclared-trailing-data", caught.exception.check)
+        self.assertIn("does not end at the EOCD", str(caught.exception))
+
+
 class AdlsSegmentTests(unittest.TestCase):
     @staticmethod
     def make_case(case_key, segments):

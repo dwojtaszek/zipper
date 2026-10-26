@@ -78,6 +78,32 @@ public class ArchiveTestSuiteGeneratorTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void BuildExpectationFile_UndeclaredTrailingData_DeclaresReaderVarianceAndInvariant()
+    {
+        var definition = ArchiveTestCatalog.GetCase("trailing-data-undeclared");
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+
+        var testCase = ArchiveTestSuiteGenerator.BuildExpectationFile(artifact, definition, 42);
+
+        Assert.Equal(ArchiveTestCatalog.PolicySensitiveClassification, testCase.Classification);
+        Assert.Equal(
+            ["list-succeeds", "list-fails"],
+            testCase.Expectations.Single(expectation => expectation.Operation == "list").AllowedOutcomes);
+        Assert.Equal(
+            ["read-entry-content-matches", "read-entry-fails"],
+            testCase.Expectations.Single(expectation => expectation.Operation == "read-entry").AllowedOutcomes);
+        Assert.Equal(
+            ["integrity-passes", "integrity-unchecked", "integrity-fails"],
+            testCase.Expectations.Single(expectation => expectation.Operation == "integrity-check").AllowedOutcomes);
+        Assert.Equal(
+            ["extract-succeeds", "extract-fails"],
+            testCase.Expectations.Single(expectation => expectation.Operation == "extract").AllowedOutcomes);
+        Assert.All(testCase.Expectations, expectation =>
+            Assert.Equal(["trailing-bytes-are-undeclared"], expectation.Invariants));
+        Assert.Empty(ArchiveTestCaseSemantics.Validate(testCase));
+    }
+
+    [Fact]
     public void BuildExpectationFile_EncodingLocalCentralCodecDivergence_DeclaresPolicyAndContainment()
     {
         var definition = ArchiveTestCatalog.GetCase("encoding-local-central-codec-divergence");
