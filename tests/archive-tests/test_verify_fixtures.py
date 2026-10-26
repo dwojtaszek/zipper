@@ -831,21 +831,24 @@ class UndeclaredTrailingDataTests(TempDirTest):
         self.assertEqual("undeclared-trailing-data", caught.exception.check)
         self.assertIn("at least one entry", str(caught.exception))
 
-    def test_archive_entries_must_use_stored_method_in_both_headers(self):
-        content = b"trailing data control"
-        buffer = io.BytesIO()
-        with zipfile.ZipFile(buffer, "w") as zf:
-            info = zipfile.ZipInfo("a.txt", date_time=(2024, 1, 1, 0, 0, 0))
-            info.compress_type = zipfile.ZIP_DEFLATED
-            zf.writestr(info, content)
-        control = buffer.getvalue()
-        archive = control + self.TRAILING
-        case, archive, _ = self.make_case(archive)
-        entry = case["entries"][0]
-        entry.update(
-            localHeaderMethod=zipfile.ZIP_DEFLATED,
-            centralDirectoryMethod=zipfile.ZIP_DEFLATED,
-            payloadCodec="deflate")
+    def test_local_header_method_must_be_stored(self):
+        control = bytearray(make_zip([("a.txt", b"trailing data control")]))
+        struct.pack_into("<H", control, 8, zipfile.ZIP_DEFLATED)
+        case, archive, _ = self.make_case(bytes(control) + self.TRAILING)
+        case["entries"][0]["localHeaderMethod"] = zipfile.ZIP_DEFLATED
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_undeclared_trailing_data(case, archive)
+
+        self.assertEqual("undeclared-trailing-data", caught.exception.check)
+        self.assertIn("Stored", str(caught.exception))
+
+    def test_central_directory_method_must_be_stored(self):
+        control = bytearray(make_zip([("a.txt", b"trailing data control")]))
+        central_offset = control.index(b"PK\x01\x02")
+        struct.pack_into("<H", control, central_offset + 10, zipfile.ZIP_DEFLATED)
+        case, archive, _ = self.make_case(bytes(control) + self.TRAILING)
+        case["entries"][0]["centralDirectoryMethod"] = zipfile.ZIP_DEFLATED
 
         with self.assertRaises(vf.VerificationError) as caught:
             vf.verify_undeclared_trailing_data(case, archive)
@@ -898,6 +901,27 @@ class UndeclaredTrailingDataTests(TempDirTest):
 
         self.assertEqual("undeclared-trailing-data", caught.exception.check)
         self.assertIn("length-anchored EOCD", str(caught.exception))
+
+    def test_suffix_bytes_must_match_expected_ascii(self):
+        case, archive, _ = self.make_case()
+        tampered = bytearray(archive)
+        tampered[-1] ^= 1
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_undeclared_trailing_data(case, bytes(tampered))
+
+        self.assertEqual("undeclared-trailing-data", caught.exception.check)
+        self.assertIn("exact 16-byte undeclared suffix", str(caught.exception))
+
+    def test_mutation_record_must_describe_undeclared_suffix(self):
+        case, archive, _ = self.make_case()
+        case["mutations"][0]["declaredValue"] = "trailing-bytes=16 undeclared=false"
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_undeclared_trailing_data(case, archive)
+
+        self.assertEqual("undeclared-trailing-data", caught.exception.check)
+        self.assertIn("mutation record", str(caught.exception))
 
     def test_central_directory_must_end_at_eocd(self):
         case, archive, eocd_offset = self.make_case()

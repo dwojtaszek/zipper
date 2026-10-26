@@ -510,7 +510,15 @@ REQ-212	unit	ArchiveTestSuiteGeneratorTests.BuildExpectationFile_DeclaredSizeUnd
 REQ-212	unit	ArchiveReferenceReaderTests.ReadOperations_DeclaredSizeUndersized_ReturnsUnverifiedBytesAtDeclaredCompressedSizeBoundary	.NET reference reader returns partial unverified bytes and fails integrity checking
 REQ-212	unit	ArchiveTestSuiteGeneratorTests.BuildExpectationFile_UndeclaredTrailingData_DeclaresReaderVarianceAndInvariant	Expectation File allows reader variance while requiring proof that 16 trailing bytes are outside the zero-comment EOCD
 REQ-212	unit	ArchiveReferenceReaderTests.ReadOperations_UndeclaredTrailingData_PinsDotNetReaderOutcomes	.NET reference reader lists, reads, integrity-checks, and extracts the Archive with undeclared trailing bytes
-REQ-212	e2e	tests/archive-tests/test_verify_fixtures.py:UndeclaredTrailingDataTests.test_full_verification_checks_the_declared_invariant	Independent verifier enforces the undeclared trailing-data invariant and rejects altered EOCD, suffix, and central-directory boundaries
+REQ-212	e2e	tests/archive-tests/test_verify_fixtures.py:UndeclaredTrailingDataTests.test_full_verification_checks_the_declared_invariant	Full verifier confirms the undeclared-trailing-data structural check and expectation invariant
+REQ-212	e2e	tests/archive-tests/test_verify_fixtures.py:UndeclaredTrailingDataTests.test_archive_must_contain_at_least_one_entry	Independent verifier rejects an undeclared-trailing-data fixture with no entries
+REQ-212	e2e	tests/archive-tests/test_verify_fixtures.py:UndeclaredTrailingDataTests.test_local_header_method_must_be_stored	Independent verifier rejects a non-Stored local-header method
+REQ-212	e2e	tests/archive-tests/test_verify_fixtures.py:UndeclaredTrailingDataTests.test_central_directory_method_must_be_stored	Independent verifier rejects a non-Stored central-directory method
+REQ-212	e2e	tests/archive-tests/test_verify_fixtures.py:UndeclaredTrailingDataTests.test_eocd_comment_length_must_remain_zero	Independent verifier rejects a nonzero EOCD comment length
+REQ-212	e2e	tests/archive-tests/test_verify_fixtures.py:UndeclaredTrailingDataTests.test_suffix_must_be_exactly_sixteen_bytes_after_eocd	Independent verifier length-anchors the EOCD before the exact 16-byte suffix
+REQ-212	e2e	tests/archive-tests/test_verify_fixtures.py:UndeclaredTrailingDataTests.test_suffix_bytes_must_match_expected_ascii	Independent verifier rejects altered bytes in the fixed trailing suffix
+REQ-212	e2e	tests/archive-tests/test_verify_fixtures.py:UndeclaredTrailingDataTests.test_mutation_record_must_describe_undeclared_suffix	Independent verifier rejects sidecar mutation metadata that misdeclares the trailing suffix
+REQ-212	e2e	tests/archive-tests/test_verify_fixtures.py:UndeclaredTrailingDataTests.test_central_directory_must_end_at_eocd	Independent verifier rejects a central-directory span that does not end at the EOCD
 REQ-213	unit	ArchiveResourceCaseTests.Build_EntriesOneOverCap_ThrowsDescriptively	Archive test fixture 1000-entry budget cap enforcement
 REQ-213	unit	ArchiveResourceCaseTests.Build_PhysicalBytesOneOver_ThrowsDescriptively	Archive test fixture 16 MiB physical size budget cap enforcement
 REQ-213	unit	ArchiveResourceCaseTests.Build_ExpandedBytesOneOver_ThrowsDescriptively	Archive test fixture 32 MiB expanded recipe content budget cap enforcement
@@ -527,6 +535,10 @@ REQ-218	unit	ArchiveCombinedCaseTests.Build_CombinedCrcAndName_AppliesBothFieldM
 REQ-218	unit	ArchiveFixtureMutationTests.Apply_StoredPayloadBitflip_ChangesOnlyPayloadByteAtDataOffset	Stored payload bitflip changes one byte at DataOffset while preserving the control content hash and structural declarations
 REQ-218	unit	ArchiveFixtureMutationTests.Apply_DeflatePayloadBitflip_ChangesLiteralByteAndPreservesDeclarations	Deflate payload bitflip changes one stored-block literal byte while preserving decodable output framing, original declarations, and sidecar content hash
 REQ-218	unit	ArchiveFixtureMutationTests.Apply_UndeclaredTrailingData_AppendsBytesWithoutDeclaringThem	Appends 16 ASCII bytes after the EOCD and leaves all prior bytes and the zero comment-length field unchanged
+REQ-218	unit	ArchiveFixtureMutationTests.Apply_UndeclaredTrailingData_EmptyControl_ThrowsInvalidOperationException	Rejects empty controls for the undeclared trailing-data mutation
+REQ-218	unit	ArchiveFixtureMutationTests.Apply_UndeclaredTrailingData_NonStoredControl_ThrowsInvalidOperationException	Rejects non-Stored controls for the undeclared trailing-data mutation
+REQ-218	unit	ArchiveFixtureMutationTests.Apply_UndeclaredTrailingData_ControlWithTrailingBytes_ThrowsInvalidOperationException	Rejects controls that already contain bytes after the EOCD
+REQ-218	unit	ArchiveFixtureMutationTests.Apply_UndeclaredTrailingData_NonzeroCommentLength_ThrowsInvalidOperationException	Rejects controls whose EOCD declares a nonzero comment length
 REQ-218	unit	ArchiveFixtureMutationTests.Apply_VersionLocalCentralMismatch_PinsLocalTwoPointZeroAndCentralFourPointFive	Version-needed disagreement keeps the local 2.0 word and rewrites the central word to Zip64 4.5 in place without moving payload or offsets
 REQ-218	unit	ArchiveFixturePropertyTests.ArchiveFixtureMutator_ApplyMutation_ShouldModifyOnlyTargetedStructureAndPreserveUnmutatedRegions	Property: ArchiveFixtureMutator modifies targeted structure bytes and preserves unmutated regions
 REQ-220	unit	ArchiveTestCodecTests.WireCode_KnownPayloadCodec_MapsHeaderVersionAndName	Archive compression method wire code mappings (store, deflate, deflate64, bzip2)

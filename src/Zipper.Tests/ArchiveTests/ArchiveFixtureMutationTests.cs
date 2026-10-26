@@ -675,6 +675,47 @@ public class ArchiveFixtureMutationTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void Apply_UndeclaredTrailingData_NonStoredControl_ThrowsInvalidOperationException()
+    {
+        var nonStoredControl = ArchiveFixtureBuilder.BuildControl("valid-deflate", 42, CancellationToken.None);
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.UndeclaredTrailingData, nonStoredControl));
+
+        Assert.Contains("non-empty Stored control", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Apply_UndeclaredTrailingData_ControlWithTrailingBytes_ThrowsInvalidOperationException()
+    {
+        var control = BuildControl();
+        var archiveBytes = new byte[control.ArchiveBytes.Length + 1];
+        control.ArchiveBytes.CopyTo(archiveBytes, 0);
+        archiveBytes[^1] = 0x41;
+        var controlWithTrailingBytes = control with { ArchiveBytes = archiveBytes };
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.UndeclaredTrailingData, controlWithTrailingBytes));
+
+        Assert.Contains("non-empty Stored control", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Apply_UndeclaredTrailingData_NonzeroCommentLength_ThrowsInvalidOperationException()
+    {
+        var control = BuildControl();
+        var archiveBytes = control.ArchiveBytes.ToArray();
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            archiveBytes.AsSpan((int)control.Layout.EocdOffset + 20, 2), 1);
+        var controlWithCommentLength = control with { ArchiveBytes = archiveBytes };
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.UndeclaredTrailingData, controlWithCommentLength));
+
+        Assert.Contains("non-empty Stored control", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Apply_UndeclaredTrailingData_AppendsBytesWithoutDeclaringThem()
     {
         const string TrailingData = "zipper-tail-data";
