@@ -960,7 +960,7 @@ class EncodingTrailByteTests(unittest.TestCase):
 class EncodingLocalCentralCodecDivergenceTests(unittest.TestCase):
     @staticmethod
     def make_zip():
-        """A stored 'ab.txt' entry with CP932 local and UTF-8 central names."""
+        """A stored entry rewritten to CP932 local and UTF-8 central names."""
         import io
         import struct
         import zipfile
@@ -997,6 +997,30 @@ class EncodingLocalCentralCodecDivergenceTests(unittest.TestCase):
 
         self.assertIn("cp932=§.txt", detail)
         self.assertIn("utf-8=§.txt", detail)
+
+    def test_local_header_name_bytes_must_match_cp932(self):
+        zip_bytes = bytearray(self.make_zip())
+        zip_bytes[30] ^= 0x01
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_encoding_codec_divergence(
+                self.make_case(), bytes(zip_bytes))
+
+        self.assertEqual("encoding-codec-divergence", caught.exception.check)
+        self.assertIn("local header does not carry the expected CP932 name", str(caught.exception))
+
+    def test_central_header_name_bytes_must_match_utf8(self):
+        zip_bytes = bytearray(self.make_zip())
+        import struct
+        cd_offset = struct.unpack_from("<I", zip_bytes, len(zip_bytes) - 22 + 16)[0]
+        zip_bytes[cd_offset + 46] ^= 0x01
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_encoding_codec_divergence(
+                self.make_case(), bytes(zip_bytes))
+
+        self.assertEqual("encoding-codec-divergence", caught.exception.check)
+        self.assertIn("central header does not carry the expected UTF-8 name", str(caught.exception))
 
     def test_local_utf8_flag_is_rejected(self):
         zip_bytes = bytearray(self.make_zip())

@@ -265,3 +265,11 @@
 - **telemetry**: host=droid mode=branch specialists=6 bundle=28141c
 - **lessons**: none
 - **suppressions**: none
+
+### 2026-10-26 droid:branch:feat/ISSUE-1283-archive-codec-divergence
+
+- **findings**: 0 ACTION, 3 INFO across 6 specialists; correctness, adversarial, and security clean.
+- **outcome**: fixed all three: added local/central raw-name tampering tests, corrected the helper docstring, and documented Python 3.11+; follow-up review clean.
+- **telemetry**: host=droid mode=branch specialists=6 bundle=~37K
+- **lessons**: Verifier tests should tamper with actual Archive header bytes as well as sidecar metadata; document runtime prerequisites next to the suite contract.
+- **suppressions**: none
