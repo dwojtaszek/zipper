@@ -413,9 +413,10 @@ public class ArchiveStructureCaseTests : WorkingDirectoryTestBase
     {
         var malformed = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.MalformedSuite);
 
-        Assert.Equal(56, malformed.Count);
+        Assert.Equal(57, malformed.Count);
         Assert.Contains(malformed, c => c.CaseKey == "unsupported-method");
         Assert.Contains(malformed, c => c.CaseKey == "unsupported-method-deflate64");
+        Assert.Contains(malformed, c => c.CaseKey == "version-local-central-mismatch");
         Assert.Contains(malformed, c => c.CaseKey == "declared-size-undersized");
         Assert.Contains(malformed, c => c.CaseKey == "zip64-extra-without-sentinels");
         Assert.Contains(malformed, c => c.CaseKey == "zip64-locator-ambiguity");
@@ -447,6 +448,7 @@ public class ArchiveStructureCaseTests : WorkingDirectoryTestBase
     [InlineData("name-local-central-mismatch")]
     [InlineData("method-local-central-mismatch")]
     [InlineData("size-local-central-mismatch")]
+    [InlineData("version-local-central-mismatch")]
     [InlineData("offset-outside-archive")]
     [InlineData("offset-into-payload")]
     [InlineData("extra-field-length-overrun")]
@@ -1054,7 +1056,7 @@ public class ArchiveStructureCaseTests : WorkingDirectoryTestBase
     public async Task GenerateAsync_AllSuites_PublishesUniqueValidatedPairsForEachCase()
     {
         var all = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.AllSuites);
-        Assert.Equal(112, all.Count);
+        Assert.Equal(113, all.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(all.Select(c => c.CaseKey).ToList(), 42, Path.Combine(TempDir, "all")),
@@ -1102,6 +1104,7 @@ public class ArchiveStructureCaseTests : WorkingDirectoryTestBase
                     && single is ArchiveTestMutationKind.NameLocalCentralMismatch
                         or ArchiveTestMutationKind.MethodLocalCentralMismatch
                         or ArchiveTestMutationKind.SizeLocalCentralMismatch
+                        or ArchiveTestMutationKind.VersionLocalCentralMismatch
                         or ArchiveTestMutationKind.OffsetOutsideArchive
                         or ArchiveTestMutationKind.OffsetIntoPayload
                         or ArchiveTestMutationKind.ExtraFieldLengthOverrun

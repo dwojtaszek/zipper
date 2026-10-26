@@ -182,6 +182,42 @@ public class ArchiveFixtureMutationTests : WorkingDirectoryTestBase
         Assert.Equal(control.Entries[0].ContentSha256, sidecar.Entries[0].ContentSha256);
     }
 
+    [Fact]
+    public void Apply_VersionLocalCentralMismatch_PinsLocalTwoPointZeroAndCentralFourPointFive()
+    {
+        var control = ArchiveFixtureBuilder.BuildControl("valid-deflate", 42, CancellationToken.None);
+        var entry = Assert.Single(control.Layout.Entries);
+        var localVersionOffset = entry.LocalHeaderOffset + 4;
+        var centralVersionOffset = entry.CentralDirectoryOffset + 6;
+
+        var mutated = ArchiveFixtureMutator.Apply(
+            ArchiveTestMutationKind.VersionLocalCentralMismatch, control);
+
+        Assert.Equal(20, BinaryPrimitives.ReadUInt16LittleEndian(mutated.ArchiveBytes.AsSpan((int)localVersionOffset, 2)));
+        Assert.Equal(45, BinaryPrimitives.ReadUInt16LittleEndian(mutated.ArchiveBytes.AsSpan((int)centralVersionOffset, 2)));
+        Assert.Equal(control.ArchiveBytes.Length, mutated.ArchiveBytes.Length);
+        Assert.Equal(1, CountDifferingBytes(control.ArchiveBytes, mutated.ArchiveBytes));
+
+        Assert.Collection(
+            mutated.Mutations,
+            mutation =>
+            {
+                Assert.Equal("version-local-central-mismatch", mutation.Code);
+                Assert.Equal("local-header", mutation.Structure);
+                Assert.Equal(localVersionOffset, mutation.Offset);
+            },
+            mutation =>
+            {
+                Assert.Equal("version-local-central-mismatch", mutation.Code);
+                Assert.Equal("central-header", mutation.Structure);
+                Assert.Equal(centralVersionOffset, mutation.Offset);
+            });
+        Assert.All(mutated.Mutations, mutation =>
+            Assert.Equal(
+                "local-version-needed=20 central-version-needed=45",
+                mutation.DeclaredValue));
+    }
+
     [Theory]
     [InlineData("btype", "non-stored block")]
     [InlineData("short-len-nlen", "a stored block is missing LEN/NLEN")]

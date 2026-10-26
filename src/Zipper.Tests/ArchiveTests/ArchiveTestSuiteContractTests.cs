@@ -270,8 +270,8 @@ public class ArchiveTestSuiteContractTests
         // +1 for the #934 clean Unicode Path control, +1 for the #935 nested budget boundary,
         // +2 for the #935 mixed one-bad-member cases, +1 for #888, +1 for #870,
         // +2 for #878, +3 for the #887 legacy-codec encoding controls, +1 for #1276,
-        // +2 for #1277, +1 for #1279, +1 for #1280, +1 for #1281): a case
+        // +2 for #1277, +1 for #1279, +1 for #1280, +1 for #1281, +1 for #1282): a case
         // dropped from the catalogue or unlisted from every suite fails here.
-        Assert.Equal(112, AllKeys().Count);
+        Assert.Equal(113, AllKeys().Count);
     }
 }

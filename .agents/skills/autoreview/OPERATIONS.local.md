@@ -241,3 +241,11 @@
 - **telemetry**: host=droid mode=branch specialists=5+1fast bundle=15-file/243-line diff
 - **lessons**: A normalized `read-entry-returns-unverified-bytes` outcome proves only a hash mismatch; assert returned byte length/content when the test name claims a partial boundary read.
 - **suppressions**: none
+
+### 2026-10-26 droid:branch:1282-version-local-central-mismatch
+
+- **findings**: 0 ACTION, 0 INFO across 5 specialists (correctness, testing, maintainability, adversarial, api-contract).
+- **outcome**: accepted / clean review. Fixture verification, full .NET tests, mutation smoke, formatting, and complete 113-case E2E passed.
+- **telemetry**: host=droid mode=branch specialists=5 bundle=25702c
+- **lessons**: none
+- **suppressions**: none

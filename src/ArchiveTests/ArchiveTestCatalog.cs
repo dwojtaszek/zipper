@@ -440,6 +440,8 @@ internal static class ArchiveTestCatalog
         ["name-local-central-mismatch"] = MutatedDefinition(ArchiveTestMutationKind.NameLocalCentralMismatch),
         ["method-local-central-mismatch"] = MutatedDefinition(ArchiveTestMutationKind.MethodLocalCentralMismatch),
         ["size-local-central-mismatch"] = MutatedDefinition(ArchiveTestMutationKind.SizeLocalCentralMismatch),
+        ["version-local-central-mismatch"] = MutatedDefinition(
+            ArchiveTestMutationKind.VersionLocalCentralMismatch, controlCaseKey: DeflateControlCaseKey),
         // Split-archive declarations and directory-count disagreements (ticket
         // #933): each case mutates declarations only over a tiny physical
         // Archive. Spanning declarations are unsupported (policy-sensitive,

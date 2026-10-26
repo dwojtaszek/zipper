@@ -518,6 +518,7 @@ REQ-217	unit	ArchiveFixturePropertyTests.ArchiveTestCaseSemantics_EvaluateReader
 REQ-218	unit	ArchiveCombinedCaseTests.Build_CombinedCrcAndName_AppliesBothFieldMutationsInOrder	Ordered field mutation composition and hash chain validation
 REQ-218	unit	ArchiveFixtureMutationTests.Apply_StoredPayloadBitflip_ChangesOnlyPayloadByteAtDataOffset	Stored payload bitflip changes one byte at DataOffset while preserving the control content hash and structural declarations
 REQ-218	unit	ArchiveFixtureMutationTests.Apply_DeflatePayloadBitflip_ChangesLiteralByteAndPreservesDeclarations	Deflate payload bitflip changes one stored-block literal byte while preserving decodable output framing, original declarations, and sidecar content hash
+REQ-218	unit	ArchiveFixtureMutationTests.Apply_VersionLocalCentralMismatch_PinsLocalTwoPointZeroAndCentralFourPointFive	Version-needed disagreement keeps the local 2.0 word and rewrites the central word to Zip64 4.5 in place without moving payload or offsets
 REQ-218	unit	ArchiveFixturePropertyTests.ArchiveFixtureMutator_ApplyMutation_ShouldModifyOnlyTargetedStructureAndPreserveUnmutatedRegions	Property: ArchiveFixtureMutator modifies targeted structure bytes and preserves unmutated regions
 REQ-220	unit	ArchiveTestCodecTests.WireCode_KnownPayloadCodec_MapsHeaderVersionAndName	Archive compression method wire code mappings (store, deflate, deflate64, bzip2)
 REQ-223	unit	HelpTextGeneratorTests.Show_MarksDeflate64Bzip2AsNotYetSupported	Help text documents unsupported compression methods (deflate64, bzip2)
