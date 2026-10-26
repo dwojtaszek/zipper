@@ -792,7 +792,7 @@ class UndeclaredTrailingDataTests(TempDirTest):
     ]
 
     @classmethod
-    def make_case(cls, archive=None):
+    def make_case(cls, archive=None, entries=None):
         content = b"trailing data control"
         if archive is None:
             control = make_zip([("a.txt", content)])
@@ -817,7 +817,8 @@ class UndeclaredTrailingDataTests(TempDirTest):
         }
         case = case_for(
             "trailing-data-undeclared", "policy-sensitive", archive,
-            [entry_record(0, "a.txt", content)], [mutation], cls.EXPECTATIONS)
+            entries if entries is not None else [entry_record(0, "a.txt", content)],
+            [mutation], cls.EXPECTATIONS)
         return case, archive, eocd_offset
 
     def test_archive_must_contain_at_least_one_entry(self):
@@ -856,6 +857,132 @@ class UndeclaredTrailingDataTests(TempDirTest):
         self.assertEqual("undeclared-trailing-data", caught.exception.check)
         self.assertIn("Stored", str(caught.exception))
 
+    def test_central_entry_disk_start_must_be_zero(self):
+        case, archive, _ = self.make_case()
+        tampered = bytearray(archive)
+        central_offset = tampered.index(b"PK\x01\x02")
+        struct.pack_into("<H", tampered, central_offset + 34, 1)
+        case["mutations"][0]["beforeSha256"] = sha256_hex(tampered[:-len(self.TRAILING)])
+        case["mutations"][0]["afterSha256"] = sha256_hex(tampered)
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_undeclared_trailing_data(case, bytes(tampered))
+
+        self.assertEqual("undeclared-trailing-data", caught.exception.check)
+        self.assertIn("nonzero disk", str(caught.exception))
+
+    def test_local_extra_field_must_end_before_central_directory(self):
+        _, archive, _ = self.make_case()
+        tampered = bytearray(archive)
+        central_offset = tampered.index(b"PK\x01\x02")
+        local_name_length = struct.unpack_from("<H", tampered, 26)[0]
+        local_name_start = vf.ZIP_LOCAL_HEADER_FIXED_SIZE
+        extra_length = central_offset - local_name_start - local_name_length + 1
+        struct.pack_into("<H", tampered, 28, extra_length)
+        case, tampered, _ = self.make_case(bytes(tampered))
+        write_pair(self.dir, case, tampered)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("undeclared-trailing-data", failure["check"])
+        self.assertIn("local entry data extends into the central directory", failure["message"])
+
+    def test_local_payload_must_end_before_central_directory(self):
+        _, archive, _ = self.make_case()
+        tampered = bytearray(archive)
+        central_offset = tampered.index(b"PK\x01\x02")
+        local_compressed_size = struct.unpack_from("<I", tampered, 18)[0] + 1
+        central_compressed_size = struct.unpack_from("<I", tampered, central_offset + 20)[0] + 1
+        local_uncompressed_size = struct.unpack_from("<I", tampered, 22)[0] + 1
+        central_uncompressed_size = struct.unpack_from("<I", tampered, central_offset + 24)[0] + 1
+        struct.pack_into("<I", tampered, 18, local_compressed_size)
+        struct.pack_into("<I", tampered, 22, local_uncompressed_size)
+        struct.pack_into("<I", tampered, central_offset + 20, central_compressed_size)
+        struct.pack_into("<I", tampered, central_offset + 24, central_uncompressed_size)
+        case, tampered, _ = self.make_case(bytes(tampered))
+        write_pair(self.dir, case, tampered)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("undeclared-trailing-data", failure["check"])
+        self.assertIn("local entry data extends into the central directory", failure["message"])
+
+    def test_local_and_central_stored_declarations_must_match(self):
+        content = b"trailing data control"
+        control = make_zip([("a.txt", content)])
+        central_offset = control.index(b"PK\x01\x02")
+        mutations = [
+            ("local CRC", 14, struct.unpack_from("<I", control, 14)[0] ^ 1),
+            ("central CRC", central_offset + 16,
+             struct.unpack_from("<I", control, central_offset + 16)[0] ^ 1),
+            ("local compressed size", 18, len(content) + 1),
+            ("central compressed size", central_offset + 20, len(content) + 1),
+            ("local uncompressed size", 22, len(content) + 1),
+            ("central uncompressed size", central_offset + 24, len(content) + 1),
+        ]
+
+        for field, offset, value in mutations:
+            with self.subTest(field=field):
+                tampered = bytearray(control)
+                struct.pack_into("<I", tampered, offset, value)
+                case, archive, _ = self.make_case(bytes(tampered) + self.TRAILING)
+
+                with self.assertRaises(vf.VerificationError) as caught:
+                    vf.verify_undeclared_trailing_data(case, archive)
+
+                self.assertEqual("undeclared-trailing-data", caught.exception.check)
+                self.assertIn("CRC or size declarations disagree", str(caught.exception))
+
+    def test_payload_codec_must_be_stored(self):
+        case, archive, _ = self.make_case()
+        case["entries"][0]["payloadCodec"] = "deflate"
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_undeclared_trailing_data(case, archive)
+
+        self.assertEqual("undeclared-trailing-data", caught.exception.check)
+        self.assertIn("payloadCodec", str(caught.exception))
+
+    def test_encrypted_entries_are_rejected(self):
+        original = make_zip([("a.txt", b"trailing data control")])
+        central_offset = original.index(b"PK\x01\x02")
+
+        for field, offset in (("local", 6), ("central", central_offset + 8)):
+            with self.subTest(field=field):
+                control = bytearray(original)
+                struct.pack_into("<H", control, offset, 1)
+                case, archive, _ = self.make_case(bytes(control) + self.TRAILING)
+
+                with self.assertRaises(vf.VerificationError) as caught:
+                    vf.verify_undeclared_trailing_data(case, archive)
+
+                self.assertEqual("undeclared-trailing-data", caught.exception.check)
+                self.assertIn("encryption", str(caught.exception))
+
+    def test_repeated_payload_ranges_respect_expanded_budget(self):
+        content = b"shared payload"
+        control = bytearray(make_zip([("dup.txt", content), ("dup.txt", content)]))
+        first_central = control.index(b"PK\x01\x02")
+        second_central = control.index(b"PK\x01\x02", first_central + 4)
+        first_local_offset = struct.unpack_from("<I", control, first_central + 42)[0]
+        struct.pack_into("<I", control, second_central + 42, first_local_offset)
+        entries = [
+            entry_record(0, "dup.txt", content),
+            entry_record(1, "dup.txt", content),
+        ]
+        case, archive, _ = self.make_case(bytes(control) + self.TRAILING, entries=entries)
+        case["limits"]["expandedBytesBudget"] = len(content)
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_undeclared_trailing_data(case, archive)
+
+        self.assertEqual("undeclared-trailing-data", caught.exception.check)
+        self.assertIn("expanded-bytes budget", str(caught.exception))
+
     def test_verifier_proves_the_length_anchored_zero_comment_eocd_and_suffix(self):
         case, archive, eocd_offset = self.make_case()
 
@@ -880,6 +1007,24 @@ class UndeclaredTrailingDataTests(TempDirTest):
         for operation in operations.values():
             self.assertIn("trailing-bytes-are-undeclared",
                           operation["invariantsChecked"])
+
+    def test_full_verification_accepts_entries_ordered_by_ordinal_key(self):
+        first_content = b"first entry"
+        second_content = b"second entry"
+        control = make_zip([("a.txt", first_content), ("b.txt", second_content)])
+        entries = [
+            entry_record(1, "b.txt", second_content),
+            entry_record(0, "a.txt", first_content),
+        ]
+        case, archive, _ = self.make_case(
+            control + self.TRAILING,
+            entries=entries)
+        write_pair(self.dir, case, archive)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(0, exit_code, report["fixtures"][0]["failure"])
+        self.assertEqual("pass", report["fixtures"][0]["status"])
 
     def test_eocd_comment_length_must_remain_zero(self):
         case, archive, eocd_offset = self.make_case()
@@ -965,6 +1110,69 @@ class UndeclaredTrailingDataTests(TempDirTest):
 
         self.assertEqual("undeclared-trailing-data", caught.exception.check)
         self.assertIn("does not end at the EOCD", str(caught.exception))
+
+    def test_eocd_disk_and_entry_counts_must_match_single_disk_archive(self):
+        for field_offset, value in ((4, 1), (6, 1), (8, 2), (10, 2)):
+            with self.subTest(field_offset=field_offset):
+                case, archive, eocd_offset = self.make_case()
+                tampered = bytearray(archive)
+                struct.pack_into("<H", tampered, eocd_offset + field_offset, value)
+
+                with self.assertRaises(vf.VerificationError) as caught:
+                    vf.verify_undeclared_trailing_data(case, bytes(tampered))
+
+                self.assertEqual("undeclared-trailing-data", caught.exception.check)
+                self.assertIn("disk or entry-count fields disagree", str(caught.exception))
+
+    def test_expectation_entry_ordinal_must_match_archive_order(self):
+        case, archive, _ = self.make_case()
+        case["entries"][0]["ordinal"] = 1
+        write_pair(self.dir, case, archive)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("undeclared-trailing-data", failure["check"])
+        self.assertIn("ordinal", failure["message"])
+
+    def test_expectation_raw_names_must_match_archive_names(self):
+        case, archive, _ = self.make_case()
+        case["entries"][0]["localNameRaw"] = b"b.txt".hex()
+        case["entries"][0]["centralNameRaw"] = b"b.txt".hex()
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_undeclared_trailing_data(case, archive)
+
+        self.assertEqual("undeclared-trailing-data", caught.exception.check)
+        self.assertIn("entry names do not match the Expectation File", str(caught.exception))
+
+    def test_expectation_cannot_relabel_file_entry_as_directory(self):
+        case, archive, _ = self.make_case()
+        entry = case["entries"][0]
+        entry["kind"] = "directory"
+        entry.pop("payloadCodec")
+        entry.pop("contentSha256")
+        write_pair(self.dir, case, archive)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        failure = report["fixtures"][0]["failure"]
+        self.assertEqual("expectation-content", failure["check"])
+        self.assertIn("kind 'directory'", failure["message"])
+
+    def test_local_and_central_names_must_match(self):
+        case, archive, _ = self.make_case()
+        control = bytearray(archive[:-len(self.TRAILING)])
+        control[30] = ord("b")
+        case, tampered, _ = self.make_case(bytes(control) + self.TRAILING)
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_undeclared_trailing_data(case, tampered)
+
+        self.assertEqual("undeclared-trailing-data", caught.exception.check)
+        self.assertIn("local and central entry names disagree", str(caught.exception))
 
 
 class AdlsSegmentTests(unittest.TestCase):
