@@ -72,6 +72,10 @@ To generate the malformed `deflate-payload-bitflip` Archive Test Fixture, which 
 ```bash
 zipper --archive-test-suite malformed --archive-test-cases deflate-payload-bitflip --seed 42 --output-path ./deflate-payload-corruption
 ```
+To generate the malformed `declared-size-undersized` Archive Test Fixture, which declares both sizes 16 bytes below the intact DEFLATE payload in both headers:
+```bash
+zipper --archive-test-suite malformed --archive-test-cases declared-size-undersized --seed 42 --output-path ./declared-size-undersized
+```
 To generate the policy-sensitive `zip64-extra-without-sentinels` Archive Test Fixture, which tests conflicting 32-bit header and Zip64 extended-information sizes:
 ```bash
 zipper --archive-test-suite malformed --archive-test-cases zip64-extra-without-sentinels --seed 42 --output-path ./zip64-extra-conflict

@@ -603,6 +603,17 @@ internal static class ArchiveTestSuiteGenerator
                 Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-fails", "integrity-unchecked", "integrity-passes"], [NoPartialWrites], ["open", ReadEntryOperation, IntegrityCheckOperation]),
                 Expectation(ExtractOperation, StrictProfile, [OperationFails], [NoPartialWrites, "no-allocation-from-declared-sizes"], ["open", ReadEntryOperation, ExtractOperation]),
             ],
+            // Both headers under-declare the compressed and uncompressed sizes by
+            // 16 bytes while the complete DEFLATE payload stays present. Readers that
+            // honor the compressed-size boundary may truncate the stream; streaming
+            // readers may reach the real DEFLATE end and return verified content.
+            ArchiveTestMutationKind.DeclaredSizeUndersized =>
+            [
+                Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [NoPartialWrites, "declared-sizes-are-lies", "no-allocation-from-declared-sizes"], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches", "read-entry-fails", "read-entry-returns-unverified-bytes"], [NoPartialWrites, "no-allocation-from-declared-sizes"], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["crc-mismatch-rejected", "integrity-fails", "integrity-unchecked", "integrity-passes"], [NoPartialWrites, "no-allocation-from-declared-sizes"], ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-fails", "extract-succeeds"], [NoPartialWrites, "no-allocation-from-declared-sizes"], ["open", ReadEntryOperation, ExtractOperation]),
+            ],
             // DEFLATE-family bitstream corruption (tickets #874 and #900): framing
             // and directory stay intact, so listing succeeds; no decoder reproduces
             // verified content from the broken stream. BZip2 block-magic, truncation,

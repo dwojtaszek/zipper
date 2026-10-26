@@ -57,6 +57,7 @@ internal static class ArchiveFixtureMutator
             ArchiveTestMutationKind.Zip64TruncatedExtra => OverrunZip64Extra(control, before),
             ArchiveTestMutationKind.Zip64SentinelCleared => ClearZip64SizeSentinels(control, before),
             ArchiveTestMutationKind.DeclaredSizeOversized => DeclareOversizedUncompressedSize(control, before),
+            ArchiveTestMutationKind.DeclaredSizeUndersized => DeclareUndersizedSizes(control, before),
             ArchiveTestMutationKind.OrphanLocalHeader => InsertOrphanLocalHeader(control, before),
             ArchiveTestMutationKind.PrefixUnrebased => InsertPrefixWithoutRebase(control, before),
             ArchiveTestMutationKind.DeflateInvalidBtype => CorruptDeflateBtype(control, before, ArchiveTestMutationKind.DeflateInvalidBtype),
@@ -760,6 +761,59 @@ internal static class ArchiveFixtureMutator
         {
             BinaryPrimitives.WriteUInt32LittleEndian(after.AsSpan((int)localSizeOffset, 4), Oversized);
             BinaryPrimitives.WriteUInt32LittleEndian(after.AsSpan((int)centralSizeOffset, 4), Oversized);
+        });
+    }
+
+    /// <summary>
+    /// Declares both compressed and uncompressed sizes 16 bytes below their actual
+    /// values in both headers while leaving the complete payload and every offset intact
+    /// (ticket #1281). The declared value records each actual and undersized value.
+    /// </summary>
+    private static MutatedArchiveFixture DeclareUndersizedSizes(ArchiveFixtureArtifact control, byte[] before)
+    {
+        const uint UndersizedBy = 16;
+        var entry = control.Layout.Entries[0];
+        if (entry.CompressedSize <= UndersizedBy || entry.UncompressedSize <= UndersizedBy)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test mutation '{ArchiveTestMutationKind.DeclaredSizeUndersized.ToCaseKey()}': compressed and uncompressed sizes must both exceed {UndersizedBy} bytes.");
+        }
+
+        var declaredCompressedSize = entry.CompressedSize - UndersizedBy;
+        var declaredUncompressedSize = entry.UncompressedSize - UndersizedBy;
+        var localCompressedOffset = entry.LocalHeaderOffset + 18;
+        var localUncompressedOffset = entry.LocalHeaderOffset + 22;
+        var centralCompressedOffset = entry.CentralDirectoryOffset + 20;
+        var centralUncompressedOffset = entry.CentralDirectoryOffset + 24;
+        var code = ArchiveTestMutationKind.DeclaredSizeUndersized.ToCaseKey();
+        var declaredValue =
+            $"declared-compressed-size={declaredCompressedSize} actual-compressed-size={entry.CompressedSize} " +
+            $"declared-uncompressed-size={declaredUncompressedSize} actual-uncompressed-size={entry.UncompressedSize}";
+
+        return Patch(ArchiveTestMutationKind.DeclaredSizeUndersized, before,
+        [
+            new MutationSpec(
+                code, "local-header", localCompressedOffset,
+                $"Rewrites the local header's compressed size from {entry.CompressedSize} to {declaredCompressedSize}; the complete {entry.CompressedSize}-byte payload stays intact.",
+                entry.Ordinal, 4, 4, DeclaredValue: declaredValue),
+            new MutationSpec(
+                code, "local-header", localUncompressedOffset,
+                $"Rewrites the local header's uncompressed size from {entry.UncompressedSize} to {declaredUncompressedSize}; the complete content stays intact.",
+                entry.Ordinal, 4, 4, DeclaredValue: declaredValue),
+            new MutationSpec(
+                code, "central-header", centralCompressedOffset,
+                "Rewrites the central header's compressed size to the same undersized declaration; the complete payload stays intact.",
+                entry.Ordinal, 4, 4, DeclaredValue: declaredValue),
+            new MutationSpec(
+                code, "central-header", centralUncompressedOffset,
+                "Rewrites the central header's uncompressed size to the same undersized declaration; both headers agree on the lie.",
+                entry.Ordinal, 4, 4, DeclaredValue: declaredValue),
+        ], after =>
+        {
+            BinaryPrimitives.WriteUInt32LittleEndian(after.AsSpan((int)localCompressedOffset, 4), declaredCompressedSize);
+            BinaryPrimitives.WriteUInt32LittleEndian(after.AsSpan((int)localUncompressedOffset, 4), declaredUncompressedSize);
+            BinaryPrimitives.WriteUInt32LittleEndian(after.AsSpan((int)centralCompressedOffset, 4), declaredCompressedSize);
+            BinaryPrimitives.WriteUInt32LittleEndian(after.AsSpan((int)centralUncompressedOffset, 4), declaredUncompressedSize);
         });
     }
 
@@ -1968,6 +2022,7 @@ internal enum ArchiveTestMutationKind
     Zip64TruncatedExtra,
     Zip64SentinelCleared,
     DeclaredSizeOversized,
+    DeclaredSizeUndersized,
     OrphanLocalHeader,
     PrefixUnrebased,
     DeflateInvalidBtype,
@@ -2029,6 +2084,7 @@ internal static class ArchiveTestMutationKindExtensions
         ArchiveTestMutationKind.Zip64TruncatedExtra => "zip64-truncated-extra",
         ArchiveTestMutationKind.Zip64SentinelCleared => "zip64-extra-without-sentinels",
         ArchiveTestMutationKind.DeclaredSizeOversized => "declared-size-oversized",
+        ArchiveTestMutationKind.DeclaredSizeUndersized => "declared-size-undersized",
         ArchiveTestMutationKind.OrphanLocalHeader => "orphan-local-header",
         ArchiveTestMutationKind.PrefixUnrebased => "prefix-unrebased",
         ArchiveTestMutationKind.DeflateInvalidBtype => "deflate-invalid-btype",

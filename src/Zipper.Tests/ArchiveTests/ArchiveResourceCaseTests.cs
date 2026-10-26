@@ -92,6 +92,88 @@ public class ArchiveResourceCaseTests : WorkingDirectoryTestBase
         });
     }
 
+    // ---- declared-size-undersized ----
+
+    [Fact]
+    public void Build_DeclaredSizeUndersized_RewritesBothHeaderSizesWithoutMovingPayload()
+    {
+        const uint UndersizedBy = 16;
+        var control = BuildControl("valid-deflate");
+        var artifact = BuildControl("declared-size-undersized");
+        var entry = control.Layout.Entries[0];
+        Assert.True(entry.CompressedSize > UndersizedBy);
+        Assert.True(entry.UncompressedSize > UndersizedBy);
+
+        var declaredCompressedSize = entry.CompressedSize - UndersizedBy;
+        var declaredUncompressedSize = entry.UncompressedSize - UndersizedBy;
+        var declaredValue =
+            $"declared-compressed-size={declaredCompressedSize} actual-compressed-size={entry.CompressedSize} " +
+            $"declared-uncompressed-size={declaredUncompressedSize} actual-uncompressed-size={entry.UncompressedSize}";
+        var expectedBytes = (byte[])control.ArchiveBytes.Clone();
+
+        void WriteUInt32(long offset, uint value) =>
+            BinaryPrimitives.WriteUInt32LittleEndian(expectedBytes.AsSpan((int)offset, 4), value);
+
+        var localCompressedSizeOffset = entry.LocalHeaderOffset + 18;
+        var localUncompressedSizeOffset = entry.LocalHeaderOffset + 22;
+        var centralCompressedSizeOffset = entry.CentralDirectoryOffset + 20;
+        var centralUncompressedSizeOffset = entry.CentralDirectoryOffset + 24;
+        WriteUInt32(localCompressedSizeOffset, declaredCompressedSize);
+        WriteUInt32(localUncompressedSizeOffset, declaredUncompressedSize);
+        WriteUInt32(centralCompressedSizeOffset, declaredCompressedSize);
+        WriteUInt32(centralUncompressedSizeOffset, declaredUncompressedSize);
+
+        Assert.Equal(expectedBytes, artifact.ArchiveBytes);
+        Assert.Equal(4, artifact.Mutations.Count);
+        Assert.Collection(
+            artifact.Mutations,
+            mutation => Assert.Equal(localCompressedSizeOffset, mutation.Offset),
+            mutation => Assert.Equal(localUncompressedSizeOffset, mutation.Offset),
+            mutation => Assert.Equal(centralCompressedSizeOffset, mutation.Offset),
+            mutation => Assert.Equal(centralUncompressedSizeOffset, mutation.Offset));
+        Assert.All(artifact.Mutations, mutation =>
+        {
+            Assert.Equal("declared-size-undersized", mutation.Code);
+            Assert.Equal("before-mutation", mutation.OffsetBasis);
+            Assert.Equal(declaredValue, mutation.DeclaredValue);
+            Assert.Equal(control.ArchiveBytes.Length, mutation.BeforeSize);
+            Assert.Equal(control.ArchiveBytes.Length, mutation.AfterSize);
+        });
+
+        var mutatedLayout = ArchiveFixtureLayout.Read(artifact.ArchiveBytes);
+        var mutatedEntry = Assert.Single(mutatedLayout.Entries);
+        Assert.Equal(control.Layout.EocdOffset, mutatedLayout.EocdOffset);
+        Assert.Equal(control.Layout.CentralDirectoryOffset, mutatedLayout.CentralDirectoryOffset);
+        Assert.Equal(entry.LocalHeaderOffset, mutatedEntry.LocalHeaderOffset);
+        Assert.Equal(entry.DataOffset, mutatedEntry.DataOffset);
+        Assert.Equal(entry.CentralDirectoryOffset, mutatedEntry.CentralDirectoryOffset);
+        Assert.Equal(
+            control.ArchiveBytes.AsSpan((int)entry.DataOffset, (int)entry.CompressedSize).ToArray(),
+            artifact.ArchiveBytes.AsSpan((int)entry.DataOffset, (int)entry.CompressedSize).ToArray());
+    }
+
+    [Theory]
+    [InlineData(16u, 17u)]
+    [InlineData(17u, 16u)]
+    public void Apply_DeclaredSizeUndersized_RejectsSizeAtReductionBoundary(
+        uint compressedSize, uint uncompressedSize)
+    {
+        var control = BuildControl("valid-deflate");
+        var entry = control.Layout.Entries[0];
+        var boundaryControl = control with
+        {
+            Layout = control.Layout with
+            {
+                Entries = [entry with { CompressedSize = compressedSize, UncompressedSize = uncompressedSize }],
+            },
+        };
+
+        var error = Assert.Throws<InvalidOperationException>(
+            () => ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.DeclaredSizeUndersized, boundaryControl));
+
+        Assert.Contains("must both exceed 16 bytes", error.Message, StringComparison.Ordinal);
+    }
+
     // ---- nested-archives-depth-two ----
 
     [Fact]
