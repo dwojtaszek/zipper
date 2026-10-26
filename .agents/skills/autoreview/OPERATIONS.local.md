@@ -273,3 +273,11 @@
 - **telemetry**: host=droid mode=branch specialists=6 bundle=~37K
 - **lessons**: Verifier tests should tamper with actual Archive header bytes as well as sidecar metadata; document runtime prerequisites next to the suite contract.
 - **suppressions**: none
+
+### 2026-10-26 droid:branch:1283-per-header-unicode-path-crc
+
+- **findings**: 2 INFO on first pass (per-header CRC test gap; stale comment); 0 ACTION, 0 INFO across 5 specialists after fixes.
+- **outcome**: fixed review findings with local/central CRC validation against each header's name, separate CRC rejection tests, and corrected documentation. No actionable findings remain.
+- **telemetry**: host=droid mode=branch specialists=5 bundle=10352c
+- **lessons**: Unicode Path CRC tests should cover local and central names independently when a fixture allows header-name divergence.
+- **suppressions**: none

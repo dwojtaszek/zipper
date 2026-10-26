@@ -280,21 +280,29 @@ internal sealed record ArchiveFixtureLayout(
             DataOffset = dataOffset,
             HasDataDescriptor = hasDescriptor,
             DataDescriptorOffset = descriptorOffset,
-            UnicodePathNameHex = ScanUnicodePathName(archive, entry, offset, nameLength, extraLength),
+            UnicodePathNameHex = ScanUnicodePathName(
+                archive, entry, offset, nameLength, extraLength, localNameBytes),
         };
     }
 
     /// <summary>
     /// Scans one entry's local-header extra area for the Info-ZIP Unicode Path subfield
     /// (0x7075, ticket #871): 2-byte tag, 2-byte data size, 1-byte version, 4-byte
-    /// CRC-32 of the standard name, then the UTF-8 Unicode name. Returns the Unicode
-    /// name bytes as lowercase hex, or null when the entry carries no 0x7075 field.
-    /// Owned Archives carry it only from the unicode-path construction, which writes
-    /// it well-formed and identically in both headers: a truncated area, trailing
-    /// garbage, a non-1 version, a CRC mismatch, or a central divergence is a
-    /// generator bug and fails loudly.
+    /// CRC-32 of that header's standard name, then the UTF-8 Unicode name. Returns the
+    /// Unicode name bytes as lowercase hex, or null when the entry carries no 0x7075
+    /// field. Owned Archives carry it only from the unicode-path construction, which
+    /// writes the same Unicode name bytes in both headers with each CRC computed from
+    /// its own standard name: a truncated area, trailing garbage, a non-1 version, a
+    /// per-header CRC mismatch, or a central divergence is a generator bug and fails
+    /// loudly.
     /// </summary>
-    private static string? ScanUnicodePathName(ReadOnlySpan<byte> archive, ArchiveFixtureEntryLayout entry, long headerOffset, int nameLength, int extraLength)
+    private static string? ScanUnicodePathName(
+        ReadOnlySpan<byte> archive,
+        ArchiveFixtureEntryLayout entry,
+        long headerOffset,
+        int nameLength,
+        int extraLength,
+        ReadOnlySpan<byte> localNameBytes)
     {
         const ushort UnicodePathTag = 0x7075;
         string? unicodeHex = null;
@@ -302,11 +310,12 @@ internal sealed record ArchiveFixtureLayout(
         {
             if (subfield.Tag == UnicodePathTag)
             {
-                unicodeHex = ValidateUnicodePathData(archive, entry, subfield.DataStart, subfield.Size);
+                unicodeHex = ValidateUnicodePathData(
+                    archive, entry, localNameBytes, subfield.DataStart, subfield.Size, "local");
             }
         }
 
-        if (unicodeHex is not null && ScanCentralUnicodePathName(archive, entry) != unicodeHex)
+        if (ScanCentralUnicodePathName(archive, entry) != unicodeHex)
         {
             throw new InvalidDataException($"Entry {entry.Ordinal} Unicode Path differs between local and central headers.");
         }
@@ -345,8 +354,14 @@ internal sealed record ArchiveFixtureLayout(
         return subfields;
     }
 
-    /// <summary>Validates a 0x7075 data area (version 1, CRC of the standard name) and returns the Unicode name hex.</summary>
-    private static string ValidateUnicodePathData(ReadOnlySpan<byte> archive, ArchiveFixtureEntryLayout entry, long dataStart, int size)
+    /// <summary>Validates a 0x7075 data area (version 1, CRC of this header's standard name) and returns the Unicode name hex.</summary>
+    private static string ValidateUnicodePathData(
+        ReadOnlySpan<byte> archive,
+        ArchiveFixtureEntryLayout entry,
+        ReadOnlySpan<byte> standardName,
+        long dataStart,
+        int size,
+        string headerName)
     {
         const int PrefixLength = 5;
         if (size < PrefixLength)
@@ -359,10 +374,9 @@ internal sealed record ArchiveFixtureLayout(
             throw new InvalidDataException($"Entry {entry.Ordinal} Unicode Path version is {archive[(int)dataStart]}, expected 1.");
         }
 
-        var standardName = Convert.FromHexString(entry.NameHex);
         if (BinaryPrimitives.ReadUInt32LittleEndian(Slice(archive, dataStart + 1, 4, $"entry {entry.Ordinal} Unicode Path CRC")) != ArchiveFixtureBuilder.Crc32(standardName))
         {
-            throw new InvalidDataException($"Entry {entry.Ordinal} Unicode Path CRC does not match the standard header name.");
+            throw new InvalidDataException($"Entry {entry.Ordinal} {headerName} Unicode Path CRC does not match its standard header name.");
         }
 
         return Convert.ToHexStringLower(Slice(archive, dataStart + PrefixLength, size - PrefixLength, $"entry {entry.Ordinal} Unicode Path name").ToArray());
@@ -377,9 +391,15 @@ internal sealed record ArchiveFixtureLayout(
             checked(entry.CentralDirectoryOffset + 46 + entry.CentralNameLength),
             entry.CentralExtraLength, "central extra area"))
         {
-            if (subfield.Tag == UnicodePathTag && subfield.Size >= 5)
+            if (subfield.Tag == UnicodePathTag)
             {
-                return Convert.ToHexStringLower(Slice(archive, subfield.DataStart + 5, subfield.Size - 5, $"entry {entry.Ordinal} central Unicode Path name").ToArray());
+                return ValidateUnicodePathData(
+                    archive,
+                    entry,
+                    Convert.FromHexString(entry.NameHex),
+                    subfield.DataStart,
+                    subfield.Size,
+                    "central");
             }
         }
 
