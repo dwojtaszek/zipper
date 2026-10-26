@@ -407,13 +407,25 @@ internal static class ArchiveTestSuiteGenerator
         ArchiveTestCaseDefinition definition) =>
         kind switch
         {
+            // CRC checks on the Deflate-control twin can reject while the entry is
+            // inflated, so that reader's read-entry operation fails before its later
+            // integrity-check operation.
             ArchiveTestMutationKind.CrcLocalMismatch
                 or ArchiveTestMutationKind.CrcCentralMismatch
-                or ArchiveTestMutationKind.CrcBothMismatch =>
+                or ArchiveTestMutationKind.CrcBothMismatch
+                or ArchiveTestMutationKind.CrcBothMismatchDeflate =>
             [
                 Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], [PayloadBytesUnchanged], ["open", ListOperation]),
                 Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches", "read-entry-fails"], [PayloadBytesUnchanged], ["open", ReadEntryOperation]),
-                Expectation(IntegrityCheckOperation, "strict-integrity-v1", ["crc-mismatch-rejected", "crc-mismatch-unchecked"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, IntegrityCheckOperation], capability: "crc32"),
+                Expectation(
+                    IntegrityCheckOperation,
+                    "strict-integrity-v1",
+                    kind == ArchiveTestMutationKind.CrcBothMismatchDeflate
+                        ? ["crc-mismatch-rejected", "crc-mismatch-unchecked", "integrity-fails"]
+                        : ["crc-mismatch-rejected", "crc-mismatch-unchecked"],
+                    [PayloadBytesUnchanged],
+                    ["open", ReadEntryOperation, IntegrityCheckOperation],
+                    capability: "crc32"),
                 Expectation(ExtractOperation, StrictProfile, ["extract-succeeds", "extract-fails"], [PayloadBytesUnchanged], ["open", ReadEntryOperation, ExtractOperation]),
             ],
             // Stored payload bitflip (ticket #1276): framing and directory stay intact,

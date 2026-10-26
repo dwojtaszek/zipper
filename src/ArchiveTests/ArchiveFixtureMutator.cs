@@ -26,7 +26,8 @@ internal static class ArchiveFixtureMutator
         {
             ArchiveTestMutationKind.CrcLocalMismatch
                 or ArchiveTestMutationKind.CrcCentralMismatch
-                or ArchiveTestMutationKind.CrcBothMismatch => FlipCrc(kind, control, before),
+                or ArchiveTestMutationKind.CrcBothMismatch
+                or ArchiveTestMutationKind.CrcBothMismatchDeflate => FlipCrc(kind, control, before),
             ArchiveTestMutationKind.TruncatePayloadTail => Truncate(
                 kind, "file-data", control.Layout.Entries[^1].DataOffset + 10, control.Layout.Entries.Count - 1,
                 "Truncates the Archive inside the final entry's compressed payload. By construction this also removes every later structure (the remaining payload bytes, the central directory, and the EOCD); the fixture is a tail-truncation case, not an isolated payload corruption.",
@@ -1128,13 +1129,17 @@ internal static class ArchiveFixtureMutator
 
         return Patch(kind, before,
         [
-            kind is ArchiveTestMutationKind.CrcLocalMismatch or ArchiveTestMutationKind.CrcBothMismatch
+            kind is ArchiveTestMutationKind.CrcLocalMismatch
+                or ArchiveTestMutationKind.CrcBothMismatch
+                or ArchiveTestMutationKind.CrcBothMismatchDeflate
                 ? new MutationSpec(
                     ArchiveTestMutationKind.CrcLocalMismatch.ToCaseKey(), "local-header", localCrcOffset,
                     "Flips the low bit of the first entry's CRC-32 in the local header only; the payload and all other structures are unchanged.",
                     entry.Ordinal, 1, 1)
                 : null,
-            kind is ArchiveTestMutationKind.CrcCentralMismatch or ArchiveTestMutationKind.CrcBothMismatch
+            kind is ArchiveTestMutationKind.CrcCentralMismatch
+                or ArchiveTestMutationKind.CrcBothMismatch
+                or ArchiveTestMutationKind.CrcBothMismatchDeflate
                 ? new MutationSpec(
                     ArchiveTestMutationKind.CrcCentralMismatch.ToCaseKey(), "central-header", centralCrcOffset,
                     kind == ArchiveTestMutationKind.CrcCentralMismatch
@@ -1144,12 +1149,16 @@ internal static class ArchiveFixtureMutator
                 : null,
         ], after =>
         {
-            if (kind is ArchiveTestMutationKind.CrcLocalMismatch or ArchiveTestMutationKind.CrcBothMismatch)
+            if (kind is ArchiveTestMutationKind.CrcLocalMismatch
+                or ArchiveTestMutationKind.CrcBothMismatch
+                or ArchiveTestMutationKind.CrcBothMismatchDeflate)
             {
                 after[localCrcOffset] ^= 0x01;
             }
 
-            if (kind is ArchiveTestMutationKind.CrcCentralMismatch or ArchiveTestMutationKind.CrcBothMismatch)
+            if (kind is ArchiveTestMutationKind.CrcCentralMismatch
+                or ArchiveTestMutationKind.CrcBothMismatch
+                or ArchiveTestMutationKind.CrcBothMismatchDeflate)
             {
                 after[centralCrcOffset] ^= 0x01;
             }
@@ -2154,6 +2163,7 @@ internal enum ArchiveTestMutationKind
     CrcLocalMismatch,
     CrcCentralMismatch,
     CrcBothMismatch,
+    CrcBothMismatchDeflate,
     TruncatePayloadTail,
     TruncateCentralTail,
     TruncateEocd,
@@ -2220,6 +2230,7 @@ internal static class ArchiveTestMutationKindExtensions
         ArchiveTestMutationKind.CrcLocalMismatch => "crc-local-mismatch",
         ArchiveTestMutationKind.CrcCentralMismatch => "crc-central-mismatch",
         ArchiveTestMutationKind.CrcBothMismatch => "crc-both-mismatch",
+        ArchiveTestMutationKind.CrcBothMismatchDeflate => "crc-both-mismatch-deflate",
         ArchiveTestMutationKind.TruncatePayloadTail => "truncate-payload-tail",
         ArchiveTestMutationKind.TruncateCentralTail => "truncate-central-tail",
         ArchiveTestMutationKind.TruncateEocd => "truncate-eocd",
