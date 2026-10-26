@@ -1656,6 +1656,8 @@ def verify_undeclared_trailing_data(case, zip_bytes):
     disk, cd_disk, disk_entries, total_entries, cd_size, cd_offset, comment_length = \
         struct.unpack_from("<HHHHIIH", zip_bytes, eocd_offset + 4)
     expected_count = len(case.get("entries", []))
+    if expected_count == 0:
+        raise VerificationError(check, "Stored control must contain at least one entry")
     if (disk, cd_disk) != (0, 0) or disk_entries != total_entries \
             or total_entries != expected_count:
         raise VerificationError(check, "EOCD disk or entry-count fields disagree")
@@ -1691,6 +1693,14 @@ def verify_undeclared_trailing_data(case, zip_bytes):
             raise VerificationError(check, "central-directory entry is missing or truncated")
         name_length, extra_length, entry_comment_length = struct.unpack_from(
             "<HHH", zip_bytes, cursor + 28)
+        central_method = struct.unpack_from("<H", zip_bytes, cursor + 10)[0]
+        local_offset = struct.unpack_from("<I", zip_bytes, cursor + 42)[0]
+        if local_offset + 10 > cd_offset \
+                or zip_bytes[local_offset:local_offset + 4] != b"PK\x03\x04":
+            raise VerificationError(check, "central-directory entry does not point to a local header")
+        local_method = struct.unpack_from("<H", zip_bytes, local_offset + 8)[0]
+        if local_method != 0 or central_method != 0:
+            raise VerificationError(check, "every entry must use Stored method 0 in both headers")
         cursor += ZIP_CENTRAL_HEADER_FIXED_SIZE + name_length + extra_length + entry_comment_length
         if cursor > cd_end:
             raise VerificationError(check, "central-directory entry exceeds the declared span")

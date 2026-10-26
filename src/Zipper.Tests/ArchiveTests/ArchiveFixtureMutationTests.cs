@@ -664,6 +664,17 @@ public class ArchiveFixtureMutationTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void Apply_UndeclaredTrailingData_EmptyControl_ThrowsInvalidOperationException()
+    {
+        var emptyControl = ArchiveFixtureBuilder.BuildControl("valid-empty", 42, CancellationToken.None);
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.UndeclaredTrailingData, emptyControl));
+
+        Assert.Contains("non-empty Stored control", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Apply_UndeclaredTrailingData_AppendsBytesWithoutDeclaringThem()
     {
         const string TrailingData = "zipper-tail-data";
