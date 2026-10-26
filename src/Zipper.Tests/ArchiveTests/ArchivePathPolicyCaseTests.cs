@@ -658,11 +658,12 @@ public class ArchivePathPolicyCaseTests : WorkingDirectoryTestBase
         // differential: every member publishes a safe
         // Fixture ID pair. The #870 EOCD parser differential and the two #878
         // ADLS Gen2 segment-depth cases, the #1280 Zip64 detection differential,
-        // and the #1285 undeclared trailing-data case are also included.
+        // the #1285 undeclared trailing-data case, and the #1286 Zip64 offset-source
+        // case are also included.
         var securityKeys = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.SecuritySuite)
             .Select(c => c.CaseKey)
             .ToList();
-        Assert.Equal(44, securityKeys.Count);
+        Assert.Equal(45, securityKeys.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(securityKeys, 42, Path.Combine(TempDir, "security")),

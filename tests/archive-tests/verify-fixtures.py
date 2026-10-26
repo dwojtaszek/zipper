@@ -118,6 +118,7 @@ STRUCTURAL_INVARIANT_CHECKS = {
     "declared-sizes-are-lies": "mutations",
     "declared-counts-disagree": "mutations",
     "metadata-sources-disagree": "mutations",
+    "central-directory-is-findable": "zip64-eocd-offset-disagreement",
     "comment-bytes-are-pure-data": "zip64-locator-ambiguity",
     "trailing-bytes-are-undeclared": "undeclared-trailing-data",
     "one-member-fails": "mutations",
@@ -470,6 +471,11 @@ class FixtureVerifier:
         # Mutation chain linkage, offset arithmetic, and raw byte comparison.
         mutation_note = verify_mutations(case, zip_bytes, actual_sha)
         checks.append({"check": "mutations", "status": "pass", "detail": mutation_note})
+
+        if case.get("caseKey") == "zip64-eocd-offset-disagreement":
+            zip64_note = verify_zip64_eocd_offset_disagreement(case, zip_bytes)
+            checks.append({"check": "zip64-eocd-offset-disagreement", "status": "pass",
+                           "detail": zip64_note})
 
         if case.get("caseKey") == "trailing-data-undeclared":
             trailing_note = verify_undeclared_trailing_data(case, zip_bytes)
@@ -1641,6 +1647,85 @@ def verify_zip64_locator_ambiguity(case, zip_bytes):
             "fake-zip64-eocd=%d fake-locator=%d" %
             (eocd_offset, comment_offset, comment_length, fake_cd_offset,
              fake_zip64_eocd_offset, fake_locator_offset))
+
+
+def verify_zip64_eocd_offset_disagreement(case, zip_bytes):
+    """Audit the #1286 shared-offset disagreement and prove the classic EOCD
+    still identifies the intact central directory."""
+    import struct
+
+    check = "zip64-eocd-offset-disagreement"
+    if len(zip_bytes) < ZIP_EOCD_FIXED_SIZE + ZIP64_LOCATOR_FIXED_SIZE + ZIP64_EOCD_FIXED_SIZE:
+        raise VerificationError(check, "Archive is too small for the EOCD, Zip64 locator, and Zip64 EOCD")
+
+    eocd_offset = len(zip_bytes) - ZIP_EOCD_FIXED_SIZE
+    if zip_bytes[eocd_offset:eocd_offset + 4] != b"PK\x05\x06":
+        raise VerificationError(check, "length-anchored EOCD signature is missing")
+    (disk, cd_disk, disk_entries, total_entries, cd_size, cd_offset, comment_length) = \
+        struct.unpack_from("<HHHHIIH", zip_bytes, eocd_offset + 4)
+    if (disk, cd_disk, disk_entries, total_entries) != (0, 0, 1, 1):
+        raise VerificationError(check, "regular EOCD must contain real one-entry single-disk values")
+    if cd_size == 0xFFFFFFFF or cd_offset == 0xFFFFFFFF or comment_length != 0:
+        raise VerificationError(check, "regular EOCD must keep non-sentinel values and a zero comment")
+
+    locator_offset = eocd_offset - ZIP64_LOCATOR_FIXED_SIZE
+    if zip_bytes[locator_offset:locator_offset + 4] != b"PK\x06\x07":
+        raise VerificationError(check, "Zip64 locator is not immediately before the EOCD")
+    (locator_signature, locator_disk, zip64_eocd_offset, disk_count) = \
+        struct.unpack_from("<IIQI", zip_bytes, locator_offset)
+    if (locator_signature != 0x07064B50 or locator_disk != 0 or disk_count != 1
+            or zip64_eocd_offset + ZIP64_EOCD_FIXED_SIZE != locator_offset):
+        raise VerificationError(check, "Zip64 locator does not point to the adjacent Zip64 EOCD")
+    if zip_bytes[zip64_eocd_offset:zip64_eocd_offset + 4] != b"PK\x06\x06":
+        raise VerificationError(check, "Zip64 EOCD signature is missing at the locator offset")
+
+    (zip64_signature, zip64_size, version_made_by, version_needed, zip64_disk,
+     zip64_cd_disk, zip64_disk_entries, zip64_total_entries, zip64_cd_size,
+     zip64_cd_offset) = struct.unpack_from("<IQHHIIQQQQ", zip_bytes, zip64_eocd_offset)
+    if (zip64_signature != 0x06064B50 or zip64_size != 44
+            or version_made_by != ZIP64_VERSION or version_needed != ZIP64_VERSION
+            or zip64_disk != 0 or zip64_cd_disk != 0
+            or zip64_disk_entries != disk_entries or zip64_total_entries != total_entries
+            or zip64_cd_size != cd_size):
+        raise VerificationError(check, "Zip64 EOCD fields do not match the regular EOCD values")
+    if zip64_cd_offset != cd_offset + 16:
+        raise VerificationError(check, "Zip64 EOCD central-directory offset must be 16 bytes past the regular EOCD offset")
+    if cd_offset + cd_size != zip64_eocd_offset:
+        raise VerificationError(check, "regular EOCD central-directory span does not end at the Zip64 EOCD")
+    if cd_offset + ZIP_CENTRAL_HEADER_FIXED_SIZE > zip64_eocd_offset \
+            or zip_bytes[cd_offset:cd_offset + 4] != b"PK\x01\x02":
+        raise VerificationError(check, "regular EOCD central-directory offset does not find a central header")
+
+    name_length, extra_length, entry_comment_length = struct.unpack_from(
+        "<HHH", zip_bytes, cd_offset + 28)
+    if cd_offset + ZIP_CENTRAL_HEADER_FIXED_SIZE + name_length + extra_length + entry_comment_length \
+            != zip64_eocd_offset:
+        raise VerificationError(check, "central directory does not contain exactly one complete entry")
+    name_start = cd_offset + ZIP_CENTRAL_HEADER_FIXED_SIZE
+    central_name = zip_bytes[name_start:name_start + name_length]
+    entries = case.get("entries", [])
+    if (len(entries) != 1 or entries[0].get("ordinal") != 0
+            or entries[0].get("centralDirectoryOffset") != cd_offset
+            or entries[0].get("centralNameRaw") != central_name.hex()):
+        raise VerificationError(check, "Expectation File does not identify the central entry at the regular EOCD offset")
+
+    mutations = case.get("mutations") or []
+    mutation_offset = zip64_eocd_offset + 48
+    if (len(mutations) != 1
+            or mutations[0].get("code") != "zip64-eocd-offset-disagreement"
+            or mutations[0].get("structure") != "zip64-eocd"
+            or mutations[0].get("offset") != mutation_offset
+            or mutations[0].get("deletedLength") != 8
+            or mutations[0].get("insertedLength") != 8
+            or mutations[0].get("declaredValue") != "zip64-cd-offset=+16"
+            or mutations[0].get("beforeSize") != len(zip_bytes)
+            or mutations[0].get("afterSize") != len(zip_bytes)
+            or mutations[0].get("beforeHex") != struct.pack("<Q", cd_offset).hex()
+            or mutations[0].get("afterHex") != struct.pack("<Q", zip64_cd_offset).hex()):
+        raise VerificationError(check, "mutation record does not describe the exact Zip64 EOCD offset rewrite")
+
+    return ("regular-cd=%d+%d zip64-cd=%d intact-central-header=true"
+            % (cd_offset, cd_size, zip64_cd_offset))
 
 
 def verify_undeclared_trailing_data(case, zip_bytes):

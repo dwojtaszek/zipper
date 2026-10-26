@@ -168,6 +168,11 @@ public sealed class ArchiveFixturePropertyTests
         var targetCase = ZipperArbitraries.SingleMutationMalformedCases[
             Math.Clamp(input.SingleMutationCaseIndex, 0, ZipperArbitraries.SingleMutationMalformedCases.Count - 1)];
         var controlCase = ArchiveTestCatalog.GetCase(targetCase.ControlCaseKey!);
+        if (targetCase.ControlConstruction is { } controlConstruction)
+        {
+            controlCase = controlCase with { Construction = controlConstruction };
+        }
+
         var control = ArchiveFixtureBuilder.Build(controlCase, input.Seed, CancellationToken.None);
         var mutationKind = targetCase.Mutations![0];
         var mutated = ArchiveFixtureMutator.Apply(mutationKind, control);

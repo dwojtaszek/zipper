@@ -489,6 +489,16 @@ internal static class ArchiveTestSuiteGenerator
                 Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-passes", "integrity-fails", "integrity-unchecked"], [PayloadBytesUnchanged, "declared-counts-disagree"], ["open", ReadEntryOperation, IntegrityCheckOperation]),
                 Expectation(ExtractOperation, StrictProfile, ["extract-succeeds", "extract-fails"], [PayloadBytesUnchanged, "declared-counts-disagree"], ["open", ReadEntryOperation, ExtractOperation]),
             ],
+            // The regular and Zip64 EOCD records disagree on their shared central-
+            // directory offset. Readers that select the truthful regular field can
+            // continue; readers that select the Zip64 field look 16 bytes too late.
+            ArchiveTestMutationKind.Zip64EocdOffsetDisagreement =>
+            [
+                Expectation(ListOperation, StrictProfile, [ListSucceeds, ListFails], ["metadata-sources-disagree", "central-directory-is-findable"], ["open", ListOperation]),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches", "read-entry-fails"], ["metadata-sources-disagree", "central-directory-is-findable"], ["open", ReadEntryOperation]),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-passes", "integrity-fails", "integrity-unchecked"], ["metadata-sources-disagree", "central-directory-is-findable"], ["open", ReadEntryOperation, IntegrityCheckOperation]),
+                Expectation(ExtractOperation, StrictProfile, ["extract-succeeds", "extract-fails"], ["metadata-sources-disagree", "central-directory-is-findable"], ["open", ReadEntryOperation, ExtractOperation]),
+            ],
             // Descriptor, extra-field, and encoding conflicts (ticket #934): one
             // metadata source disagrees while each structure looks plausible and
             // the payload bytes stay intact. CRC lies report through the CRC
