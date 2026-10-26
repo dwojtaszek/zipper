@@ -297,3 +297,11 @@
 - **telemetry**: host=droid mode=branch specialists=5 bundle=5104c
 - **lessons**: Document each affected case's current normalized outcome before describing runtime-upgrade transitions.
 - **suppressions**: none
+
+### 2026-10-26 droid:branch:issue-1285-resume-validation
+
+- **findings**: 0 ACTION, 0 INFO across 7 reviewers (correctness, adversarial, security, testing, maintainability, performance, API contract).
+- **outcome**: clean review. Focused .NET tests (415), replay/golden tests (2), Python verifier tests (150), strict traceability, generated-fixture verification, mutation smoke (3 killed, 0 survived), and format verification passed. Full Archive Test E2E was not run because it would delete the pre-existing `results/archive-test-suites` directory.
+- **telemetry**: host=droid mode=branch specialists=7 bundle=78157c
+- **lessons**: none
+- **suppressions**: none

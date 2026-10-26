@@ -566,6 +566,10 @@ internal static class ArchiveTestCatalog
             controlCaseKey: "valid-signatures-in-comment",
             classification: PolicySensitiveClassification,
             suites: [MalformedSuite, SecuritySuite]),
+        ["trailing-data-undeclared"] = MutatedDefinition(
+            ArchiveTestMutationKind.UndeclaredTrailingData,
+            classification: PolicySensitiveClassification,
+            suites: [MalformedSuite, SecuritySuite]),
         ["invalid-utf8-name"] = MutatedDefinition(ArchiveTestMutationKind.InvalidUtf8Name),
         ["zip64-missing-extra"] = MutatedDefinition(
             ArchiveTestMutationKind.Zip64MissingExtra, controlCaseKey: Zip64ControlCaseKey),

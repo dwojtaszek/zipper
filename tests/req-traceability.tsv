@@ -491,7 +491,7 @@ REQ-208	unit	ArchiveStructureCaseTests.ListSuite_Malformed_IncludesAllStructureC
 REQ-208	unit	ArchiveTestSuiteContractTests.Catalogue_ContainsExactlyTheFrozenCaseKeys	Archive test fixture catalog contains frozen case keys
 REQ-208	unit	ArchiveFixtureBuilderTests.BuildControl_EncodingLocalCentralCodecDivergence_RewritesLocalNameWithCp932	New encoding Case Key carries same logical name as CP932 local and UTF-8 central bytes
 REQ-208	unit	ArchiveTestModuleTests.RunAsync_EncodingSuiteNoSelection_PublishesExpectedCaseKeys	Encoding suite publishes the local/central codec divergence Case Key
-REQ-208	e2e	test-archive-test-suites.sh	Encoding suite publishes four Archive Test Fixture pairs and the full catalog contains 114 Case Keys
+REQ-208	e2e	test-archive-test-suites.sh	Encoding suite publishes four Archive Test Fixture pairs and the full catalog contains 115 Case Keys
 REQ-208	unit	Deflate64LongMatchTests.Catalog_ContainsDeflate64LongMatchControl	Archive test catalog includes Deflate64 long match case key
 REQ-208	unit	ArchiveFixturePropertyTests.ArchiveTestModule_TryApplyAndTryBuild_ShouldAcceptAllCanonicalSuitesAndRejectUnknownSuites	Property: ArchiveTestModule parses CLI suite flags and resolves canonical suite names
 REQ-210	unit	ArchiveFixtureLayoutTests.Read_SingleStoredControl_CapturesExactOffsets	Layout reader parses local/central directory offsets for fixture ID computation
@@ -508,6 +508,9 @@ REQ-212	unit	Deflate64LongMatchTests.Build_OrdinaryDeflateDecoderCannotDecodeStr
 REQ-212	unit	ArchiveFixturePropertyTests.ArchiveTestCaseSemantics_EvaluateReaderOperations_ShouldEnforceFourReaderOperationsIndependently	Property: ArchiveTestCaseSemantics enforces four reader operations and profile monotonicity
 REQ-212	unit	ArchiveTestSuiteGeneratorTests.BuildExpectationFile_DeclaredSizeUndersized_DeclaresBoundedReaderVariance	Undersized declaration expectation contract allows observed reader variance and requires bounded handling
 REQ-212	unit	ArchiveReferenceReaderTests.ReadOperations_DeclaredSizeUndersized_ReturnsUnverifiedBytesAtDeclaredCompressedSizeBoundary	.NET reference reader returns partial unverified bytes and fails integrity checking
+REQ-212	unit	ArchiveTestSuiteGeneratorTests.BuildExpectationFile_UndeclaredTrailingData_DeclaresReaderVarianceAndInvariant	Expectation File allows reader variance while requiring proof that 16 trailing bytes are outside the zero-comment EOCD
+REQ-212	unit	ArchiveReferenceReaderTests.ReadOperations_UndeclaredTrailingData_PinsDotNetReaderOutcomes	.NET reference reader lists, reads, integrity-checks, and extracts the Archive with undeclared trailing bytes
+REQ-212	e2e	test-archive-test-suites.sh	Archive Test E2E runs the independent Python verifier suite and validates generated fixtures
 REQ-213	unit	ArchiveResourceCaseTests.Build_EntriesOneOverCap_ThrowsDescriptively	Archive test fixture 1000-entry budget cap enforcement
 REQ-213	unit	ArchiveResourceCaseTests.Build_PhysicalBytesOneOver_ThrowsDescriptively	Archive test fixture 16 MiB physical size budget cap enforcement
 REQ-213	unit	ArchiveResourceCaseTests.Build_ExpandedBytesOneOver_ThrowsDescriptively	Archive test fixture 32 MiB expanded recipe content budget cap enforcement
@@ -523,6 +526,11 @@ REQ-212	unit	ArchiveTestSuiteGeneratorTests.BuildExpectationFile_EncodingLocalCe
 REQ-218	unit	ArchiveCombinedCaseTests.Build_CombinedCrcAndName_AppliesBothFieldMutationsInOrder	Ordered field mutation composition and hash chain validation
 REQ-218	unit	ArchiveFixtureMutationTests.Apply_StoredPayloadBitflip_ChangesOnlyPayloadByteAtDataOffset	Stored payload bitflip changes one byte at DataOffset while preserving the control content hash and structural declarations
 REQ-218	unit	ArchiveFixtureMutationTests.Apply_DeflatePayloadBitflip_ChangesLiteralByteAndPreservesDeclarations	Deflate payload bitflip changes one stored-block literal byte while preserving decodable output framing, original declarations, and sidecar content hash
+REQ-218	unit	ArchiveFixtureMutationTests.Apply_UndeclaredTrailingData_AppendsBytesWithoutDeclaringThem	Appends 16 ASCII bytes after the EOCD and leaves all prior bytes and the zero comment-length field unchanged
+REQ-218	unit	ArchiveFixtureMutationTests.Apply_UndeclaredTrailingData_EmptyControl_ThrowsInvalidOperationException	Rejects empty controls for the undeclared trailing-data mutation
+REQ-218	unit	ArchiveFixtureMutationTests.Apply_UndeclaredTrailingData_NonStoredControl_ThrowsInvalidOperationException	Rejects non-Stored controls for the undeclared trailing-data mutation
+REQ-218	unit	ArchiveFixtureMutationTests.Apply_UndeclaredTrailingData_ControlWithTrailingBytes_ThrowsInvalidOperationException	Rejects controls that already contain bytes after the EOCD
+REQ-218	unit	ArchiveFixtureMutationTests.Apply_UndeclaredTrailingData_NonzeroCommentLength_ThrowsInvalidOperationException	Rejects controls whose EOCD declares a nonzero comment length
 REQ-218	unit	ArchiveFixtureMutationTests.Apply_VersionLocalCentralMismatch_PinsLocalTwoPointZeroAndCentralFourPointFive	Version-needed disagreement keeps the local 2.0 word and rewrites the central word to Zip64 4.5 in place without moving payload or offsets
 REQ-218	unit	ArchiveFixturePropertyTests.ArchiveFixtureMutator_ApplyMutation_ShouldModifyOnlyTargetedStructureAndPreserveUnmutatedRegions	Property: ArchiveFixtureMutator modifies targeted structure bytes and preserves unmutated regions
 REQ-220	unit	ArchiveTestCodecTests.WireCode_KnownPayloadCodec_MapsHeaderVersionAndName	Archive compression method wire code mappings (store, deflate, deflate64, bzip2)

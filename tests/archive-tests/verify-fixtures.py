@@ -119,6 +119,7 @@ STRUCTURAL_INVARIANT_CHECKS = {
     "declared-counts-disagree": "mutations",
     "metadata-sources-disagree": "mutations",
     "comment-bytes-are-pure-data": "zip64-locator-ambiguity",
+    "trailing-bytes-are-undeclared": "undeclared-trailing-data",
     "one-member-fails": "mutations",
     "one-member-unsupported": "mutations",
     "spanning-declared-single-file": "mutations",
@@ -469,6 +470,11 @@ class FixtureVerifier:
         # Mutation chain linkage, offset arithmetic, and raw byte comparison.
         mutation_note = verify_mutations(case, zip_bytes, actual_sha)
         checks.append({"check": "mutations", "status": "pass", "detail": mutation_note})
+
+        if case.get("caseKey") == "trailing-data-undeclared":
+            trailing_note = verify_undeclared_trailing_data(case, zip_bytes)
+            checks.append({"check": "undeclared-trailing-data", "status": "pass",
+                           "detail": trailing_note})
 
         # Orphan hidden entry (ticket #869): the hidden LFH at offset 0 has no CDH;
         # CD-driven readers list only visibles while a forward LFH scan sees more.
@@ -1635,6 +1641,128 @@ def verify_zip64_locator_ambiguity(case, zip_bytes):
             "fake-zip64-eocd=%d fake-locator=%d" %
             (eocd_offset, comment_offset, comment_length, fake_cd_offset,
              fake_zip64_eocd_offset, fake_locator_offset))
+
+
+def verify_undeclared_trailing_data(case, zip_bytes):
+    """Audit the Stored Archive's EOCD and prove its 16-byte suffix is undeclared."""
+    import struct
+    import zlib
+
+    check = "undeclared-trailing-data"
+    trailing = b"zipper-tail-data"
+    eocd_offset = len(zip_bytes) - len(trailing) - ZIP_EOCD_FIXED_SIZE
+    if eocd_offset < 0 or zip_bytes[eocd_offset:eocd_offset + 4] != b"PK\x05\x06":
+        raise VerificationError(check, "length-anchored EOCD signature is missing")
+
+    disk, cd_disk, disk_entries, total_entries, cd_size, cd_offset, comment_length = \
+        struct.unpack_from("<HHHHIIH", zip_bytes, eocd_offset + 4)
+    expected_count = len(case.get("entries", []))
+    if expected_count == 0:
+        raise VerificationError(check, "Stored control must contain at least one entry")
+    if (disk, cd_disk) != (0, 0) or disk_entries != total_entries \
+            or total_entries != expected_count:
+        raise VerificationError(check, "EOCD disk or entry-count fields disagree")
+    if comment_length != 0:
+        raise VerificationError(check, "EOCD comment length must remain zero")
+    if cd_offset + cd_size != eocd_offset:
+        raise VerificationError(check, "central directory does not end at the EOCD")
+    if zip_bytes[eocd_offset + ZIP_EOCD_FIXED_SIZE:] != trailing:
+        raise VerificationError(check, "the exact 16-byte undeclared suffix is missing")
+
+    mutations = case.get("mutations") or []
+    if len(mutations) != 1:
+        raise VerificationError(check, "expected one trailing-data mutation record")
+    mutation = mutations[0]
+    if (mutation.get("code") != "trailing-data-undeclared"
+            or mutation.get("structure") != "whole-archive"
+            or mutation.get("offset") != eocd_offset + ZIP_EOCD_FIXED_SIZE
+            or mutation.get("deletedLength") != 0
+            or mutation.get("insertedLength") != len(trailing)
+            or mutation.get("beforeSize") != eocd_offset + ZIP_EOCD_FIXED_SIZE
+            or mutation.get("afterSize") != len(zip_bytes)
+            or mutation.get("beforeSha256") != sha256_hex(zip_bytes[:eocd_offset + ZIP_EOCD_FIXED_SIZE])
+            or mutation.get("afterSha256") != sha256_hex(zip_bytes)
+            or mutation.get("afterHex") != trailing.hex()
+            or mutation.get("declaredValue") != "trailing-bytes=16 undeclared=true"):
+        raise VerificationError(check, "mutation record does not describe the exact undeclared suffix")
+
+    cursor = cd_offset
+    cd_end = cd_offset + cd_size
+    entries_by_ordinal = {entry["ordinal"]: entry for entry in case["entries"]}
+    expanded_budget = case["limits"]["expandedBytesBudget"]
+    expanded_bytes = 0
+    for ordinal in range(total_entries):
+        if cursor + ZIP_CENTRAL_HEADER_FIXED_SIZE > cd_end \
+                or zip_bytes[cursor:cursor + 4] != b"PK\x01\x02":
+            raise VerificationError(check, "central-directory entry is missing or truncated")
+        name_length, extra_length, entry_comment_length = struct.unpack_from(
+            "<HHH", zip_bytes, cursor + 28)
+        disk_start = struct.unpack_from("<H", zip_bytes, cursor + 34)[0]
+        if disk_start != 0:
+            raise VerificationError(check, "central-directory entry starts on a nonzero disk")
+        central_name_start = cursor + ZIP_CENTRAL_HEADER_FIXED_SIZE
+        central_name = zip_bytes[central_name_start:central_name_start + name_length]
+        central_method = struct.unpack_from("<H", zip_bytes, cursor + 10)[0]
+        local_offset = struct.unpack_from("<I", zip_bytes, cursor + 42)[0]
+        if local_offset + ZIP_LOCAL_HEADER_FIXED_SIZE > cd_offset \
+                or zip_bytes[local_offset:local_offset + 4] != b"PK\x03\x04":
+            raise VerificationError(check, "central-directory entry does not point to a local header")
+        entry = entries_by_ordinal.get(ordinal)
+        if entry is None:
+            raise VerificationError(check, "Expectation File is missing entry ordinal %d" % ordinal)
+        if entry.get("kind") == "file" and entry.get("payloadCodec") != "stored":
+            raise VerificationError(check, "file entry payloadCodec must be stored")
+        local_method = struct.unpack_from("<H", zip_bytes, local_offset + 8)[0]
+        if local_method != 0 or central_method != 0:
+            raise VerificationError(check, "every entry must use Stored method 0 in both headers")
+        local_flags = struct.unpack_from("<H", zip_bytes, local_offset + 6)[0]
+        central_flags = struct.unpack_from("<H", zip_bytes, cursor + 8)[0]
+        if local_flags != 0 or central_flags != 0:
+            raise VerificationError(check, "Stored entries must not declare general-purpose flags, including encryption")
+        local_name_length = struct.unpack_from("<H", zip_bytes, local_offset + 26)[0]
+        local_name_start = local_offset + ZIP_LOCAL_HEADER_FIXED_SIZE
+        if local_name_start + local_name_length > cd_offset:
+            raise VerificationError(check, "local entry name extends into the central directory")
+        local_name = zip_bytes[local_name_start:local_name_start + local_name_length]
+        if local_name != central_name:
+            raise VerificationError(check, "local and central entry names disagree")
+        local_extra_length = struct.unpack_from("<H", zip_bytes, local_offset + 28)[0]
+        local_data_offset = local_name_start + local_name_length + local_extra_length
+        local_crc = struct.unpack_from("<I", zip_bytes, local_offset + 14)[0]
+        local_compressed_size, local_uncompressed_size = struct.unpack_from(
+            "<II", zip_bytes, local_offset + 18)
+        central_crc = struct.unpack_from("<I", zip_bytes, cursor + 16)[0]
+        central_compressed_size, central_uncompressed_size = struct.unpack_from(
+            "<II", zip_bytes, cursor + 20)
+        if (local_crc != central_crc
+                or (local_compressed_size, local_uncompressed_size)
+                != (central_compressed_size, central_uncompressed_size)
+                or central_compressed_size != central_uncompressed_size):
+            raise VerificationError(check, "Stored local and central CRC or size declarations disagree")
+        if (local_data_offset > cd_offset
+                or central_compressed_size > cd_offset - local_data_offset):
+            raise VerificationError(check, "local entry data extends into the central directory")
+        if central_uncompressed_size > expanded_budget - expanded_bytes:
+            raise VerificationError(check, "Stored payloads exceed the expanded-bytes budget")
+        expanded_bytes += central_uncompressed_size
+        payload_end = local_data_offset + central_compressed_size
+        payload = zip_bytes[local_data_offset:payload_end]
+        if zlib.crc32(payload) & 0xFFFFFFFF != central_crc:
+            raise VerificationError(check, "Stored entry CRC does not match its payload")
+        if (local_name.hex() != entry.get("localNameRaw")
+                or central_name.hex() != entry.get("centralNameRaw")):
+            raise VerificationError(check, "entry names do not match the Expectation File")
+        if (entry.get("contentSize") is not None and len(payload) != entry["contentSize"]
+                or entry.get("kind") == "file" and entry.get("contentSha256") is not None
+                and sha256_hex(payload) != entry["contentSha256"]):
+            raise VerificationError(check, "Stored payload does not match its Expectation File")
+        cursor += ZIP_CENTRAL_HEADER_FIXED_SIZE + name_length + extra_length + entry_comment_length
+        if cursor > cd_end:
+            raise VerificationError(check, "central-directory entry exceeds the declared span")
+    if cursor != cd_end:
+        raise VerificationError(check, "central-directory span does not match its entry records")
+
+    return "eocd=%d suffix=%d-bytes comment-length=0" % (eocd_offset, len(trailing))
 
 
 def verify_adls_segments(case):

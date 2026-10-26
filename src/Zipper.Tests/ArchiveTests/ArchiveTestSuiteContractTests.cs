@@ -66,9 +66,9 @@ public class ArchiveTestSuiteContractTests
         "bzip2-high-ratio-bounded",
     ];
 
-    /// <summary>The malformed parser-differential cases (tickets #869, #870, and #1280) housed in security.</summary>
+    /// <summary>The malformed parser-differential cases (tickets #869, #870, #1280, and #1285) housed in security.</summary>
     private static readonly string[] ParserDifferentialSecurityCaseKeys =
-        ["orphan-local-header", "eocdr-ambiguity-comment", "zip64-locator-ambiguity"];
+        ["orphan-local-header", "eocdr-ambiguity-comment", "zip64-locator-ambiguity", "trailing-data-undeclared"];
 
     /// <summary>The hostile filename-byte cases (ticket #876) housed in security.</summary>
     private static readonly string[] HostileNameSecurityCaseKeys = ["filename-null-byte", "filename-c0-control"];
@@ -238,6 +238,7 @@ public class ArchiveTestSuiteContractTests
             .Append("eocdr-ambiguity-comment")
             .Append("zip64-locator-ambiguity")
             .Append("zip64-extra-without-sentinels")
+            .Append("trailing-data-undeclared")
             .Order(StringComparer.Ordinal);
         Assert.Equal(expected, malformed);
     }
@@ -271,8 +272,9 @@ public class ArchiveTestSuiteContractTests
         // +2 for the #935 mixed one-bad-member cases, +1 for #888, +1 for #870,
         // +2 for #878, +3 for the #887 legacy-codec encoding controls, +1 for #1276,
         // +2 for #1277, +1 for #1279, +1 for #1280, +1 for #1281, +1 for #1282,
-        // +1 for #1283 encoding codec divergence): any case dropped from the catalog
+        // +1 for #1283 encoding codec divergence, +1 for #1285 undeclared trailing
+        // data): any case dropped from the catalog
         // or unlisted from every suite fails here.
-        Assert.Equal(114, AllKeys().Count);
+        Assert.Equal(115, AllKeys().Count);
     }
 }

@@ -12,7 +12,8 @@ namespace Zipper.Tests;
 /// extract outcomes are normalized (never exception wording) and checked against the
 /// Expectation File's allowed outcomes, mirroring the independent verifier. Valid
 /// controls are the required positive controls and are extracted into a fresh owned
-/// directory; policy-sensitive and malformed fixtures are never extracted here.
+/// directory. Other malformed and policy-sensitive fixtures are not extracted here;
+/// trailing-data-undeclared is safe because it reuses the valid Stored control's paths.
 /// Platform-marked expectations do not apply on this host and are recorded as
 /// not-applicable, never as passing verifications (REQ-212).
 /// </summary>
@@ -341,6 +342,22 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
         Assert.Equal("list-succeeds", NormalizeList(artifact.ArchiveBytes, testCase));
         Assert.Equal("read-entry-content-matches", NormalizeReadEntry(artifact.ArchiveBytes, testCase));
         Assert.Equal("integrity-passes", NormalizeIntegrityCheck(artifact.ArchiveBytes, testCase));
+    }
+
+    [Fact]
+    public void ReadOperations_UndeclaredTrailingData_PinsDotNetReaderOutcomes()
+    {
+        var definition = ArchiveTestCatalog.GetCase("trailing-data-undeclared");
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+        var testCase = ArchiveTestSuiteGenerator.BuildExpectationFile(artifact, definition, 42);
+
+        Assert.Equal("list-succeeds", NormalizeList(artifact.ArchiveBytes, testCase));
+        Assert.Equal("read-entry-content-matches", NormalizeReadEntry(artifact.ArchiveBytes, testCase));
+        Assert.Equal("integrity-passes", NormalizeIntegrityCheck(artifact.ArchiveBytes, testCase));
+
+        var extractDirectory = Path.Combine(TempDir, "trailing-data-extract");
+        Directory.CreateDirectory(extractDirectory);
+        Assert.Equal("extract-succeeds", NormalizeExtract(artifact.ArchiveBytes, testCase, extractDirectory));
     }
 
     [Theory]

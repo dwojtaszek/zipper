@@ -84,6 +84,10 @@ To generate the policy-sensitive `zip64-extra-without-sentinels` Archive Test Fi
 ```bash
 zipper --archive-test-suite malformed --archive-test-cases zip64-extra-without-sentinels --seed 42 --output-path ./zip64-extra-conflict
 ```
+To generate the policy-sensitive `trailing-data-undeclared` Archive Test Fixture, which appends 16 bytes after a zero-comment EOCD:
+```bash
+zipper --archive-test-suite malformed --archive-test-cases trailing-data-undeclared --seed 42 --output-path ./trailing-data
+```
 To generate the policy-sensitive `encoding-local-central-codec-divergence` Archive Test Fixture, where the same logical name uses CP932 in the local header and UTF-8 in the central header:
 ```bash
 zipper --archive-test-suite encoding --archive-test-cases encoding-local-central-codec-divergence --seed 42 --output-path ./encoding-divergence
