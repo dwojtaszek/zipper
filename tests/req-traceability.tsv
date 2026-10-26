@@ -489,6 +489,9 @@ REQ-226	unit	ChaosAndComparisonPropertyTests.ProductionMetadataBudget_SanitizeAn
 REQ-208	unit	ArchiveCompatibilityCaseTests.Build_ValidZip64Small_RoundTripsThroughTwoImplementations	Compatibility suite Zip64 case selection and round-trip verification
 REQ-208	unit	ArchiveStructureCaseTests.ListSuite_Malformed_IncludesAllStructureCases	Malformed suite includes stored-payload-bitflip and excludes the frozen smoke suite
 REQ-208	unit	ArchiveTestSuiteContractTests.Catalogue_ContainsExactlyTheFrozenCaseKeys	Archive test fixture catalog contains frozen case keys
+REQ-208	unit	ArchiveFixtureBuilderTests.BuildControl_EncodingLocalCentralCodecDivergence_RewritesLocalNameWithCp932	New encoding Case Key carries same logical name as CP932 local and UTF-8 central bytes
+REQ-208	unit	ArchiveTestModuleTests.RunAsync_EncodingSuiteNoSelection_PublishesExpectedCaseKeys	Encoding suite publishes the local/central codec divergence Case Key
+REQ-208	e2e	test-archive-test-suites.sh	Encoding suite publishes four Archive Test Fixture pairs and the full catalog contains 114 Case Keys
 REQ-208	unit	Deflate64LongMatchTests.Catalog_ContainsDeflate64LongMatchControl	Archive test catalog includes Deflate64 long match case key
 REQ-208	unit	ArchiveFixturePropertyTests.ArchiveTestModule_TryApplyAndTryBuild_ShouldAcceptAllCanonicalSuitesAndRejectUnknownSuites	Property: ArchiveTestModule parses CLI suite flags and resolves canonical suite names
 REQ-210	unit	ArchiveFixtureLayoutTests.Read_SingleStoredControl_CapturesExactOffsets	Layout reader parses local/central directory offsets for fixture ID computation
@@ -515,6 +518,8 @@ REQ-217	unit	ArchiveTestCodecTests.WireCode_KnownPayloadCodec_MapsHeaderVersionA
 REQ-217	unit	ArchiveTestJsonTests.Serialize_ValidCase_RoundTripsThroughBytes	Expectation File JSON serialization round-trips through draft-07 schema
 REQ-217	unit	ArchiveFixturePropertyTests.ArchiveFixtureBuilder_Build_ShouldRoundTripMethod8StoredBlockStream	Property: method-8 stored-block DEFLATE serialization validates LEN/NLEN and decodes to the recipe payload across empty and varied small inputs
 REQ-217	unit	ArchiveFixturePropertyTests.ArchiveTestCaseSemantics_EvaluateReaderOperations_ShouldEnforceFourReaderOperationsIndependently	Property: Expectation File schema and semantics validate reader operation expectations
+REQ-217	unit	ArchiveFixturePropertyTests.ArchiveFixtureLayout_Read_ShouldPreserveCodecDivergenceWithoutShiftingOffsets	Property: divergent raw header names remain recorded while the equal-length construction preserves offsets
+REQ-212	unit	ArchiveTestSuiteGeneratorTests.BuildExpectationFile_EncodingLocalCentralCodecDivergence_DeclaresPolicyAndContainment	Expectation File declares policy-sensitive reader outcomes and extraction containment invariants
 REQ-218	unit	ArchiveCombinedCaseTests.Build_CombinedCrcAndName_AppliesBothFieldMutationsInOrder	Ordered field mutation composition and hash chain validation
 REQ-218	unit	ArchiveFixtureMutationTests.Apply_StoredPayloadBitflip_ChangesOnlyPayloadByteAtDataOffset	Stored payload bitflip changes one byte at DataOffset while preserving the control content hash and structural declarations
 REQ-218	unit	ArchiveFixtureMutationTests.Apply_DeflatePayloadBitflip_ChangesLiteralByteAndPreservesDeclarations	Deflate payload bitflip changes one stored-block literal byte while preserving decodable output framing, original declarations, and sidecar content hash

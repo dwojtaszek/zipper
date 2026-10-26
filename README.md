@@ -84,6 +84,10 @@ To generate the policy-sensitive `zip64-extra-without-sentinels` Archive Test Fi
 ```bash
 zipper --archive-test-suite malformed --archive-test-cases zip64-extra-without-sentinels --seed 42 --output-path ./zip64-extra-conflict
 ```
+To generate the policy-sensitive `encoding-local-central-codec-divergence` Archive Test Fixture, where the same logical name uses CP932 in the local header and UTF-8 in the central header:
+```bash
+zipper --archive-test-suite encoding --archive-test-cases encoding-local-central-codec-divergence --seed 42 --output-path ./encoding-divergence
+```
 
 #### 7. Choose the Archive compression method
 `--compression` sets the ZIP compression method for every Archive the run produces (Standard mode, `--include-load-file`, and `--production-zip`) and defaults to `deflate`:
@@ -176,7 +180,7 @@ All command-line flags recognized by Zipper:
 | `--hash-mode` | none | `actual`, `simulated`, `none` | Document hash computation mode |
 | `--hash-algorithms` | `md5` | `md5`, `sha1`, `sha256` | Comma-separated hash algorithms |
 | `--benchmark` | `false` | flag | Run performance benchmark suite and exit |
-| `--archive-test-suite` | none | `smoke`, `compatibility`, `malformed`, `security`, `encoding`, `all` | Publish an Archive Test Fixture suite (closed flag set: requires `--output-path` pointing to a new directory; accepts only `--archive-test-suite`, `--archive-test-cases`, `--seed`, `--output-path`; see [Archive Test Suites](docs/archive-test-suites.md)) |
+| `--archive-test-suite` | none | `smoke`, `compatibility`, `malformed`, `security`, `encoding`, `all` | Publish an Archive Test Fixture suite (the `encoding` suite includes local/central codec divergence; closed flag set: requires `--output-path` pointing to a new directory; accepts only `--archive-test-suite`, `--archive-test-cases`, `--seed`, `--output-path`; see [Archive Test Suites](docs/archive-test-suites.md)) |
 | `--archive-test-cases` | none | comma-separated Case Keys | Filter the suite to the named cases (closed flag set; requires `--archive-test-suite`) |
 | `--version` | `false` | flag | Print full embedded version string and exit |
 

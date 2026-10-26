@@ -1010,6 +1010,46 @@ class EncodingLocalCentralCodecDivergenceTests(unittest.TestCase):
 
         self.assertEqual("encoding-codec-divergence", caught.exception.check)
 
+    def test_central_utf8_flag_is_required(self):
+        zip_bytes = bytearray(self.make_zip())
+        import struct
+        cd_offset = struct.unpack_from("<I", zip_bytes, len(zip_bytes) - 22 + 16)[0]
+        central_flags = struct.unpack_from("<H", zip_bytes, cd_offset + 8)[0]
+        struct.pack_into("<H", zip_bytes, cd_offset + 8, central_flags & ~0x0800)
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_encoding_codec_divergence(
+                self.make_case(), bytes(zip_bytes))
+
+        self.assertEqual("encoding-codec-divergence", caught.exception.check)
+        self.assertIn("central bit 11", str(caught.exception))
+
+    def test_sidecar_names_must_match_the_header_codecs(self):
+        for field, wrong_value in (
+                ("localNameRaw", "61622e747874"),
+                ("centralNameRaw", "61622e747874")):
+            with self.subTest(field=field):
+                case = self.make_case()
+                case["entries"][0][field] = wrong_value
+
+                with self.assertRaises(vf.VerificationError) as caught:
+                    vf.verify_encoding_codec_divergence(
+                        case, self.make_zip())
+
+                self.assertEqual("encoding-codec-divergence", caught.exception.check)
+                self.assertIn("sidecar raw hex", str(caught.exception))
+
+    def test_sidecar_readable_name_must_match_decoded_names(self):
+        case = self.make_case()
+        case["entries"][0]["readableName"] = "ab.txt"
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_encoding_codec_divergence(
+                case, self.make_zip())
+
+        self.assertEqual("encoding-codec-divergence", caught.exception.check)
+        self.assertIn("readableName", str(caught.exception))
+
 
 class PositiveControlTests(TempDirTest):
     def test_committed_valid_empty_vector_passes(self):

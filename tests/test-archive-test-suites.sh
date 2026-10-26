@@ -253,19 +253,19 @@ else
   check 1 "independent verifier must pass the malformed selection"
 fi
 
-# Encoding suite (ticket #887): the three legacy-codec 0x5C trail-byte
-# controls, verified by the named CP932/Big5/GBK consumer oracle.
+# Encoding suite (tickets #887/#1283): three legacy-codec 0x5C trail-byte
+# controls plus local/central codec divergence, verified by named-codec oracles.
 ENCODING_OUT="$TEST_OUTPUT_DIR/encoding"
 zipper --archive-test-suite encoding --seed 42 --output-path "$ENCODING_OUT"
 encoding_zips=$(find "$ENCODING_OUT" -maxdepth 1 -name '*.zip' | wc -l)
 encoding_jsons=$(find "$ENCODING_OUT" -maxdepth 1 -name '*.json' | wc -l)
-assert_eq "$encoding_zips" 3 "encoding suite published 3 archives"
-assert_eq "$encoding_jsons" 3 "encoding suite published 3 sidecars"
+assert_eq "$encoding_zips" 4 "encoding suite published 4 archives"
+assert_eq "$encoding_jsons" 4 "encoding suite published 4 sidecars"
 if python3 tests/archive-tests/verify-fixtures.py "$ENCODING_OUT" \
      --report "$TEST_OUTPUT_DIR/encoding-verification.json" >/dev/null 2>&1; then
-  check 0 "encoding suite fixtures verified by the named-codec consumer"
+  check 0 "encoding suite fixtures verified by the named-codec consumers"
 else
-  check 1 "encoding suite fixtures must verify (named CP932/Big5/GBK consumer)"
+  check 1 "encoding suite fixtures must verify (CP932/Big5/GBK and CP932/UTF-8)"
 fi
 
 ALL_OUT="$TEST_OUTPUT_DIR/all"
