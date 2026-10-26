@@ -219,6 +219,7 @@ internal sealed record ArchiveFixtureLayout(
 
         cursor = checked(start + 46 + nameLength + extraLength + commentLength);
 
+        var nameHex = Convert.ToHexStringLower(nameBytes);
         return new ArchiveFixtureEntryLayout(
             Ordinal: ordinal,
             LocalHeaderOffset: localHeaderOffset,
@@ -236,8 +237,8 @@ internal sealed record ArchiveFixtureLayout(
             HasDataDescriptor: false,
             DataDescriptorOffset: 0,
             Name: Encoding.UTF8.GetString(nameBytes),
-            NameHex: Convert.ToHexStringLower(nameBytes),
-            LocalNameHex: Convert.ToHexStringLower(nameBytes));
+            NameHex: nameHex,
+            LocalNameHex: nameHex);
     }
 
     private static ArchiveFixtureEntryLayout AttachLocalHeader(

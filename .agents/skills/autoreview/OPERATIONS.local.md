@@ -281,3 +281,11 @@
 - **telemetry**: host=droid mode=branch specialists=5 bundle=10352c
 - **lessons**: Unicode Path CRC tests should cover local and central names independently when a fixture allows header-name divergence.
 - **suppressions**: none
+
+### 2026-10-26 droid:branch:1283-resume-validation
+
+- **findings**: 1 INFO (duplicate central-name hex conversion); 0 ACTION; no findings after the fix review.
+- **outcome**: reused one hex conversion for both initial layout fields. All 3,468 .NET tests, 126 verifier tests, 114 generated fixtures, formatting, and mutation smoke passed.
+- **telemetry**: host=droid mode=branch specialists=8 bundle=68066c
+- **lessons**: none
+- **suppressions**: none
