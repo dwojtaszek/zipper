@@ -433,6 +433,33 @@ public class ArchiveFixtureMutationTests : WorkingDirectoryTestBase
         });
     }
 
+    [Fact]
+    public void Build_CrcBothMismatchDeflate_FlipsOnlyBothHeaderCrcWords()
+    {
+        var definition = ArchiveTestCatalog.GetCase("crc-both-mismatch-deflate");
+        var control = ArchiveFixtureBuilder.BuildControl("valid-deflate", 42, CancellationToken.None);
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+        var entry = control.Layout.Entries[0];
+        var localCrcOffset = entry.LocalHeaderOffset + 14;
+        var centralCrcOffset = entry.CentralDirectoryOffset + 16;
+
+        Assert.Equal("valid-deflate", definition.ControlCaseKey);
+        Assert.Equal((ushort)8, BinaryPrimitives.ReadUInt16LittleEndian(
+            control.ArchiveBytes.AsSpan((int)entry.LocalHeaderOffset + 8, 2)));
+        Assert.Equal((ushort)8, BinaryPrimitives.ReadUInt16LittleEndian(
+            control.ArchiveBytes.AsSpan((int)entry.CentralDirectoryOffset + 10, 2)));
+        Assert.Equal(["crc-local-mismatch", "crc-central-mismatch"], artifact.Mutations.Select(mutation => mutation.Code));
+        Assert.Equal(localCrcOffset, artifact.Mutations[0].Offset);
+        Assert.Equal(centralCrcOffset, artifact.Mutations[1].Offset);
+        Assert.Equal(2, CountDifferingBytes(control.ArchiveBytes, artifact.ArchiveBytes));
+        Assert.Equal(control.ArchiveBytes[(int)localCrcOffset] ^ 0x01, artifact.ArchiveBytes[(int)localCrcOffset]);
+        Assert.Equal(control.ArchiveBytes[(int)centralCrcOffset] ^ 0x01, artifact.ArchiveBytes[(int)centralCrcOffset]);
+        Assert.True(
+            artifact.ArchiveBytes.AsSpan((int)localCrcOffset, 4)
+                .SequenceEqual(artifact.ArchiveBytes.AsSpan((int)centralCrcOffset, 4)),
+            "the local and central headers must declare the same flipped CRC-32");
+    }
+
     [Theory]
     [InlineData((int)ArchiveTestMutationKind.TruncatePayloadTail, "truncate-payload-tail", "file-data")]
     [InlineData((int)ArchiveTestMutationKind.TruncateCentralTail, "truncate-central-tail", "central-header")]

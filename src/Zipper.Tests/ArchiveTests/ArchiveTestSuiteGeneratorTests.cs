@@ -29,6 +29,26 @@ public class ArchiveTestSuiteGeneratorTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void BuildExpectationFile_CrcBothMismatchDeflate_AllowsInflateTimeCrcRejection()
+    {
+        var definition = ArchiveTestCatalog.GetCase("crc-both-mismatch-deflate");
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+
+        var testCase = ArchiveTestSuiteGenerator.BuildExpectationFile(artifact, definition);
+        var readEntry = Assert.Single(testCase.Expectations, expectation => expectation.Operation == "read-entry");
+        var integrity = Assert.Single(testCase.Expectations, expectation => expectation.Operation == "integrity-check");
+
+        Assert.Equal("valid-deflate", definition.ControlCaseKey);
+        Assert.Equal(["read-entry-content-matches", "read-entry-fails"], readEntry.AllowedOutcomes);
+        Assert.Contains("read-entry", readEntry.FailureStages!);
+        Assert.Equal("strict-integrity-v1", integrity.Profile);
+        Assert.Equal(
+            ["crc-mismatch-rejected", "crc-mismatch-unchecked", "integrity-fails"],
+            integrity.AllowedOutcomes);
+        Assert.Equal("crc32", integrity.Capability);
+    }
+
+    [Fact]
     public void BuildExpectationFile_DeflatePayloadBitflip_DeclaresDeflateIntegrityProfile()
     {
         var definition = ArchiveTestCatalog.GetCase("deflate-payload-bitflip");

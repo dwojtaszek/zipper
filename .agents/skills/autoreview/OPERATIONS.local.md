@@ -305,3 +305,11 @@
 - **telemetry**: host=droid mode=branch specialists=7 bundle=78157c
 - **lessons**: none
 - **suppressions**: none
+
+### 2026-10-26 droid:branch:issue-1289
+
+- **findings**: 0 ACTION, 0 INFO across 5 reviewers (correctness, adversarial, testing, maintainability, performance).
+- **outcome**: clean review. Full solution tests, format, 118-case Archive Test E2E, independent verification, 7-Zip, offline verification, and mutation smoke passed.
+- **telemetry**: host=droid mode=branch specialists=5 bundle=31857c
+- **lessons**: none
+- **suppressions**: none

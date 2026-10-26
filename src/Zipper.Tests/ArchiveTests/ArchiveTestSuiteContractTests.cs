@@ -136,6 +136,18 @@ public class ArchiveTestSuiteContractTests
         Assert.Equal(2, smoke.Count(c => c.Classification == "malformed"));
     }
 
+    [Fact]
+    public void Catalogue_CrcBothMismatchDeflate_UsesDeflateControlAndStaysOutOfSmoke()
+    {
+        var definition = ArchiveTestCatalog.GetCase("crc-both-mismatch-deflate");
+
+        Assert.Equal("malformed", definition.Classification);
+        Assert.Equal([ArchiveTestCatalog.MalformedSuite], definition.Suites);
+        Assert.Equal("valid-deflate", definition.ControlCaseKey);
+        Assert.Equal([ArchiveTestMutationKind.CrcBothMismatchDeflate], definition.Mutations);
+        Assert.DoesNotContain(definition.CaseKey, SuiteKeys(ArchiveTestCatalog.SmokeSuite));
+    }
+
     // ---- security: policy, collision, unsupported-feature, bounded resource ----
 
     [Fact]
@@ -294,9 +306,10 @@ public class ArchiveTestSuiteContractTests
         // +2 for #878, +3 for the #887 legacy-codec encoding controls, +1 for #1276,
         // +2 for #1277, +1 for #1279, +1 for #1280, +1 for #1281, +1 for #1282,
         // +1 for #1283 encoding codec divergence, +1 for #1285 undeclared trailing,
-        // +1 for #1286 Zip64 EOCD offset disagreement, +1 for #1288 extra-field truncation
+        // +1 for #1286 Zip64 EOCD offset disagreement, +1 for #1288 extra-field truncation,
+        // +1 for #1289 the DEFLATE-control CRC mismatch
         // data): any case dropped from the catalog
         // or unlisted from every suite fails here.
-        Assert.Equal(117, AllKeys().Count);
+        Assert.Equal(118, AllKeys().Count);
     }
 }

@@ -72,6 +72,10 @@ To generate the malformed `deflate-payload-bitflip` Archive Test Fixture, which 
 ```bash
 zipper --archive-test-suite malformed --archive-test-cases deflate-payload-bitflip --seed 42 --output-path ./deflate-payload-corruption
 ```
+To generate the malformed `crc-both-mismatch-deflate` Archive Test Fixture, which flips both CRC-32 header values on a Deflate Archive without changing its payload or sizes:
+```bash
+zipper --archive-test-suite malformed --archive-test-cases crc-both-mismatch-deflate --seed 42 --output-path ./deflate-crc-mismatch
+```
 To generate the malformed `declared-size-undersized` Archive Test Fixture, which declares both sizes 16 bytes below the intact DEFLATE payload in both headers:
 ```bash
 zipper --archive-test-suite malformed --archive-test-cases declared-size-undersized --seed 42 --output-path ./declared-size-undersized

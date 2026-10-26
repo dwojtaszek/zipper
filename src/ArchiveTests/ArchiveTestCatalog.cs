@@ -444,6 +444,8 @@ internal static class ArchiveTestCatalog
         // smoke suite alongside the healthy controls while staying malformed.
         ["crc-both-mismatch"] = MutatedDefinition(
             ArchiveTestMutationKind.CrcBothMismatch, suites: SmokeMalformedSuites),
+        ["crc-both-mismatch-deflate"] = MutatedDefinition(
+            ArchiveTestMutationKind.CrcBothMismatchDeflate, controlCaseKey: DeflateControlCaseKey),
         ["stored-payload-bitflip"] = MutatedDefinition(
             ArchiveTestMutationKind.StoredPayloadBitflip, adapterChecks: SevenZipTestFailure),
         ["deflate-payload-bitflip"] = MutatedDefinition(
