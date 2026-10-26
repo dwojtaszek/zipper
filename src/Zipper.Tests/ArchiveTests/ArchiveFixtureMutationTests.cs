@@ -532,9 +532,12 @@ public class ArchiveFixtureMutationTests : WorkingDirectoryTestBase
     }
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void Apply_Zip64EocdOffsetDisagreement_RejectsControlWhenEitherOffsetIsWrong(bool regularEocdOffset)
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void Apply_Zip64EocdOffsetDisagreement_RejectsControlWhenEitherOffsetIsWrong(
+        bool regularEocdOffsetWrong,
+        bool zip64EocdOffsetWrong)
     {
         var definition = ArchiveTestCatalog.GetCase("zip64-eocd-offset-disagreement");
         var controlConstruction = definition.ControlConstruction
@@ -547,13 +550,14 @@ public class ArchiveFixtureMutationTests : WorkingDirectoryTestBase
         var zip64EocdOffset = checked((int)BinaryPrimitives.ReadUInt64LittleEndian(
             control.ArchiveBytes.AsSpan((int)control.Layout.EocdOffset - 20 + 8, 8)));
         var malformedControlBytes = control.ArchiveBytes.ToArray();
-        if (regularEocdOffset)
+        if (regularEocdOffsetWrong)
         {
             BinaryPrimitives.WriteUInt32LittleEndian(
                 malformedControlBytes.AsSpan((int)control.Layout.EocdOffset + 16, 4),
                 checked((uint)control.Layout.CentralDirectoryOffset + 1));
         }
-        else
+
+        if (zip64EocdOffsetWrong)
         {
             BinaryPrimitives.WriteUInt64LittleEndian(
                 malformedControlBytes.AsSpan(zip64EocdOffset + 48, 8),
