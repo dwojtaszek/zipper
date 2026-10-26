@@ -12,7 +12,8 @@ namespace Zipper.Tests;
 /// extract outcomes are normalized (never exception wording) and checked against the
 /// Expectation File's allowed outcomes, mirroring the independent verifier. Valid
 /// controls are the required positive controls and are extracted into a fresh owned
-/// directory; policy-sensitive and malformed fixtures are never extracted here.
+/// directory. Other malformed and policy-sensitive fixtures are not extracted here;
+/// trailing-data-undeclared is safe because it reuses the valid Stored control's paths.
 /// Platform-marked expectations do not apply on this host and are recorded as
 /// not-applicable, never as passing verifications (REQ-212).
 /// </summary>
