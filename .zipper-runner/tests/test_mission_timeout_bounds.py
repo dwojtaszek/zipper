@@ -43,9 +43,11 @@ sys.path.insert(0, str(RUNNER_BASE))
 # Agents that emit nothing until they exit: the bound is the only hang guard.
 SILENT_AGENTS = ("opencode", "hermes", "codex", "claude")
 SILENT_HANG_SECONDS = 900
-# Agents that stop themselves (agy) or stream progress (droid): a wall-clock cut
-# would truncate work that is actually happening.
-LIVE_AGENTS = ("agy", "droid")
+# Agents that stop themselves: a wall-clock cut would truncate work that is
+# actually happening. droid is not here -- it streams progress and commits, so it
+# is bounded by silence instead, with a separate generous ceiling. See
+# test_droid_liveness.py.
+LIVE_AGENTS = ("agy",)
 LIVE_AGENT_SECONDS = 2700
 
 
@@ -84,7 +86,7 @@ class MissionBoundTests(unittest.TestCase):
                     f"{name} emits nothing until it exits; a long bound is pure waste")
 
     def test_liveAgents_shouldKeepTheLongerBound(self):
-        """agy stops itself and droid streams progress; cutting either truncates real work."""
+        """agy stops itself; cutting it truncates real work."""
         for name in LIVE_AGENTS:
             with self.subTest(plugin=name):
                 self.assertEqual(
