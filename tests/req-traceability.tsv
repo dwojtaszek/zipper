@@ -518,6 +518,7 @@ REQ-212	e2e	tests/archive-tests/test_verify_fixtures.py:UndeclaredTrailingDataTe
 REQ-212	e2e	tests/archive-tests/test_verify_fixtures.py:UndeclaredTrailingDataTests.test_suffix_must_be_exactly_sixteen_bytes_after_eocd	Independent verifier length-anchors the EOCD before the exact 16-byte suffix
 REQ-212	e2e	tests/archive-tests/test_verify_fixtures.py:UndeclaredTrailingDataTests.test_suffix_bytes_must_match_expected_ascii	Independent verifier rejects altered bytes in the fixed trailing suffix
 REQ-212	e2e	tests/archive-tests/test_verify_fixtures.py:UndeclaredTrailingDataTests.test_mutation_record_must_describe_undeclared_suffix	Independent verifier rejects sidecar mutation metadata that misdeclares the trailing suffix
+REQ-212	e2e	tests/archive-tests/test_verify_fixtures.py:UndeclaredTrailingDataTests.test_exactly_one_mutation_record_is_required	Independent verifier rejects missing or duplicate undeclared-trailing-data mutation records
 REQ-212	e2e	tests/archive-tests/test_verify_fixtures.py:UndeclaredTrailingDataTests.test_central_directory_must_end_at_eocd	Independent verifier rejects a central-directory span that does not end at the EOCD
 REQ-213	unit	ArchiveResourceCaseTests.Build_EntriesOneOverCap_ThrowsDescriptively	Archive test fixture 1000-entry budget cap enforcement
 REQ-213	unit	ArchiveResourceCaseTests.Build_PhysicalBytesOneOver_ThrowsDescriptively	Archive test fixture 16 MiB physical size budget cap enforcement

@@ -940,6 +940,20 @@ class UndeclaredTrailingDataTests(TempDirTest):
                 self.assertEqual("undeclared-trailing-data", caught.exception.check)
                 self.assertIn("mutation record", str(caught.exception))
 
+    def test_exactly_one_mutation_record_is_required(self):
+        case, archive, _ = self.make_case()
+
+        for mutations in ([], [case["mutations"][0], case["mutations"][0]]):
+            with self.subTest(mutation_count=len(mutations)):
+                tampered_case, archive, _ = self.make_case()
+                tampered_case["mutations"] = mutations
+
+                with self.assertRaises(vf.VerificationError) as caught:
+                    vf.verify_undeclared_trailing_data(tampered_case, archive)
+
+                self.assertEqual("undeclared-trailing-data", caught.exception.check)
+                self.assertIn("one trailing-data mutation record", str(caught.exception))
+
     def test_central_directory_must_end_at_eocd(self):
         case, archive, eocd_offset = self.make_case()
         tampered = bytearray(archive)
