@@ -226,6 +226,34 @@ public class ArchiveFixtureMutationTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void Apply_CentralExtraLengthOverrun_WhenDeclaredLengthExactlyFitsToEof_RejectsMutation()
+    {
+        const int DeclaredExtraLength = 0x0400;
+        var control = BuildControl();
+        var entry = control.Layout.Entries[0];
+        var centralExtraOffset = entry.CentralDirectoryOffset + 46 + entry.CentralNameLength;
+        var commentLength = checked((int)(centralExtraOffset + DeclaredExtraLength - control.ArchiveBytes.Length));
+        Assert.InRange(commentLength, 1, ushort.MaxValue);
+
+        var archiveBytes = new byte[checked(control.ArchiveBytes.Length + commentLength)];
+        control.ArchiveBytes.CopyTo(archiveBytes, 0);
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            archiveBytes.AsSpan((int)control.Layout.EocdOffset + 20, 2),
+            checked((ushort)commentLength));
+        var boundaryControl = control with
+        {
+            ArchiveBytes = archiveBytes,
+            ArchiveSha256 = Convert.ToHexStringLower(SHA256.HashData(archiveBytes)),
+            Layout = ArchiveFixtureLayout.Read(archiveBytes, commentLength),
+        };
+
+        Assert.Equal(DeclaredExtraLength, archiveBytes.Length - centralExtraOffset);
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            ArchiveFixtureMutator.Apply(ArchiveTestMutationKind.CentralExtraLengthOverrun, boundaryControl));
+        Assert.Contains("1024 bytes fit in the remaining 1024", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Apply_VersionLocalCentralMismatch_PinsLocalTwoPointZeroAndCentralFourPointFive()
     {
         var control = ArchiveFixtureBuilder.BuildControl("valid-deflate", 42, CancellationToken.None);
