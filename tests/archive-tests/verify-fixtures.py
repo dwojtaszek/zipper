@@ -333,7 +333,12 @@ class FixtureVerifier:
             self.bytes_read += total
         return b"".join(chunks)
 
-    def _open(self, zip_bytes):
+    def _open(self, zip_bytes, case=None):
+        if (case is not None
+                and case.get("caseKey") == ENCODING_CODEC_DIVERGENCE_CASE_KEY):
+            # The central UTF-8 flag overrides metadata_encoding; CP932 therefore
+            # applies only to the local header when Python reads the member.
+            return zipfile.ZipFile(io.BytesIO(zip_bytes), metadata_encoding="cp932")
         return zipfile.ZipFile(io.BytesIO(zip_bytes))
 
     def _validate_case_budgets(self, case):
@@ -382,6 +387,12 @@ class FixtureVerifier:
 
     def verify_structure(self, case, zip_bytes):
         checks = []
+
+        if (case.get("caseKey") == ENCODING_CODEC_DIVERGENCE_CASE_KEY
+                and sys.version_info < (3, 11)):
+            raise VerificationError(
+                "encoding-codec-divergence",
+                "Python 3.11+ is required to verify CP932 local-name reads via metadata_encoding")
 
         # REQ-213 fixed maximum budget checks before Ajv:
         self._validate_case_budgets(case)
@@ -499,6 +510,13 @@ class FixtureVerifier:
             encoding_note = verify_encoding_trail_bytes(case, zip_bytes)
             checks.append({"check": "encoding-trail-byte", "status": "pass", "detail": encoding_note})
 
+        # Local/central codec divergence (#1283): bit 11 selects a different
+        # valid codec for each header, and both decoded names must agree.
+        if case.get("caseKey") == ENCODING_CODEC_DIVERGENCE_CASE_KEY:
+            encoding_note = verify_encoding_codec_divergence(case, zip_bytes)
+            checks.append({"check": "encoding-codec-divergence", "status": "pass",
+                           "detail": encoding_note})
+
         # Prefixed cases (ticket #873): a 64-byte signature-free stub precedes the
         # Archive; the rebased twin shifts every offset past it, the unrebased twin
         # leaves stale offsets behind.
@@ -540,7 +558,7 @@ class FixtureVerifier:
         listing succeeds only when the reader's entry count equals the declared
         limits.entryCount."""
         try:
-            with self._open(zip_bytes) as zf:
+            with self._open(zip_bytes, case) as zf:
                 entry_count = len(zf.infolist())
         except NotImplementedError:
             return "list-fails", {}, "open"
@@ -605,7 +623,7 @@ class FixtureVerifier:
 
     def op_read_entry(self, zip_bytes, case, budget):
         try:
-            with self._open(zip_bytes) as zf:
+            with self._open(zip_bytes, case) as zf:
                 infos = zf.infolist()
                 return self._read_all_entries(zf, case, infos, budget,
                                               crc_token="read-entry-fails")
@@ -625,7 +643,7 @@ class FixtureVerifier:
         Python verifies against the central-directory value and never consults
         a patched local-header CRC."""
         try:
-            with self._open(zip_bytes) as zf:
+            with self._open(zip_bytes, case) as zf:
                 infos = zf.infolist()
                 outcome, details, stage = self._read_all_entries(
                     zf, case, infos, budget, crc_token="crc-mismatch-rejected")
@@ -665,7 +683,7 @@ class FixtureVerifier:
         through the bounded reader, so no zip bomb can expand unbounded."""
         counter = {"read": 0}
         try:
-            with self._open(zip_bytes) as zf:
+            with self._open(zip_bytes, case) as zf:
                 infos = zf.infolist()
 
                 # Independent safety derivation (the JSON is not hash-bound).
@@ -1660,6 +1678,11 @@ ENCODING_TRAIL_BYTE_CASES = {
     "encoding-gbk-trail-backslash": ("gbk", "815c2e747874", "乗.txt"),
 }
 
+ENCODING_CODEC_DIVERGENCE_CASE_KEY = "encoding-local-central-codec-divergence"
+ENCODING_CODEC_DIVERGENCE_LOCAL_NAME = "81982e747874"
+ENCODING_CODEC_DIVERGENCE_CENTRAL_NAME = "c2a72e747874"
+ENCODING_CODEC_DIVERGENCE_READABLE_NAME = "§.txt"
+
 
 def verify_encoding_trail_bytes(case, zip_bytes):
     """Legacy-codec 0x5C trail-byte audit (ticket #887): the single member's
@@ -1731,6 +1754,69 @@ def verify_encoding_trail_bytes(case, zip_bytes):
                                 "sidecar readableName %r does not equal the decoded %s name"
                                 % (record["readableName"], codec))
     return ("%s decoded=%s no-spurious-split" % (codec, expected_name))
+
+
+def verify_encoding_codec_divergence(case, zip_bytes):
+    """Local/central codec audit (ticket #1283): the local name is CP932 with
+    bit 11 clear, the central name is UTF-8 with bit 11 set, and both codecs
+    decode to the same logical member name."""
+    import codecs
+    import struct
+
+    check = "encoding-codec-divergence"
+    if case.get("caseKey") != ENCODING_CODEC_DIVERGENCE_CASE_KEY:
+        raise VerificationError(check, "unexpected case key %r" % case.get("caseKey"))
+    entries = case.get("entries", [])
+    if len(entries) != 1:
+        raise VerificationError(check, "expected exactly one entry, found %d" % len(entries))
+    record = entries[0]
+    local_name = bytes.fromhex(ENCODING_CODEC_DIVERGENCE_LOCAL_NAME)
+    central_name = bytes.fromhex(ENCODING_CODEC_DIVERGENCE_CENTRAL_NAME)
+    if record.get("localNameRaw") != local_name.hex() \
+            or record.get("centralNameRaw") != central_name.hex():
+        raise VerificationError(check, "sidecar raw hex does not record the two codec names")
+    if record.get("readableName") != ENCODING_CODEC_DIVERGENCE_READABLE_NAME:
+        raise VerificationError(check, "sidecar readableName does not match the logical member name")
+
+    if len(zip_bytes) < 30 or zip_bytes[0:4] != b"PK\x03\x04":
+        raise VerificationError(check, "offset 0 is not a local file header")
+    local_flags = struct.unpack_from("<H", zip_bytes, 6)[0]
+    local_name_length = struct.unpack_from("<H", zip_bytes, 26)[0]
+    if local_flags & 0x0800:
+        raise VerificationError(check, "local bit 11 must be clear for the CP932 name")
+    if local_name_length != len(local_name) \
+            or zip_bytes[30:30 + local_name_length] != local_name:
+        raise VerificationError(check, "local header does not carry the expected CP932 name")
+
+    if len(zip_bytes) < 22 or zip_bytes[-22:-18] != b"PK\x05\x06":
+        raise VerificationError(check, "EOCD signature missing at the expected offset")
+    cd_offset = struct.unpack_from("<I", zip_bytes, len(zip_bytes) - 22 + 16)[0]
+    if cd_offset + 46 > len(zip_bytes) or zip_bytes[cd_offset:cd_offset + 4] != b"PK\x01\x02":
+        raise VerificationError(check, "central directory missing at offset %d" % cd_offset)
+    central_flags = struct.unpack_from("<H", zip_bytes, cd_offset + 8)[0]
+    central_name_length = struct.unpack_from("<H", zip_bytes, cd_offset + 28)[0]
+    if not central_flags & 0x0800:
+        raise VerificationError(check, "central bit 11 must be set for the UTF-8 name")
+    if central_name_length != len(central_name) \
+            or zip_bytes[cd_offset + 46:cd_offset + 46 + central_name_length] != central_name:
+        raise VerificationError(check, "central header does not carry the expected UTF-8 name")
+    if local_name == central_name:
+        raise VerificationError(check, "local and central raw names must differ")
+
+    try:
+        local_decoded = codecs.decode(local_name, "cp932")
+        central_decoded = codecs.decode(central_name, "utf-8")
+    except (UnicodeDecodeError, LookupError) as error:
+        raise VerificationError(check, "header codec failed to decode the name: %s" % error) from error
+    if local_decoded != ENCODING_CODEC_DIVERGENCE_READABLE_NAME \
+            or central_decoded != ENCODING_CODEC_DIVERGENCE_READABLE_NAME:
+        raise VerificationError(
+            check,
+            "CP932 decoded %r and UTF-8 decoded %r; both must equal %r"
+            % (local_decoded, central_decoded, ENCODING_CODEC_DIVERGENCE_READABLE_NAME))
+    if local_decoded != central_decoded:
+        raise VerificationError(check, "local and central codecs render different member names")
+    return "cp932=%s utf-8=%s local-central-codecs-agree" % (local_decoded, central_decoded)
 
 
 def verify_unicode_path_extra(case, zip_bytes):

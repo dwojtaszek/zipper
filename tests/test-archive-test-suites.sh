@@ -16,7 +16,7 @@ mkdir -p "$TEST_OUTPUT_DIR"
 
 SMOKE_CASES=5    # the frozen smoke set (#834): valid-empty, valid-stored,
                  # valid-deflate, crc-both-mismatch, missing-eocd
-ALL_CASES=113    # the frozen complete-catalogue size (#834, +1 #869, +1 #871, +1 #872, +2 #873, +3 #874, +2 #876, +1 #880, +1 #882, +1 #877, +1 #897, +1 #898, +1 consolidated #885/#886/#879, +2 #875, +1 #884, +1 #889, +5 #899, +6 #900, +1 #931, +5 #933, +2 #934 Zip64 descriptors, +7 #934 matrix, +1 #934 clean Unicode Path, +1 #935 nested budget, +2 #935 mixed, +1 #888, +1 #870, +2 #878, +3 #887, +1 #1276, +2 #1277, +1 #1279, +1 #1280, +1 #1281, +1 #1282): every unique Case Key
+ALL_CASES=114    # the frozen complete-catalogue size (#834, +1 #869, +1 #871, +1 #872, +2 #873, +3 #874, +2 #876, +1 #880, +1 #882, +1 #877, +1 #897, +1 #898, +1 consolidated #885/#886/#879, +2 #875, +1 #884, +1 #889, +5 #899, +6 #900, +1 #931, +5 #933, +2 #934 Zip64 descriptors, +7 #934 matrix, +1 #934 clean Unicode Path, +1 #935 nested budget, +2 #935 mixed, +1 #888, +1 #870, +2 #878, +3 #887, +1 #1276, +2 #1277, +1 #1279, +1 #1280, +1 #1281, +1 #1282, +1 #1283): every unique Case Key
 
 # Stored/header-only byte goldens (#846): stored entries plus fixed timestamps
 # are byte-stable across runtimes, so the Fixture IDs are frozen and asserted on
@@ -253,19 +253,19 @@ else
   check 1 "independent verifier must pass the malformed selection"
 fi
 
-# Encoding suite (ticket #887): the three legacy-codec 0x5C trail-byte
-# controls, verified by the named CP932/Big5/GBK consumer oracle.
+# Encoding suite (tickets #887/#1283): three legacy-codec 0x5C trail-byte
+# controls plus local/central codec divergence, verified by named-codec oracles.
 ENCODING_OUT="$TEST_OUTPUT_DIR/encoding"
 zipper --archive-test-suite encoding --seed 42 --output-path "$ENCODING_OUT"
 encoding_zips=$(find "$ENCODING_OUT" -maxdepth 1 -name '*.zip' | wc -l)
 encoding_jsons=$(find "$ENCODING_OUT" -maxdepth 1 -name '*.json' | wc -l)
-assert_eq "$encoding_zips" 3 "encoding suite published 3 archives"
-assert_eq "$encoding_jsons" 3 "encoding suite published 3 sidecars"
+assert_eq "$encoding_zips" 4 "encoding suite published 4 archives"
+assert_eq "$encoding_jsons" 4 "encoding suite published 4 sidecars"
 if python3 tests/archive-tests/verify-fixtures.py "$ENCODING_OUT" \
      --report "$TEST_OUTPUT_DIR/encoding-verification.json" >/dev/null 2>&1; then
-  check 0 "encoding suite fixtures verified by the named-codec consumer"
+  check 0 "encoding suite fixtures verified by the named-codec consumers"
 else
-  check 1 "encoding suite fixtures must verify (named CP932/Big5/GBK consumer)"
+  check 1 "encoding suite fixtures must verify (CP932/Big5/GBK and CP932/UTF-8)"
 fi
 
 ALL_OUT="$TEST_OUTPUT_DIR/all"

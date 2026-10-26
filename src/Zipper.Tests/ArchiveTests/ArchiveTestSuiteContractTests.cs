@@ -88,12 +88,13 @@ public class ArchiveTestSuiteContractTests
     /// <summary>The Zip64 header-vs-extra size source case (ticket #1279) housed in security.</summary>
     private static readonly string[] Zip64ExtraConflictSecurityCaseKeys = ["zip64-extra-without-sentinels"];
 
-    /// <summary>The three legacy-codec trail-byte cases (ticket #887) housed in the encoding suite, in ordinal Case Key order.</summary>
-    private static readonly string[] EncodingTrailByteCaseKeys =
+    /// <summary>The four policy-sensitive name-encoding cases housed in the encoding suite, in ordinal Case Key order.</summary>
+    private static readonly string[] EncodingCaseKeys =
     [
         "encoding-big5-trail-backslash",
         "encoding-cp932-trail-backslash",
         "encoding-gbk-trail-backslash",
+        "encoding-local-central-codec-divergence",
     ];
 
     private static List<string> SuiteKeys(string suite) =>
@@ -183,17 +184,16 @@ public class ArchiveTestSuiteContractTests
 
 
     [Fact]
-    public void ListSuite_Encoding_ContainsExactlyTheLegacyCodecTrailByteCases()
+    public void ListSuite_Encoding_ContainsExactlyTheNameEncodingCases()
     {
-        Assert.Equal(EncodingTrailByteCaseKeys, SuiteKeys(ArchiveTestCatalog.EncodingSuite));
+        Assert.Equal(EncodingCaseKeys, SuiteKeys(ArchiveTestCatalog.EncodingSuite));
     }
 
     [Fact]
     public void ListSuite_Encoding_MembersStayOutOfDefaultSuites()
     {
-        // The triage note on #887 keeps the legacy-codec controls out of the
-        // default compatibility and security suites: only named encoding
-        // consumers evaluate the decode-level behavior.
+        // The #887 and #1283 codec controls stay out of the default suites:
+        // only named encoding consumers evaluate the decode-level behavior.
         var encoding = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.EncodingSuite);
         Assert.All(encoding, c =>
         {
@@ -270,8 +270,9 @@ public class ArchiveTestSuiteContractTests
         // +1 for the #934 clean Unicode Path control, +1 for the #935 nested budget boundary,
         // +2 for the #935 mixed one-bad-member cases, +1 for #888, +1 for #870,
         // +2 for #878, +3 for the #887 legacy-codec encoding controls, +1 for #1276,
-        // +2 for #1277, +1 for #1279, +1 for #1280, +1 for #1281, +1 for #1282): a case
-        // dropped from the catalogue or unlisted from every suite fails here.
-        Assert.Equal(113, AllKeys().Count);
+        // +2 for #1277, +1 for #1279, +1 for #1280, +1 for #1281, +1 for #1282,
+        // +1 for #1283 encoding codec divergence): any case dropped from the catalog
+        // or unlisted from every suite fails here.
+        Assert.Equal(114, AllKeys().Count);
     }
 }

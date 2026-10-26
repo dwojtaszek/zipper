@@ -957,6 +957,124 @@ class EncodingTrailByteTests(unittest.TestCase):
         self.assertEqual("encoding-trail-byte", caught.exception.check)
 
 
+class EncodingLocalCentralCodecDivergenceTests(unittest.TestCase):
+    @staticmethod
+    def make_zip():
+        """A stored entry rewritten to CP932 local and UTF-8 central names."""
+        import io
+        import struct
+        import zipfile
+
+        local_name = bytes.fromhex("81982e747874")
+        central_name = bytes.fromhex("c2a72e747874")
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as archive:
+            archive.writestr("ab.txt", b"x")
+        zip_bytes = bytearray(buf.getvalue())
+        cd_offset = struct.unpack_from("<I", zip_bytes, len(zip_bytes) - 22 + 16)[0]
+        zip_bytes[30:36] = local_name
+        zip_bytes[cd_offset + 46:cd_offset + 52] = central_name
+        central_flags = struct.unpack_from("<H", zip_bytes, cd_offset + 8)[0]
+        struct.pack_into("<H", zip_bytes, cd_offset + 8, central_flags | 0x0800)
+        return bytes(zip_bytes)
+
+    @staticmethod
+    def make_case():
+        return {
+            "caseKey": "encoding-local-central-codec-divergence",
+            "entries": [{
+                "ordinal": 0,
+                "kind": "file",
+                "localNameRaw": "81982e747874",
+                "centralNameRaw": "c2a72e747874",
+                "readableName": "§.txt",
+            }],
+        }
+
+    def test_named_codecs_decode_divergent_header_names_to_same_logical_name(self):
+        detail = vf.verify_encoding_codec_divergence(
+            self.make_case(), self.make_zip())
+
+        self.assertIn("cp932=§.txt", detail)
+        self.assertIn("utf-8=§.txt", detail)
+
+    def test_local_header_name_bytes_must_match_cp932(self):
+        zip_bytes = bytearray(self.make_zip())
+        zip_bytes[30] ^= 0x01
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_encoding_codec_divergence(
+                self.make_case(), bytes(zip_bytes))
+
+        self.assertEqual("encoding-codec-divergence", caught.exception.check)
+        self.assertIn("local header does not carry the expected CP932 name", str(caught.exception))
+
+    def test_central_header_name_bytes_must_match_utf8(self):
+        zip_bytes = bytearray(self.make_zip())
+        import struct
+        cd_offset = struct.unpack_from("<I", zip_bytes, len(zip_bytes) - 22 + 16)[0]
+        zip_bytes[cd_offset + 46] ^= 0x01
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_encoding_codec_divergence(
+                self.make_case(), bytes(zip_bytes))
+
+        self.assertEqual("encoding-codec-divergence", caught.exception.check)
+        self.assertIn("central header does not carry the expected UTF-8 name", str(caught.exception))
+
+    def test_local_utf8_flag_is_rejected(self):
+        zip_bytes = bytearray(self.make_zip())
+        import struct
+        local_flags = struct.unpack_from("<H", zip_bytes, 6)[0]
+        struct.pack_into("<H", zip_bytes, 6, local_flags | 0x0800)
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_encoding_codec_divergence(
+                self.make_case(), bytes(zip_bytes))
+
+        self.assertEqual("encoding-codec-divergence", caught.exception.check)
+
+    def test_central_utf8_flag_is_required(self):
+        zip_bytes = bytearray(self.make_zip())
+        import struct
+        cd_offset = struct.unpack_from("<I", zip_bytes, len(zip_bytes) - 22 + 16)[0]
+        central_flags = struct.unpack_from("<H", zip_bytes, cd_offset + 8)[0]
+        struct.pack_into("<H", zip_bytes, cd_offset + 8, central_flags & ~0x0800)
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_encoding_codec_divergence(
+                self.make_case(), bytes(zip_bytes))
+
+        self.assertEqual("encoding-codec-divergence", caught.exception.check)
+        self.assertIn("central bit 11", str(caught.exception))
+
+    def test_sidecar_names_must_match_the_header_codecs(self):
+        for field, wrong_value in (
+                ("localNameRaw", "61622e747874"),
+                ("centralNameRaw", "61622e747874")):
+            with self.subTest(field=field):
+                case = self.make_case()
+                case["entries"][0][field] = wrong_value
+
+                with self.assertRaises(vf.VerificationError) as caught:
+                    vf.verify_encoding_codec_divergence(
+                        case, self.make_zip())
+
+                self.assertEqual("encoding-codec-divergence", caught.exception.check)
+                self.assertIn("sidecar raw hex", str(caught.exception))
+
+    def test_sidecar_readable_name_must_match_decoded_names(self):
+        case = self.make_case()
+        case["entries"][0]["readableName"] = "ab.txt"
+
+        with self.assertRaises(vf.VerificationError) as caught:
+            vf.verify_encoding_codec_divergence(
+                case, self.make_zip())
+
+        self.assertEqual("encoding-codec-divergence", caught.exception.check)
+        self.assertIn("readableName", str(caught.exception))
+
+
 class PositiveControlTests(TempDirTest):
     def test_committed_valid_empty_vector_passes(self):
         with open(os.path.join(VECTOR_DIR, "valid-empty.json"), "r", encoding="utf-8") as handle:

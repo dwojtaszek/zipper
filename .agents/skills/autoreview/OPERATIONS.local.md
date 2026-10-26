@@ -265,3 +265,27 @@
 - **telemetry**: host=droid mode=branch specialists=6 bundle=28141c
 - **lessons**: none
 - **suppressions**: none
+
+### 2026-10-26 droid:branch:feat/ISSUE-1283-archive-codec-divergence
+
+- **findings**: 0 ACTION, 3 INFO across 6 specialists; correctness, adversarial, and security clean.
+- **outcome**: fixed all three: added local/central raw-name tampering tests, corrected the helper docstring, and documented Python 3.11+; follow-up review clean.
+- **telemetry**: host=droid mode=branch specialists=6 bundle=~37K
+- **lessons**: Verifier tests should tamper with actual Archive header bytes as well as sidecar metadata; document runtime prerequisites next to the suite contract.
+- **suppressions**: none
+
+### 2026-10-26 droid:branch:1283-per-header-unicode-path-crc
+
+- **findings**: 2 INFO on first pass (per-header CRC test gap; stale comment); 0 ACTION, 0 INFO across 5 specialists after fixes.
+- **outcome**: fixed review findings with local/central CRC validation against each header's name, separate CRC rejection tests, and corrected documentation. No actionable findings remain.
+- **telemetry**: host=droid mode=branch specialists=5 bundle=10352c
+- **lessons**: Unicode Path CRC tests should cover local and central names independently when a fixture allows header-name divergence.
+- **suppressions**: none
+
+### 2026-10-26 droid:branch:1283-resume-validation
+
+- **findings**: 1 INFO (duplicate central-name hex conversion); 0 ACTION; no findings after the fix review.
+- **outcome**: reused one hex conversion for both initial layout fields. All 3,468 .NET tests, 126 verifier tests, 114 generated fixtures, formatting, and mutation smoke passed.
+- **telemetry**: host=droid mode=branch specialists=8 bundle=68066c
+- **lessons**: none
+- **suppressions**: none

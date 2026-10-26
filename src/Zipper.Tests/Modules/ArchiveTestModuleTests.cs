@@ -102,6 +102,7 @@ public class ArchiveTestModuleTests : WorkingDirectoryTestBase
             "encoding-big5-trail-backslash",
             "encoding-cp932-trail-backslash",
             "encoding-gbk-trail-backslash",
+            "encoding-local-central-codec-divergence",
         ];
         Assert.Equal(expectedCaseKeys.Length * 2, Directory.GetFiles(destination).Length);
         var publishedCaseKeys = Directory.GetFiles(destination, "*.json")

@@ -167,7 +167,7 @@ internal static class ArchiveTestSuiteGenerator
                 return new ArchiveTestEntry(
                     Ordinal: layout.Ordinal,
                     Kind: isDirectory ? "directory" : "file",
-                    LocalNameRaw: layout.NameHex,
+                    LocalNameRaw: layout.LocalNameHex,
                     CentralNameRaw: layout.NameHex,
                     ReadableName: layout.Name,
                     LocalHeaderMethod: localMethod,
@@ -319,12 +319,12 @@ internal static class ArchiveTestSuiteGenerator
             ];
         }
 
-        // Legacy-codec trail-byte 0x5C names (ticket #887): valid single entries
-        // whose raw name bytes contain 0x5C only as a CP932/Big5/GBK character's
-        // trail byte. Decoding-aware readers keep one member; separator-normalizing
-        // readers may split or reject — every observed outcome is recorded, and the
-        // named encoding-consumer verifier asserts the decode-level no-split property.
-        if (definition.CaseKey is "encoding-cp932-trail-backslash" or "encoding-big5-trail-backslash" or "encoding-gbk-trail-backslash")
+        // Encoding controls (#887 and #1283): named codec consumers decode each
+        // header as declared, then list and read the same logical member name.
+        if (definition.CaseKey is "encoding-cp932-trail-backslash"
+            or "encoding-big5-trail-backslash"
+            or "encoding-gbk-trail-backslash"
+            or "encoding-local-central-codec-divergence")
         {
             return
             [

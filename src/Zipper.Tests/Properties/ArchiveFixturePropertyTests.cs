@@ -109,6 +109,31 @@ public sealed class ArchiveFixturePropertyTests
     }
 
     [Property]
+    public void ArchiveFixtureLayout_Read_ShouldPreserveCodecDivergenceWithoutShiftingOffsets(ArchiveFixturePropertyInput input)
+    {
+        const string LogicalName = "§.txt";
+        var baselineDefinition = new ArchiveTestCaseDefinition(
+            "encoding-codec-divergence-baseline",
+            CaseRevision: 1,
+            ExpectationRevision: 1,
+            Classification: "valid",
+            Suites: [ArchiveTestCatalog.EncodingSuite],
+            Recipe: new ArchiveTestRecipe([ArchiveTestRecipeEntry.File(LogicalName, 60, "stored")]));
+        var baseline = ArchiveFixtureBuilder.Build(baselineDefinition, input.Seed, CancellationToken.None);
+        var artifact = ArchiveFixtureBuilder.BuildControl(
+            "encoding-local-central-codec-divergence", input.Seed, CancellationToken.None);
+        var entry = Assert.Single(ArchiveFixtureLayout.Read(
+            artifact.ArchiveBytes, allowLocalCentralNameDivergence: true).Entries);
+
+        Assert.Equal("81982e747874", entry.LocalNameHex);
+        Assert.Equal("c2a72e747874", entry.NameHex);
+        Assert.Equal(LogicalName, entry.Name);
+        Assert.Equal(baseline.Layout.Entries[0].DataOffset, entry.DataOffset);
+        Assert.Equal(baseline.Layout.CentralDirectoryOffset, artifact.Layout.CentralDirectoryOffset);
+        Assert.Equal(baseline.ArchiveBytes.Length, artifact.ArchiveBytes.Length);
+    }
+
+    [Property]
     public void ArchiveFixtureBuilder_Build_ShouldRoundTripMethod8StoredBlockStream(DeflateStoredBlockPropertyInput input)
     {
         const string CaseKey = "deflate-stored-block-property";

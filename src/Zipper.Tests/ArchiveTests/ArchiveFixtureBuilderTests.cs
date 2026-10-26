@@ -66,6 +66,42 @@ public class ArchiveFixtureBuilderTests
     }
 
     [Fact]
+    public void BuildControl_EncodingLocalCentralCodecDivergence_RewritesLocalNameWithCp932()
+    {
+        const string ExpectedName = "§.txt";
+        var artifact = ArchiveFixtureBuilder.BuildControl(
+            "encoding-local-central-codec-divergence", 42, CancellationToken.None);
+
+        var entry = Assert.Single(artifact.Layout.Entries);
+        Assert.Equal(ExpectedName, entry.Name);
+        var localName = artifact.ArchiveBytes
+            .AsSpan((int)entry.LocalHeaderOffset + 30, entry.LocalNameLength)
+            .ToArray();
+        var centralName = artifact.ArchiveBytes
+            .AsSpan((int)entry.CentralDirectoryOffset + 46, entry.CentralNameLength)
+            .ToArray();
+        var cp932 = CodePagesEncodingProvider.Instance.GetEncoding(932)!;
+
+        Assert.Equal(localName.Length, centralName.Length);
+        Assert.Equal(ExpectedName, cp932.GetString(localName));
+        Assert.Equal(ExpectedName, Encoding.UTF8.GetString(centralName));
+        Assert.Equal((ushort)0, (ushort)(BinaryPrimitives.ReadUInt16LittleEndian(
+            artifact.ArchiveBytes.AsSpan((int)entry.LocalHeaderOffset + 6, 2)) & 0x0800));
+        Assert.Equal((ushort)0x0800, (ushort)(BinaryPrimitives.ReadUInt16LittleEndian(
+            artifact.ArchiveBytes.AsSpan((int)entry.CentralDirectoryOffset + 8, 2)) & 0x0800));
+
+        var testCase = ArchiveTestSuiteGenerator.BuildExpectationFile(
+            artifact, ArchiveTestCatalog.GetCase("encoding-local-central-codec-divergence"));
+        var expectation = Assert.Single(testCase.Entries);
+        Assert.Equal("81982e747874", expectation.LocalNameRaw);
+        Assert.Equal("c2a72e747874", expectation.CentralNameRaw);
+        Assert.Equal(Convert.ToHexStringLower(localName), expectation.LocalNameRaw);
+        Assert.Equal(Convert.ToHexStringLower(centralName), expectation.CentralNameRaw);
+        Assert.Equal(ExpectedName, expectation.ReadableName);
+        Assert.Equal(artifact.Entries[0].Content, ReadEntryContent(artifact.ArchiveBytes, ExpectedName));
+    }
+
+    [Fact]
     public void BuildControl_ValidDeflate_EmitsDeflateMethodAndKnownContent()
     {
         var artifact = ArchiveFixtureBuilder.BuildControl("valid-deflate", 42, CancellationToken.None);
