@@ -1274,7 +1274,6 @@ internal static class ArchiveFixtureMutator
         const ushort LocalVersion = 20;
         const ushort CentralVersion = 45;
         var entry = control.Layout.Entries[0];
-        var localVersionOffset = entry.LocalHeaderOffset + 4;  // local header version needed to extract (u16)
         var centralVersionOffset = entry.CentralDirectoryOffset + 6;  // central signature + version made by
         var code = ArchiveTestMutationKind.VersionLocalCentralMismatch.ToCaseKey();
         var declaredValue = $"local-version-needed={LocalVersion} central-version-needed={CentralVersion}";
@@ -1282,18 +1281,11 @@ internal static class ArchiveFixtureMutator
         return Patch(ArchiveTestMutationKind.VersionLocalCentralMismatch, before,
         [
             new MutationSpec(
-                code, "local-header", localVersionOffset,
-                $"Keeps the local header's version-needed at 2.0 ({LocalVersion}); the central header below claims 4.5 ({CentralVersion}), so strict readers see a Zip64 version the Archive does not use.",
-                entry.Ordinal, 2, 2, DeclaredValue: declaredValue),
-            new MutationSpec(
                 code, "central-header", centralVersionOffset,
                 $"Rewrites the central header's version-needed from 2.0 ({LocalVersion}) to 4.5 ({CentralVersion}) while the local header still declares 2.0; the central version-made-by field is unchanged.",
                 entry.Ordinal, 2, 2, DeclaredValue: declaredValue),
-        ], after =>
-        {
-            BinaryPrimitives.WriteUInt16LittleEndian(after.AsSpan((int)localVersionOffset, 2), LocalVersion);
-            BinaryPrimitives.WriteUInt16LittleEndian(after.AsSpan((int)centralVersionOffset, 2), CentralVersion);
-        });
+        ], after => BinaryPrimitives.WriteUInt16LittleEndian(
+            after.AsSpan((int)centralVersionOffset, 2), CentralVersion));
     }
 
     /// <summary>

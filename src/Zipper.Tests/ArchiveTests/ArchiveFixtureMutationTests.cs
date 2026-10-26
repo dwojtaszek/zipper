@@ -193,29 +193,17 @@ public class ArchiveFixtureMutationTests : WorkingDirectoryTestBase
         var mutated = ArchiveFixtureMutator.Apply(
             ArchiveTestMutationKind.VersionLocalCentralMismatch, control);
 
+        Assert.Equal(20, BinaryPrimitives.ReadUInt16LittleEndian(control.ArchiveBytes.AsSpan((int)localVersionOffset, 2)));
         Assert.Equal(20, BinaryPrimitives.ReadUInt16LittleEndian(mutated.ArchiveBytes.AsSpan((int)localVersionOffset, 2)));
         Assert.Equal(45, BinaryPrimitives.ReadUInt16LittleEndian(mutated.ArchiveBytes.AsSpan((int)centralVersionOffset, 2)));
         Assert.Equal(control.ArchiveBytes.Length, mutated.ArchiveBytes.Length);
         Assert.Equal(1, CountDifferingBytes(control.ArchiveBytes, mutated.ArchiveBytes));
 
-        Assert.Collection(
-            mutated.Mutations,
-            mutation =>
-            {
-                Assert.Equal("version-local-central-mismatch", mutation.Code);
-                Assert.Equal("local-header", mutation.Structure);
-                Assert.Equal(localVersionOffset, mutation.Offset);
-            },
-            mutation =>
-            {
-                Assert.Equal("version-local-central-mismatch", mutation.Code);
-                Assert.Equal("central-header", mutation.Structure);
-                Assert.Equal(centralVersionOffset, mutation.Offset);
-            });
-        Assert.All(mutated.Mutations, mutation =>
-            Assert.Equal(
-                "local-version-needed=20 central-version-needed=45",
-                mutation.DeclaredValue));
+        var mutation = Assert.Single(mutated.Mutations);
+        Assert.Equal("version-local-central-mismatch", mutation.Code);
+        Assert.Equal("central-header", mutation.Structure);
+        Assert.Equal(centralVersionOffset, mutation.Offset);
+        Assert.Equal("local-version-needed=20 central-version-needed=45", mutation.DeclaredValue);
     }
 
     [Theory]
