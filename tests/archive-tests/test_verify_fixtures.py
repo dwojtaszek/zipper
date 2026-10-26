@@ -915,13 +915,30 @@ class UndeclaredTrailingDataTests(TempDirTest):
 
     def test_mutation_record_must_describe_undeclared_suffix(self):
         case, archive, _ = self.make_case()
-        case["mutations"][0]["declaredValue"] = "trailing-bytes=16 undeclared=false"
+        invalid_values = {
+            "code": "other-mutation",
+            "structure": "local-header",
+            "offset": 0,
+            "deletedLength": 1,
+            "insertedLength": 15,
+            "beforeSize": len(archive),
+            "afterSize": len(archive) + 1,
+            "beforeSha256": "0" * 64,
+            "afterSha256": "0" * 64,
+            "afterHex": "00" * len(self.TRAILING),
+            "declaredValue": "trailing-bytes=16 undeclared=false",
+        }
 
-        with self.assertRaises(vf.VerificationError) as caught:
-            vf.verify_undeclared_trailing_data(case, archive)
+        for field, value in invalid_values.items():
+            with self.subTest(field=field):
+                tampered_case, archive, _ = self.make_case()
+                tampered_case["mutations"][0][field] = value
 
-        self.assertEqual("undeclared-trailing-data", caught.exception.check)
-        self.assertIn("mutation record", str(caught.exception))
+                with self.assertRaises(vf.VerificationError) as caught:
+                    vf.verify_undeclared_trailing_data(tampered_case, archive)
+
+                self.assertEqual("undeclared-trailing-data", caught.exception.check)
+                self.assertIn("mutation record", str(caught.exception))
 
     def test_central_directory_must_end_at_eocd(self):
         case, archive, eocd_offset = self.make_case()
