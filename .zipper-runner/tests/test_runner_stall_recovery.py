@@ -34,7 +34,9 @@ import os
 import subprocess
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -203,13 +205,31 @@ class _RunnerFixture:
             "        print(specific.read_text() if specific.exists() else (root / 'pr.json').read_text())\n"
             "elif args[:2] == ['pr', 'view']:\n"
             "    pr = load('pr.json', {})\n"
+            "    ref = args[2]\n"
+            "    if not ref.isdigit() and (root / 'fail-branch-view').exists():\n"
+            "        sys.stderr.write('no pull requests found for branch ' + ref + '\\n')\n"
+            "        sys.exit(1)\n"
+            "    if ref.isdigit() and (root / 'fail-state-view').exists() and 'statusCheckRollup' not in args[args.index('--json') + 1]:\n"
+            "        sys.stderr.write('no pull requests found\\n')\n"
+            "        sys.exit(1)\n"
+            "    if ref.isdigit() and (root / 'fail-full-view').exists() and 'statusCheckRollup' in args[args.index('--json') + 1]:\n"
+            "        sys.stderr.write('could not read pull request\\n')\n"
+            "        sys.exit(1)\n"
             "    if args[args.index('--json') + 1] == 'commits':\n"
             "        print('feat: completed work')\n"
             "    else:\n"
-            "        print(json.dumps({'number': 99, 'state': 'OPEN',\n"
+            "        # Honor the requested fields: a caller that asks for the narrow\n"
+            "        # verify shape must not be handed the rollup, or a test could not\n"
+            "        # tell a full payload from a narrow one.\n"
+            "        full = {'number': 99, 'state': 'OPEN', 'mergeable': 'MERGEABLE',\n"
+            "            'headRefName': (pr.get('head') or {}).get('ref'),\n"
             "            'headRefOid': (pr.get('head') or {}).get('sha'),\n"
+            "            'updatedAt': pr.get('updatedAt', ''),\n"
+            "            'reviews': [], 'comments': [],\n"
             "            'statusCheckRollup': [{'__typename': 'CheckRun', 'name': 'ci-gate',\n"
-            "                'status': 'COMPLETED', 'conclusion': 'SUCCESS'}]}))\n"
+            "                'status': 'COMPLETED', 'conclusion': 'SUCCESS'}]}\n"
+            "        fields = args[args.index('--json') + 1].split(',')\n"
+            "        print(json.dumps({k: full[k] for k in fields if k in full}))\n"
             "elif args[:2] == ['pr', 'list']:\n"
             "    (root / 'pr-list-fields.txt').write_text(args[args.index('--json') + 1])\n"
             "    print(json.dumps(load('pr_list.json', [])))\n"
@@ -219,8 +239,8 @@ class _RunnerFixture:
         gh.chmod(0o755)
 
 
-class BlockedWorktreeEscalationTests(unittest.TestCase):
-    """An unauthorized PR must escalate, never fail silent or dispatch a run."""
+class _WorktreePassTests(unittest.TestCase):
+    """A temporary root with the stub gh on PATH and one active worktree."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -234,6 +254,10 @@ class BlockedWorktreeEscalationTests(unittest.TestCase):
     def tearDown(self):
         self.fixture.close()
         self.tmp.cleanup()
+
+
+class BlockedWorktreeEscalationTests(_WorktreePassTests):
+    """An unauthorized PR must escalate, never fail silent or dispatch a run."""
 
     def test_escalation_firstThreeSendsThenRateLimited(self):
         # A draft is a refusal reason that holds without a head move, so it drives
@@ -1046,6 +1070,123 @@ class CronWrapperLogTests(unittest.TestCase):
                 text = path.read_text()
                 self.assertEqual(text.count("Starting Autonomous Runner Cron Run"), 1)
                 self.assertEqual(text.count("Finished Autonomous Runner Cron Run"), 1)
+
+
+class UninitializedMatchedBranchTests(_WorktreePassTests):
+    """A failed branch lookup must not leave `matched_branch` unbound.
+
+    `matched_branch = None` sat inside the nested `if pr_code != 0:` block, but
+    `if matched_branch:` reads it from outside that block. The saved-state recovery
+    sets `pr_code = 0`, which skips the block that initializes it, so a transient
+    `gh pr view <branch>` failure followed by a successful saved-state lookup raised
+    UnboundLocalError and aborted the entire pass. Everything after this loop in
+    `main()` -- the orphan sweep, the Dependabot sweep, and new issue pickup -- was
+    lost with it. Observed on the host at 2026-10-26 05:50 (exit code 1).
+    """
+
+    def _drive(self):
+        """Run one babysit pass over the active worktree and return what it printed."""
+        buffer = StringIO()
+        with redirect_stdout(buffer):
+            self.runner.babysit_active_worktrees()
+        return buffer.getvalue()
+
+    def test_branchLookupFailsAndStateResolves_shouldNotRaise(self):
+        """The exact production sequence: the branch lookup fails, then the recorded
+        PR resolves to an open PR on that branch."""
+        # The recorded PR is open and names this branch, so the recovery path sets
+        # pr_code = 0 without ever reaching the block that initializes the variable.
+        (self.root / "state" / "issue-42.json").write_text(json.dumps({
+            "pr_number": "99", "branch": "fix/ISSUE-42-proof",
+            "authorized_head": self.fixture.old_head,
+        }))
+        (self.root / "fail-branch-view").write_text("1")
+
+        output = self._drive()
+
+        self.assertIn("Proceeding with babysit", output,
+                      "the saved-state recovery must still be reached")
+        # The recovery clears pr_code, and the no-PR repair path re-tests it, so a
+        # resolved PR must not also be treated as a missing one: that would push the
+        # branch, try `gh pr create` for a PR that already exists, and re-invoke the
+        # agent on work that is already open.
+        self.assertNotIn("PR does not exist for branch", output)
+        self.assertNotIn("No open PR found", output)
+        self.assertNotIn("Creating PR directly", output)
+        self.assertNotIn("Re-invoking agent", output)
+        self.assertNotIn("Removing worktree", output)
+        # The recovered PR must reach the shared handler with a full payload. The
+        # verify lookup is deliberately narrow, so handing that on instead would read
+        # as an empty rollup and stall the PR on a false "checks pending" -- the gate
+        # below is what proves the payload carried the rollup.
+        self.assertIn("CI is SUCCESS for PR #99", output)
+        self.assertEqual((self.root / "merged").read_text(), "99")
+
+    def test_branchLookupFailsAndFullReadFails_shouldDeferRatherThanStall(self):
+        """When the record resolves the PR but the full read also fails, the pass must
+        defer to the next cycle instead of handing the narrow verify payload on: that
+        payload has no rollup, so the handler would read the checks as pending and
+        leave the PR parked on a false wait."""
+        (self.root / "fail-branch-view").write_text("1")
+        (self.root / "fail-full-view").write_text("1")
+
+        output = self._drive()
+
+        self.assertIn("unreadable in full; retrying next cycle", output)
+        self.assertNotIn("Evaluating checks", output)
+        self.assertNotIn("Creating PR directly", output)
+        self.assertFalse((self.root / "merged").exists())
+
+    def test_stateRecordForAPrOnAnotherBranch_shouldNotAdoptThePr(self):
+        """The record names an open PR, but that PR's head is not this worktree's
+        branch. Adopting it would drive this worktree against another branch's PR."""
+        pr = dict(self.fixture.pr)
+        pr["head"] = {"ref": "fix/ISSUE-43-other", "sha": self.fixture.new_head,
+                      "repo": {"full_name": "dwojtaszek/zipper"}}
+        (self.root / "pr.json").write_text(json.dumps(pr))
+        (self.root / "fail-branch-view").write_text("1")
+
+        output = self._drive()
+
+        self.assertNotIn("Proceeding with babysit", output)
+        self.assertIn("No open PR found", output)
+
+    def test_branchAndStateLookupsFail_shouldStillAlignToTheDiscoveredBranch(self):
+        """The control for the other assignment of the same variable.
+
+        Both lookups fail, so the nested `if pr_code != 0:` block does run and must
+        still bind `matched_branch` from `gh pr list`. Without that assignment the
+        worktree is never realigned to the branch the open PR actually uses, and
+        the pass falls through to creating a second PR.
+        """
+        (self.root / "fail-branch-view").write_text("1")
+        (self.root / "fail-state-view").write_text("1")
+        (self.root / "pr_list.json").write_text(json.dumps([{
+            "number": 99, "headRefName": "fix/ISSUE-42-proof",
+            "title": "fix: proof", "body": "Fixes #42",
+            "author": {"login": "dwojtaszek"},
+            "url": "https://github.com/dwojtaszek/zipper/pull/99",
+        }]))
+
+        output = self._drive()
+
+        self.assertIn("Found existing open PR #99 on branch 'fix/ISSUE-42-proof'", output)
+        self.assertIn("Successfully switched worktree", output)
+        self.assertNotIn("Creating PR directly", output)
+
+    def test_branchLookupFailsWithNoMatchingPr_shouldNotRaise(self):
+        """No record and no open PR leaves `matched_branch` at its initial value, so
+        the `if matched_branch:` read must be safe and must not realign the worktree
+        onto a branch no open PR uses."""
+        (self.root / "fail-branch-view").write_text("1")
+        (self.root / "state" / "issue-42.json").unlink()
+        (self.root / "pr_list.json").write_text("[]")
+
+        output = self._drive()
+
+        self.assertIn("No open PR found for completed branch", output)
+        self.assertNotIn("Successfully switched worktree", output)
+        self.assertNotIn("Found existing open PR", output)
 
 
 if __name__ == "__main__":
