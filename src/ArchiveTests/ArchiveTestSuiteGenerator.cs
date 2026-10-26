@@ -423,15 +423,14 @@ internal static class ArchiveTestSuiteGenerator
                 Expectation(IntegrityCheckOperation, "strict-integrity-v1", ["crc-mismatch-rejected", "integrity-fails"], [NoPartialWrites], ["open", ReadEntryOperation, IntegrityCheckOperation], capability: "deflate-bitstream"),
                 Expectation(ExtractOperation, StrictProfile, ["extract-fails"], [NoPartialWrites], ["open", ReadEntryOperation, ExtractOperation]),
             ],
-            // Local-header lies with an intact central directory: lenient central-based
-            // readers succeed; strict local-header validators reject (ticket #840).
-            // The orphan hidden entry (ticket #869) keeps the visible central directory
-            // intact: CD readers list and read visibles while streaming readers see more.
-            // Cross-method disagreements (ticket #899) are the same shape with
-            // non-Stored/Deflate codes.
+            // Header-level inconsistencies: lenient central-based readers may continue,
+            // strict readers may reject mismatched fields, and forward-scanning readers
+            // may discover orphan local headers omitted by the central directory.
+            // Cross-method disagreements (ticket #899) use non-Stored/Deflate codes.
             ArchiveTestMutationKind.NameLocalCentralMismatch
                 or ArchiveTestMutationKind.MethodLocalCentralMismatch
                 or ArchiveTestMutationKind.SizeLocalCentralMismatch
+                or ArchiveTestMutationKind.VersionLocalCentralMismatch
                 or ArchiveTestMutationKind.ExtraFieldLengthOverrun
                 or ArchiveTestMutationKind.OrphanLocalHeader
                 or ArchiveTestMutationKind.MethodCrossDeflate64Deflate

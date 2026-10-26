@@ -241,3 +241,27 @@
 - **telemetry**: host=droid mode=branch specialists=5+1fast bundle=15-file/243-line diff
 - **lessons**: A normalized `read-entry-returns-unverified-bytes` outcome proves only a hash mismatch; assert returned byte length/content when the test name claims a partial boundary read.
 - **suppressions**: none
+
+### 2026-10-26 droid:branch:1282-version-local-central-mismatch
+
+- **findings**: 0 ACTION, 0 INFO across 5 specialists (correctness, testing, maintainability, adversarial, api-contract).
+- **outcome**: accepted / clean review. Fixture verification, full .NET tests, mutation smoke, formatting, and complete 113-case E2E passed.
+- **telemetry**: host=droid mode=branch specialists=5 bundle=25702c
+- **lessons**: none
+- **suppressions**: none
+
+### 2026-10-26 droid:branch:1282-version-local-central-mismatch-followup
+
+- **findings**: 0 ACTION, 0 INFO across 5 reviewers (correctness, testing, maintainability, adversarial, API contract).
+- **outcome**: clean review after adding the missing local-header MutationSpec and regression assertions; the test failed first against the single-record implementation. Focused tests, independent fixture verification, format, mutation smoke, and the pre-commit full unit suite passed.
+- **telemetry**: host=droid mode=branch specialists=5 bundle=27519c
+- **lessons**: none
+- **suppressions**: none
+
+### 2026-10-26 droid:branch:1282-resume-validation
+
+- **findings**: 0 ACTION, 0 INFO across 6 reviewers (correctness, adversarial, testing, maintainability, performance, API contract).
+- **outcome**: clean review. Focused Archive Test Fixture tests (259), replay tests (2), single-fixture verification, complete 113-case Archive Test E2E, format, and mutation smoke gate passed.
+- **telemetry**: host=droid mode=branch specialists=6 bundle=28141c
+- **lessons**: none
+- **suppressions**: none

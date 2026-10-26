@@ -76,6 +76,10 @@ To generate the malformed `declared-size-undersized` Archive Test Fixture, which
 ```bash
 zipper --archive-test-suite malformed --archive-test-cases declared-size-undersized --seed 42 --output-path ./declared-size-undersized
 ```
+To generate the malformed `version-local-central-mismatch` Archive Test Fixture, which keeps the local header's version-needed at 2.0 while the central header claims the Zip64 4.5 version the Archive does not use:
+```bash
+zipper --archive-test-suite malformed --archive-test-cases version-local-central-mismatch --seed 42 --output-path ./version-local-central-mismatch
+```
 To generate the policy-sensitive `zip64-extra-without-sentinels` Archive Test Fixture, which tests conflicting 32-bit header and Zip64 extended-information sizes:
 ```bash
 zipper --archive-test-suite malformed --archive-test-cases zip64-extra-without-sentinels --seed 42 --output-path ./zip64-extra-conflict

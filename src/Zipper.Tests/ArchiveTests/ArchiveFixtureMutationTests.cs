@@ -182,6 +182,47 @@ public class ArchiveFixtureMutationTests : WorkingDirectoryTestBase
         Assert.Equal(control.Entries[0].ContentSha256, sidecar.Entries[0].ContentSha256);
     }
 
+    [Fact]
+    public void Apply_VersionLocalCentralMismatch_PinsLocalTwoPointZeroAndCentralFourPointFive()
+    {
+        var control = ArchiveFixtureBuilder.BuildControl("valid-deflate", 42, CancellationToken.None);
+        var entry = Assert.Single(control.Layout.Entries);
+        var localVersionOffset = entry.LocalHeaderOffset + 4;
+        var centralVersionOffset = entry.CentralDirectoryOffset + 6;
+
+        var mutated = ArchiveFixtureMutator.Apply(
+            ArchiveTestMutationKind.VersionLocalCentralMismatch, control);
+
+        Assert.Equal(20, BinaryPrimitives.ReadUInt16LittleEndian(control.ArchiveBytes.AsSpan((int)localVersionOffset, 2)));
+        Assert.Equal(20, BinaryPrimitives.ReadUInt16LittleEndian(control.ArchiveBytes.AsSpan((int)centralVersionOffset, 2)));
+        Assert.Equal(20, BinaryPrimitives.ReadUInt16LittleEndian(mutated.ArchiveBytes.AsSpan((int)localVersionOffset, 2)));
+        Assert.Equal(45, BinaryPrimitives.ReadUInt16LittleEndian(mutated.ArchiveBytes.AsSpan((int)centralVersionOffset, 2)));
+        Assert.Equal(control.ArchiveBytes.Length, mutated.ArchiveBytes.Length);
+        Assert.Equal(1, CountDifferingBytes(control.ArchiveBytes, mutated.ArchiveBytes));
+
+        Assert.Equal(2, mutated.Mutations.Count);
+        var localMutation = mutated.Mutations[0];
+        var centralMutation = mutated.Mutations[1];
+        Assert.Equal("version-local-central-mismatch", localMutation.Code);
+        Assert.Equal("local-header", localMutation.Structure);
+        Assert.Equal(localVersionOffset, localMutation.Offset);
+        Assert.Equal(2, localMutation.DeletedLength);
+        Assert.Equal(2, localMutation.InsertedLength);
+        Assert.Equal("version-local-central-mismatch", centralMutation.Code);
+        Assert.Equal("central-header", centralMutation.Structure);
+        Assert.Equal(centralVersionOffset, centralMutation.Offset);
+        Assert.Equal(2, centralMutation.DeletedLength);
+        Assert.Equal(2, centralMutation.InsertedLength);
+        Assert.Equal(localMutation.BeforeHex, localMutation.AfterHex);
+        Assert.NotEqual(centralMutation.BeforeHex, centralMutation.AfterHex);
+        Assert.All(mutated.Mutations, mutation =>
+            Assert.Equal("local-version-needed=20 central-version-needed=45", mutation.DeclaredValue));
+        Assert.Equal(control.ArchiveSha256, localMutation.BeforeSha256);
+        Assert.Equal(mutated.ArchiveSha256, localMutation.AfterSha256);
+        Assert.Equal(control.ArchiveSha256, centralMutation.BeforeSha256);
+        Assert.Equal(mutated.ArchiveSha256, centralMutation.AfterSha256);
+    }
+
     [Theory]
     [InlineData("btype", "non-stored block")]
     [InlineData("short-len-nlen", "a stored block is missing LEN/NLEN")]

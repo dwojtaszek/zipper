@@ -46,6 +46,7 @@ internal static class ArchiveFixtureMutator
             ArchiveTestMutationKind.NameLocalCentralMismatch => MismatchLocalName(control, before),
             ArchiveTestMutationKind.MethodLocalCentralMismatch => MismatchLocalMethod(control, before),
             ArchiveTestMutationKind.SizeLocalCentralMismatch => MismatchLocalCompressedSize(control, before),
+            ArchiveTestMutationKind.VersionLocalCentralMismatch => MismatchLocalVersion(control, before),
             ArchiveTestMutationKind.OffsetOutsideArchive => PointCentralOffsetOutsideArchive(control, before),
             ArchiveTestMutationKind.OffsetIntoPayload => PointCentralOffsetIntoPayload(control, before),
             ArchiveTestMutationKind.ExtraFieldLengthOverrun => OverrunExtraFieldLength(control, before),
@@ -1264,6 +1265,38 @@ internal static class ArchiveFixtureMutator
     }
 
     /// <summary>
+    /// Disagrees the version-needed words: the local header keeps the control's 2.0
+    /// (20) while the central header claims 4.5 (45), the Zip64 version this Archive
+    /// does not use. Both words are recorded; the payload and every offset stay put.
+    /// </summary>
+    private static MutatedArchiveFixture MismatchLocalVersion(ArchiveFixtureArtifact control, byte[] before)
+    {
+        const ushort LocalVersion = 20;
+        const ushort CentralVersion = 45;
+        var entry = control.Layout.Entries[0];
+        var localVersionOffset = entry.LocalHeaderOffset + 4;  // local version-needed field
+        var centralVersionOffset = entry.CentralDirectoryOffset + 6;  // central signature + version made by
+        var code = ArchiveTestMutationKind.VersionLocalCentralMismatch.ToCaseKey();
+        var declaredValue = $"local-version-needed={LocalVersion} central-version-needed={CentralVersion}";
+
+        return Patch(ArchiveTestMutationKind.VersionLocalCentralMismatch, before,
+        [
+            new MutationSpec(
+                code, "local-header", localVersionOffset,
+                $"Keeps the local header's version-needed at 2.0 ({LocalVersion}) while the central header claims 4.5 ({CentralVersion}); the payload and every offset stay put.",
+                entry.Ordinal, 2, 2, DeclaredValue: declaredValue),
+            new MutationSpec(
+                code, "central-header", centralVersionOffset,
+                $"Rewrites the central header's version-needed from 2.0 ({LocalVersion}) to 4.5 ({CentralVersion}) while the local header still declares 2.0; the central version-made-by field is unchanged.",
+                entry.Ordinal, 2, 2, DeclaredValue: declaredValue),
+        ], after =>
+        {
+            BinaryPrimitives.WriteUInt16LittleEndian(after.AsSpan((int)localVersionOffset, 2), LocalVersion);
+            BinaryPrimitives.WriteUInt16LittleEndian(after.AsSpan((int)centralVersionOffset, 2), CentralVersion);
+        });
+    }
+
+    /// <summary>
     /// Rewrites the first entry's central relative-local-header offset to a fixed value
     /// near the UInt32 boundary, far beyond physical EOF. The physical bytes and the
     /// control layout are unchanged; the lie lives in the declared offset only.
@@ -2011,6 +2044,7 @@ internal enum ArchiveTestMutationKind
     NameLocalCentralMismatch,
     MethodLocalCentralMismatch,
     SizeLocalCentralMismatch,
+    VersionLocalCentralMismatch,
     OffsetOutsideArchive,
     OffsetIntoPayload,
     ExtraFieldLengthOverrun,
@@ -2073,6 +2107,7 @@ internal static class ArchiveTestMutationKindExtensions
         ArchiveTestMutationKind.NameLocalCentralMismatch => "name-local-central-mismatch",
         ArchiveTestMutationKind.MethodLocalCentralMismatch => "method-local-central-mismatch",
         ArchiveTestMutationKind.SizeLocalCentralMismatch => "size-local-central-mismatch",
+        ArchiveTestMutationKind.VersionLocalCentralMismatch => "version-local-central-mismatch",
         ArchiveTestMutationKind.OffsetOutsideArchive => "offset-outside-archive",
         ArchiveTestMutationKind.OffsetIntoPayload => "offset-into-payload",
         ArchiveTestMutationKind.ExtraFieldLengthOverrun => "extra-field-length-overrun",
