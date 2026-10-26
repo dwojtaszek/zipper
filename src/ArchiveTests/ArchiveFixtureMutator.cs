@@ -369,7 +369,7 @@ internal static class ArchiveFixtureMutator
         var zip64CentralDirectoryOffset = BinaryPrimitives.ReadUInt64LittleEndian(
             before.AsSpan((int)zip64EocdOffset + 48, 8));
         if (eocdCentralDirectoryOffset != trueCentralDirectoryOffset
-            && zip64CentralDirectoryOffset != trueCentralDirectoryOffset)
+            || zip64CentralDirectoryOffset != trueCentralDirectoryOffset)
         {
             throw new InvalidOperationException(
                 $"Archive Test case '{code}' requires matching, non-sentinel regular and Zip64 EOCD central-directory offsets.");
