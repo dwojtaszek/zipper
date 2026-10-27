@@ -31,6 +31,9 @@ public class FileGenerationRequest
     /// </summary>
     internal IReadOnlyList<SourceInput.SourceRecord>? SourceRecords { get; set; }
 
+    /// <summary>Gets the validated Source Record paths retained for path-pointer collision checks.</summary>
+    internal IReadOnlySet<string>? SourcePaths { get; set; }
+
     public FileGenerationRequest Clone()
     {
         return new FileGenerationRequest
@@ -49,6 +52,7 @@ public class FileGenerationRequest
             Hash = this.Hash,
             LoadfileOnly = this.LoadfileOnly,
             SourceRecords = this.SourceRecords,
+            SourcePaths = this.SourcePaths,
         };
     }
 }

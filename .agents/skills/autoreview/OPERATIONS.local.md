@@ -337,3 +337,11 @@
 - **telemetry**: host=droid mode=branch specialists=7 bundle=41490c
 - **lessons**: none
 - **suppressions**: none
+
+### 2026-10-27 droid:local:issue-1292-path-reconciliation-test
+
+- **findings**: 0 (fast correctness pass)
+- **outcome**: accepted / clean review; normalized the archive entry and proved the original path is accepted before checking the mutated path.
+- **telemetry**: host=droid mode=local specialists=1 bundle=~900c
+- **lessons**: none
+- **suppressions**: none

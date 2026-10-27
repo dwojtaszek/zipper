@@ -330,8 +330,14 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
             Assert.True(pathIndex >= 0);
             string corruptedPath = DatLineParser.Parse(chaosLines[lineNumber - 1], '\u0014', '\u00fe')[pathIndex];
             string originalPath = DatLineParser.Parse(baselineLines[lineNumber - 1], '\u0014', '\u00fe')[pathIndex];
+            string archiveEntry = originalPath.Replace('\\', '/');
+            var validator = new PathReconciliationValidator();
+            var originalValidation = new ValidationResult();
+            validator.Validate([originalPath], [archiveEntry], chaosLoadFile, originalValidation);
+            Assert.Empty(originalValidation.Findings);
+
             var validation = new ValidationResult();
-            new PathReconciliationValidator().Validate([corruptedPath], [originalPath], chaosLoadFile, validation);
+            validator.Validate([corruptedPath], [archiveEntry], chaosLoadFile, validation);
             Assert.Contains(validation.Findings, finding => finding.Category == "PathReconciliation");
         }
         finally
@@ -345,6 +351,43 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
                 Directory.Delete(baselinePath, true);
             }
         }
+    }
+
+    [Fact]
+    public async Task ChaosScenario_SourceDrivenPathPointer_AvoidsPathAndSidecarCollisions()
+    {
+        string sourceCsv = Path.Combine(this.TempDir, "source-paths.csv");
+        string outputPath = Path.Combine(this.TempDir, $"zipper_source_chaos_{Guid.NewGuid():N}");
+        await File.WriteAllTextAsync(sourceCsv, "FilePath,FileType\nfolder\\doc.pdf,pdf\nfolder\\doc_MISSING.docx,docx\n");
+
+        var (exitCode, _, stderr) = await RunWithCapture(new[]
+        {
+            "--loadfile-only", "--input-csv", sourceCsv, "--count", "2", "--output-path", outputPath,
+            "--chaos-mode", "--chaos-types", "path-pointer", "--chaos-amount", "2", "--seed", "42",
+        });
+        Assert.Equal(0, exitCode);
+        Assert.Empty(stderr);
+
+        string loadFile = Assert.Single(Directory.GetFiles(outputPath, "*.dat"));
+        var lines = await File.ReadAllLinesAsync(loadFile);
+        var columns = DatLineParser.Parse(lines[0], '\u0014', '\u00fe');
+        int pathIndex = columns.FindIndex(column => string.Equals(column, "File Path", StringComparison.Ordinal));
+        Assert.True(pathIndex >= 0);
+
+        var mutatedPaths = lines.Skip(1)
+            .Select(line => DatLineParser.Parse(line, '\u0014', '\u00fe')[pathIndex])
+            .ToArray();
+        Assert.Equal(
+            new[] { "folder/doc_MISSING_1.pdf", "folder/doc_MISSING_MISSING.docx" },
+            mutatedPaths);
+
+        var validation = new ValidationResult();
+        new PathReconciliationValidator().Validate(
+            mutatedPaths,
+            ["folder/doc.pdf", "folder/doc_MISSING.docx"],
+            loadFile,
+            validation);
+        Assert.Equal(2, validation.Findings.Count);
     }
 
     [Fact]

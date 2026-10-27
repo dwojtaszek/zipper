@@ -42,6 +42,7 @@ internal class ChaosEngine
     /// <param name="eol">Configured end-of-line string.</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     /// <param name="dateColumnNames">Optional names of date columns that the <c>date-format</c> anomaly may target.</param>
+    /// <param name="sourceFilePaths">Optional Source Record paths used to avoid path-pointer collisions.</param>
     public ChaosEngine(
         long totalLines,
         string? chaosAmount,
@@ -51,7 +52,8 @@ internal class ChaosEngine
         string quoteDelimiter,
         string eol,
         int? seed = null,
-        IReadOnlyCollection<string>? dateColumnNames = null)
+        IReadOnlyCollection<string>? dateColumnNames = null,
+        IReadOnlySet<string>? sourceFilePaths = null)
     {
         this.format = format;
         this.totalLines = totalLines;
@@ -105,7 +107,7 @@ internal class ChaosEngine
         // Initialize Applier
         this.applier = format == LoadFileFormat.Opt
             ? new OptAnomalyApplier(random)
-            : new DatAnomalyApplier(random, columnDelimiter, quoteDelimiter, string.IsNullOrEmpty(eol) ? "\r\n" : eol, dateColumnNames);
+            : new DatAnomalyApplier(random, columnDelimiter, quoteDelimiter, string.IsNullOrEmpty(eol) ? "\r\n" : eol, dateColumnNames, sourceFilePaths);
     }
 
     /// <summary>

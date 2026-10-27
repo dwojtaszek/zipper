@@ -57,7 +57,8 @@ internal static class ChaosEngineBuilder
             chaosQuoteDelim,
             eolString,
             request.Metadata.Seed,
-            GetDateColumnNames(request));
+            GetDateColumnNames(request),
+            format == LoadFileFormat.Dat ? request.SourcePaths : null);
     }
 
     private static IReadOnlyCollection<string> GetDateColumnNames(FileGenerationRequest request)

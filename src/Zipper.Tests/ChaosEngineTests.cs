@@ -1030,6 +1030,41 @@ public class ChaosEngineTests
     }
 
     [Fact]
+    public void DatRecordAnomalies_MixedWithLegacyTypes_OnlyInterceptDataRecords()
+    {
+        var engine = new ChaosEngine(
+            totalLines: 5,
+            chaosAmount: "100%",
+            chaosTypes: "mixed-delimiters,path-pointer",
+            format: LoadFileFormat.Dat,
+            columnDelimiter: "|",
+            quoteDelimiter: "\"",
+            eol: "\r\n",
+            seed: 42);
+        var serializer = new DatSerializer('|', '"', "~");
+
+        Assert.False(engine.ShouldIntercept(1));
+        for (int lineNumber = 2; lineNumber <= 5; lineNumber++)
+        {
+            Assert.True(engine.ShouldIntercept(lineNumber));
+            var record = new LoadFileRecord
+            {
+                Columns = ["File Path", "Author"],
+                Values = [$"NATIVES\\001\\DOC{lineNumber.ToString("D8", CultureInfo.InvariantCulture)}.pdf", "Jane Doe"],
+                RecordId = $"DOC{lineNumber.ToString("D8", CultureInfo.InvariantCulture)}",
+            };
+            string line = serializer.RenderRecord(record);
+
+            string result = engine.Intercept(lineNumber, line, record.RecordId, record, serializer);
+
+            Assert.NotEqual(line, result);
+        }
+
+        Assert.Equal(2, engine.Anomalies.Count(anomaly => anomaly.ErrorType == "mixed-delimiters"));
+        Assert.Equal(2, engine.Anomalies.Count(anomaly => anomaly.ErrorType == "path-pointer"));
+    }
+
+    [Fact]
     public void DatDefaultAnomalies_PreservePreviouslyEnabledTypes()
     {
         const int totalLines = 100;
@@ -1042,19 +1077,48 @@ public class ChaosEngineTests
             quoteDelimiter: "\"",
             eol: "\r\n",
             seed: 42);
+        var legacyEngine = new ChaosEngine(
+            totalLines,
+            chaosAmount: "10",
+            chaosTypes: "mixed-delimiters,quotes,columns,eol,encoding",
+            format: LoadFileFormat.Dat,
+            columnDelimiter: "|",
+            quoteDelimiter: "\"",
+            eol: "\r\n",
+            seed: 42);
+        var headerEngine = new ChaosEngine(
+            totalLines: 2,
+            chaosAmount: "100%",
+            chaosTypes: null,
+            format: LoadFileFormat.Dat,
+            columnDelimiter: "|",
+            quoteDelimiter: "\"",
+            eol: "\r\n",
+            seed: 42);
+        Assert.True(headerEngine.ShouldIntercept(1));
+        Assert.True(headerEngine.ShouldIntercept(2));
         string line = "\"DOC00000001\"|\"NATIVES\\DOC00000001.pdf\"|\"2024-01-15\"|\"Jane Doe\"";
 
         for (int i = 1; i <= totalLines; i++)
         {
-            if (engine.ShouldIntercept(i))
+            bool shouldIntercept = engine.ShouldIntercept(i);
+            Assert.Equal(legacyEngine.ShouldIntercept(i), shouldIntercept);
+            if (shouldIntercept)
             {
-                engine.Intercept(i, line, $"DOC{i:D8}");
+                string recordId = $"DOC{i:D8}";
+                Assert.Equal(
+                    legacyEngine.Intercept(i, line, recordId),
+                    engine.Intercept(i, line, recordId));
                 _ = engine.GetEncodingAnomaly(i, i + 1, Encoding.UTF8);
+                _ = legacyEngine.GetEncodingAnomaly(i, i + 1, Encoding.UTF8);
             }
         }
 
         Assert.Equal(10, engine.Anomalies.Count);
         Assert.DoesNotContain(engine.Anomalies, anomaly =>
             ChaosAnomalyTypes.DatRecordOnly.Contains(anomaly.ErrorType, StringComparer.Ordinal));
+        Assert.Equal(
+            legacyEngine.Anomalies.Select(anomaly => (anomaly.LineNumber, anomaly.ErrorType, anomaly.Column, anomaly.Description)),
+            engine.Anomalies.Select(anomaly => (anomaly.LineNumber, anomaly.ErrorType, anomaly.Column, anomaly.Description)));
     }
 }

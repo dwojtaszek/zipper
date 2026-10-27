@@ -7,6 +7,7 @@ using Zipper.LoadFiles;
 using Zipper.ManifestComparison;
 using Zipper.Profiles;
 using Zipper.Profiles.Generation;
+using Zipper.Validation;
 
 namespace Zipper.Tests.Properties;
 
@@ -201,6 +202,60 @@ public sealed class ChaosAndComparisonPropertyTests
         Assert.Equal(record.RecordId, anomaly.RecordID);
         Assert.False(string.IsNullOrWhiteSpace(anomaly.Column));
         Assert.NotEqual("N/A", anomaly.Column);
+    }
+
+    [Property]
+    public void DatAnomalyApplier_PathPointer_ShouldAvoidExistingSourcePaths(
+        byte rawCollisionDepth,
+        bool useBackslashes,
+        ChaosSeedPropertyInput seedInput)
+    {
+        const string originalPath = "folder/doc.pdf";
+        int collisionDepth = (rawCollisionDepth % 5) + 1;
+        var existingFilePaths = new List<string> { originalPath };
+        for (int depth = 1; depth <= collisionDepth; depth++)
+        {
+            string suffix = depth == 1 ? "_MISSING" : $"_MISSING_{depth - 1}";
+            string extension = depth == 1 || depth % 2 == 0 ? ".docx" : ".pdf";
+            string existingPath = $"folder/doc{suffix}{extension}";
+            if (useBackslashes)
+            {
+                existingPath = existingPath.Replace('/', '\\');
+            }
+            else if (depth % 2 == 0)
+            {
+                existingPath = existingPath.ToUpperInvariant();
+            }
+
+            existingFilePaths.Add(existingPath);
+        }
+
+        var record = new LoadFileRecord
+        {
+            Columns = ["File Path"],
+            Values = [originalPath],
+            RecordId = $"DOC{seedInput.RecordOrdinal:D4}",
+        };
+        var serializer = new DatSerializer('|', '"', "~");
+        var anomalies = new List<ChaosAnomaly>();
+        var applier = new DatAnomalyApplier(
+            new Random(seedInput.Seed),
+            "|",
+            "\"",
+            "\r\n",
+            sourceFilePaths: existingFilePaths
+                .Select(path => path.Replace('\\', '/'))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase));
+        string line = serializer.RenderRecord(record);
+
+        string result = applier.Apply(2, line, record.RecordId, "path-pointer", anomalies, record, serializer);
+        string mutatedPath = DatLineParser.Parse(result, '|', '"')[0].Replace('\\', '/');
+
+        Assert.NotEqual(line, result);
+        Assert.Equal(
+            $"folder/doc_MISSING_{collisionDepth.ToString(CultureInfo.InvariantCulture)}.pdf",
+            mutatedPath);
+        Assert.Equal("path-pointer", Assert.Single(anomalies).ErrorType);
     }
 
     [Property]

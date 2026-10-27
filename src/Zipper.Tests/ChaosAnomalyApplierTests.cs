@@ -160,8 +160,14 @@ public class DatAnomalyApplierTests
         Assert.Equal("path-pointer", anomaly.ErrorType);
         Assert.Equal("File Path", anomaly.Column);
 
+        string archiveEntry = record.Values[1].Replace('\\', '/');
+        var validator = new PathReconciliationValidator();
+        var originalValidation = new ValidationResult();
+        validator.Validate([record.Values[1]], [archiveEntry], "test.dat", originalValidation);
+        Assert.Empty(originalValidation.Findings);
+
         var validation = new ValidationResult();
-        new PathReconciliationValidator().Validate([fields[1]], [record.Values[1]], "test.dat", validation);
+        validator.Validate([fields[1]], [archiveEntry], "test.dat", validation);
         Assert.Contains(validation.Findings, finding => finding.Category == "PathReconciliation");
     }
 

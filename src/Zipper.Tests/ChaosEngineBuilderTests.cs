@@ -2,6 +2,7 @@ using System.Reflection;
 using Xunit;
 using Zipper.LoadFiles;
 using Zipper.Profiles;
+using Zipper.SourceInput;
 using Zipper.Validation;
 
 namespace Zipper.Tests;
@@ -115,6 +116,49 @@ public class ChaosEngineBuilderTests
         Assert.Equal("jdoe", fields[0]);
         Assert.Contains(fields[1], new[] { "00/00/0000", "2018-01-15 a.m.", "2018-044-09" });
         Assert.Equal("ReviewStamp", Assert.Single(engine.Anomalies).Column);
+    }
+
+    [Fact]
+    public void Build_PathPointer_AvoidsExistingSourcePaths()
+    {
+        var sourceRecords = new[]
+        {
+            new SourceRecord { RelativePath = "folder/doc.pdf", FileType = "pdf" },
+            new SourceRecord { RelativePath = "folder/doc_MISSING.docx", FileType = "docx" },
+        };
+        var request = new FileGenerationRequest
+        {
+            LoadfileOnly = true,
+            SourceRecords = sourceRecords,
+            SourcePaths = new HashSet<string>(
+                sourceRecords.Select(sourceRecord => sourceRecord.RelativePath),
+                StringComparer.OrdinalIgnoreCase),
+        };
+        request.Chaos = request.Chaos with { ChaosMode = true, ChaosAmount = "2", ChaosTypes = "path-pointer" };
+        request.Delimiters = request.Delimiters with { ColumnDelimiter = "|", QuoteDelimiter = "\"", EndOfLine = "CRLF" };
+        request.Metadata = request.Metadata with { Seed = 42 };
+
+        var engine = ChaosEngineBuilder.Build(request, 3, LoadFileFormat.Dat);
+        Assert.NotNull(engine);
+        Assert.False(engine.ShouldIntercept(1));
+        Assert.True(engine.ShouldIntercept(2));
+
+        var record = new LoadFileRecord
+        {
+            Columns = ["File Path"],
+            Values = [sourceRecords[0].RelativePath],
+            RecordId = "DOC00000001",
+        };
+        var serializer = new DatSerializer('|', '"', "~");
+        string line = serializer.RenderRecord(record);
+
+        string result = engine.Intercept(2, line, record.RecordId, record, serializer);
+        string mutatedPath = DatLineParser.Parse(result, '|', '"')[0];
+
+        Assert.Equal("folder/doc_MISSING_1.pdf", mutatedPath);
+        Assert.DoesNotContain(sourceRecords, sourceRecord =>
+            string.Equals(sourceRecord.RelativePath, mutatedPath, StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("path-pointer", Assert.Single(engine.Anomalies).ErrorType);
     }
 
     [Fact]

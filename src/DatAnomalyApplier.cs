@@ -1,5 +1,6 @@
 using System.Text;
 using Zipper.LoadFiles;
+using Zipper.SourceInput;
 
 namespace Zipper;
 
@@ -26,6 +27,7 @@ internal class DatAnomalyApplier : IAnomalyApplier
     private readonly string quoteDelimiter;
     private readonly string eol;
     private readonly HashSet<string> dateColumnNames;
+    private readonly IReadOnlySet<string>? sourceFilePaths;
     private readonly HashSet<long> encodingAnomalyLines = new();
     private readonly char[] alternatives;
 
@@ -34,7 +36,8 @@ internal class DatAnomalyApplier : IAnomalyApplier
         string columnDelimiter,
         string quoteDelimiter,
         string eol,
-        IReadOnlyCollection<string>? dateColumnNames = null)
+        IReadOnlyCollection<string>? dateColumnNames = null,
+        IReadOnlySet<string>? sourceFilePaths = null)
     {
         this.random = random;
         this.columnDelimiter = columnDelimiter;
@@ -43,6 +46,7 @@ internal class DatAnomalyApplier : IAnomalyApplier
         this.dateColumnNames = new HashSet<string>(
             (dateColumnNames ?? Array.Empty<string>()).Select(NormalizeColumnName),
             StringComparer.Ordinal);
+        this.sourceFilePaths = sourceFilePaths;
         this.alternatives = AlternativeDelimiters.Where(c => !string.Equals(c.ToString(), columnDelimiter, StringComparison.Ordinal)).ToArray();
     }
 
@@ -94,8 +98,30 @@ internal class DatAnomalyApplier : IAnomalyApplier
                     pathIndex = FindColumnIndex(record, IsPathColumn);
                 }
 
+                if (pathIndex < 0 || record is null || serializer is null)
+                {
+                    return line;
+                }
+
                 string originalPath = GetValue(record, pathIndex);
-                string missingPath = CreateMissingPath(originalPath);
+                string baseMissingPath = CreateMissingPath(originalPath);
+                string missingPath = baseMissingPath;
+                if (this.sourceFilePaths is not null)
+                {
+                    GetPathReconciliationParts(baseMissingPath, out string missingDirectory, out string baseMissingFileName);
+                    string missingFileName = baseMissingFileName;
+                    int collisionIndex = 0;
+                    while (this.IsExistingSourcePath(missingDirectory, missingFileName))
+                    {
+                        collisionIndex++;
+                        missingPath = AddCollisionSuffix(baseMissingPath, collisionIndex);
+                        missingFileName = string.Concat(
+                            baseMissingFileName,
+                            "_",
+                            collisionIndex.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    }
+                }
+
                 if (!TryRenderReplacement(record, serializer, pathIndex, missingPath, out result))
                 {
                     return line;
@@ -106,6 +132,11 @@ internal class DatAnomalyApplier : IAnomalyApplier
                 break;
             case "field-length":
                 int lengthIndex = FindColumnIndex(record, this.IsFieldValueColumn);
+                if (lengthIndex < 0 || serializer is null)
+                {
+                    return line;
+                }
+
                 char valueCharacter = FieldLengthCharacters.First(c =>
                     !this.columnDelimiter.Contains(c, StringComparison.Ordinal)
                     && !this.quoteDelimiter.Contains(c, StringComparison.Ordinal));
@@ -207,6 +238,34 @@ internal class DatAnomalyApplier : IAnomalyApplier
     private bool IsDateColumn(string column)
         => this.dateColumnNames.Contains(NormalizeColumnName(column));
 
+    private bool IsExistingSourcePath(string directory, string fileNameWithoutExtension)
+    {
+        if (this.sourceFilePaths is null)
+        {
+            return false;
+        }
+
+        foreach (string extension in SourceFileTypeMap.SupportedExtensions)
+        {
+            string candidatePath = directory.Length == 0
+                ? string.Concat(fileNameWithoutExtension, extension)
+                : string.Concat(directory, "/", fileNameWithoutExtension, extension);
+            if (this.sourceFilePaths.Contains(candidatePath))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static void GetPathReconciliationParts(string path, out string directory, out string fileNameWithoutExtension)
+    {
+        string normalizedPath = path.Replace('\\', '/');
+        directory = Path.GetDirectoryName(normalizedPath)?.Replace('\\', '/') ?? string.Empty;
+        fileNameWithoutExtension = Path.GetFileNameWithoutExtension(normalizedPath);
+    }
+
     private static bool IsPathColumn(string column)
         => IsPathColumnNormalized(NormalizeColumnName(column));
 
@@ -282,6 +341,16 @@ internal class DatAnomalyApplier : IAnomalyApplier
         return extension > lastSeparator
             ? string.Concat(path.AsSpan(0, extension), "_MISSING", path.AsSpan(extension))
             : string.Concat(path, "_MISSING");
+    }
+
+    private static string AddCollisionSuffix(string path, int collisionIndex)
+    {
+        int lastSeparator = Math.Max(path.LastIndexOf('/'), path.LastIndexOf('\\'));
+        int extension = path.LastIndexOf('.');
+        string suffix = $"_{collisionIndex.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+        return extension > lastSeparator
+            ? string.Concat(path.AsSpan(0, extension), suffix, path.AsSpan(extension))
+            : string.Concat(path, suffix);
     }
 
     private static string NormalizeColumnName(string column)

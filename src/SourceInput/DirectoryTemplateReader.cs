@@ -9,8 +9,17 @@ namespace Zipper.SourceInput;
 internal static class DirectoryTemplateReader
 {
     internal static bool TryRead(string directoryPath, out IReadOnlyList<SourceRecord> records, out string? error, int maxRecords = SourceRecordIntake.MaxSourceRecords)
+        => TryRead(directoryPath, out records, out _, out error, maxRecords);
+
+    internal static bool TryRead(
+        string directoryPath,
+        out IReadOnlyList<SourceRecord> records,
+        out IReadOnlySet<string>? sourcePaths,
+        out string? error,
+        int maxRecords = SourceRecordIntake.MaxSourceRecords)
     {
         records = Array.Empty<SourceRecord>();
+        sourcePaths = null;
         error = null;
 
         if (!Directory.Exists(directoryPath))
@@ -60,6 +69,7 @@ internal static class DirectoryTemplateReader
         var sorted = built.ToList();
         sorted.Sort(static (a, b) => string.CompareOrdinal(a.RelativePath, b.RelativePath));
         records = sorted;
+        sourcePaths = intake.SourcePaths;
         return true;
     }
 }

@@ -7,7 +7,12 @@ namespace Zipper.SourceInput;
 /// </summary>
 internal static class SourceFileTypeMap
 {
-    internal const string SupportedExtensionsDisplay = ".pdf, .jpg, .jpeg, .tif, .tiff, .eml, .docx, .xlsx";
+    internal static readonly string[] SupportedExtensions =
+    [
+        ".pdf", ".jpg", ".jpeg", ".tif", ".tiff", ".eml", ".docx", ".xlsx",
+    ];
+
+    internal static readonly string SupportedExtensionsDisplay = string.Join(", ", SupportedExtensions);
 
     internal static bool TryFromExtension(string extensionLower, out string fileType)
     {

@@ -42,11 +42,25 @@ public sealed class SourceInputModule : CliModule
     public string? InputCsv => _inputCsv;
     public string? DirectoryTemplate => _directoryTemplate;
 
-    internal bool TryBuild(long? declaredCount, bool productionSet, BatesNumberConfig? bates, out IReadOnlyList<SourceInput.SourceRecord>? sourceRecords)
+    internal bool TryBuild(
+        long? declaredCount,
+        bool productionSet,
+        BatesNumberConfig? bates,
+        out IReadOnlyList<SourceInput.SourceRecord>? sourceRecords)
+        => this.TryBuild(declaredCount, productionSet, bates, retainSourcePaths: false, out sourceRecords, out _);
+
+    internal bool TryBuild(
+        long? declaredCount,
+        bool productionSet,
+        BatesNumberConfig? bates,
+        bool retainSourcePaths,
+        out IReadOnlyList<SourceInput.SourceRecord>? sourceRecords,
+        out IReadOnlySet<string>? sourcePaths)
     {
         if (!HasSourceInput)
         {
             sourceRecords = null;
+            sourcePaths = null;
             return true;
         }
 
@@ -57,6 +71,7 @@ public sealed class SourceInputModule : CliModule
         {
             Console.Error.WriteLine("Error: --input-csv and --directory-template cannot be used together.");
             sourceRecords = null;
+            sourcePaths = null;
             return false;
         }
 
@@ -65,6 +80,7 @@ public sealed class SourceInputModule : CliModule
         {
             Console.Error.WriteLine($"Error: Path traversal detected in source input path '{sourcePath}'. Source input must reside within working directory.");
             sourceRecords = null;
+            sourcePaths = null;
             return false;
         }
 
@@ -75,17 +91,20 @@ public sealed class SourceInputModule : CliModule
                 ? $"Error: Source CSV '{sourcePath}' does not exist."
                 : $"Error: Directory template '{sourcePath}' does not exist.");
             sourceRecords = null;
+            sourcePaths = null;
             return false;
         }
 
         IReadOnlyList<SourceInput.SourceRecord> rows;
+        IReadOnlySet<string>? readPaths;
         var readOk = hasCsv
-            ? SourceInput.SourceCsvReader.TryRead(_inputCsv!, out rows, out var readError)
-            : SourceInput.DirectoryTemplateReader.TryRead(_directoryTemplate!, out rows, out readError);
+            ? SourceInput.SourceCsvReader.TryRead(_inputCsv!, out rows, out readPaths, out var readError)
+            : SourceInput.DirectoryTemplateReader.TryRead(_directoryTemplate!, out rows, out readPaths, out readError);
         if (!readOk)
         {
             Console.Error.WriteLine($"Error: {readError}");
             sourceRecords = null;
+            sourcePaths = null;
             return false;
         }
 
@@ -93,6 +112,7 @@ public sealed class SourceInputModule : CliModule
         {
             Console.Error.WriteLine($"Error: --count ({declaredCount.Value}) does not match the Source Record count ({rows.Count}). Align --count with the source input or omit it.");
             sourceRecords = null;
+            sourcePaths = null;
             return false;
         }
 
@@ -100,6 +120,7 @@ public sealed class SourceInputModule : CliModule
         {
             Console.Error.WriteLine("Error: the source 'BatesNumber' column requires --bates-prefix so the Bates column is emitted.");
             sourceRecords = null;
+            sourcePaths = null;
             return false;
         }
 
@@ -107,6 +128,7 @@ public sealed class SourceInputModule : CliModule
         {
             Console.Error.WriteLine("Error: the source 'BatesNumber' column cannot be used with --production-set. Production Set Bates Numbers come from the configured Bates sequence so Volume ranges in the Production Manifest stay exact.");
             sourceRecords = null;
+            sourcePaths = null;
             return false;
         }
 
@@ -118,10 +140,12 @@ public sealed class SourceInputModule : CliModule
         {
             Console.Error.WriteLine($"Error: {identityCollision}");
             sourceRecords = null;
+            sourcePaths = null;
             return false;
         }
 
         sourceRecords = rows;
+        sourcePaths = retainSourcePaths ? readPaths : null;
         return true;
     }
 
