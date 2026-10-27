@@ -41,6 +41,7 @@ internal class ChaosEngine
     /// <param name="quoteDelimiter">Configured quote delimiter.</param>
     /// <param name="eol">Configured end-of-line string.</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
+    /// <param name="dateColumnNames">Optional names of date columns that the <c>date-format</c> anomaly may target.</param>
     public ChaosEngine(
         long totalLines,
         string? chaosAmount,
@@ -136,6 +137,8 @@ internal class ChaosEngine
     /// <param name="lineNumber">1-based line number.</param>
     /// <param name="line">Original line content.</param>
     /// <param name="recordId">Record ID (e.g., "DOC00001054" or "HEADER").</param>
+    /// <param name="record">Optional parsed record. DAT record-level anomalies require it.</param>
+    /// <param name="serializer">Optional serializer used to render the modified record.</param>
     /// <returns>Modified line with injected anomaly.</returns>
     public string Intercept(
         long lineNumber,
