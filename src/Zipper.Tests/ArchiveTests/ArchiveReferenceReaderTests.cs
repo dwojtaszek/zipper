@@ -373,6 +373,25 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void ReadOperations_NameSiblingPrefixTraversal_PreservesNamesAndPayloads()
+    {
+        var definition = ArchiveTestCatalog.GetCase("name-sibling-prefix-traversal");
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+        var testCase = ArchiveTestSuiteGenerator.BuildExpectationFile(artifact, definition, 42);
+
+        using (var archive = new ZipArchive(new MemoryStream(artifact.ArchiveBytes), ZipArchiveMode.Read))
+        {
+            Assert.Equal(
+                testCase.Entries.Select(entry => entry.ReadableName),
+                archive.Entries.Select(entry => entry.FullName));
+        }
+
+        Assert.Equal("list-succeeds", NormalizeList(artifact.ArchiveBytes, testCase));
+        Assert.Equal("read-entry-content-matches", NormalizeReadEntry(artifact.ArchiveBytes, testCase));
+        Assert.Equal("integrity-passes", NormalizeIntegrityCheck(artifact.ArchiveBytes, testCase));
+    }
+
+    [Fact]
     public void ReadOperations_ExtraFieldTruncated_PinsDotNetReaderOutcomes()
     {
         var definition = ArchiveTestCatalog.GetCase("extra-field-truncated");

@@ -114,6 +114,10 @@ internal enum ArchiveControlConstruction
     /// control bytes in both headers (ticket #876).</summary>
     HostileNameControlChars,
 
+    /// <summary>Replaces two same-length name placeholders with normalization-sensitive
+    /// traversal names in both headers (ticket #1290).</summary>
+    HostileNameSiblingPrefix,
+
     /// <summary>Writes through a non-seekable stream so the standard writer emits
     /// data descriptors with the signature (APPNOTE §4.3.9).</summary>
     NonSeekableDescriptor,
@@ -637,6 +641,10 @@ internal static class ArchiveTestCatalog
             Suites: [SecuritySuite],
             Recipe: HostileNameRecipe,
             Construction: ArchiveControlConstruction.HostileNameControlChars),
+        ["name-sibling-prefix-traversal"] = PolicyDefinition(
+            "name-sibling-prefix-traversal",
+            HostileNameSiblingPrefixRecipe,
+            ArchiveControlConstruction.HostileNameSiblingPrefix),
         ["directory-slash-with-payload"] = PolicyDefinition("directory-slash-with-payload", DirectorySlashWithPayloadRecipe),
         ["directory-attribute-with-payload"] = PolicyDefinition("directory-attribute-with-payload", DirectoryAttributeWithPayloadRecipe),
         ["symlink-then-descendant"] = PolicyDefinition("symlink-then-descendant", SymlinkThenDescendantRecipe),
@@ -756,12 +764,14 @@ internal static class ArchiveTestCatalog
         ControlCaseKey: StoredControlCaseKey,
         Mutations: chain);
 
-    /// <summary>A policy-sensitive direct recipe (ticket #842): suite security, no
-    /// mutation, no construction — the standard writer's bytes for these names.</summary>
-    private static ArchiveTestCaseDefinition PolicyDefinition(string caseKey, ArchiveTestRecipe recipe) => new(
+    /// <summary>A policy-sensitive recipe (ticket #842): suite security, no mutation,
+    /// and optional name construction when the standard writer cannot emit the bytes.</summary>
+    private static ArchiveTestCaseDefinition PolicyDefinition(
+        string caseKey, ArchiveTestRecipe recipe, ArchiveControlConstruction? construction = null) => new(
         caseKey, CaseRevision: 1, ExpectationRevision: 2, Classification: PolicySensitiveClassification,
         Suites: [SecuritySuite],
-        Recipe: recipe);
+        Recipe: recipe,
+        Construction: construction);
 
     private static ArchiveTestRecipe ControlRecipe(string controlCaseKey) => controlCaseKey switch
     {
@@ -829,6 +839,16 @@ internal static class ArchiveTestCatalog
     private static ArchiveTestRecipe HostileNameRecipe => new(
     [
         ArchiveTestRecipeEntry.File("report.pdfX.exe", 40, "stored"),
+    ]);
+
+    // Ticket #1290: policy-name placeholders become the sibling-prefix and
+    // percent-encoded traversal names without moving any Archive structure. The
+    // constructed names exceed the ordinary depth-2 budget because normalization
+    // behavior is under test; ordinary verification never extracts this Archive.
+    private static ArchiveTestRecipe HostileNameSiblingPrefixRecipe => new(
+    [
+        ArchiveTestRecipeEntry.PolicyFile("sibling-placeholderx", "sibling-prefix"),
+        ArchiveTestRecipeEntry.PolicyFile("encoded-placeholderx", "encoded-traversal"),
     ]);
 
     // The recipe for the zip-bomb-overlapping-deflate case (ticket #872): 64

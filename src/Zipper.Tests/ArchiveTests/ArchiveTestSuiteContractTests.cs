@@ -70,8 +70,9 @@ public class ArchiveTestSuiteContractTests
     private static readonly string[] ParserDifferentialSecurityCaseKeys =
         ["orphan-local-header", "eocdr-ambiguity-comment", "zip64-locator-ambiguity", "trailing-data-undeclared"];
 
-    /// <summary>The hostile filename-byte cases (ticket #876) housed in security.</summary>
-    private static readonly string[] HostileNameSecurityCaseKeys = ["filename-null-byte", "filename-c0-control"];
+    /// <summary>The hostile filename cases (tickets #876 and #1290) housed in security.</summary>
+    private static readonly string[] HostileNameSecurityCaseKeys =
+        ["filename-null-byte", "filename-c0-control", "name-sibling-prefix-traversal"];
 
     /// <summary>The Unicode name-policy case (ticket #871) housed in security.</summary>
     private static readonly string[] UnicodePathSecurityCaseKeys = ["unicode-path-extra-mismatch"];
@@ -182,6 +183,22 @@ public class ArchiveTestSuiteContractTests
             Assert.False(c.IsMutation);
             Assert.Null(c.Construction);
         });
+    }
+
+    [Fact]
+    public void ListSuite_Security_SiblingPrefixTraversalUsesHostileNameConstruction()
+    {
+        var definition = ArchiveTestCatalog.GetCase("name-sibling-prefix-traversal");
+
+        Assert.Equal(ArchiveTestCatalog.PolicySensitiveClassification, definition.Classification);
+        Assert.Equal([ArchiveTestCatalog.SecuritySuite], definition.Suites);
+        Assert.False(definition.IsMutation);
+        Assert.Equal(ArchiveControlConstruction.HostileNameSiblingPrefix, definition.Construction);
+        Assert.Equal(
+            ["sibling-placeholderx", "encoded-placeholderx"],
+            definition.Recipe.Entries.Select(entry => entry.Name));
+        Assert.All(definition.Recipe.Entries, entry => Assert.True(entry.IsPolicyName));
+        Assert.Contains(definition.CaseKey, SuiteKeys(ArchiveTestCatalog.SecuritySuite));
     }
 
     // ---- compatibility and malformed: classification-based, plus pinned structure cases ----
@@ -307,9 +324,10 @@ public class ArchiveTestSuiteContractTests
         // +2 for #1277, +1 for #1279, +1 for #1280, +1 for #1281, +1 for #1282,
         // +1 for #1283 encoding codec divergence, +1 for #1285 undeclared trailing,
         // +1 for #1286 Zip64 EOCD offset disagreement, +1 for #1288 extra-field truncation,
-        // +1 for #1289 the DEFLATE-control CRC mismatch
+        // +1 for #1289 the DEFLATE-control CRC mismatch, +1 for #1290 the
+        // normalization-sensitive hostile-name corpus
         // data): any case dropped from the catalog
         // or unlisted from every suite fails here.
-        Assert.Equal(118, AllKeys().Count);
+        Assert.Equal(119, AllKeys().Count);
     }
 }

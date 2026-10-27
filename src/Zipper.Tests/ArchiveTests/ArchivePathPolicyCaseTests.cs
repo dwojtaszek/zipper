@@ -40,9 +40,10 @@ public class ArchivePathPolicyCaseTests : WorkingDirectoryTestBase
         "path-emoji-zwj-namemax",
         "path-adls-segments-boundary",
         "path-adls-segments-exceeded",
+        "name-sibling-prefix-traversal",
     ];
 
-    /// <summary>The ten cases whose extract expectation is a containment policy.</summary>
+    /// <summary>The eleven cases whose extract expectation is a containment policy.</summary>
     private static readonly string[] ContainmentCaseKeys =
     [
         "path-parent-traversal",
@@ -55,6 +56,7 @@ public class ArchivePathPolicyCaseTests : WorkingDirectoryTestBase
         "path-azure-disallowed-unicode",
         "directory-slash-with-payload",
         "directory-attribute-with-payload",
+        "name-sibling-prefix-traversal",
     ];
 
     /// <summary>The six collision cases that name a no-silent-overwrite policy.</summary>
@@ -365,7 +367,7 @@ public class ArchivePathPolicyCaseTests : WorkingDirectoryTestBase
 
     // The security-suite membership contract (policy, collision, unsupported-feature,
     // bounded resource per #834) is pinned by ArchiveTestSuiteContractTests; these
-    // policy-case tests target the eighteen policy-sensitive recipes directly.
+    // policy-case tests target the twenty-two policy-sensitive recipes.
 
     // ---- Raw name bytes (the hazard is the bytes themselves) ----
 
@@ -548,6 +550,9 @@ public class ArchivePathPolicyCaseTests : WorkingDirectoryTestBase
         // Read-only listing and per-ordinal content reads: no extraction on this host.
         using var archive = new ZipArchive(new MemoryStream(artifact.ArchiveBytes), ZipArchiveMode.Read);
         Assert.Equal(artifact.Layout.EntryCount, archive.Entries.Count);
+        Assert.Equal(
+            artifact.Layout.Entries.Select(entry => entry.Name),
+            archive.Entries.Select(entry => entry.FullName));
 
         for (var ordinal = 0; ordinal < archive.Entries.Count; ordinal++)
         {
@@ -608,6 +613,7 @@ public class ArchivePathPolicyCaseTests : WorkingDirectoryTestBase
         Assert.Null(ExtractExpectationOf(cases["file-directory-conflict"]).Platform);
         Assert.Null(ExtractExpectationOf(cases["azure-directory-marker-collision"]).Platform);
         Assert.Null(ExtractExpectationOf(cases["filename-bidi-override"]).Platform);
+        Assert.Null(ExtractExpectationOf(cases["name-sibling-prefix-traversal"]).Platform);
         Assert.Null(ExtractExpectationOf(cases["symlink-then-descendant"]).Platform);
         Assert.Null(ExtractExpectationOf(cases["directory-slash-with-payload"]).Platform);
         Assert.Null(ExtractExpectationOf(cases["directory-attribute-with-payload"]).Platform);
@@ -663,7 +669,7 @@ public class ArchivePathPolicyCaseTests : WorkingDirectoryTestBase
         var securityKeys = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.SecuritySuite)
             .Select(c => c.CaseKey)
             .ToList();
-        Assert.Equal(45, securityKeys.Count);
+        Assert.Equal(46, securityKeys.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(securityKeys, 42, Path.Combine(TempDir, "security")),
@@ -682,7 +688,7 @@ public class ArchivePathPolicyCaseTests : WorkingDirectoryTestBase
     [Fact]
     public async Task GenerateAsync_PolicyCases_PublishesPairsWithSafeBasenamesOnly()
     {
-        // Publishes the eighteen policy-sensitive recipes (the path/collision/entry-type
+        // Publishes the twenty-two policy-sensitive recipes (the path/collision/entry-type
         // subset of the security suite; the full suite membership is pinned by
         // ArchiveTestSuiteContractTests).
         var result = await PublishPolicySuiteAsync("out");

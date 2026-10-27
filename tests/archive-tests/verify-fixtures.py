@@ -563,10 +563,12 @@ class FixtureVerifier:
             coded_note = verify_coded_method(case, zip_bytes, 9)
             checks.append({"check": "coded-method", "status": "pass", "detail": coded_note})
 
-        # Hostile filename bytes (ticket #876): the sidecar raw hex must equal
-        # the exact hostile bytes in both headers; reads stay ordinal-based so
-        # a Python NUL truncation never becomes a name-keyed lookup.
-        if case.get("caseKey") in ("filename-null-byte", "filename-c0-control"):
+        # Hostile filename bytes (ticket #876) and normalization-sensitive
+        # traversal names (ticket #1290): raw header bytes are audited by ordinal,
+        # never through Python's name-keyed lookup.
+        if case.get("caseKey") in (
+                "filename-null-byte", "filename-c0-control",
+                "name-sibling-prefix-traversal"):
             hostile_note = verify_hostile_name(case, zip_bytes)
             checks.append({"check": "hostile-name", "status": "pass", "detail": hostile_note})
 
@@ -2277,35 +2279,79 @@ def verify_shared_payload_range(case, zip_bytes):
 
 
 def verify_hostile_name(case, zip_bytes):
-    """Hostile-name audit (ticket #876): one stored entry whose local and
-    central raw name bytes equal the exact hostile hex recorded in the
-    Expectation File. NUL truncates in Python list views; C0 bytes survive."""
+    """Hostile-name audit (tickets #876 and #1290): each entry's local and
+    central raw name bytes equal the exact hostile bytes recorded in the
+    Expectation File. NUL truncates in Python list views; ordinary names retain
+    their decoded spelling."""
     import struct
 
     expected = {
-        "filename-null-byte": "7265706f72742e706466002e657865",
-        "filename-c0-control": "0102036f72742e706466582e657865",
+        "filename-null-byte": ["7265706f72742e706466002e657865"],
+        "filename-c0-control": ["0102036f72742e706466582e657865"],
+        "name-sibling-prefix-traversal": [
+            "782f2e2e2f2e2e2f646f63732e2e2f652e747874",
+            "2e2e2532662e2e2532666573636170652e747874",
+        ],
     }[case["caseKey"]]
-    if len(case["entries"]) != 1:
-        raise VerificationError("hostile-name", "expected exactly one entry record")
-    record = case["entries"][0]
-    if record["localNameRaw"] != expected or record["centralNameRaw"] != expected:
-        raise VerificationError("hostile-name", "sidecar raw hex does not carry the hostile bytes")
-    raw = bytes.fromhex(expected)
-    if len(zip_bytes) < 30 or zip_bytes[0:4] != b"PK\x03\x04":
-        raise VerificationError("hostile-name", "offset 0 is not a local file header")
-    local_name_len = struct.unpack_from("<H", zip_bytes, 26)[0]
-    if zip_bytes[30:30 + local_name_len] != raw:
-        raise VerificationError("hostile-name", "raw local name is not the hostile bytes")
-    if len(zip_bytes) < 22 or zip_bytes[-22:-18] != b"PK\x05\x06":
+    if len(case["entries"]) != len(expected):
+        raise VerificationError(
+            "hostile-name",
+            "expected %d entry records, found %d" % (len(expected), len(case["entries"])))
+    if len(zip_bytes) < ZIP_EOCD_FIXED_SIZE:
         raise VerificationError("hostile-name", "EOCD signature missing at the expected offset")
-    cd_offset = struct.unpack_from("<I", zip_bytes, len(zip_bytes) - 22 + 16)[0]
-    if cd_offset + 46 > len(zip_bytes) or zip_bytes[cd_offset:cd_offset + 4] != b"PK\x01\x02":
-        raise VerificationError("hostile-name", "central directory missing at offset %d" % cd_offset)
-    central_name_len = struct.unpack_from("<H", zip_bytes, cd_offset + 28)[0]
-    if zip_bytes[cd_offset + 46:cd_offset + 46 + central_name_len] != raw:
-        raise VerificationError("hostile-name", "raw central name is not the hostile bytes")
-    return "hostile=%s local-central-equal" % case["caseKey"]
+    eocd_offset = len(zip_bytes) - ZIP_EOCD_FIXED_SIZE
+    if zip_bytes[eocd_offset:eocd_offset + 4] != b"PK\x05\x06":
+        raise VerificationError("hostile-name", "EOCD signature missing at the expected offset")
+    entries_on_disk, total_entries = struct.unpack_from("<HH", zip_bytes, eocd_offset + 8)
+    cd_size, cd_offset = struct.unpack_from("<II", zip_bytes, eocd_offset + 12)
+    cd_end = cd_offset + cd_size
+    if entries_on_disk != len(expected) or total_entries != len(expected):
+        raise VerificationError("hostile-name", "EOCD entry count does not match the hostile-name corpus")
+    if cd_end != eocd_offset or cd_end > len(zip_bytes):
+        raise VerificationError("hostile-name", "central directory does not end at the EOCD")
+
+    cursor = cd_offset
+    readable_names = []
+    for ordinal, expected_hex in enumerate(expected):
+        record = case["entries"][ordinal]
+        if record.get("ordinal") != ordinal:
+            raise VerificationError("hostile-name", "sidecar entries are not in ordinal order")
+        if record.get("localNameRaw") != expected_hex or record.get("centralNameRaw") != expected_hex:
+            raise VerificationError("hostile-name", "sidecar raw hex does not carry the hostile bytes")
+        raw = bytes.fromhex(expected_hex)
+        readable_name = raw.decode("utf-8")
+        readable_names.append(readable_name)
+        if record.get("readableName") != readable_name:
+            raise VerificationError("hostile-name", "sidecar readableName does not match the raw bytes")
+
+        if cursor + ZIP_CENTRAL_HEADER_FIXED_SIZE > cd_end or zip_bytes[cursor:cursor + 4] != b"PK\x01\x02":
+            raise VerificationError("hostile-name", "central directory entry %d is missing" % ordinal)
+        name_length, extra_length, comment_length = struct.unpack_from("<HHH", zip_bytes, cursor + 28)
+        central_name_start = cursor + ZIP_CENTRAL_HEADER_FIXED_SIZE
+        central_name = zip_bytes[central_name_start:central_name_start + name_length]
+        if central_name != raw:
+            raise VerificationError("hostile-name", "raw central name %d is not the hostile bytes" % ordinal)
+        local_offset = struct.unpack_from("<I", zip_bytes, cursor + 42)[0]
+        if local_offset + ZIP_LOCAL_HEADER_FIXED_SIZE > cd_offset or zip_bytes[local_offset:local_offset + 4] != b"PK\x03\x04":
+            raise VerificationError("hostile-name", "local header %d is missing" % ordinal)
+        local_name_length = struct.unpack_from("<H", zip_bytes, local_offset + 26)[0]
+        local_extra_length = struct.unpack_from("<H", zip_bytes, local_offset + 28)[0]
+        local_name_start = local_offset + ZIP_LOCAL_HEADER_FIXED_SIZE
+        local_name_end = local_name_start + local_name_length
+        if local_name_end + local_extra_length > cd_offset:
+            raise VerificationError("hostile-name", "local name %d extends past the central directory" % ordinal)
+        if zip_bytes[local_name_start:local_name_end] != raw:
+            raise VerificationError("hostile-name", "raw local name %d is not the hostile bytes" % ordinal)
+        cursor += ZIP_CENTRAL_HEADER_FIXED_SIZE + name_length + extra_length + comment_length
+
+    if cursor != cd_end:
+        raise VerificationError("hostile-name", "central directory size does not match its entries")
+    if case["caseKey"] == "name-sibling-prefix-traversal":
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            reader_names = [info.filename for info in zf.infolist()]
+        if reader_names != readable_names:
+            raise VerificationError("hostile-name", "Python reader changed a normalization-sensitive name")
+    return "hostile=%s entries=%d local-central-equal" % (case["caseKey"], len(expected))
 
 
 def verify_coded_method(case, zip_bytes, expected):
