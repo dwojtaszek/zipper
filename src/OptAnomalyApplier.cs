@@ -68,7 +68,7 @@ internal class OptAnomalyApplier : IAnomalyApplier
 
     public byte[]? GetEncodingAnomaly(long lineNumber, long nextLineNumber, Encoding encoding, List<ChaosAnomaly> anomalies)
     {
-        if (!this.encodingAnomalyLines.Remove(lineNumber))
+        if (this.encodingAnomalyLines.Count == 0 || !this.encodingAnomalyLines.Remove(lineNumber))
         {
             return null;
         }

@@ -535,6 +535,36 @@ public class SourceDrivenGenerationTests : IDisposable
     }
 
     [Fact]
+    public async Task LoadfileOnly_SourceTiffRow_FullChaosOptEncodingEmitsAndAuditsBom()
+    {
+        var request = this.CreateSourceRequest([Row("a.tiff", "tiff")]);
+        request.LoadfileOnly = true;
+        request.Tiff = request.Tiff with { PageRange = (10, 10) };
+        request.LoadFile = request.LoadFile with
+        {
+            Formats = [LoadFileFormat.Opt],
+            Encoding = "ANSI",
+            IsEncodingExplicit = true,
+        };
+        request.Chaos = new ChaosConfig
+        {
+            ChaosMode = true,
+            ChaosAmount = "100%",
+            ChaosScenario = "full-chaos",
+        };
+
+        var result = await LoadFileOnlyGenerator.GenerateAsync(request);
+
+        byte[] output = await File.ReadAllBytesAsync(result.LoadFilePath);
+        Assert.True(output.AsSpan().IndexOf(Encoding.UTF8.GetPreamble()) >= 0);
+
+        using var audit = JsonDocument.Parse(await File.ReadAllTextAsync(result.PropertiesFilePath));
+        var anomalies = audit.RootElement.GetProperty("chaosMode").GetProperty("injectedAnomalies");
+        Assert.Contains(anomalies.EnumerateArray(), anomaly =>
+            anomaly.GetProperty("errorType").GetString() == "opt-encoding");
+    }
+
+    [Fact]
     public async Task XmlWriter_RootLevelSourceEml_ChildPathsHaveNoLeadingSlash()
     {
         var rows = new[]

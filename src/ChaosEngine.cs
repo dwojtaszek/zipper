@@ -19,10 +19,11 @@ internal class ChaosEngine
     private readonly List<ChaosAnomaly> anomalies = new();
     private int anomalyTypeIndex;
 
-    private readonly ChaosSampler sampler;
     private readonly IAnomalyApplier applier;
     private readonly LoadFileFormat format;
     private readonly long totalLines;
+    private readonly bool onlyOptEncoding;
+    private readonly ChaosSampler sampler;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ChaosEngine"/> class.
@@ -52,9 +53,6 @@ internal class ChaosEngine
         Random random = seed.HasValue ? new Random(seed.Value) : new Random();
 #pragma warning restore S2245
 
-        // Initialize Sampler
-        this.sampler = new ChaosSampler(totalLines, chaosAmount, random);
-
         // Determine enabled types
         var validTypes = format == LoadFileFormat.Opt ? OptChaosTypes : DatChaosTypes;
         if (!string.IsNullOrEmpty(chaosTypes))
@@ -69,6 +67,13 @@ internal class ChaosEngine
             var defaultTypes = format == LoadFileFormat.Opt ? OptDefaultChaosTypes : validTypes;
             this.enabledTypes = new HashSet<string>(defaultTypes, StringComparer.OrdinalIgnoreCase);
         }
+
+        this.onlyOptEncoding = format == LoadFileFormat.Opt
+            && this.enabledTypes.Count == 1
+            && this.enabledTypes.Contains("opt-encoding");
+        ChaosSampler.ValidateTotalLines(totalLines);
+        long targetableLines = this.onlyOptEncoding && totalLines > 1 ? totalLines - 1 : totalLines;
+        this.sampler = new ChaosSampler(targetableLines, chaosAmount, random);
 
         // If quote-delim is "none", disable the quotes chaos type
         if (string.IsNullOrEmpty(quoteDelimiter))
@@ -92,7 +97,8 @@ internal class ChaosEngine
     /// </summary>
     /// <param name="lineNumber">1-based line number.</param>
     /// <returns>True if the line should be corrupted.</returns>
-    public bool ShouldIntercept(long lineNumber) => this.sampler.ShouldIntercept(lineNumber);
+    public bool ShouldIntercept(long lineNumber) =>
+        !(this.onlyOptEncoding && lineNumber >= this.totalLines) && this.sampler.ShouldIntercept(lineNumber);
 
     /// <summary>
     /// Intercepts and corrupts a line. Returns the modified line.
@@ -114,7 +120,12 @@ internal class ChaosEngine
 
         if (this.format == LoadFileFormat.Opt && lineNumber == this.totalLines && chosenType == "opt-encoding")
         {
-            return line;
+            if (this.onlyOptEncoding)
+            {
+                return line;
+            }
+
+            chosenType = typeList.First(type => type != "opt-encoding");
         }
 
         return this.applier.Apply(lineNumber, line, recordId, chosenType, this.anomalies);

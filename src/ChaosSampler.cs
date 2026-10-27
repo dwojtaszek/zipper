@@ -6,6 +6,14 @@ internal class ChaosSampler
 
     public ChaosSampler(long totalLines, string? chaosAmount, Random random)
     {
+        ValidateTotalLines(totalLines);
+
+        int targetCount = ParseChaosAmount(chaosAmount, (int)totalLines);
+        this.targetLines = SelectTargetLines((int)totalLines, targetCount, random);
+    }
+
+    internal static void ValidateTotalLines(long totalLines)
+    {
         if (totalLines > int.MaxValue)
         {
             throw new ArgumentOutOfRangeException(nameof(totalLines), "Chaos Engine does not support load files larger than Int32.MaxValue lines due to Floyd's sampling algorithm constraints.");
@@ -15,10 +23,6 @@ internal class ChaosSampler
         {
             throw new ArgumentOutOfRangeException(nameof(totalLines), "Chaos Engine requires a positive totalLines count.");
         }
-
-        int targetCount = ParseChaosAmount(chaosAmount, (int)totalLines);
-
-        this.targetLines = SelectTargetLines((int)totalLines, targetCount, random);
     }
 
     public bool ShouldIntercept(long lineNumber) => this.targetLines.Contains(lineNumber);
