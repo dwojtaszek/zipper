@@ -321,3 +321,11 @@
 - **telemetry**: host=droid mode=branch specialists=12 bundle=~59K
 - **lessons**: hostile-name verifier tests should tamper the sidecar independently of the ZIP headers.
 - **suppressions**: none
+
+### 2026-10-27 droid:branch:issue-1290-follow-up
+
+- **findings**: 1 ACTION rejected (safe rewriting is already allowed as `entry-renamed-by-policy`); 2 INFO fixed (second-entry header tampering and stale liveness timing description).
+- **outcome**: four follow-up reviewers returned no findings; focused liveness and full verifier tests passed. No publication performed.
+- **telemetry**: host=droid mode=branch specialists=4 bundle=~2500c
+- **lessons**: Check existing outcome tokens before proposing a new success outcome; a contained renamed path is already represented.
+- **suppressions**: none

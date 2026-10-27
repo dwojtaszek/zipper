@@ -1744,16 +1744,25 @@ class HostileNameTests(unittest.TestCase):
         eocd_offset = len(archive) - 22
         cd_offset = struct.unpack_from("<I", archive, eocd_offset + 16)[0]
 
-        for offset, expected_detail in ((30, "local name 0"), (cd_offset + 46, "central name 0")):
-            with self.subTest(header=expected_detail):
-                tampered = bytearray(archive)
-                tampered[offset] ^= 1
+        cursor = cd_offset
+        for ordinal in range(len(case["entries"])):
+            name_length, extra_length, comment_length = struct.unpack_from(
+                "<HHH", archive, cursor + 28)
+            local_offset = struct.unpack_from("<I", archive, cursor + 42)[0]
+            for offset, expected_detail in (
+                    (local_offset + 30, "local name %d" % ordinal),
+                    (cursor + 46, "central name %d" % ordinal)):
+                with self.subTest(header=expected_detail):
+                    tampered = bytearray(archive)
+                    tampered[offset] ^= 1
 
-                with self.assertRaises(vf.VerificationError) as caught:
-                    vf.verify_hostile_name(case, bytes(tampered))
+                    with self.assertRaises(vf.VerificationError) as caught:
+                        vf.verify_hostile_name(case, bytes(tampered))
 
-                self.assertEqual("hostile-name", caught.exception.check)
-                self.assertIn(expected_detail, str(caught.exception))
+                    self.assertEqual("hostile-name", caught.exception.check)
+                    self.assertIn(expected_detail, str(caught.exception))
+
+            cursor += 46 + name_length + extra_length + comment_length
 
     def test_sibling_prefix_sidecar_name_mismatch_fails(self):
         for ordinal, field, wrong_value in (

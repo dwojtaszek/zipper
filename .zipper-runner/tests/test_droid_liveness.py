@@ -82,16 +82,16 @@ EXITED_WITH_LINGERING_CHILD = (
     "print('started', flush=True)\n"
     "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(5)'])\n"
 )
-# Commits at 0.9s intervals against a 1s bound, with the poll interval set far
-# above both. Only asking for a fresh HEAD when the silence deadline arrives can
-# tell this apart from a hang, since no scheduled poll ever runs.
+# Commits 3s before a 4s bound, then stays silent past it. The wide margin keeps
+# scheduler and Git latency from changing the result; only a fresh HEAD check at
+# the silence deadline can tell this apart from a hang.
 DEADLINE_COMMITTING = (
     "import subprocess, time\n"
     "print('started', flush=True)\n"
-    "for i in range(3):\n"
-    "    time.sleep(0.9)\n"
-    "    subprocess.run(['git', 'commit', '--allow-empty', '--no-edit', '-m', 'wip'],\n"
-    "                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n"
+    "time.sleep(1.0)\n"
+    "subprocess.run(['git', 'commit', '--allow-empty', '--no-edit', '-m', 'wip'],\n"
+    "               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n"
+    "time.sleep(4.0)\n"
     "print('done', flush=True)\n"
 )
 # Closes both output streams, then keeps running. The watchdog must stay alive
@@ -202,12 +202,13 @@ class ProgressKeepsAMissionAliveTests(_LivenessCase):
 
         The poll interval is set far above the bound, so no scheduled poll runs
         before the deadline: the deadline itself has to ask for a fresh HEAD
-        before it may call the mission silent. Without that, a mission that
-        commits at 0.9s into a 1s window is killed for silence 0.1s later.
+        before it may call the mission silent. Here the commit is made 1s into a
+        4s window; without that fresh check, the mission is killed at the
+        deadline despite having committed about 3s earlier.
         """
         _git_repo(self.directory)
         before = subprocess.check_output(["git", "-C", self.directory, "rev-parse", "HEAD"], text=True).strip()
-        (code, out, err), _ = self._run(DEADLINE_COMMITTING, head_check=30.0)
+        (code, out, err), _ = self._run(DEADLINE_COMMITTING, liveness=4.0, head_check=30.0)
         after = subprocess.check_output(["git", "-C", self.directory, "rev-parse", "HEAD"], text=True).strip()
         self.assertEqual(code, 0, err)
         self.assertIn("done", out)
