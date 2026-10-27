@@ -329,3 +329,11 @@
 - **telemetry**: host=droid mode=branch specialists=4 bundle=~2500c
 - **lessons**: Check existing outcome tokens before proposing a new success outcome; a contained renamed path is already represented.
 - **suppressions**: none
+
+### 2026-10-27 droid:branch:issue-1291-opt-encoding
+
+- **findings**: 0 ACTION, 0 INFO across 7 reviewers (correctness, adversarial, security, testing, maintainability, performance, API contract); CodeRabbit found 0.
+- **outcome**: clean review. Focused tests, all 3,516 unit tests, 78 analyzer tests, format, chaos coverage E2E (18/18), mutation smoke (3 killed, 0 survived), and pre-push E2E smoke (6/6) passed. PR #1372 opened; robot review gate had no unresolved threads.
+- **telemetry**: host=droid mode=branch specialists=7 bundle=41490c
+- **lessons**: none
+- **suppressions**: none
