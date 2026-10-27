@@ -1755,6 +1755,21 @@ class HostileNameTests(unittest.TestCase):
                 self.assertEqual("hostile-name", caught.exception.check)
                 self.assertIn(expected_detail, str(caught.exception))
 
+    def test_sibling_prefix_sidecar_name_mismatch_fails(self):
+        for ordinal, field, wrong_value in (
+                (0, "localNameRaw", "00"),
+                (1, "centralNameRaw", "00"),
+                (0, "readableName", "x/../../docs../wrong.txt")):
+            with self.subTest(field=field):
+                case, archive = self.make_case()
+                case["entries"][ordinal][field] = wrong_value
+
+                with self.assertRaises(vf.VerificationError) as caught:
+                    vf.verify_hostile_name(case, archive)
+
+                self.assertEqual("hostile-name", caught.exception.check)
+                self.assertIn("sidecar", str(caught.exception))
+
 
 class PositiveControlTests(TempDirTest):
     def test_committed_valid_empty_vector_passes(self):

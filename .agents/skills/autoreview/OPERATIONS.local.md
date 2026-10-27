@@ -313,3 +313,11 @@
 - **telemetry**: host=droid mode=branch specialists=5 bundle=31857c
 - **lessons**: none
 - **suppressions**: none
+
+### 2026-10-27 droid:branch:issue-1290
+
+- **findings**: 1 INFO (missing negative test for hostile-name sidecar fields); fixed with direct tampering cases. 0 findings across 5 follow-up reviewers.
+- **outcome**: verified the full 119-case catalogue and unchanged 5-case smoke set, ran the archive E2E including 7-Zip and offline verification, focused .NET/Python tests, format check, and mutation smoke (2 killed, 0 survived). The unrelated macOS runner liveness test failed in CI but passed when reproduced locally. No publication performed.
+- **telemetry**: host=droid mode=branch specialists=12 bundle=~59K
+- **lessons**: hostile-name verifier tests should tamper the sidecar independently of the ZIP headers.
+- **suppressions**: none

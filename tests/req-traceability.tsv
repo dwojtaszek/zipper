@@ -524,7 +524,7 @@ REQ-212	unit	ArchiveReferenceReaderTests.ReadOperations_UndeclaredTrailingData_P
 REQ-212	unit	ArchiveTestSuiteGeneratorTests.BuildExpectationFile_ExtraFieldTruncated_DeclaresReaderVarianceAndInvariants	Expectation File allows reader variance and requires proof of a central extra-field overrun past EOF
 REQ-212	unit	ArchiveReferenceReaderTests.ReadOperations_ExtraFieldTruncated_PinsDotNetReaderOutcomes	.NET reference reader rejects the overlong central extra-field length during listing, reading, and integrity-check
 REQ-212	e2e	test-archive-test-suites.sh	Archive Test E2E runs the independent Python verifier suite and validates generated fixtures
-REQ-212	e2e	archive-tests/test_verify_fixtures.py	Independent Python verifier proves the declared central extra-field extends past EOF and rejects a shortened overrun
+REQ-212	e2e	archive-tests/test_verify_fixtures.py	Independent Python verifier covers hostile sidecar name tampering and the declared central extra-field overrun
 REQ-213	unit	ArchiveResourceCaseTests.Build_EntriesOneOverCap_ThrowsDescriptively	Archive test fixture 1000-entry budget cap enforcement
 REQ-213	unit	ArchiveResourceCaseTests.Build_PhysicalBytesOneOver_ThrowsDescriptively	Archive test fixture 16 MiB physical size budget cap enforcement
 REQ-213	unit	ArchiveResourceCaseTests.Build_ExpandedBytesOneOver_ThrowsDescriptively	Archive test fixture 32 MiB expanded recipe content budget cap enforcement
