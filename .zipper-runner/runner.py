@@ -3757,6 +3757,267 @@ def _worktrees_we_may_drive(active_worktrees):
             yield wt_path
 
 
+_SILENT_CLOSE_AUDIT_LOOKBACK_MINUTES = 90
+# Far above any plausible daily close count for this repository. Reaching it means
+# the read was partial, and a partial read must not clear the window: the issues it
+# never fetched would otherwise be skipped permanently.
+_SILENT_CLOSE_READ_LIMIT = 1000
+# The watermark trails the sweep by this much, and each sweep re-reads the overlap.
+# `gh issue list --search` is served by GitHub's search index, which lags writes, so
+# a close can be absent from a read that is otherwise complete. Advancing to `now`
+# would start the next window after that close and lose it for good -- the exact
+# failure this audit exists to catch. Re-reading is what makes the lag harmless; the
+# reported-number list is what stops the overlap from mailing twice.
+_SILENT_CLOSE_AUDIT_MARGIN_MINUTES = 30
+# Enough for weeks of closes at this repository's rate, and the list is pruned by
+# age, so it stays a bound rather than a leak.
+_SILENT_CLOSE_REPORTED_MAX = 200
+# Incomplete reads in a row before the condition is escalated. One is a hiccup; a
+# run of them means the audit is blind, which is otherwise only visible as a line
+# in a rotated log.
+_SILENT_CLOSE_INCOMPLETE_STRIKES = 3
+
+
+class _ClosedIssueSweep(NamedTuple):
+    """One closed-issue read: the issues worth reporting, and whether it was whole."""
+
+    flagged: list
+    complete: bool
+
+
+def _silent_close_audit_path() -> str:
+    return os.path.join(STATE_DIR, "silent-close-audit.json")
+
+
+def _load_silent_close_audit() -> tuple[datetime | None, dict]:
+    """The previous window end and the numbers already reported, or (None, {}).
+
+    None (rather than a default timestamp) lets the caller pick the first-run
+    lookback. Every unusable shape is treated the same way, including a stamp with
+    no offset: ``fromisoformat`` accepts ``2026-10-27T19:38:49`` and a date-only
+    ``2026-10-27``, and comparing either against an aware ``closedAt`` raises
+    ``TypeError`` -- which would escape ``main()`` and abort the entire runner every
+    cycle until a human deleted the file. A naive stamp is therefore rejected here,
+    the same way ``_parse_github_timestamp`` rejects one.
+    """
+    try:
+        with open(_silent_close_audit_path()) as f:
+            state = json.load(f)
+        if not isinstance(state, dict):
+            return None, {}
+        reported = state.get("reported")
+        if not isinstance(reported, dict):
+            reported = {}
+        return _parse_github_timestamp(state.get("audited_through")), reported
+    except (OSError, ValueError, TypeError, KeyError):
+        return None, {}
+
+
+def _save_silent_close_audit(moment: datetime, reported: dict) -> None:
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        ordered = sorted(reported.items(), key=lambda kv: str(kv[1]), reverse=True)
+        with open(_silent_close_audit_path(), "w") as f:
+            json.dump({"audited_through": moment.isoformat(),
+                       "reported": dict(ordered[:_SILENT_CLOSE_REPORTED_MAX])}, f)
+    except OSError as e:
+        print(f"[close-audit] Could not persist the audit window: {e}")
+
+
+def _parse_github_timestamp(value) -> datetime | None:
+    """Parse a GitHub ISO-8601 stamp into an aware datetime, or None.
+
+    GitHub emits both the 'Z' and '+00:00' spellings, and comparing the two as
+    strings is not chronological ('...49Z' sorts after '...49.5+00:00'), so the
+    window filter must compare parsed instants. A single malformed stamp returns
+    None rather than raising: one bad field must not abort the whole sweep.
+    """
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else None
+
+
+def _silently_closed_issues(since: datetime, until: datetime) -> _ClosedIssueSweep | None:
+    """Closed-as-completed issues in (since, until] with no comment and no closing PR.
+
+    GitHub's own two backing signals are the test. ``closedByPullRequestsReferences``
+    is the reference GitHub maintains for a ``Closes #N`` merge, and it is what
+    separates a backed close from an unbacked one -- a ``closed`` timeline event
+    carries an empty ``commit_id`` even for a PR-backed close, so it cannot be
+    used. A comment is the other signal: a deliberate manual close explains
+    itself, and a silent one does not. Either one suppresses the report, which is
+    what keeps a manual "closing as implemented elsewhere" close out of it.
+
+    The window is half-open and bounded at both ends. A ``closedAt`` in the future
+    is dropped rather than reported: a host clock behind GitHub's would otherwise
+    re-flag the same issue every cycle until the clocks agreed.
+
+    Returns None when GitHub state could not be read, so the caller can retry the
+    same window instead of advancing past issues it never examined. Otherwise the
+    sweep says whether the read was whole: a read that hit the limit is a partial
+    answer, and clearing the window on one would skip whatever it did not fetch.
+    """
+    code, out, err = run_cmd(
+        ["gh", "issue", "list", "--state", "closed", "--limit", str(_SILENT_CLOSE_READ_LIMIT),
+         "--search", f"closed:>={since.date().isoformat()}",
+         "--json", "number,title,url,closedAt,stateReason,comments,closedByPullRequestsReferences"],
+        cwd=REPO_PATH, timeout=NETWORK_GIT_TIMEOUT,
+    )
+    if code != 0:
+        print(f"[close-audit] Could not list closed issues: {(err or out).strip()[:200]}")
+        return None
+    try:
+        issues = json.loads(out)
+    except json.JSONDecodeError:
+        print(f"[close-audit] Unparseable closed-issue list: {out[:200]}")
+        return None
+    if not isinstance(issues, list):
+        return None
+    flagged = []
+    for issue in issues:
+        if not isinstance(issue, dict):
+            continue
+        closed_at = _parse_github_timestamp(issue.get("closedAt"))
+        if closed_at is None or closed_at <= since or closed_at > until:
+            continue
+        if issue.get("stateReason") != "COMPLETED":
+            continue
+        if issue.get("comments") or issue.get("closedByPullRequestsReferences"):
+            continue
+        flagged.append(issue)
+    return _ClosedIssueSweep(flagged, len(issues) < _SILENT_CLOSE_READ_LIMIT)
+
+
+def audit_silently_closed_issues() -> int:
+    """Email when an issue was closed as completed with no evidence of the work.
+
+    Issue #1363 -- a weekly CLI QA review that recorded a genuinely failing gate --
+    was closed COMPLETED with zero comments and no merged PR behind it, so the
+    failure it documented vanished without a trace. This pass re-derives GitHub's
+    backing signals and mails a digest naming each issue.
+
+    Warn only. It never comments, closes, or reopens: an audit that can mutate the
+    state it reports on cannot be trusted to report accurately, and a wrong reopen
+    is worse than a missed warning.
+
+    The window advances only on a whole read whose issues were either absent or
+    actually delivered. A failed lookup, a partial read, or a send that failed all
+    leave the window open so the next sweep re-reads the same issues -- advancing
+    first would exclude them from every later sweep, silently losing the one alert
+    this exists to send. The retry reuses the shared subject rate limit, whose
+    default window bounds a persistently failing mailer to one attempt a day rather
+    than one per cycle; that window is deliberately not shortened here, because
+    ``_should_send_rate_limited`` prunes rate files by the window it is given and a
+    shorter one would delete the records every other alert relies on.
+    """
+    if DRY_RUN:
+        print("[close-audit] Skipped in a dry run.")
+        return 0
+    now = datetime.now(timezone.utc)
+    since, reported = _load_silent_close_audit()
+    if since is None:
+        since = now - timedelta(minutes=_SILENT_CLOSE_AUDIT_LOOKBACK_MINUTES)
+    sweep = _silently_closed_issues(since, now)
+    if sweep is None:
+        return 0
+    if not sweep.complete:
+        strikes = _record_silent_close_incomplete(since)
+        print(f"[close-audit] Closed-issue list hit the {_SILENT_CLOSE_READ_LIMIT}-issue read limit; "
+              f"leaving the window open to re-read it (strike {strikes}).")
+        if strikes >= _SILENT_CLOSE_INCOMPLETE_STRIKES:
+            _alert_silent_close_incomplete(strikes)
+        return 0
+    # A whole read is recorded by _save_silent_close_audit, which writes only the
+    # window and the reported numbers -- so the strike count is cleared with it.
+    # The overlap re-read below is expected, so an issue already reported in a
+    # previous sweep is not reported again.
+    fresh = [issue for issue in sweep.flagged if str(issue.get("number")) not in reported]
+    # The watermark trails by the margin so a close the search index has not caught
+    # up with is still inside the next window.
+    watermark = now - timedelta(minutes=_SILENT_CLOSE_AUDIT_MARGIN_MINUTES)
+    if not fresh:
+        _save_silent_close_audit(watermark, reported)
+        return 0
+    flagged = fresh
+    numbers = [str(issue.get("number")) for issue in flagged]
+    print(f"[close-audit] {len(flagged)} issue(s) closed as completed with no comment and "
+          f"no closing PR: {', '.join('#' + n for n in numbers)}")
+    subject = ("[Runner] Issue Closed With No Comment and No Closing PR: "
+               + ", ".join(f"#{n}" for n in numbers))
+    if not _should_send_rate_limited(subject, min_consecutive=1):
+        print("[close-audit] Alert already attempted within the retry window; keeping it open.")
+        return len(flagged)
+    items = "".join(
+        f"<li><a href=\"{html.escape(str(issue.get('url', '')))}\">#{issue.get('number')}</a> "
+        f"{html.escape(str(issue.get('title', '')))}"
+        f"<br><small>closed {html.escape(str(issue.get('closedAt', '')))}</small></li>"
+        for issue in flagged
+    )
+    delivered = send_email(subject, (
+        f"<h3>{len(flagged)} issue(s) were closed as completed with no comment and no closing PR.</h3>"
+        f"<p>A close with no comment and no merged PR leaves no record of what was actually done, "
+        f"so a recorded failure can disappear silently. Check whether the work really landed:</p>"
+        f"<ul>{items}</ul>"
+    ))
+    if delivered is False:
+        print("[close-audit] Delivery failed; keeping the window open to retry.")
+        return len(flagged)
+    for number in numbers:
+        reported[number] = now.isoformat()
+    _save_silent_close_audit(watermark, reported)
+    return len(flagged)
+
+
+def _record_silent_close_incomplete(since: datetime) -> int:
+    """Count consecutive incomplete reads, keeping the window exactly where it was.
+
+    The count lives in its own key rather than among the reported numbers, so the
+    reported-number filter can never mistake it for an issue. The window is written
+    back unchanged: an incomplete read has examined nothing it can vouch for, so
+    advancing it would skip precisely the closes the read did not fetch.
+    """
+    strikes = 1
+    try:
+        with open(_silent_close_audit_path()) as f:
+            raw = json.load(f)
+        if isinstance(raw, dict):
+            strikes = int(raw.get("incomplete_strikes", 0) or 0) + 1
+    except (OSError, ValueError, TypeError):
+        pass
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        with open(_silent_close_audit_path(), "w") as f:
+            json.dump({"audited_through": since.isoformat(),
+                       "reported": _load_silent_close_audit()[1],
+                       "incomplete_strikes": strikes}, f)
+    except OSError as e:
+        print(f"[close-audit] Could not persist the incomplete-read count: {e}")
+    return strikes
+
+
+def _alert_silent_close_incomplete(strikes: int) -> None:
+    """Escalate a sustained partial read, which would otherwise only reach a log.
+
+    A partial read is not just a skipped sweep: it blinds the audit for as long as
+    it lasts, and the guard's whole point is that a silent gap is what goes
+    unnoticed. The alert is subject-rate-limited like every other recurring one.
+    """
+    subject = "[Runner] Silent-Close Audit Cannot Read All Closed Issues"
+    if not _should_send_rate_limited(subject):
+        return
+    send_email(subject, (
+        f"<h3>The silent-close audit has hit its read limit {strikes} times in a row.</h3>"
+        f"<p>Each sweep fetches at most {_SILENT_CLOSE_READ_LIMIT} closed issues. Reaching that "
+        f"limit means the read was partial, so the audit has not examined every close and its "
+        f"window has stayed open rather than skipping them.</p>"
+        f"<p>While this lasts, an issue closed with no comment and no closing PR goes unreported.</p>"
+    ))
+
+
 def babysit_active_worktrees():
     if not os.path.exists(WORKTREES_BASE):
         return 0
@@ -6060,6 +6321,11 @@ def main():
                 BABYSIT_LOCK.release()
         else:
             print("Babysit pass skipped: another babysit is active.")
+
+    # Independent of worktrees, and deliberately outside the babysit lock: a
+    # skipped babysit pass must not also skip the only check that notices an
+    # issue closed with no evidence behind it.
+    audit_silently_closed_issues()
 
     # Recalculate after babysit — merged/closed PRs may have been cleaned up
     active_count = _active_worktree_count()
