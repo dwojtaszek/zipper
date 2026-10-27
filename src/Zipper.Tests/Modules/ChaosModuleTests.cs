@@ -47,11 +47,14 @@ public class ChaosModuleTests
 
     [Theory]
     [InlineData(null, null, false)]
+    [InlineData("", null, true)]
     [InlineData("mixed-delimiters", null, false)]
     [InlineData("path-pointer", null, true)]
     [InlineData(null, "structured-import-failures", false)]
     [InlineData(null, "realistic-import-failures", true)]
     [InlineData(null, "full-chaos", true)]
+    [InlineData("", "structured-import-failures", false)]
+    [InlineData("", "full-chaos", true)]
     public void RequiresSourcePaths_UsesEffectiveDatAnomalyTypes(
         string? chaosTypes,
         string? scenario,
