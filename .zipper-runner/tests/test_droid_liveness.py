@@ -33,6 +33,12 @@ from unittest.mock import patch
 RUNNER_BASE = Path(__file__).resolve().parents[1]
 PLUGINS = RUNNER_BASE / "plugins"
 
+# The longest droid mission measured under the silence watchdog: a retry of issue
+# #1290 that finished 60s under the 5400s ceiling that had cut its first attempt.
+# The ceiling has to clear real work rather than land on top of it.
+LONGEST_MEASURED_MISSION_SECONDS = 5340
+CEILING_HEADROOM = 5 / 4  # at least 25% above the longest measured mission
+
 sys.path.insert(0, str(RUNNER_BASE))
 
 # Prints every 0.1s for 2s: never silent for the 1s bound, so it must finish.
@@ -312,6 +318,10 @@ class BoundShapeTests(unittest.TestCase):
     """The declared bounds, so a revert to a wall-clock cut is caught."""
 
     def setUp(self):
+        # The bound tests assert the shipped defaults, so an ambient override left
+        # in a developer's shell must not be able to fail them.
+        for name in ("RUNNER_DROID_LIVENESS_TIMEOUT", "RUNNER_DROID_MISSION_TIMEOUT"):
+            os.environ.pop(name, None)
         self.plugin = _load()
 
     def test_silenceBound_shouldSitBelowTheCeiling(self):
@@ -336,18 +346,30 @@ class BoundShapeTests(unittest.TestCase):
                 os.environ.pop(name, None)
         self.assertEqual(fresh.HEAD_CHECK_SECONDS, 30)
 
-    def test_ceiling_shouldSitAboveTheBoundThatTruncatedWorkingMissions(self):
-        """2700s cut four missions that were still working. The ceiling has to be
-        clear of it, or the silence bound is the only bound that matters and the
-        truncation returns."""
-        self.assertGreater(self.plugin.MISSION_TIMEOUT, 2700)
+    def test_ceiling_shouldSitClearOfTheLongestMeasuredMission(self):
+        """A ceiling inside normal work truncates instead of protecting.
 
-    def test_defaults_shouldMatchTheDocumentedBounds(self):
-        for name in ("RUNNER_DROID_LIVENESS_TIMEOUT", "RUNNER_DROID_MISSION_TIMEOUT"):
-            os.environ.pop(name, None)
+        This subsumes the earlier floor of 2700s, which cut missions that were
+        still working. See plugins/droid.py MISSION_TIMEOUT for the measurements.
+        """
+        self.assertGreaterEqual(
+            self.plugin.MISSION_TIMEOUT,
+            LONGEST_MEASURED_MISSION_SECONDS * CEILING_HEADROOM,
+            "the ceiling must keep headroom over the longest measured mission",
+        )
+
+    def test_defaults_shouldMatchTheDeclaredBounds(self):
         fresh = _load()
         self.assertEqual(fresh.LIVENESS_TIMEOUT, 900)
-        self.assertEqual(fresh.MISSION_TIMEOUT, 5400)
+        self.assertEqual(fresh.MISSION_TIMEOUT, 7200)
+
+    def test_documentedBounds_shouldMatchTheDefaults(self):
+        """The README states both bounds in two places. A value change that misses
+        one of them is doc/code drift, and nothing else in the tree reads this
+        file, so the numbers are asserted here rather than left to review."""
+        readme = (RUNNER_BASE / "README.md").read_text()
+        self.assertIn("a 900s silence bound with a 7200s ceiling for droid", readme)
+        self.assertIn("with 7200s as a generous absolute ceiling", readme)
 
 
 if __name__ == "__main__":

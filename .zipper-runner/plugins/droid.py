@@ -36,13 +36,22 @@ REASONING_EFFORT = "max"
 #
 # MISSION_TIMEOUT stays as a generous absolute ceiling, for a mission that emits
 # output forever without finishing. The silence bound is what catches a hang, so
-# the ceiling can sit well above any legitimate mission.
+# the ceiling can sit well above any legitimate mission. At 5400s it did not:
+# that ceiling cut two missions that were still working (#1290 and #1291), and
+# the retry of #1290 finished at 5340s -- 60s under the ceiling it was racing.
+# A ceiling that lands inside normal work is a truncation risk, not a safety net.
+#
+# The cost of a longer ceiling is real and is what bounds it: droid prints
+# progress every ~3 minutes against a 900s silence bound, so a mission stuck in a
+# chatty retry loop never trips silence and holds the single worktree slot for the
+# whole ceiling. That is the trade -- 30 minutes of slot on a genuinely stuck
+# mission against truncating a mission that has just passed its gates.
 #
 # Note HEARTBEAT_SECONDS is *not* a liveness signal: it is this plugin's own
 # timer, printed whether or not droid produces anything, so it proves only that
 # the pipe drain is running. It is deliberately not fed into the progress clock.
 LIVENESS_TIMEOUT = int(os.environ.get("RUNNER_DROID_LIVENESS_TIMEOUT", "900"))
-MISSION_TIMEOUT = int(os.environ.get("RUNNER_DROID_MISSION_TIMEOUT", "5400"))
+MISSION_TIMEOUT = int(os.environ.get("RUNNER_DROID_MISSION_TIMEOUT", "7200"))
 HEARTBEAT_SECONDS = 60
 # How often to ask git whether the mission committed. Read-only and cheap, and it
 # holds up the pipe drain for only milliseconds. Deliberately not configurable:
