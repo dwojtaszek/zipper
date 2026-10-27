@@ -19,9 +19,36 @@ BASE = Path(__file__).resolve().parents[1]
 class MergeAuthorizationTests(unittest.TestCase):
     def test_merge_untrustedForkWrongBaseAndSpoofedBot_doNotMutateRefs(self):
         for mutation in ("untrusted", "fork", "base", "spoof", "spoof-id", "spoof-type", "missing", "no-state",
-                         "bot-mixed", "bot-unsigned", "bot-drift", "stale-approval", "revoked-approval", "dismissed-approval"):
+                         "bot-mixed", "bot-unsigned", "bot-drift", "stale-approval", "revoked-approval",
+                         "dismissed-approval", "automated-untrusted", "automated-unlabeled",
+                         "automated-other-label"):
             with self.subTest(mutation=mutation):
                 self._exercise(mutation)
+
+    def test_merge_automatedLabelFromTrustedAuthor_authorizesWithoutARecord(self):
+        """The perf-baseline workflow names no issue by construction, so no record can
+        ever authorize its PR. The maintainer-applied 'automated' label substitutes."""
+        self._exercise("automated", expected=True)
+
+    def test_scanners_adoptedAutomatedPr_mergesOnItsGatesAlone(self):
+        """Adoption has to work from the scanner, not only from a direct merge."""
+        self._exercise("automated", expected=True, scanner="orphan")
+
+    def test_scanners_automatedPrWhoseBranchMoved_doesNotDriveTheStaleEntry(self):
+        """The list entry is read before the PR is re-read, so the branch can move in
+        between. Merging on the stale entry would gate a head the scanner never saw."""
+        self._exercise("automated-renamed", expected=False, scanner="orphan")
+
+    def test_scanners_adoptedPrMentioningAnIssue_doesNotTouchThatIssue(self):
+        """Adoption keys on the label, not on the body text. A generated body that
+        happens to mention a number must not make the runner create a worktree for,
+        or clear the state of, an issue it never recorded work for."""
+        self._exercise("automated-mentions-issue", expected=False, scanner="orphan")
+
+    def test_scanners_automatedLabelOnAStrangersPr_isIgnoredEntirely(self):
+        """Only the maintainer's own automation can be adopted: a label is not a
+        grant of provenance, and the maintainer must not be mailed about it."""
+        self._exercise("automated-untrusted", expected=False, scanner="orphan")
 
     def test_merge_runnerProvenance_mergesExactReviewedHead(self):
         self._exercise("runner", expected=True)
@@ -102,8 +129,29 @@ class MergeAuthorizationTests(unittest.TestCase):
                 "head": {"ref": "fix/ISSUE-42-proof", "sha": head,
                          "repo": {"full_name": "dwojtaszek/zipper"}},
             }
-            if scenario in ("untrusted", "approval", "recovery", "spoof", "stale-approval", "revoked-approval", "dismissed-approval"):
+            if scenario in ("untrusted", "approval", "recovery", "spoof", "stale-approval", "revoked-approval",
+                            "dismissed-approval", "automated-untrusted"):
                 pr["user"]["login"] = "outsider"
+            if scenario.startswith("automated"):
+                # The shape the perf-baseline-refresh workflow opens: no issue
+                # reference in the branch, title, or body.
+                pr["title"] = "chore: refresh perf baselines"
+                pr["body"] = "## Perf Baseline Refresh\n\nNo issue reference anywhere."
+                pr["head"]["ref"] = "perf/baseline-refresh-40302990823"
+                labels = {"automated": [{"name": "automated"}],
+                          "automated-unlabeled": [],
+                          # The real refresh PR carries perf alongside automated, so a
+                          # label that merely exists must not stand in for the marker.
+                          "automated-other-label": [{"name": "perf"}]}
+                pr["labels"] = labels.get(scenario, [{"name": "automated"}])
+            if scenario == "automated-renamed":
+                # The list entry was read before the branch moved, so it still names
+                # the old branch while the PR itself is on the new one.
+                (root / "list-branch.txt").write_text("perf/baseline-refresh-older-run")
+            if scenario == "automated-mentions-issue":
+                # The body names an issue the runner holds no record for, and no
+                # worktree exists for it.
+                pr["body"] = "## Perf Baseline Refresh\n\nSupersedes #77."
             if scenario == "fork":
                 pr["head"]["repo"]["full_name"] = "outsider/zipper"
             if scenario == "base":
@@ -160,7 +208,9 @@ class MergeAuthorizationTests(unittest.TestCase):
                 "    else: print(json.dumps({'number':99,'state':'OPEN','headRefOid':pr.get('head',{}).get('sha'), 'statusCheckRollup':[{'__typename':'CheckRun','name':'ci-gate','status':'COMPLETED','conclusion':'SUCCESS'}]}))\n"
                 "elif args[:2] == ['pr','list']:\n"
                 "    pr=json.loads((root/'pr.json').read_text())\n"
-                "    print(json.dumps([{'number':99,'title':pr.get('title','Fix #42'),'body':pr.get('body','Closes #42'),'author':{'login':pr['user']['login']},'headRefName':pr.get('head',{}).get('ref','fix/ISSUE-42-proof'),'statusCheckRollup':[{'__typename':'CheckRun','name':'ci-gate','status':'COMPLETED','conclusion':'SUCCESS'}]}]))\n"
+                "    override=root/'list-branch.txt'\n"
+                "    branch=override.read_text().strip() if override.exists() else pr.get('head',{}).get('ref','fix/ISSUE-42-proof')\n"
+                "    print(json.dumps([{'number':99,'title':pr.get('title','Fix #42'),'body':pr.get('body','Closes #42'),'author':{'login':pr['user']['login']},'headRefName':branch,'headRefOid':pr.get('head',{}).get('sha'),'labels':pr.get('labels',[]),'statusCheckRollup':[{'__typename':'CheckRun','name':'ci-gate','status':'COMPLETED','conclusion':'SUCCESS'}]}]))\n"
                 "else: raise AssertionError(args)\n"
             )
             gh.chmod(0o755)
@@ -182,7 +232,7 @@ class MergeAuthorizationTests(unittest.TestCase):
             if scenario == "moved":
                 # The record still points at the pre-PR commit on main.
                 state["authorized_head"] = initial
-            if scenario != "no-state":
+            if scenario != "no-state" and not scenario.startswith("automated"):
                 (root / "state" / "issue-42.json").write_text(json.dumps(state))
             if scenario == "failed-review":
                 (root / "state" / "pr-99-coderabbit-gate.json").write_text('{"error":"review failed"}')
@@ -195,12 +245,28 @@ class MergeAuthorizationTests(unittest.TestCase):
             runner.REVIEW_GATE_SCRIPT = "tests/wait-for-reviews.sh"
             with patch.dict(os.environ, {"PATH": directory + os.pathsep + os.environ["PATH"],
                                          "FIXTURE": directory, "SCENARIO": scenario,
-                                         "REVIEW_EXIT": "1" if scenario == "trusted-recovery" else "0"}):
+                                         "REVIEW_EXIT": "1" if scenario in ("trusted-recovery", "automated-mentions-issue") else "0"}):
+                emails = []
+                sent = patch.object(runner, "send_email",
+                                    side_effect=lambda subject, body: emails.append((subject, body)) or True)
+                sent.start()
+                self.addCleanup(sent.stop)
                 if scanner:
                     {"active": runner.babysit_active_worktrees, "orphan": runner.babysit_orphaned_issue_prs,
                      "dependabot": runner.babysit_dependabot_prs}[scanner]()
-                    if not expected:
+                    # An adopted PR is authorized, so the gate is reached; the
+                    # unauthorized shapes must not reach it at all.
+                    if not expected and scenario != "automated-mentions-issue":
                         self.assertFalse((root / "review-called").exists())
+                    if scenario == "automated-mentions-issue":
+                        # Adoption keys on the label, not on the body text, so the
+                        # runner must never treat this PR as work for issue #77.
+                        self.assertEqual([s for s, _ in emails], ["[Runner] PR #99 Cannot Be Merged"])
+                        self.assertNotIn("#77", emails[0][1])
+                    if scenario == "automated-untrusted":
+                        # The label alone must not adopt a stranger's PR, and the
+                        # runner must not mail the maintainer about it either.
+                        self.assertEqual(emails, [])
                 elif scenario in ("recovery", "trusted-recovery"):
                     runner._recreate_worktree_for_pr("42", "fix/ISSUE-42-proof", 99, head)
                     worktree = root / "worktrees/issue-42"
