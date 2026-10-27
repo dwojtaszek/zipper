@@ -4,3 +4,4 @@ broken-boundaries
 field-overflow
 full-chaos
 transfer-encoding-failures
+realistic-import-failures

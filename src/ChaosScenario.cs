@@ -54,6 +54,12 @@ internal static class ChaosScenarios
             ChaosTypes: "mixed-delimiters,encoding,quotes",
             DefaultAmount: "4%",
             RequiredFormat: LoadFileFormat.Dat),
+        new(
+            Name: "realistic-import-failures",
+            Description: "Documented DAT ingest failures: missing paths, overlong fields, malformed dates, control bytes, and empty columns",
+            ChaosTypes: "path-pointer,field-length,date-format,null-byte,trailing-empties",
+            DefaultAmount: "5%",
+            RequiredFormat: LoadFileFormat.Dat),
     };
 
     private static readonly IReadOnlyList<string> CachedScenarioNames =

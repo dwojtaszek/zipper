@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using FsCheck.Xunit;
 using Xunit;
+using Zipper.LoadFiles;
 using Zipper.ManifestComparison;
 using Zipper.Profiles;
 using Zipper.Profiles.Generation;
@@ -166,6 +167,40 @@ public sealed class ChaosAndComparisonPropertyTests
         // After fix: anomalies only recorded when line was modified
         // eol always modifies, others may not with empty delimiters
         Assert.Contains(edgeAnomalies, a => a.ErrorType == "eol");
+    }
+
+    [Property]
+    public void DatAnomalyApplier_ApplyRecord_ShouldBeDeterministicAndAuditTheColumn(
+        byte rawTypeIndex,
+        ChaosSeedPropertyInput seedInput)
+    {
+        string[] chaosTypes = ["path-pointer", "field-length", "date-format", "null-byte", "trailing-empties"];
+        string chaosType = chaosTypes[rawTypeIndex % chaosTypes.Length];
+        IReadOnlyList<string> columns = ["Control Number", "File Path", "Date Created", "Author"];
+        var record = new LoadFileRecord
+        {
+            Columns = columns,
+            Values = ["DOC00000001", "NATIVES\\001\\DOC00000001.pdf", "2024-01-15", "Jane Doe"],
+            RecordId = $"DOC{seedInput.RecordOrdinal:D4}",
+        };
+        var serializer = new DatSerializer('|', '"', "~");
+        string line = serializer.RenderRecord(record);
+        var firstAnomalies = new List<ChaosAnomaly>();
+        var replayAnomalies = new List<ChaosAnomaly>();
+        var first = new DatAnomalyApplier(new Random(seedInput.Seed), "|", "\"", "\r\n", ["Date Created"]);
+        var replay = new DatAnomalyApplier(new Random(seedInput.Seed), "|", "\"", "\r\n", ["Date Created"]);
+
+        string mutated = first.Apply(2, line, record.RecordId, chaosType, firstAnomalies, record, serializer);
+        string replayed = replay.Apply(2, line, record.RecordId, chaosType, replayAnomalies, record, serializer);
+
+        Assert.NotEqual(line, mutated);
+        Assert.Equal(mutated, replayed);
+        var anomaly = Assert.Single(firstAnomalies);
+        Assert.Equal(anomaly, Assert.Single(replayAnomalies));
+        Assert.Equal(chaosType, anomaly.ErrorType);
+        Assert.Equal(record.RecordId, anomaly.RecordID);
+        Assert.False(string.IsNullOrWhiteSpace(anomaly.Column));
+        Assert.NotEqual("N/A", anomaly.Column);
     }
 
     [Property]

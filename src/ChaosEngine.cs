@@ -1,4 +1,5 @@
 using System.Text;
+using Zipper.LoadFiles;
 
 namespace Zipper;
 
@@ -12,6 +13,8 @@ namespace Zipper;
 internal class ChaosEngine
 {
     private static readonly string[] DatChaosTypes = ChaosAnomalyTypes.Dat.ToArray();
+    private static readonly string[] DatDefaultChaosTypes = ChaosAnomalyTypes.DatDefault.ToArray();
+    private static readonly HashSet<string> DatRecordOnlyChaosTypes = new(ChaosAnomalyTypes.DatRecordOnly, StringComparer.Ordinal);
     private static readonly string[] OptChaosTypes = ChaosAnomalyTypes.Opt.ToArray();
     private static readonly string[] OptDefaultChaosTypes = OptChaosTypes.Where(type => type != "opt-encoding").ToArray();
 
@@ -23,6 +26,8 @@ internal class ChaosEngine
     private readonly LoadFileFormat format;
     private readonly long totalLines;
     private readonly bool onlyOptEncoding;
+    private readonly bool hasDatRecordOnlyTypes;
+    private readonly bool noDatRecords;
     private readonly ChaosSampler sampler;
 
     /// <summary>
@@ -44,7 +49,8 @@ internal class ChaosEngine
         string columnDelimiter,
         string quoteDelimiter,
         string eol,
-        int? seed = null)
+        int? seed = null,
+        IReadOnlyCollection<string>? dateColumnNames = null)
     {
         this.format = format;
         this.totalLines = totalLines;
@@ -62,17 +68,31 @@ internal class ChaosEngine
                 StringComparer.OrdinalIgnoreCase);
             this.enabledTypes.IntersectWith(validTypes);
         }
+        else if (chaosTypes is null)
+        {
+            var defaultTypes = format == LoadFileFormat.Opt ? OptDefaultChaosTypes : DatDefaultChaosTypes;
+            this.enabledTypes = new HashSet<string>(defaultTypes, StringComparer.OrdinalIgnoreCase);
+        }
         else
         {
-            var defaultTypes = format == LoadFileFormat.Opt ? OptDefaultChaosTypes : validTypes;
-            this.enabledTypes = new HashSet<string>(defaultTypes, StringComparer.OrdinalIgnoreCase);
+            // Preserve the existing empty-string behavior: an explicit empty DAT filter
+            // enables every DAT anomaly, including the opt-in record-level types.
+            this.enabledTypes = new HashSet<string>(validTypes, StringComparer.OrdinalIgnoreCase);
         }
 
         this.onlyOptEncoding = format == LoadFileFormat.Opt
             && this.enabledTypes.Count == 1
             && this.enabledTypes.Contains("opt-encoding");
+        this.hasDatRecordOnlyTypes = format == LoadFileFormat.Dat
+            && this.enabledTypes.Count > 0
+            && this.enabledTypes.Any(DatRecordOnlyChaosTypes.Contains);
+        this.noDatRecords = this.hasDatRecordOnlyTypes && totalLines == 1;
         ChaosSampler.ValidateTotalLines(totalLines);
         long targetableLines = this.onlyOptEncoding && totalLines > 1 ? totalLines - 1 : totalLines;
+        if (this.hasDatRecordOnlyTypes)
+        {
+            targetableLines = Math.Max(1, totalLines - 1);
+        }
         this.sampler = new ChaosSampler(targetableLines, chaosAmount, random);
 
         // If quote-delim is "none", disable the quotes chaos type
@@ -84,7 +104,7 @@ internal class ChaosEngine
         // Initialize Applier
         this.applier = format == LoadFileFormat.Opt
             ? new OptAnomalyApplier(random)
-            : new DatAnomalyApplier(random, columnDelimiter, quoteDelimiter, string.IsNullOrEmpty(eol) ? "\r\n" : eol);
+            : new DatAnomalyApplier(random, columnDelimiter, quoteDelimiter, string.IsNullOrEmpty(eol) ? "\r\n" : eol, dateColumnNames);
     }
 
     /// <summary>
@@ -97,8 +117,18 @@ internal class ChaosEngine
     /// </summary>
     /// <param name="lineNumber">1-based line number.</param>
     /// <returns>True if the line should be corrupted.</returns>
-    public bool ShouldIntercept(long lineNumber) =>
-        !(this.onlyOptEncoding && lineNumber >= this.totalLines) && this.sampler.ShouldIntercept(lineNumber);
+    public bool ShouldIntercept(long lineNumber)
+    {
+        if (this.hasDatRecordOnlyTypes)
+        {
+            return !this.noDatRecords
+                && lineNumber > 1
+                && lineNumber <= this.totalLines
+                && this.sampler.ShouldIntercept(lineNumber - 1);
+        }
+
+        return !(this.onlyOptEncoding && lineNumber >= this.totalLines) && this.sampler.ShouldIntercept(lineNumber);
+    }
 
     /// <summary>
     /// Intercepts and corrupts a line. Returns the modified line.
@@ -107,7 +137,12 @@ internal class ChaosEngine
     /// <param name="line">Original line content.</param>
     /// <param name="recordId">Record ID (e.g., "DOC00001054" or "HEADER").</param>
     /// <returns>Modified line with injected anomaly.</returns>
-    public string Intercept(long lineNumber, string line, string recordId)
+    public string Intercept(
+        long lineNumber,
+        string line,
+        string recordId,
+        LoadFileRecord? record = null,
+        ILoadFileSerializer? serializer = null)
     {
         if (this.enabledTypes.Count == 0)
         {
@@ -117,6 +152,17 @@ internal class ChaosEngine
         var typeList = this.enabledTypes.ToArray();
         var chosenType = typeList[this.anomalyTypeIndex % typeList.Length];
         this.anomalyTypeIndex++;
+
+        if (this.format == LoadFileFormat.Dat && record is null && DatRecordOnlyChaosTypes.Contains(chosenType))
+        {
+            var fallbackType = typeList.FirstOrDefault(type => !DatRecordOnlyChaosTypes.Contains(type));
+            if (fallbackType is null)
+            {
+                return line;
+            }
+
+            chosenType = fallbackType;
+        }
 
         if (this.format == LoadFileFormat.Opt && lineNumber == this.totalLines && chosenType == "opt-encoding")
         {
@@ -128,7 +174,7 @@ internal class ChaosEngine
             chosenType = typeList.First(type => type != "opt-encoding");
         }
 
-        return this.applier.Apply(lineNumber, line, recordId, chosenType, this.anomalies);
+        return this.applier.Apply(lineNumber, line, recordId, chosenType, this.anomalies, record, serializer);
     }
 
     /// <summary>

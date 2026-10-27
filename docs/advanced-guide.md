@@ -294,6 +294,8 @@ Two modes write no **Archive** at all, so the column there reports the requested
 
 Inject deliberate structural and encoding anomalies into Load Files for ingestion testing. Requires `--loadfile-only` and `dat` or `opt` format.
 
+DAT also supports `path-pointer`, `field-length`, `date-format`, `null-byte`, and `trailing-empties` for documented platform import failures. These record-level types are opt-in to preserve existing default output. `path-pointer` and `date-format` target the resolved DAT Columns; all five record-level types are audited with their affected Column. Use `realistic-import-failures` to enable them together.
+
 OPT supports `opt-encoding`, which inserts UTF-8 BOM bytes at a record boundary; ANSI/Windows-1252 readers render them as mojibake. It is opt-in to preserve existing OPT chaos output and is enabled by the `full-chaos` scenario.
 
 ```bash
@@ -308,6 +310,9 @@ zipper --loadfile-only --loadfile-format opt --encoding ANSI --count 100000 --ou
 # Predefined chaos scenario
 zipper --loadfile-only --count 100000 --output-path ./platform_test \
     --chaos-mode --chaos-scenario structured-import-failures
+# Documented platform import failures
+zipper --loadfile-only --count 100000 --output-path ./realistic_import_failures \
+    --chaos-mode --chaos-scenario realistic-import-failures --seed 42
 ```
 
 List available scenarios: `zipper --chaos-list`
@@ -542,7 +547,7 @@ Written by `--compare-production-manifests` to `--comparison-output`. Records co
 | `--chaos-mode` + `--production-set` | **Conflict**: chaos requires `--loadfile-only` |
 | `--chaos-amount`, `--chaos-types` | Require `--chaos-mode` |
 | `--chaos-scenario` | Requires `--chaos-mode`; conflicts with `--chaos-types` |
-| `--chaos-scenario` + format | Some scenarios require specific `--loadfile-format` (e.g., `broken-boundaries` requires `opt`) |
+| `--chaos-scenario` + format | Some scenarios require specific `--loadfile-format` (e.g., `broken-boundaries` requires `opt`, `realistic-import-failures` requires `dat`) |
 | `--production-set` | Requires `--bates-prefix`; conflicts with `--loadfile-only` |
 | `--redacted-production` | Requires `--production-set`; conflicts with `--loadfile-only`. Redacted text files are only written when `--with-text` is enabled; without it, `REDACTED_TEXT_PATH` is empty in the Load File. |
 | `--withheld-native-policy` | Requires `--redacted-production` |

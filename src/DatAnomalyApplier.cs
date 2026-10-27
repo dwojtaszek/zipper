@@ -1,28 +1,59 @@
 using System.Text;
+using Zipper.LoadFiles;
 
 namespace Zipper;
 
 internal class DatAnomalyApplier : IAnomalyApplier
 {
+    private const int EmptyTrailingColumnCount = 4096;
+    private const int MaxFieldLength = 32_768;
+    private const string FieldLengthCharacters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    private static readonly string[] MalformedDateValues =
+    [
+        "00/00/0000",
+        "2018-01-15 a.m.",
+        "2018-044-09",
+    ];
+    private static readonly HashSet<string> PathColumnNames =
+        new(["FILEPATH", "PATH", "NATIVEPATH", "TEXTPATH", "IMAGEPATH", "ITEMPATH"], StringComparer.Ordinal);
+    private static readonly HashSet<string> IdentityColumnNames =
+        new(["DOCID", "CONTROLNUMBER", "BATES", "BATESNUMBER", "BEGBATES", "ENDBATES", "IMAGEKEY"], StringComparer.Ordinal);
+
     private static readonly char[] AlternativeDelimiters = { ',', '\t', '|' };
 
     private readonly Random random;
     private readonly string columnDelimiter;
     private readonly string quoteDelimiter;
     private readonly string eol;
+    private readonly HashSet<string> dateColumnNames;
     private readonly HashSet<long> encodingAnomalyLines = new();
     private readonly char[] alternatives;
 
-    public DatAnomalyApplier(Random random, string columnDelimiter, string quoteDelimiter, string eol)
+    public DatAnomalyApplier(
+        Random random,
+        string columnDelimiter,
+        string quoteDelimiter,
+        string eol,
+        IReadOnlyCollection<string>? dateColumnNames = null)
     {
         this.random = random;
         this.columnDelimiter = columnDelimiter;
         this.quoteDelimiter = quoteDelimiter;
         this.eol = eol;
+        this.dateColumnNames = new HashSet<string>(
+            (dateColumnNames ?? Array.Empty<string>()).Select(NormalizeColumnName),
+            StringComparer.Ordinal);
         this.alternatives = AlternativeDelimiters.Where(c => !string.Equals(c.ToString(), columnDelimiter, StringComparison.Ordinal)).ToArray();
     }
 
-    public string Apply(long lineNumber, string line, string recordId, string chaosType, List<ChaosAnomaly> anomalies)
+    public string Apply(
+        long lineNumber,
+        string line,
+        string recordId,
+        string chaosType,
+        List<ChaosAnomaly> anomalies,
+        LoadFileRecord? record = null,
+        ILoadFileSerializer? serializer = null)
     {
         string result = line;
         string column = "N/A";
@@ -55,6 +86,91 @@ internal class DatAnomalyApplier : IAnomalyApplier
             case "encoding":
                 encodingAnomalyLines.Add(lineNumber);
                 return line;
+            case "path-pointer":
+                int pathIndex = FindColumnIndex(record, static column =>
+                    string.Equals(NormalizeColumnName(column), "FILEPATH", StringComparison.Ordinal));
+                if (pathIndex < 0)
+                {
+                    pathIndex = FindColumnIndex(record, IsPathColumn);
+                }
+
+                string originalPath = GetValue(record, pathIndex);
+                string missingPath = CreateMissingPath(originalPath);
+                if (!TryRenderReplacement(record, serializer, pathIndex, missingPath, out result))
+                {
+                    return line;
+                }
+
+                column = record!.Columns[pathIndex];
+                description = $"Replaced the {column} with a plausible path that does not exist.";
+                break;
+            case "field-length":
+                int lengthIndex = FindColumnIndex(record, this.IsFieldValueColumn);
+                char valueCharacter = FieldLengthCharacters.First(c =>
+                    !this.columnDelimiter.Contains(c, StringComparison.Ordinal)
+                    && !this.quoteDelimiter.Contains(c, StringComparison.Ordinal));
+                string oversizedValue = new(valueCharacter, MaxFieldLength);
+                if (lengthIndex >= 0 && string.Equals(GetValue(record, lengthIndex), oversizedValue, StringComparison.Ordinal))
+                {
+                    valueCharacter = FieldLengthCharacters.First(c =>
+                        c != valueCharacter
+                        && !this.columnDelimiter.Contains(c, StringComparison.Ordinal)
+                        && !this.quoteDelimiter.Contains(c, StringComparison.Ordinal));
+                    oversizedValue = new string(valueCharacter, MaxFieldLength);
+                }
+                if (!TryRenderReplacement(record, serializer, lengthIndex, oversizedValue, out result))
+                {
+                    return line;
+                }
+
+                column = record!.Columns[lengthIndex];
+                description = $"Replaced the value with {MaxFieldLength.ToString(System.Globalization.CultureInfo.InvariantCulture)} characters, beyond common platform field limits.";
+                break;
+            case "date-format":
+                int dateIndex = FindColumnIndex(record, this.IsDateColumn);
+                string originalDate = GetValue(record, dateIndex);
+                string? malformedDate = null;
+                int startIndex = this.random.Next(MalformedDateValues.Length);
+                for (int i = 0; i < MalformedDateValues.Length; i++)
+                {
+                    string candidate = MalformedDateValues[(startIndex + i) % MalformedDateValues.Length];
+                    if (!string.Equals(candidate, originalDate, StringComparison.Ordinal))
+                    {
+                        malformedDate = candidate;
+                        break;
+                    }
+                }
+                if (malformedDate is null || !TryRenderReplacement(record, serializer, dateIndex, malformedDate, out result))
+                {
+                    return line;
+                }
+
+                column = record!.Columns[dateIndex];
+                description = $"Replaced the date value with malformed value '{malformedDate}'.";
+                break;
+            case "null-byte":
+                int controlIndex = FindColumnIndex(record, this.IsFieldValueColumn);
+                string valueWithControls = GetValue(record, controlIndex).Insert(GetValue(record, controlIndex).Length / 2, "\0\u0001");
+                if (!TryRenderReplacement(record, serializer, controlIndex, valueWithControls, out result))
+                {
+                    return line;
+                }
+
+                column = record!.Columns[controlIndex];
+                description = "Inserted a NULL byte and unsupported control character in the field.";
+                break;
+            case "trailing-empties":
+                if (record is null || string.IsNullOrEmpty(this.columnDelimiter))
+                {
+                    return line;
+                }
+
+                result = string.Concat(line, string.Concat(Enumerable.Repeat(this.columnDelimiter, EmptyTrailingColumnCount)));
+                column = record.Columns.Count > 0
+                    ? $"Trailing empty columns after {record.Columns[^1]}"
+                    : "Trailing empty columns";
+                description = $"Appended {EmptyTrailingColumnCount.ToString(System.Globalization.CultureInfo.InvariantCulture)} empty trailing columns.";
+                break;
             default:
                 description = $"Unknown chaos type: {chaosType}";
                 break;
@@ -75,6 +191,89 @@ internal class DatAnomalyApplier : IAnomalyApplier
 
         return result;
     }
+
+    private bool IsDateColumn(string column)
+        => this.dateColumnNames.Contains(NormalizeColumnName(column));
+
+    private static bool IsPathColumn(string column)
+        => IsPathColumnNormalized(NormalizeColumnName(column));
+
+    private static bool IsPathColumnNormalized(string normalized)
+    {
+        return PathColumnNames.Contains(normalized) || normalized.EndsWith("PATH", StringComparison.Ordinal);
+    }
+
+    private bool IsFieldValueColumn(string column)
+    {
+        string normalized = NormalizeColumnName(column);
+        return !IsPathColumnNormalized(normalized)
+            && !this.dateColumnNames.Contains(normalized)
+            && !IdentityColumnNames.Contains(normalized)
+            && normalized is not ("FILESIZE" or "PAGECOUNT");
+    }
+
+    private static int FindColumnIndex(LoadFileRecord? record, Func<string, bool> predicate)
+    {
+        if (record is null)
+        {
+            return -1;
+        }
+
+        int count = Math.Min(record.Columns.Count, record.Values.Count);
+        for (int i = 0; i < count; i++)
+        {
+            if (predicate(record.Columns[i]))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static string GetValue(LoadFileRecord? record, int index) =>
+        record is not null && index >= 0 && index < record.Values.Count ? record.Values[index] : string.Empty;
+
+    private static bool TryRenderReplacement(
+        LoadFileRecord? record,
+        ILoadFileSerializer? serializer,
+        int index,
+        string replacement,
+        out string line)
+    {
+        if (record is null || serializer is null || index < 0 || index >= record.Values.Count)
+        {
+            line = string.Empty;
+            return false;
+        }
+
+        var values = record.Values.ToArray();
+        values[index] = replacement;
+        line = serializer.RenderRecord(new LoadFileRecord
+        {
+            Columns = record.Columns,
+            Values = values,
+            RecordId = record.RecordId,
+        });
+        return true;
+    }
+
+    private static string CreateMissingPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return "NATIVES\\__MISSING__\\DOCUMENT.pdf";
+        }
+
+        int lastSeparator = Math.Max(path.LastIndexOf('/'), path.LastIndexOf('\\'));
+        int extension = path.LastIndexOf('.');
+        return extension > lastSeparator
+            ? string.Concat(path.AsSpan(0, extension), "_MISSING", path.AsSpan(extension))
+            : string.Concat(path, "_MISSING");
+    }
+
+    private static string NormalizeColumnName(string column) =>
+        new(column.Where(char.IsLetterOrDigit).Select(char.ToUpperInvariant).ToArray());
 
     public byte[]? GetEncodingAnomaly(long lineNumber, long nextLineNumber, Encoding encoding, List<ChaosAnomaly> anomalies)
     {

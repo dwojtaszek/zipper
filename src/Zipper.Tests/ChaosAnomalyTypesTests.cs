@@ -12,7 +12,20 @@ public class ChaosAnomalyTypesTests
         Assert.Contains("columns", ChaosAnomalyTypes.Dat);
         Assert.Contains("eol", ChaosAnomalyTypes.Dat);
         Assert.Contains("encoding", ChaosAnomalyTypes.Dat);
-        Assert.Equal(5, ChaosAnomalyTypes.Dat.Count);
+        Assert.Contains("path-pointer", ChaosAnomalyTypes.Dat);
+        Assert.Contains("field-length", ChaosAnomalyTypes.Dat);
+        Assert.Contains("date-format", ChaosAnomalyTypes.Dat);
+        Assert.Contains("null-byte", ChaosAnomalyTypes.Dat);
+        Assert.Contains("trailing-empties", ChaosAnomalyTypes.Dat);
+        Assert.Equal(10, ChaosAnomalyTypes.Dat.Count);
+    }
+
+    [Fact]
+    public void DatDefault_ExcludesOptInTypes()
+    {
+        Assert.Equal(
+            new[] { "mixed-delimiters", "quotes", "columns", "eol", "encoding" },
+            ChaosAnomalyTypes.DatDefault);
     }
 
     [Fact]

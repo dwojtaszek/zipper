@@ -123,7 +123,17 @@ internal static class LoadFileEmitter
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            await EmitChaosLineAsync(stream, chaosEngine, lineNumber, serializer.RenderRecord(record), record.RecordId, encoding, eol, cancellationToken).ConfigureAwait(false);
+            await EmitChaosLineAsync(
+                stream,
+                chaosEngine,
+                lineNumber,
+                serializer.RenderRecord(record),
+                record.RecordId,
+                encoding,
+                eol,
+                cancellationToken,
+                record,
+                serializer).ConfigureAwait(false);
             lineNumber++;
         }
     }
@@ -136,10 +146,12 @@ internal static class LoadFileEmitter
         string recordId,
         Encoding encoding,
         string eol,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        LoadFileRecord? record = null,
+        ILoadFileSerializer? serializer = null)
     {
         var text = chaosEngine.ShouldIntercept(lineNumber)
-            ? chaosEngine.Intercept(lineNumber, originalLine, recordId)
+            ? chaosEngine.Intercept(lineNumber, originalLine, recordId, record, serializer)
             : originalLine;
 
         int textByteCount = encoding.GetByteCount(text);

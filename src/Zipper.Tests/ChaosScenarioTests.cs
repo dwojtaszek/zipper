@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Xunit;
+using Zipper.Validation;
 
 namespace Zipper.Tests;
 
@@ -117,6 +118,13 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
         Assert.Equal("mixed-delimiters,encoding,quotes", transfer.ChaosTypes);
         Assert.Equal("4%", transfer.DefaultAmount);
         Assert.Equal(LoadFileFormat.Dat, transfer.RequiredFormat);
+
+        // 7. realistic-import-failures
+        var realistic = ChaosScenarios.GetByName("realistic-import-failures");
+        Assert.NotNull(realistic);
+        Assert.Equal("path-pointer,field-length,date-format,null-byte,trailing-empties", realistic.ChaosTypes);
+        Assert.Equal("5%", realistic.DefaultAmount);
+        Assert.Equal(LoadFileFormat.Dat, realistic.RequiredFormat);
     }
 
     // --- CLI integration tests ---
@@ -127,6 +135,7 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
         Assert.Equal(0, exitCode);
         Assert.Contains("Available Chaos Scenarios", stdout, StringComparison.Ordinal);
         Assert.Contains("structured-import-failures", stdout, StringComparison.Ordinal);
+        Assert.Contains("realistic-import-failures", stdout, StringComparison.Ordinal);
         Assert.Contains("full-chaos", stdout, StringComparison.Ordinal);
     }
 
@@ -270,6 +279,70 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
             if (Directory.Exists(tempPath))
             {
                 Directory.Delete(tempPath, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ChaosScenario_RealisticImportFailures_GeneratesAllAuditedAnomalies()
+    {
+        var tempPath = Path.Combine(this.TempDir, $"zipper_{Guid.NewGuid():N}");
+        var baselinePath = Path.Combine(this.TempDir, $"zipper_baseline_{Guid.NewGuid():N}");
+        try
+        {
+            var (exitCode, _, _) = await RunWithCapture(new[]
+            {
+                "--loadfile-only", "--count", "5", "--output-path", tempPath,
+                "--chaos-mode", "--chaos-scenario", "realistic-import-failures",
+                "--chaos-amount", "5", "--seed", "42",
+            });
+            Assert.Equal(0, exitCode);
+
+            string propertiesPath = Assert.Single(Directory.GetFiles(tempPath, "*_properties.json"));
+            using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(propertiesPath));
+            var anomalies = doc.RootElement.GetProperty("chaosMode").GetProperty("injectedAnomalies")
+                .EnumerateArray()
+                .ToArray();
+            var expectedTypes = new HashSet<string>(ChaosAnomalyTypes.DatRecordOnly, StringComparer.Ordinal);
+            var actualTypes = anomalies.Select(anomaly => anomaly.GetProperty("errorType").GetString()!).ToHashSet(StringComparer.Ordinal);
+            JsonElement pathPointer = Assert.Single(anomalies, anomaly => anomaly.GetProperty("errorType").GetString() == "path-pointer");
+
+            Assert.Equal(expectedTypes, actualTypes);
+            Assert.All(anomalies, anomaly =>
+            {
+                Assert.False(string.IsNullOrWhiteSpace(anomaly.GetProperty("column").GetString()));
+                Assert.NotEqual("N/A", anomaly.GetProperty("column").GetString());
+            });
+
+            var (baselineExitCode, _, _) = await RunWithCapture(new[]
+            {
+                "--loadfile-only", "--count", "5", "--output-path", baselinePath, "--seed", "42",
+            });
+            Assert.Equal(0, baselineExitCode);
+
+            string chaosLoadFile = Assert.Single(Directory.GetFiles(tempPath, "*.dat"));
+            string baselineLoadFile = Assert.Single(Directory.GetFiles(baselinePath, "*.dat"));
+            var chaosLines = await File.ReadAllLinesAsync(chaosLoadFile);
+            var baselineLines = await File.ReadAllLinesAsync(baselineLoadFile);
+            int lineNumber = int.Parse(pathPointer.GetProperty("lineNumber").GetString()!, System.Globalization.CultureInfo.InvariantCulture);
+            var header = DatLineParser.Parse(chaosLines[0], '\u0014', '\u00fe');
+            int pathIndex = header.FindIndex(column => string.Equals(column, "File Path", StringComparison.Ordinal));
+            Assert.True(pathIndex >= 0);
+            string corruptedPath = DatLineParser.Parse(chaosLines[lineNumber - 1], '\u0014', '\u00fe')[pathIndex];
+            string originalPath = DatLineParser.Parse(baselineLines[lineNumber - 1], '\u0014', '\u00fe')[pathIndex];
+            var validation = new ValidationResult();
+            new PathReconciliationValidator().Validate([corruptedPath], [originalPath], chaosLoadFile, validation);
+            Assert.Contains(validation.Findings, finding => finding.Category == "PathReconciliation");
+        }
+        finally
+        {
+            if (Directory.Exists(tempPath))
+            {
+                Directory.Delete(tempPath, true);
+            }
+            if (Directory.Exists(baselinePath))
+            {
+                Directory.Delete(baselinePath, true);
             }
         }
     }

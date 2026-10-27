@@ -57,7 +57,14 @@ Mirror an input CSV or existing directory structure using synthetic placeholder 
 zipper --input-csv ./source.csv --output-path ./source_output --bates-prefix ABC
 ```
 
-#### 6. Publish Archive Test Fixture pairs
+#### 6. Test documented platform import failures
+Generate a DAT Load File with deterministic path, field-length, date, control-byte, and trailing-empty anomalies. These new anomaly types remain opt-in, so the existing default Chaos output is unchanged:
+```bash
+zipper --loadfile-only --count 100000 --output-path ./import-failures \
+    --chaos-mode --chaos-scenario realistic-import-failures --seed 42
+```
+
+#### 7. Publish Archive Test Fixture pairs
 Publish the frozen smoke suite (five cases: three valid controls plus a CRC lie and a missing EOCD) as flat `<fixtureId>.zip` / `<fixtureId>.json` pairs for extractor testing — see [Archive Test Suites](docs/archive-test-suites.md):
 ```bash
 zipper --archive-test-suite smoke --seed 42 --output-path ./archive-cases
@@ -109,7 +116,7 @@ To generate the policy-sensitive `name-sibling-prefix-traversal` Archive Test Fi
 zipper --archive-test-suite security --archive-test-cases name-sibling-prefix-traversal --seed 42 --output-path ./sibling-prefix-traversal
 ```
 
-#### 7. Choose the Archive compression method
+#### 8. Choose the Archive compression method
 `--compression` sets the ZIP compression method for every Archive the run produces (Standard mode, `--include-load-file`, and `--production-zip`) and defaults to `deflate`:
 ```bash
 zipper --type pdf --count 1000 --output-path ./stored_archive --compression store
@@ -179,7 +186,7 @@ All command-line flags recognized by Zipper:
 | `--nested-delim` | `\` | `ascii:N` or `char:C` | Nested value separator |
 | `--chaos-mode` | `false` | flag | Enable Chaos Engine anomaly injection |
 | `--chaos-amount` | `1%` | exact count `N` or percentage `N%` | Anomaly target count/percentage |
-| `--chaos-types` | all (OPT excludes `opt-encoding`) | comma-separated list | Filter DAT types (`mixed-delimiters`, `quotes`, `columns`, `eol`, `encoding`) or OPT types (`opt-boundary`, `opt-columns`, `opt-pagecount`, `opt-path`, `opt-batesnumber`, `opt-encoding`); `opt-encoding` is enabled by `full-chaos` |
+| `--chaos-types` | existing DAT types (OPT excludes `opt-encoding`) | comma-separated list | Filter DAT types (`mixed-delimiters`, `quotes`, `columns`, `eol`, `encoding`, `path-pointer`, `field-length`, `date-format`, `null-byte`, `trailing-empties`) or OPT types (`opt-boundary`, `opt-columns`, `opt-pagecount`, `opt-path`, `opt-batesnumber`, `opt-encoding`); the new DAT types are opt-in and `full-chaos` enables all types |
 | `--chaos-scenario` | none | scenario name | Predefined chaos scenario |
 | `--chaos-list` | `false` | flag | Print available chaos scenarios and exit |
 | `--production-set` | `false` | flag | Structured Production Set output |
@@ -203,6 +210,8 @@ All command-line flags recognized by Zipper:
 | `--archive-test-suite` | none | `smoke`, `compatibility`, `malformed`, `security`, `encoding`, `all` | Publish an Archive Test Fixture suite (the `security` suite includes `name-sibling-prefix-traversal`; the `encoding` suite includes local/central codec divergence; closed flag set: requires `--output-path` pointing to a new directory; accepts only `--archive-test-suite`, `--archive-test-cases`, `--seed`, `--output-path`; see [Archive Test Suites](docs/archive-test-suites.md)) |
 | `--archive-test-cases` | none | comma-separated Case Keys | Filter the suite to the named cases (closed flag set; requires `--archive-test-suite`) |
 | `--version` | `false` | flag | Print full embedded version string and exit |
+
+Chaos requires `--loadfile-only`; `--chaos-scenario` conflicts with `--chaos-types`. The five documented platform import-failure DAT types are opt-in, and `realistic-import-failures` requires DAT. `full-chaos` enables every anomaly type.
 
 ### Standard Load File Columns
 

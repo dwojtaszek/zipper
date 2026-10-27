@@ -6,10 +6,17 @@ namespace Zipper;
 /// </summary>
 internal static class ChaosAnomalyTypes
 {
-    public static readonly IReadOnlyList<string> Dat = new[]
+    public static readonly IReadOnlyList<string> DatDefault = new[]
     {
         "mixed-delimiters", "quotes", "columns", "eol", "encoding",
     };
+
+    public static readonly IReadOnlyList<string> DatRecordOnly = new[]
+    {
+        "path-pointer", "field-length", "date-format", "null-byte", "trailing-empties",
+    };
+
+    public static readonly IReadOnlyList<string> Dat = DatDefault.Concat(DatRecordOnly).ToArray();
 
     public static readonly IReadOnlyList<string> Opt = new[]
     {

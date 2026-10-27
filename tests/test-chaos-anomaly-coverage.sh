@@ -118,6 +118,10 @@ while IFS= read -r TYPE; do
     if [[ "$TYPES_PRESENT" != "$TYPE" ]]; then
         print_error "Type mismatch for $TYPE: got '$TYPES_PRESENT'"
     fi
+    if [[ "$TYPE" == "path-pointer" ]] \
+        && ! jq -e '.chaosMode.injectedAnomalies[] | select(.errorType == "path-pointer" and .column == "File Path")' "$PROPS" >/dev/null; then
+        print_error "path-pointer audit does not name the File Path column"
+    fi
 
     # Unique line numbers (duplicates indicate a bug)
     DUP_LINES=$(jq -r '

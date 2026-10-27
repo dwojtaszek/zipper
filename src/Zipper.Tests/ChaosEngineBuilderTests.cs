@@ -1,5 +1,8 @@
 using System.Reflection;
 using Xunit;
+using Zipper.LoadFiles;
+using Zipper.Profiles;
+using Zipper.Validation;
 
 namespace Zipper.Tests;
 
@@ -68,6 +71,44 @@ public class ChaosEngineBuilderTests
         Assert.Contains("mixed-delimiters", enabledTypes);
         Assert.Contains("quotes", enabledTypes);
         Assert.Equal(2, enabledTypes.Count);
+    }
+
+    [Fact]
+    public void Build_DateFormat_UsesProfileTypesWithoutNameHeuristics()
+    {
+        var request = new FileGenerationRequest { LoadfileOnly = true };
+        request.Metadata = request.Metadata with
+        {
+            Seed = 42,
+            ColumnProfile = new ColumnProfile
+            {
+                Columns =
+                [
+                    new ColumnDefinition { Name = "Updated By", Type = "text" },
+                    new ColumnDefinition { Name = "ReviewStamp", Type = "date" },
+                ],
+            },
+        };
+        request.Delimiters = request.Delimiters with { ColumnDelimiter = "|", QuoteDelimiter = "\"", EndOfLine = "CRLF" };
+        request.Chaos = request.Chaos with { ChaosMode = true, ChaosAmount = "1", ChaosTypes = "date-format" };
+        var record = new LoadFileRecord
+        {
+            Columns = ["Updated By", "ReviewStamp"],
+            Values = ["jdoe", "2024-01-15"],
+            RecordId = "DOC00000001",
+        };
+        var serializer = new DatSerializer('|', '"', "~");
+        string line = serializer.RenderRecord(record);
+        var engine = ChaosEngineBuilder.Build(request, 2, LoadFileFormat.Dat);
+        Assert.NotNull(engine);
+        Assert.True(engine.ShouldIntercept(2));
+
+        string result = engine.Intercept(2, line, record.RecordId, record, serializer);
+
+        var fields = DatLineParser.Parse(result, '|', '"');
+        Assert.Equal("jdoe", fields[0]);
+        Assert.Contains(fields[1], new[] { "00/00/0000", "2018-01-15 a.m.", "2018-044-09" });
+        Assert.Equal("ReviewStamp", Assert.Single(engine.Anomalies).Column);
     }
 
     [Fact]

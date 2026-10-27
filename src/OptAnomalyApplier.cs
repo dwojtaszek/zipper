@@ -1,4 +1,5 @@
 using System.Text;
+using Zipper.LoadFiles;
 
 namespace Zipper;
 
@@ -12,7 +13,14 @@ internal class OptAnomalyApplier : IAnomalyApplier
         this.random = random;
     }
 
-    public string Apply(long lineNumber, string line, string recordId, string chaosType, List<ChaosAnomaly> anomalies)
+    public string Apply(
+        long lineNumber,
+        string line,
+        string recordId,
+        string chaosType,
+        List<ChaosAnomaly> anomalies,
+        LoadFileRecord? record = null,
+        ILoadFileSerializer? serializer = null)
     {
         string result = line;
         string description;

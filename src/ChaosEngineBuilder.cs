@@ -51,6 +51,49 @@ internal static class ChaosEngineBuilder
             chaosColDelim,
             chaosQuoteDelim,
             eolString,
-            request.Metadata.Seed);
+            request.Metadata.Seed,
+            GetDateColumnNames(request));
+    }
+
+    private static IReadOnlyCollection<string> GetDateColumnNames(FileGenerationRequest request)
+    {
+        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (request.Metadata.ColumnProfile is { } profile)
+        {
+            foreach (var column in profile.Columns)
+            {
+                if (string.Equals(column.Type, "date", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(column.Type, "datetime", StringComparison.OrdinalIgnoreCase))
+                {
+                    columns.Add(column.Name);
+                }
+            }
+        }
+
+        if (request.LoadfileOnly && request.SourceRecords is null && request.Metadata.ColumnProfile is null)
+        {
+            columns.Add("Date Sent");
+            columns.Add("EmailSentDate");
+        }
+        else
+        {
+            if (request.Metadata.ShouldIncludeMetadataColumns(request.Output))
+            {
+                columns.Add("Date Sent");
+            }
+
+            if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
+            {
+                columns.Add("Sent Date");
+                columns.Add("EmailSentDate");
+            }
+
+            if (request.Metadata.ShouldIncludeCollectionMetadataColumns())
+            {
+                columns.Add("Collection Date");
+            }
+        }
+
+        return columns;
     }
 }

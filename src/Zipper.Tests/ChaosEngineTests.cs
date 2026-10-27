@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Xunit;
+using Zipper.LoadFiles;
 
 namespace Zipper.Tests;
 
@@ -964,5 +965,74 @@ public class ChaosEngineTests
 
         Assert.Equal(interceptedCount, engine.Anomalies.Count);
         Assert.All(engine.Anomalies, a => Assert.Equal("opt-boundary", a.ErrorType));
+    }
+
+    [Theory]
+    [InlineData("path-pointer", "File Path")]
+    [InlineData("field-length", "Author")]
+    [InlineData("date-format", "Date Created")]
+    [InlineData("null-byte", "Author")]
+    [InlineData("trailing-empties", "Trailing empty columns after Author")]
+    public void DatRecordAnomalies_OnlyInterceptDataRecords_AndAuditTheColumn(string type, string expectedColumn)
+    {
+        IReadOnlyList<string> columns = ["Control Number", "File Path", "Date Created", "Author"];
+        var record = new LoadFileRecord
+        {
+            Columns = columns,
+            Values = ["DOC00000001", "NATIVES\\001\\DOC00000001.pdf", "2024-01-15", "Jane Doe"],
+            RecordId = "DOC00000001",
+        };
+        var serializer = new DatSerializer('|', '"', "~");
+        string line = serializer.RenderRecord(record);
+        var engine = new ChaosEngine(
+            totalLines: 2,
+            chaosAmount: "1",
+            chaosTypes: type,
+            format: LoadFileFormat.Dat,
+            columnDelimiter: "|",
+            quoteDelimiter: "\"",
+            eol: "\r\n",
+            seed: 42,
+            dateColumnNames: ["Date Created"]);
+
+        Assert.False(engine.ShouldIntercept(1), "Record anomalies must never target the header.");
+        Assert.True(engine.ShouldIntercept(2), "An exact count should target the sole data record.");
+
+        string result = engine.Intercept(2, line, record.RecordId, record, serializer);
+
+        Assert.NotEqual(line, result);
+        var anomaly = Assert.Single(engine.Anomalies);
+        Assert.Equal(type, anomaly.ErrorType);
+        Assert.Equal(expectedColumn, anomaly.Column);
+        Assert.Equal(record.RecordId, anomaly.RecordID);
+    }
+
+    [Fact]
+    public void DatDefaultAnomalies_PreservePreviouslyEnabledTypes()
+    {
+        const int totalLines = 100;
+        var engine = new ChaosEngine(
+            totalLines,
+            chaosAmount: "10",
+            chaosTypes: null,
+            format: LoadFileFormat.Dat,
+            columnDelimiter: "|",
+            quoteDelimiter: "\"",
+            eol: "\r\n",
+            seed: 42);
+        string line = "\"DOC00000001\"|\"NATIVES\\DOC00000001.pdf\"|\"2024-01-15\"|\"Jane Doe\"";
+
+        for (int i = 1; i <= totalLines; i++)
+        {
+            if (engine.ShouldIntercept(i))
+            {
+                engine.Intercept(i, line, $"DOC{i:D8}");
+                _ = engine.GetEncodingAnomaly(i, i + 1, Encoding.UTF8);
+            }
+        }
+
+        Assert.Equal(10, engine.Anomalies.Count);
+        Assert.DoesNotContain(engine.Anomalies, anomaly =>
+            ChaosAnomalyTypes.DatRecordOnly.Contains(anomaly.ErrorType, StringComparer.Ordinal));
     }
 }
