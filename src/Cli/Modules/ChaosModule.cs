@@ -25,8 +25,13 @@ public sealed class ChaosModule : CliModule
         }
 
         string? chaosTypes = this._types;
-        if (chaosTypes is null && !string.IsNullOrEmpty(this._scenario))
+        if (chaosTypes is null)
         {
+            if (string.IsNullOrEmpty(this._scenario))
+            {
+                return ChaosAnomalyTypes.DatDefault.Contains("path-pointer", StringComparer.OrdinalIgnoreCase);
+            }
+
             chaosTypes = ChaosScenarios.GetByName(this._scenario)?.ChaosTypes;
         }
 
