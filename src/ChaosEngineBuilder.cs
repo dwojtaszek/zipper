@@ -75,27 +75,30 @@ internal static class ChaosEngineBuilder
             }
         }
 
-        if (request.LoadfileOnly && request.SourceRecords is null && request.Metadata.ColumnProfile is null)
+        if (request.Metadata.ColumnProfile is null)
         {
-            columns.Add("Date Sent");
-            columns.Add("EmailSentDate");
-        }
-        else
-        {
-            if (request.Metadata.ShouldIncludeMetadataColumns(request.Output))
+            if (request.LoadfileOnly && request.SourceRecords is null)
             {
                 columns.Add("Date Sent");
-            }
-
-            if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
-            {
-                columns.Add("Sent Date");
                 columns.Add("EmailSentDate");
             }
-
-            if (request.Metadata.ShouldIncludeCollectionMetadataColumns())
+            else
             {
-                columns.Add("Collection Date");
+                if (request.Metadata.ShouldIncludeMetadataColumns(request.Output))
+                {
+                    columns.Add("Date Sent");
+                }
+
+                if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
+                {
+                    columns.Add("Sent Date");
+                    columns.Add("EmailSentDate");
+                }
+
+                if (request.Metadata.ShouldIncludeCollectionMetadataColumns())
+                {
+                    columns.Add("Collection Date");
+                }
             }
         }
 

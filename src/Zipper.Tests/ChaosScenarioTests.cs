@@ -391,6 +391,38 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public async Task ChaosScenario_DirectoryTemplatePathPointer_AvoidsSourcePathCollisions()
+    {
+        string sourceDirectory = Path.Combine(this.TempDir, "source-template");
+        string sourceFolder = Path.Combine(sourceDirectory, "folder");
+        string outputPath = Path.Combine(this.TempDir, $"zipper_template_chaos_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(sourceFolder);
+        await File.WriteAllTextAsync(Path.Combine(sourceFolder, "doc.pdf"), string.Empty);
+        await File.WriteAllTextAsync(Path.Combine(sourceFolder, "doc_MISSING.docx"), string.Empty);
+
+        var (exitCode, _, stderr) = await RunWithCapture(new[]
+        {
+            "--loadfile-only", "--directory-template", sourceDirectory, "--count", "2", "--output-path", outputPath,
+            "--chaos-mode", "--chaos-types", "path-pointer", "--chaos-amount", "2", "--seed", "42",
+        });
+        Assert.Equal(0, exitCode);
+        Assert.Empty(stderr);
+
+        string loadFile = Assert.Single(Directory.GetFiles(outputPath, "*.dat"));
+        var lines = await File.ReadAllLinesAsync(loadFile);
+        var columns = DatLineParser.Parse(lines[0], '\u0014', '\u00fe');
+        int pathIndex = columns.FindIndex(column => string.Equals(column, "File Path", StringComparison.Ordinal));
+        Assert.True(pathIndex >= 0);
+
+        var mutatedPaths = lines.Skip(1)
+            .Select(line => DatLineParser.Parse(line, '\u0014', '\u00fe')[pathIndex])
+            .ToArray();
+        Assert.Equal(
+            new[] { "folder/doc_MISSING_1.pdf", "folder/doc_MISSING_MISSING.docx" },
+            mutatedPaths);
+    }
+
+    [Fact]
     public async Task ChaosScenario_AmountOverride_UsesCustomAmount()
     {
         var tempPath = Path.Combine(this.TempDir, $"zipper_{Guid.NewGuid():N}");

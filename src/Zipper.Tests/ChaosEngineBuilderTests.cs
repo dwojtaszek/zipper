@@ -1,5 +1,6 @@
 using System.Reflection;
 using Xunit;
+using Zipper.Config;
 using Zipper.LoadFiles;
 using Zipper.Profiles;
 using Zipper.SourceInput;
@@ -116,6 +117,42 @@ public class ChaosEngineBuilderTests
         Assert.Equal("jdoe", fields[0]);
         Assert.Contains(fields[1], new[] { "00/00/0000", "2018-01-15 a.m.", "2018-044-09" });
         Assert.Equal("ReviewStamp", Assert.Single(engine.Anomalies).Column);
+    }
+
+    [Fact]
+    public void Build_DateFormat_DoesNotTargetTextTypedBuiltInColumn()
+    {
+        var request = new FileGenerationRequest
+        {
+            LoadfileOnly = true,
+            Output = new OutputConfig { FileType = "eml", FileCount = 1 },
+        };
+        request.Metadata = request.Metadata with
+        {
+            Seed = 42,
+            ColumnProfile = new ColumnProfile
+            {
+                Columns = [new ColumnDefinition { Name = "Sent Date", Type = "text" }],
+            },
+        };
+        request.Chaos = request.Chaos with { ChaosMode = true, ChaosAmount = "1", ChaosTypes = "date-format" };
+
+        var record = new LoadFileRecord
+        {
+            Columns = ["Sent Date"],
+            Values = ["Jane Doe"],
+            RecordId = "DOC00000001",
+        };
+        var serializer = new DatSerializer('|', '"', "~");
+        string line = serializer.RenderRecord(record);
+        var engine = ChaosEngineBuilder.Build(request, 2, LoadFileFormat.Dat);
+        Assert.NotNull(engine);
+        Assert.True(engine.ShouldIntercept(2));
+
+        string result = engine.Intercept(2, line, record.RecordId, record, serializer);
+
+        Assert.Equal(line, result);
+        Assert.Empty(engine.Anomalies);
     }
 
     [Fact]
