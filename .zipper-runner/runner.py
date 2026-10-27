@@ -5688,8 +5688,9 @@ def _worktree_mission_lock(wt_path: str):
     outlives a SIGKILLed runner, so a runner killed outright can free a worktree
     whose agent is still writing. The watchdog does not cover that case either: it
     reclaims by killing the holder's process group, which the agent's separate
-    session escapes. Each plugin's own mission bound (900s of silence, or a 2700s
-    wall clock for agy; see the plugins) is what keeps that window small.
+    session escapes. Each plugin's own mission bound (900s of silence for the four
+    silent agents, 900s of silence with a 7200s ceiling for droid, a 2700s wall
+    clock for agy; see the plugins) is what keeps that window small.
 
     Deliberately not wired to `_reclaim_stale_lock`: that reclaims by killing the
     holder's process group, which would kill a whole intake run for a worktree it
