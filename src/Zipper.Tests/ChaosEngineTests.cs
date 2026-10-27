@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Xunit;
 
@@ -15,6 +16,22 @@ public class ChaosEngineTests
             format: LoadFileFormat.Dat,
             columnDelimiter: "\u0014",
             quoteDelimiter: "\u00fe",
+            eol: "\r\n",
+            seed: 42));
+
+        Assert.Contains("Chaos Engine does not support load files larger than Int32.MaxValue lines", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Constructor_OptEncodingTotalLinesExceedsIntMax_ThrowsArgumentOutOfRangeException()
+    {
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => new ChaosEngine(
+            totalLines: (long)int.MaxValue + 1,
+            chaosAmount: "0",
+            chaosTypes: "opt-encoding",
+            format: LoadFileFormat.Opt,
+            columnDelimiter: ",",
+            quoteDelimiter: string.Empty,
             eol: "\r\n",
             seed: 42));
 
@@ -201,6 +218,139 @@ public class ChaosEngineTests
         }
 
         Assert.True(gotAnomaly, "Should inject at least one encoding anomaly");
+    }
+
+    [Fact]
+    public void OptEncodingAnomaly_ReturnsUtf8BomBetweenRecordsAndSkipsEndOfFile()
+    {
+        var engine = new ChaosEngine(
+            totalLines: 3,
+            chaosAmount: "100%",
+            chaosTypes: "opt-encoding",
+            format: LoadFileFormat.Opt,
+            columnDelimiter: ",",
+            quoteDelimiter: string.Empty,
+            eol: "\r\n",
+            seed: 42);
+        const string line = "IMG001,VOL001,IMAGES\\IMG001.tif,Y,,,3";
+
+        for (int lineNumber = 1; lineNumber <= 2; lineNumber++)
+        {
+            Assert.True(engine.ShouldIntercept(lineNumber));
+            Assert.Equal(line, engine.Intercept(lineNumber, line, $"IMG{lineNumber:D3}"));
+        }
+        Assert.False(engine.ShouldIntercept(3));
+        Assert.Empty(engine.Anomalies);
+
+        var bytes = engine.GetEncodingAnomaly(1, 2, Encoding.Latin1);
+
+        Assert.NotNull(bytes);
+        Assert.Equal(Encoding.UTF8.GetPreamble(), bytes);
+        var anomaly = Assert.Single(engine.Anomalies);
+        Assert.Equal("Boundary 1-2", anomaly.LineNumber);
+        Assert.Equal("opt-encoding", anomaly.ErrorType);
+        bytes = engine.GetEncodingAnomaly(2, 3, Encoding.Latin1);
+        Assert.NotNull(bytes);
+        Assert.Equal(Encoding.UTF8.GetPreamble(), bytes);
+        Assert.Null(engine.GetEncodingAnomaly(1, 2, Encoding.Latin1));
+        Assert.Null(engine.GetEncodingAnomaly(3, 4, Encoding.Latin1));
+        Assert.Equal(2, engine.Anomalies.Count);
+    }
+
+    [Fact]
+    public void OptEncodingAnomaly_DoesNotEmitBytesAtEndOfSingleRecordFile()
+    {
+        var engine = new ChaosEngine(
+            totalLines: 1,
+            chaosAmount: "1",
+            chaosTypes: "opt-encoding",
+            format: LoadFileFormat.Opt,
+            columnDelimiter: ",",
+            quoteDelimiter: string.Empty,
+            eol: "\r\n",
+            seed: 42);
+        const string line = "IMG001,VOL001,IMAGES\\IMG001.tif,Y,,,3";
+
+        Assert.False(engine.ShouldIntercept(1));
+        Assert.Equal(line, engine.Intercept(1, line, "IMG001"));
+
+        Assert.Null(engine.GetEncodingAnomaly(1, 2, Encoding.Latin1));
+        Assert.Empty(engine.Anomalies);
+    }
+
+    [Fact]
+    public void OptEncodingAnomaly_SamplesOnlyAvailableRecordBoundaries()
+    {
+        var engine = new ChaosEngine(
+            totalLines: 2,
+            chaosAmount: "100%",
+            chaosTypes: "opt-encoding",
+            format: LoadFileFormat.Opt,
+            columnDelimiter: ",",
+            quoteDelimiter: string.Empty,
+            eol: "\r\n",
+            seed: 42);
+
+        Assert.True(engine.ShouldIntercept(1));
+        Assert.False(engine.ShouldIntercept(2));
+    }
+
+    [Fact]
+    public void OptEncodingAnomaly_AtTerminalRecordUsesAnotherEnabledType()
+    {
+        const string line = "IMG001,VOL001,IMAGES\\IMG001.tif,Y,,,3";
+
+        foreach (int totalLines in new[] { 2, 3 })
+        {
+            var engine = new ChaosEngine(
+                totalLines,
+                chaosAmount: totalLines.ToString(CultureInfo.InvariantCulture),
+                chaosTypes: "opt-encoding,opt-boundary",
+                format: LoadFileFormat.Opt,
+                columnDelimiter: ",",
+                quoteDelimiter: string.Empty,
+                eol: "\r\n",
+                seed: 42);
+
+            for (int lineNumber = 1; lineNumber < totalLines; lineNumber++)
+            {
+                Assert.True(engine.ShouldIntercept(lineNumber));
+                engine.Intercept(lineNumber, line, $"IMG{lineNumber:D3}");
+                engine.GetEncodingAnomaly(lineNumber, lineNumber + 1, Encoding.Latin1);
+            }
+
+            Assert.True(engine.ShouldIntercept(totalLines));
+            string terminalLine = engine.Intercept(totalLines, line, $"IMG{totalLines:D3}");
+
+            Assert.NotEqual(line, terminalLine);
+            Assert.Contains(engine.Anomalies, anomaly =>
+                anomaly.LineNumber == totalLines.ToString(CultureInfo.InvariantCulture) &&
+                anomaly.ErrorType == "opt-boundary");
+        }
+    }
+
+    [Fact]
+    public void OptEncodingAnomaly_IsNotEnabledByDefault()
+    {
+        var engine = new ChaosEngine(
+            totalLines: 100,
+            chaosAmount: "100%",
+            chaosTypes: null,
+            format: LoadFileFormat.Opt,
+            columnDelimiter: ",",
+            quoteDelimiter: string.Empty,
+            eol: "\r\n",
+            seed: 42);
+        const string line = "IMG001,VOL001,IMAGES\\IMG001.tif,Y,,,3";
+
+        for (int lineNumber = 1; lineNumber < 100; lineNumber++)
+        {
+            Assert.True(engine.ShouldIntercept(lineNumber));
+            engine.Intercept(lineNumber, line, $"IMG{lineNumber:D3}");
+            Assert.Null(engine.GetEncodingAnomaly(lineNumber, lineNumber + 1, Encoding.Latin1));
+        }
+
+        Assert.DoesNotContain(engine.Anomalies, anomaly => anomaly.ErrorType == "opt-encoding");
     }
 
     [Fact]

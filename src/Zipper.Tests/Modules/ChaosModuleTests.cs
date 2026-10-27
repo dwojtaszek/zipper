@@ -182,6 +182,16 @@ public class ChaosModuleTests
     }
 
     [Fact]
+    public void TryBuild_OptEncodingTypeForOptFormat_BuildsConfig()
+    {
+        var spec = new ChaosConfigSpec(Amount: null, Types: "opt-encoding", Scenario: null) { Mode = true };
+
+        Assert.True(TryBuildWithValues(spec, out var config, formats: new List<LoadFileFormat> { LoadFileFormat.Opt }));
+
+        Assert.Equal("opt-encoding", config.ChaosTypes);
+    }
+
+    [Fact]
     public void TryBuild_ChaosModeWithCsvFormat_ReturnsFalse()
     {
         // Formats list with a non-DAT/OPT format rejects --chaos-mode.

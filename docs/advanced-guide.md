@@ -292,12 +292,18 @@ Two modes write no **Archive** at all, so the column there reports the requested
 
 ### Chaos Engine
 
-Inject deliberate structural anomalies into Load Files for ingestion testing. Requires `--loadfile-only` and `dat` or `opt` format.
+Inject deliberate structural and encoding anomalies into Load Files for ingestion testing. Requires `--loadfile-only` and `dat` or `opt` format.
+
+OPT supports `opt-encoding`, which inserts UTF-8 BOM bytes at a record boundary; ANSI/Windows-1252 readers render them as mojibake. It is opt-in to preserve existing OPT chaos output and is enabled by the `full-chaos` scenario.
 
 ```bash
 # Inject anomalies into 5% of records
 zipper --loadfile-only --count 100000 --output-path ./chaos_test \
     --chaos-mode --chaos-amount "5%" --seed 42
+
+# Exercise the OPT ANSI/UTF-8 encoding seam
+zipper --loadfile-only --loadfile-format opt --encoding ANSI --count 100000 --output-path ./opt_encoding_test \
+    --chaos-mode --chaos-types opt-encoding --chaos-amount "5%" --seed 42
 
 # Predefined chaos scenario
 zipper --loadfile-only --count 100000 --output-path ./platform_test \

@@ -110,7 +110,8 @@ internal static class LoadFileAuditWriter
     private static long ComputeOptRecordCount(FileGenerationRequest request, IReadOnlyCollection<FileData> composedRecords)
     {
         long total = 0;
-        bool pageCountEnabled = request.Tiff.ShouldIncludePageCount(request.Output);
+        bool pageCountEnabled = request.Tiff.ShouldIncludePageCount(request.Output)
+            || (request.LoadfileOnly && request.SourceRecords is not null);
         bool withFamilies = request.Metadata.WithFamilies && request.Output.HasFileType("eml");
 
         foreach (var f in composedRecords)

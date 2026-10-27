@@ -23,7 +23,8 @@ public class ChaosAnomalyTypesTests
         Assert.Contains("opt-pagecount", ChaosAnomalyTypes.Opt);
         Assert.Contains("opt-path", ChaosAnomalyTypes.Opt);
         Assert.Contains("opt-batesnumber", ChaosAnomalyTypes.Opt);
-        Assert.Equal(5, ChaosAnomalyTypes.Opt.Count);
+        Assert.Contains("opt-encoding", ChaosAnomalyTypes.Opt);
+        Assert.Equal(6, ChaosAnomalyTypes.Opt.Count);
     }
 
     [Fact]

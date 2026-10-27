@@ -2,8 +2,8 @@
 REM E2E test: Chaos anomaly coverage (Windows)
 REM Verifies chaos mode produces anomalies for each type
 
+setlocal DisableDelayedExpansion
 call "%~dp0_zipper-cli.bat"
-setlocal enabledelayedexpansion
 
 set PASSED=0
 set FAILED=0
@@ -36,6 +36,32 @@ if not errorlevel 1 (
     set /a FAILED+=1
 )
 
+REM Test OPT encoding chaos emits a UTF-8 BOM and records the anomaly
+echo [ INFO ] Test: OPT chaos with opt-encoding type
+%ZIPPER_CMD% --loadfile-only --loadfile-format opt --encoding ANSI --count 100 --output-path "%TEST_OUTPUT_DIR%\opt_encoding" --chaos-mode --chaos-types opt-encoding --chaos-amount 10 --seed 42 >nul 2>&1
+if not errorlevel 1 (
+    set "OPT_ENCODING_FILE="
+    set "OPT_ENCODING_PROPS="
+    for %%F in ("%TEST_OUTPUT_DIR%\opt_encoding\*.opt") do set "OPT_ENCODING_FILE=%%~fF"
+    for %%F in ("%TEST_OUTPUT_DIR%\opt_encoding\*_properties.json") do set "OPT_ENCODING_PROPS=%%~fF"
+    if defined OPT_ENCODING_FILE if defined OPT_ENCODING_PROPS (
+        powershell -NoProfile -Command "$b=[IO.File]::ReadAllBytes($env:OPT_ENCODING_FILE); $p=Get-Content -Raw $env:OPT_ENCODING_PROPS | ConvertFrom-Json; if ([BitConverter]::ToString($b).Contains('EF-BB-BF') -and @($p.chaosMode.injectedAnomalies | Where-Object { $_.errorType -eq 'opt-encoding' }).Count -gt 0) { exit 0 } else { exit 1 }" >nul 2>&1
+        if not errorlevel 1 (
+            echo [ INFO ] PASS: OPT encoding chaos emitted and audited UTF-8 BOM
+            set /a PASSED+=1
+        ) else (
+            echo [ ERROR ] FAIL: OPT encoding chaos output or audit
+            set /a FAILED+=1
+        )
+    ) else (
+        echo [ ERROR ] FAIL: OPT encoding chaos output files missing
+        set /a FAILED+=1
+    )
+) else (
+    echo [ ERROR ] FAIL: OPT encoding chaos
+    set /a FAILED+=1
+)
+
 REM Test chaos scenario
 echo [ INFO ] Test: Chaos scenario full-chaos
 %ZIPPER_CMD% --loadfile-only --count 100 --output-path "%TEST_OUTPUT_DIR%\full_chaos" --chaos-mode --chaos-scenario full-chaos --seed 42 >nul 2>&1
@@ -51,11 +77,11 @@ REM --- Cleanup ---
 if exist "%TEST_OUTPUT_DIR%" rmdir /s /q "%TEST_OUTPUT_DIR%"
 
 echo.
-set /a TOTAL=!PASSED!+!FAILED!
-if !FAILED! equ 0 (
-    echo [ SUCCESS ] Chaos anomaly coverage tests passed! ^(!PASSED!/!TOTAL!^)
+set /a TOTAL=%PASSED%+%FAILED%
+if %FAILED% equ 0 (
+    echo [ SUCCESS ] Chaos anomaly coverage tests passed! ^(%PASSED%/%TOTAL%^)
 ) else (
-    echo [ ERROR ] Chaos anomaly tests: !FAILED!/!TOTAL! FAILED
+    echo [ ERROR ] Chaos anomaly tests: %FAILED%/%TOTAL% FAILED
     exit /b 1
 )
 exit /b 0

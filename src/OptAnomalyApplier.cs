@@ -5,6 +5,7 @@ namespace Zipper;
 internal class OptAnomalyApplier : IAnomalyApplier
 {
     private readonly Random random;
+    private readonly HashSet<long> encodingAnomalyLines = new();
 
     public OptAnomalyApplier(Random random)
     {
@@ -41,6 +42,9 @@ internal class OptAnomalyApplier : IAnomalyApplier
                 result = ApplyOptBatesNumberCorruption(line);
                 description = "Removed the Bates Number (Column 1).";
                 break;
+            case "opt-encoding":
+                this.encodingAnomalyLines.Add(lineNumber);
+                return line;
             default:
                 description = $"Unknown OPT chaos type: {chaosType}";
                 break;
@@ -64,7 +68,22 @@ internal class OptAnomalyApplier : IAnomalyApplier
 
     public byte[]? GetEncodingAnomaly(long lineNumber, long nextLineNumber, Encoding encoding, List<ChaosAnomaly> anomalies)
     {
-        return null; // OPT doesn't have an encoding anomaly by default
+        if (this.encodingAnomalyLines.Count == 0 || !this.encodingAnomalyLines.Remove(lineNumber))
+        {
+            return null;
+        }
+
+        byte[] utf8Bom = Encoding.UTF8.GetPreamble();
+        anomalies.Add(new ChaosAnomaly
+        {
+            LineNumber = $"Boundary {lineNumber}-{nextLineNumber}",
+            RecordID = "N/A",
+            Column = "N/A",
+            ErrorType = "opt-encoding",
+            Description = $"Injected UTF-8 BOM bytes into {encoding.WebName} output between OPT records; ANSI/Windows-1252 readers render them as mojibake.",
+        });
+
+        return utf8Bom;
     }
 
     private string ApplyOptBoundaryFlip(string line)

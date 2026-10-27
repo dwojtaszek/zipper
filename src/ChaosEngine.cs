@@ -13,13 +13,17 @@ internal class ChaosEngine
 {
     private static readonly string[] DatChaosTypes = ChaosAnomalyTypes.Dat.ToArray();
     private static readonly string[] OptChaosTypes = ChaosAnomalyTypes.Opt.ToArray();
+    private static readonly string[] OptDefaultChaosTypes = OptChaosTypes.Where(type => type != "opt-encoding").ToArray();
 
     private readonly HashSet<string> enabledTypes;
     private readonly List<ChaosAnomaly> anomalies = new();
     private int anomalyTypeIndex;
 
-    private readonly ChaosSampler sampler;
     private readonly IAnomalyApplier applier;
+    private readonly LoadFileFormat format;
+    private readonly long totalLines;
+    private readonly bool onlyOptEncoding;
+    private readonly ChaosSampler sampler;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ChaosEngine"/> class.
@@ -42,12 +46,12 @@ internal class ChaosEngine
         string eol,
         int? seed = null)
     {
+        this.format = format;
+        this.totalLines = totalLines;
+
 #pragma warning disable S2245 // Pseudo-randomness is safe for mock metadata generation
         Random random = seed.HasValue ? new Random(seed.Value) : new Random();
 #pragma warning restore S2245
-
-        // Initialize Sampler
-        this.sampler = new ChaosSampler(totalLines, chaosAmount, random);
 
         // Determine enabled types
         var validTypes = format == LoadFileFormat.Opt ? OptChaosTypes : DatChaosTypes;
@@ -60,8 +64,16 @@ internal class ChaosEngine
         }
         else
         {
-            this.enabledTypes = new HashSet<string>(validTypes, StringComparer.OrdinalIgnoreCase);
+            var defaultTypes = format == LoadFileFormat.Opt ? OptDefaultChaosTypes : validTypes;
+            this.enabledTypes = new HashSet<string>(defaultTypes, StringComparer.OrdinalIgnoreCase);
         }
+
+        this.onlyOptEncoding = format == LoadFileFormat.Opt
+            && this.enabledTypes.Count == 1
+            && this.enabledTypes.Contains("opt-encoding");
+        ChaosSampler.ValidateTotalLines(totalLines);
+        long targetableLines = this.onlyOptEncoding && totalLines > 1 ? totalLines - 1 : totalLines;
+        this.sampler = new ChaosSampler(targetableLines, chaosAmount, random);
 
         // If quote-delim is "none", disable the quotes chaos type
         if (string.IsNullOrEmpty(quoteDelimiter))
@@ -85,7 +97,8 @@ internal class ChaosEngine
     /// </summary>
     /// <param name="lineNumber">1-based line number.</param>
     /// <returns>True if the line should be corrupted.</returns>
-    public bool ShouldIntercept(long lineNumber) => this.sampler.ShouldIntercept(lineNumber);
+    public bool ShouldIntercept(long lineNumber) =>
+        !(this.onlyOptEncoding && lineNumber >= this.totalLines) && this.sampler.ShouldIntercept(lineNumber);
 
     /// <summary>
     /// Intercepts and corrupts a line. Returns the modified line.
@@ -105,16 +118,26 @@ internal class ChaosEngine
         var chosenType = typeList[this.anomalyTypeIndex % typeList.Length];
         this.anomalyTypeIndex++;
 
+        if (this.format == LoadFileFormat.Opt && lineNumber == this.totalLines && chosenType == "opt-encoding")
+        {
+            if (this.onlyOptEncoding)
+            {
+                return line;
+            }
+
+            chosenType = typeList.First(type => type != "opt-encoding");
+        }
+
         return this.applier.Apply(lineNumber, line, recordId, chosenType, this.anomalies);
     }
 
     /// <summary>
-    /// Generates an encoding anomaly (invalid bytes) to inject between two lines.
+    /// Generates encoding-anomaly bytes to inject between two lines.
     /// </summary>
     /// <param name="lineNumber">Line number after which to inject.</param>
     /// <param name="nextLineNumber">Next line number.</param>
     /// <param name="encoding">Target encoding.</param>
-    /// <returns>Invalid byte array, or null if encoding chaos is not enabled or not targeted.</returns>
+    /// <returns>Injected byte array, or null if encoding chaos is not enabled or not targeted.</returns>
     public byte[]? GetEncodingAnomaly(long lineNumber, long nextLineNumber, Encoding encoding)
     {
         return this.applier.GetEncodingAnomaly(lineNumber, nextLineNumber, encoding, this.anomalies);
