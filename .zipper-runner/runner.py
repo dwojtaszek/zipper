@@ -283,6 +283,131 @@ def is_quota_exhausted(output: str, stderr: str = "") -> bool:
         return True
     return False
 
+# A mission that ends non-zero has to say why in the run log. Each plugin reports
+# its reason on one of the returned streams: a kill message naming the bound that
+# fired, a provider error, or an exception string. Without it a ceiling cut, a
+# silence kill, and an ordinary no-progress cycle read identically in the log --
+# which is how a mission truncated at the 5400s ceiling was recorded as progress
+# and only ever surfaced inside an escalation email. The reason is one line
+# because the log is scanned, not read, and stderr can carry a whole traceback.
+_MISSION_REASON_LIMIT = 300
+
+# Provider errors arrive wrapped in colour codes -- opencode writes
+# "\x1b[91m\x1b[1mError: \x1b[0mFree usage limit reached" -- so the escapes have to
+# go before a line can be recognised or read.
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*m")
+# A line that names itself as an error, optionally behind one short word so that
+# "API Error:" counts. Anchored at the start of the line, so assistant prose that
+# merely mentions an error mid-sentence does not qualify as the cause.
+_ERROR_LINE_RE = re.compile(r"^(?:[A-Za-z][\w-]*\s+)?error\b", re.IGNORECASE)
+
+
+def _reason_lines(text: str) -> list[str]:
+    """The text as ANSI-free, stripped lines, blanks preserved as block breaks."""
+    return [_ANSI_ESCAPE_RE.sub("", line).strip() for line in (text or "").splitlines()]
+
+
+def _last_error_block(lines: list[str]) -> str:
+    """The last error-announcing line plus the rest of its paragraph, or "".
+
+    The *last* one, not the first: codex composes a provider error and then its
+    own kill message (`codex.py`), and the kill is the fact that explains the
+    exit. Taking the first would report a 900s silence kill as a rate limit.
+    Following lines are kept because provider messages wrap, and a blank line
+    ends the block so a partial-output dump underneath it stays out of the log.
+    """
+    for index in range(len(lines) - 1, -1, -1):
+        if not _ERROR_LINE_RE.match(lines[index]):
+            continue
+        block = [lines[index]]
+        for following in lines[index + 1:]:
+            if not following:
+                break
+            block.append(following)
+        return " ".join(block)
+    return ""
+
+
+def _mission_failure_reason(out: str, err: str) -> str:
+    """One-line reason for a non-zero mission exit, for the run log.
+
+    An error-announcing line wins, whichever stream carries it, because that is
+    where every plugin puts its termination message. Only stderr supplies the
+    last-line fallback: stdout is assistant prose, and its last line is as likely
+    to be a cheerful summary as the failure, so reporting it would name the wrong
+    thing. A plugin that announced no error and left nothing on stderr returns "",
+    and the caller says so explicitly.
+    """
+    err_lines = _reason_lines(err)
+    for lines in (err_lines, _reason_lines(out)):
+        block = _last_error_block(lines)
+        if block:
+            return _one_line_reason(block)
+    reported = [line for line in err_lines if line]
+    return _one_line_reason(reported[-1]) if reported else ""
+
+
+def _one_line_reason(text: str) -> str:
+    """Collapse a reason to a single truncated line."""
+    collapsed = " ".join(text.split())
+    if len(collapsed) > _MISSION_REASON_LIMIT:
+        collapsed = collapsed[: _MISSION_REASON_LIMIT - 3].rstrip() + "..."
+    return collapsed
+
+
+def _mission_lock_held_for(wt_path: str) -> bool:
+    """Whether *this process* holds the worktree mission lock for this worktree.
+
+    Read from the in-process registry rather than by probing the lock file: `flock`
+    is per open file description, so a probe would be refused by the very lock this
+    process already holds, and the registry is what `_worktree_mission_lock` itself
+    consults for its reentrancy.
+    """
+    try:
+        return _worktree_mission_lock_path(wt_path) in _worktree_mission_locks
+    except Exception:
+        # A diagnostic must never be the thing that breaks a mission.
+        return True
+
+
+def run_mission_logged(plugin, agent_name: str, model_name: str, prompt: str, cwd: str,
+                       *, is_continue: bool, phase: str) -> tuple[int, str, str]:
+    """Run one agent mission and record why it ended when it ended non-zero.
+
+    Every mission call site goes through here so the reason cannot be logged at
+    one of them and forgotten at another. `phase` names the sweep that dispatched
+    (`intake`, `babysit-repair`, `babysit-orphan`) so a log reader can tell which
+    one produced the line; the `babysit-` prefix keeps both repair paths greppable
+    alongside the `[babysit]` lines the rest of those functions already print.
+
+    A plugin that raises is reported too: the sweep then ends with a reason line
+    rather than a bare traceback, which is the same "no reason in the log" defect
+    reached by a different route. The exception still propagates, so crash
+    semantics are unchanged.
+
+    This is also where the worktree-mission lock is verified at runtime. The lock
+    is taken by the caller, so nothing structural stops a future dispatch site
+    from calling the seam outside one; the guard reports that instead of relying on
+    a static test alone. It warns rather than raises: the seam is on the path of
+    every mission, so a false positive would break a run, and the miss it reports
+    is a concurrency hazard rather than a reason to abandon the work.
+    """
+    if not _mission_lock_held_for(cwd):
+        print(f"[{phase}] WARNING: {agent_name}/{model_name} mission is dispatching in "
+              f"{os.path.basename(cwd)} without this process holding its worktree "
+              f"mission lock; another run may be driving the same worktree.")
+    try:
+        code, out, err = plugin.run_mission(prompt, cwd, is_continue=is_continue, model=model_name)
+    except Exception as exc:
+        print(f"[{phase}] {agent_name}/{model_name} mission raised "
+              f"{type(exc).__name__}: {_one_line_reason(str(exc))}")
+        raise
+    if code != 0:
+        reason = _mission_failure_reason(out, err)
+        print(f"[{phase}] {agent_name}/{model_name} mission ended non-zero (exit={code})"
+              + (f": {reason}" if reason else " with no reported reason"))
+    return code, out, err
+
 # Some providers state their own reset window; agy embeds "Resets in 85h0m6s" in
 # its 429 payload. Retrying inside that window can only fail, so the stated
 # window is authoritative and QUOTA_COOLDOWN_MINUTES becomes the fallback for
@@ -3320,7 +3445,9 @@ def _babysit_with_fallback(
             if pr_number and not _authorized_pr(pr_number, str(issue_number), authorized["head"]["sha"]):
                 return
             print(f"[babysit] Trying {agent_name}/{model_name}...")
-            code, out, err = plugin.run_mission(prompt, wt_path, is_continue=True, model=model_name)
+            code, out, err = run_mission_logged(
+                plugin, agent_name, model_name, prompt, wt_path,
+                is_continue=True, phase="babysit-repair")
 
             if code != 0 and is_quota_exhausted(out, err):
                 mark_model_exhausted(agent_name, model_name, stderr=err)
@@ -3347,7 +3474,10 @@ def _babysit_with_fallback(
             if code == 0 and "PENDING" in after[0]:
                 print(f"[babysit] {agent_name}/{model_name} exit=0 and CI is in-flight — waiting for checks")
                 return
-            print(f"[babysit] {agent_name}/{model_name} did not complete babysit (exit={code})")
+            # The exit code is only repeated for a clean exit: a non-zero one was
+            # already reported, with its reason, by run_mission_logged.
+            print(f"[babysit] {agent_name}/{model_name} did not complete babysit"
+                  + (" (exit=0)" if code == 0 else ""))
 
             before = after
 
@@ -3927,7 +4057,9 @@ def babysit_active_worktrees():
                             print(f"FATAL: Agent {agent_name!r} not loaded. Available: {list(AGENT_PLUGINS)}")
                             sys.exit(1)
                         _, before_head, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
-                        agy_code, agy_out, agy_err = plugin.run_mission(prompt, wt_path, is_continue=True, model=model_name)
+                        agy_code, agy_out, agy_err = run_mission_logged(
+                            plugin, agent_name, model_name, prompt, wt_path,
+                            is_continue=True, phase="babysit-orphan")
 
                         _auto_commit_wip_checkpoint(wt_path, issue_number, agent_name)
                         _, after_head, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
@@ -6035,7 +6167,9 @@ def main():
                         _, before_commits, _ = run_cmd(["git", "rev-list", "--count", f"main..{branch_name}"], cwd=REPO_PATH)
                         before_count = int(before_commits.strip() or "0")
                         model_name = _current_model()
-                        agy_code, agy_out, agy_err = plugin.run_mission(prompt, wt_path, is_continue=False, model=model_name)
+                        agy_code, agy_out, agy_err = run_mission_logged(
+                            plugin, agent_name, model_name, prompt, wt_path,
+                            is_continue=False, phase="intake")
 
                         _auto_commit_wip_checkpoint(wt_path, num, agent_name)
 

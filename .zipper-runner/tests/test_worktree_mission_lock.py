@@ -313,6 +313,12 @@ class MissionDispatchCoverageTests(unittest.TestCase):
     a programmatic re-indent could silently misplace. Parsing the module pins the
     invariant directly: a new dispatch site, or a guard deleted from an existing
     one, fails here.
+
+    The three sites now call `run_mission_logged`, which is the seam that also
+    records a non-zero exit's reason before returning. The seam is the only caller
+    of `plugin.run_mission`, so requiring every seam call to sit inside the lock
+    still bounds the actual dispatch -- and a site that called the plugin directly
+    would escape both this check and the reason logging, so it is rejected too.
     """
 
     def _mission_lock_names(self, node: ast.With) -> bool:
@@ -321,14 +327,18 @@ class MissionDispatchCoverageTests(unittest.TestCase):
             and getattr(item.context_expr.func, "id", "") == "_worktree_mission_lock"
             for item in node.items)
 
+    def _seam_calls(self, tree: ast.AST) -> list[ast.Call]:
+        return [
+            node for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and getattr(node.func, "id", "") == "run_mission_logged"
+        ]
+
     def test_everyMissionDispatch_shouldBeInsideAWorktreeLock(self):
         source = Path(runner.__file__).read_text(encoding="utf-8")
         tree = ast.parse(source)
 
-        dispatches = [
-            node for node in ast.walk(tree)
-            if isinstance(node, ast.Call) and getattr(node.func, "attr", "") == "run_mission"
-        ]
+        dispatches = self._seam_calls(tree)
         self.assertEqual(len(dispatches), 3,
                          "the runner dispatches missions from exactly three sites; a new "
                          "one must be wrapped in _worktree_mission_lock and counted here")
@@ -342,7 +352,21 @@ class MissionDispatchCoverageTests(unittest.TestCase):
                     wrapped += 1
                     break
         self.assertEqual(wrapped, len(dispatches),
-                         "every run_mission call must sit inside a _worktree_mission_lock block")
+                         "every mission dispatch must sit inside a _worktree_mission_lock block")
+
+    def test_directPluginCalls_shouldBeOnlyTheSeam(self):
+        """A direct `plugin.run_mission` call outside the seam would dispatch an
+        unlocked mission and skip the reason logging, so there must be none."""
+        tree = ast.parse(Path(runner.__file__).read_text(encoding="utf-8"))
+        callers = [
+            node.name
+            for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)
+            for child in ast.walk(node)
+            if isinstance(child, ast.Call)
+            and getattr(child.func, "attr", "") == "run_mission"
+        ]
+        self.assertEqual(callers, ["run_mission_logged"],
+                         f"these functions dispatch a mission outside the seam: {callers}")
 
 
 class BabysitMissionExclusionTests(unittest.TestCase):
