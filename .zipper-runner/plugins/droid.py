@@ -125,10 +125,18 @@ class _MissionOutput:
         self.structured = False
         self.pending = bytearray()
         self.scanned = 0
+        # A turn that did not simply complete, e.g. "model_usage_exhausted". Kept
+        # separately because it explains a failure that would otherwise leave no
+        # trace at all: `completion` wins `stdout_text`, so folding this into
+        # `messages` would hide it whenever the CLI also emitted a final text.
+        self.turn_failure = ""
 
     def stdout_text(self):
         if self.structured:
-            return self.final_text + "\n" if self.final_text is not None else "".join(self.messages)
+            text = self.final_text + "\n" if self.final_text is not None else "".join(self.messages)
+            # A blank line, so the reason stands as its own paragraph rather than
+            # running into the assistant's final text.
+            return f"{self.turn_failure}\n\n{text}" if self.turn_failure else text
         return self.raw.decode(errors="replace")
 
     def _record_event(self, line):
@@ -147,6 +155,14 @@ class _MissionOutput:
             print("[droid] assistant progress", flush=True)
         elif event.get("type") == "completion" and isinstance(event.get("finalText"), str):
             self.final_text = event["finalText"]
+        elif event.get("type") == "agent_turn_outcome":
+            # The CLI's own verdict on the turn. "completed" is the ordinary case
+            # and says nothing worth logging; anything else is the reason the
+            # mission ended, and it is the only place that reason appears --
+            # measured on the host, `model_usage_exhausted` is the one that occurs.
+            reason = event.get("reason")
+            if isinstance(reason, str) and reason and reason != "completed":
+                self.turn_failure = f"Error: droid turn ended early: {reason}"
 
     def consume(self, stream, chunk):
         if stream == "stderr":

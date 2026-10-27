@@ -67,14 +67,19 @@ class _EmailRecorder:
 
 
 class _FakePlugin:
-    """A plugin whose only observable effect is a marker file."""
+    """A plugin whose only observable effect is a marker file.
 
-    def __init__(self, marker: Path):
+    `result` is the (code, stdout, stderr) tuple the mission returns; the default
+    is a clean exit, and a test can set it to drive the failure paths.
+    """
+
+    def __init__(self, marker: Path, result=None):
         self.marker = marker
+        self.result = result if result is not None else (0, "", "")
 
     def run_mission(self, prompt, cwd, is_continue=False, model=None):
         self.marker.write_text(prompt)
-        return 0, "", ""
+        return self.result
 
 
 class _RunnerFixture:
@@ -1076,6 +1081,63 @@ class CronWrapperLogTests(unittest.TestCase):
                 text = path.read_text()
                 self.assertEqual(text.count("Starting Autonomous Runner Cron Run"), 1)
                 self.assertEqual(text.count("Finished Autonomous Runner Cron Run"), 1)
+
+
+class MissionReasonLoggingTests(_WorktreePassTests):
+    """A non-zero mission exit must say why in the run log.
+
+    Observed on the host: issue #1291 was cut at the 5400s droid ceiling with the
+    agent mid-read and a WIP commit on disk, and the run log showed only "Progress
+    recorded on issue #1291". The reason reached an escalation email body and
+    nothing else, so no log scan could see the truncation. These tests drive the
+    real babysit sweep rather than the seam, so a call site that stops logging is
+    caught here even if the seam still works.
+    """
+
+    def _drive(self, plugin):
+        self.runner.AGENT_CANDIDATES = [("fake", "model")]
+        self.runner.AGENT_PLUGINS = {"fake": plugin}
+        buffer = StringIO()
+        with redirect_stdout(buffer):
+            self.runner._babysit_with_fallback(
+                "prompt", str(self.wt), "fix/ISSUE-42-proof", 42, 99)
+        return buffer.getvalue()
+
+    def test_killedMission_shouldLogTheBoundThatFired(self):
+        plugin = _FakePlugin(self.root / "marker")
+        plugin.result = (-1, "", "Error: Droid mission timed out after 5400 seconds.")
+        output = self._drive(plugin)
+        self.assertIn("mission ended non-zero (exit=-1)", output)
+        self.assertIn("Droid mission timed out after 5400 seconds.", output)
+
+    def test_silenceKill_shouldLogItsOwnMessage(self):
+        """The two droid bounds are different failures; the log must not conflate
+        them, or a hang reads as a truncation."""
+        plugin = _FakePlugin(self.root / "marker")
+        plugin.result = (
+            -1, "",
+            "Error: Droid mission hung and was forcefully killed after 900 seconds "
+            "with no output and no new commit.",
+        )
+        output = self._drive(plugin)
+        self.assertIn("no output and no new commit", output)
+        self.assertNotIn("timed out after", output)
+
+    def test_successfulMission_shouldAddNoReasonLine(self):
+        plugin = _FakePlugin(self.root / "marker")
+        plugin.result = (0, "", "")
+        output = self._drive(plugin)
+        self.assertNotIn("mission ended non-zero", output)
+
+    def test_realSweep_shouldHoldTheWorktreeLock(self):
+        """The seam warns when a dispatch happens outside the worktree lock, so a
+        silent run is the evidence that this call site really is inside it. A
+        missing lock here is the concurrency hazard the lock exists for."""
+        plugin = _FakePlugin(self.root / "marker")
+        plugin.result = (-1, "", "Error: Droid mission timed out after 7200 seconds.")
+        output = self._drive(plugin)
+        self.assertIn("mission ended non-zero", output, "the reason must still be logged")
+        self.assertNotIn("without this process holding", output)
 
 
 class UninitializedMatchedBranchTests(_WorktreePassTests):
