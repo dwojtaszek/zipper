@@ -165,7 +165,19 @@ internal class DatAnomalyApplier : IAnomalyApplier
                     return line;
                 }
 
-                result = string.Concat(line, string.Concat(Enumerable.Repeat(this.columnDelimiter, EmptyTrailingColumnCount)));
+                result = string.Create(
+                    line.Length + (this.columnDelimiter.Length * EmptyTrailingColumnCount),
+                    (Line: line, Delimiter: this.columnDelimiter),
+                    static (destination, state) =>
+                    {
+                        state.Line.AsSpan().CopyTo(destination);
+                        int offset = state.Line.Length;
+                        for (int i = 0; i < EmptyTrailingColumnCount; i++)
+                        {
+                            state.Delimiter.AsSpan().CopyTo(destination[offset..]);
+                            offset += state.Delimiter.Length;
+                        }
+                    });
                 column = record.Columns.Count > 0
                     ? $"Trailing empty columns after {record.Columns[^1]}"
                     : "Trailing empty columns";
@@ -272,8 +284,32 @@ internal class DatAnomalyApplier : IAnomalyApplier
             : string.Concat(path, "_MISSING");
     }
 
-    private static string NormalizeColumnName(string column) =>
-        new(column.Where(char.IsLetterOrDigit).Select(char.ToUpperInvariant).ToArray());
+    private static string NormalizeColumnName(string column)
+    {
+        int normalizedLength = 0;
+        foreach (char character in column)
+        {
+            if (char.IsLetterOrDigit(character))
+            {
+                normalizedLength++;
+            }
+        }
+
+        return string.Create(
+            normalizedLength,
+            column,
+            static (normalized, source) =>
+            {
+                int index = 0;
+                foreach (char character in source)
+                {
+                    if (char.IsLetterOrDigit(character))
+                    {
+                        normalized[index++] = char.ToUpperInvariant(character);
+                    }
+                }
+            });
+    }
 
     public byte[]? GetEncodingAnomaly(long lineNumber, long nextLineNumber, Encoding encoding, List<ChaosAnomaly> anomalies)
     {

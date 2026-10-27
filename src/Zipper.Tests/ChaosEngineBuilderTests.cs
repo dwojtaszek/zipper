@@ -73,8 +73,14 @@ public class ChaosEngineBuilderTests
         Assert.Equal(2, enabledTypes.Count);
     }
 
-    [Fact]
-    public void Build_DateFormat_UsesProfileTypesWithoutNameHeuristics()
+    [Theory]
+    [InlineData("date")]
+    [InlineData("datetime")]
+    [InlineData("legacydatesent")]
+    [InlineData("legacydatecreated")]
+    [InlineData("emailsentdate")]
+    [InlineData("syntheticemailsentdate")]
+    public void Build_DateFormat_UsesProfileTypesWithoutNameHeuristics(string dateType)
     {
         var request = new FileGenerationRequest { LoadfileOnly = true };
         request.Metadata = request.Metadata with
@@ -85,7 +91,7 @@ public class ChaosEngineBuilderTests
                 Columns =
                 [
                     new ColumnDefinition { Name = "Updated By", Type = "text" },
-                    new ColumnDefinition { Name = "ReviewStamp", Type = "date" },
+                    new ColumnDefinition { Name = "ReviewStamp", Type = dateType },
                 ],
             },
         };

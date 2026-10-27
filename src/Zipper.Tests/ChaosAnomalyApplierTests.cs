@@ -187,6 +187,46 @@ public class DatAnomalyApplierTests
     }
 
     [Fact]
+    public void Apply_PathPointer_WithoutPathColumn_ReturnsUnchangedLine_AndDoesNotRecordAnomaly()
+    {
+        var record = new LoadFileRecord
+        {
+            Columns = ["Control Number", "Author"],
+            Values = ["DOC00000001", "Jane Doe"],
+            RecordId = "DOC00000001",
+        };
+        string line = Serializer.RenderRecord(record);
+        var anomalies = new List<ChaosAnomaly>();
+        var applier = new DatAnomalyApplier(new Random(42), "|", "\"", "\r\n");
+
+        string result = applier.Apply(2, line, record.RecordId, "path-pointer", anomalies, record, Serializer);
+
+        Assert.Equal(line, result);
+        Assert.Empty(anomalies);
+    }
+
+    [Theory]
+    [InlineData("field-length")]
+    [InlineData("null-byte")]
+    public void Apply_FieldAnomalies_WithoutEligibleColumn_ReturnUnchangedLine_AndDoNotRecordAnomaly(string type)
+    {
+        var record = new LoadFileRecord
+        {
+            Columns = ["Control Number", "File Path", "Date Created"],
+            Values = ["DOC00000001", "NATIVES\\001\\DOC00000001.pdf", "2024-01-15"],
+            RecordId = "DOC00000001",
+        };
+        string line = Serializer.RenderRecord(record);
+        var anomalies = new List<ChaosAnomaly>();
+        var applier = new DatAnomalyApplier(new Random(42), "|", "\"", "\r\n", ["Date Created"]);
+
+        string result = applier.Apply(2, line, record.RecordId, type, anomalies, record, Serializer);
+
+        Assert.Equal(line, result);
+        Assert.Empty(anomalies);
+    }
+
+    [Fact]
     public void Apply_FieldLength_ExceedsCommonLimit_AndRecordsColumn()
     {
         var record = CreateRecord();
@@ -218,6 +258,25 @@ public class DatAnomalyApplierTests
         var anomaly = Assert.Single(anomalies);
         Assert.Equal("date-format", anomaly.ErrorType);
         Assert.Equal("Date Created", anomaly.Column);
+    }
+
+    [Fact]
+    public void Apply_DateFormat_WithoutDateColumn_ReturnsUnchangedLine_AndDoesNotRecordAnomaly()
+    {
+        var record = new LoadFileRecord
+        {
+            Columns = ["Control Number", "File Path", "Author"],
+            Values = ["DOC00000001", "NATIVES\\001\\DOC00000001.pdf", "Jane Doe"],
+            RecordId = "DOC00000001",
+        };
+        string line = Serializer.RenderRecord(record);
+        var anomalies = new List<ChaosAnomaly>();
+        var applier = new DatAnomalyApplier(new Random(42), "|", "\"", "\r\n", ["Date Created"]);
+
+        string result = applier.Apply(2, line, record.RecordId, "date-format", anomalies, record, Serializer);
+
+        Assert.Equal(line, result);
+        Assert.Empty(anomalies);
     }
 
     [Fact]

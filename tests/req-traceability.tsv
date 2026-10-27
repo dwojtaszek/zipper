@@ -211,12 +211,17 @@ REQ-095	unit	ChaosAndComparisonPropertyTests.ChaosSampler_SelectTargets_ShouldRe
 REQ-096	unit	ChaosEngineTests.ChaosTypes_Filtering_OnlyUsesSpecifiedTypes	--chaos-types filter
 REQ-097	unit	ChaosAnomalyTypesTests.Dat_ContainsExpectedTypes	DAT chaos anomaly types
 REQ-097	unit	ChaosAndComparisonPropertyTests.DatAnomalyApplier_Apply_ShouldMutateLineAndRecordAnomalyMetadata	Property: DatAnomalyApplier mutates DAT line and records anomaly metadata
+REQ-097	unit	ChaosEngineBuilderTests.Build_DateFormat_UsesProfileTypesWithoutNameHeuristics	date-format recognizes all supported date Column generator types
 REQ-097	unit	DatAnomalyApplierTests.Apply_PathPointer_ReplacesPathWithMissingPath_AndPathReconciliationFindsIt	path-pointer alters the File Path and PathReconciliationValidator rejects it against the original path
+REQ-097	unit	DatAnomalyApplierTests.Apply_PathPointer_WithoutPathColumn_ReturnsUnchangedLine_AndDoesNotRecordAnomaly	path-pointer is a no-op when a record has no path Column
 REQ-097	unit	DatAnomalyApplierTests.Apply_FieldLength_ExceedsCommonLimit_AndRecordsColumn	field-length exceeds the common field limit and audits the Column
 REQ-097	unit	DatAnomalyApplierTests.Apply_DateFormat_UsesMalformedDate_AndRecordsColumn	date-format uses a malformed date and audits the Column
+REQ-097	unit	DatAnomalyApplierTests.Apply_DateFormat_WithoutDateColumn_ReturnsUnchangedLine_AndDoesNotRecordAnomaly	date-format is a no-op when a record has no configured date Column
 REQ-097	unit	DatAnomalyApplierTests.Apply_NullByte_InsertsUnsupportedControls_AndRecordsColumn	null-byte inserts unsupported controls and audits the Column
+REQ-097	unit	DatAnomalyApplierTests.Apply_FieldAnomalies_WithoutEligibleColumn_ReturnUnchangedLine_AndDoNotRecordAnomaly	field-length and null-byte are no-ops when no eligible field Column exists
 REQ-097	unit	DatAnomalyApplierTests.Apply_TrailingEmpties_AppendsLongEmptyTail_AndRecordsAnomaly	trailing-empties adds audited trailing empty columns
 REQ-097	unit	ChaosEngineTests.DatRecordAnomalies_OnlyInterceptDataRecords_AndAuditTheColumn	ChaosEngine record anomaly targeting and Column audit
+REQ-097	unit	ChaosEngineTests.DatRecordAnomalies_HeaderOnlyFile_DoesNotInterceptHeader	Record-only DAT anomalies do not target a header without records
 REQ-097	unit	ChaosEngineTests.DatDefaultAnomalies_PreservePreviouslyEnabledTypes	Default Chaos Engine output type set is preserved
 REQ-097	unit	ChaosScenarioTests.ChaosScenario_RealisticImportFailures_GeneratesAllAuditedAnomalies	realistic-import-failures runs all five DAT anomaly types through Loadfile-Only Mode
 REQ-098	unit	ChaosAnomalyTypesTests.Opt_ContainsExpectedTypes	OPT chaos anomaly types

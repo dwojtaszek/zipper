@@ -6,6 +6,11 @@ namespace Zipper;
 /// </summary>
 internal static class ChaosEngineBuilder
 {
+    private static readonly HashSet<string> DateColumnTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "date", "datetime", "legacydatesent", "legacydatecreated", "emailsentdate", "syntheticemailsentdate",
+    };
+
     /// <summary>
     /// Builds a <see cref="ChaosEngine"/> for the specified request and format,
     /// or returns <c>null</c> when chaos is disabled.
@@ -62,8 +67,7 @@ internal static class ChaosEngineBuilder
         {
             foreach (var column in profile.Columns)
             {
-                if (string.Equals(column.Type, "date", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(column.Type, "datetime", StringComparison.OrdinalIgnoreCase))
+                if (DateColumnTypes.Contains(column.Type))
                 {
                     columns.Add(column.Name);
                 }

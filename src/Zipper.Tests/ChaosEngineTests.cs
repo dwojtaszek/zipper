@@ -1007,6 +1007,28 @@ public class ChaosEngineTests
         Assert.Equal(record.RecordId, anomaly.RecordID);
     }
 
+    [Theory]
+    [InlineData("path-pointer")]
+    [InlineData("field-length")]
+    [InlineData("date-format")]
+    [InlineData("null-byte")]
+    [InlineData("trailing-empties")]
+    public void DatRecordAnomalies_HeaderOnlyFile_DoesNotInterceptHeader(string type)
+    {
+        var engine = new ChaosEngine(
+            totalLines: 1,
+            chaosAmount: "1",
+            chaosTypes: type,
+            format: LoadFileFormat.Dat,
+            columnDelimiter: "|",
+            quoteDelimiter: "\"",
+            eol: "\r\n",
+            seed: 42);
+
+        Assert.False(engine.ShouldIntercept(1));
+        Assert.Empty(engine.Anomalies);
+    }
+
     [Fact]
     public void DatDefaultAnomalies_PreservePreviouslyEnabledTypes()
     {
