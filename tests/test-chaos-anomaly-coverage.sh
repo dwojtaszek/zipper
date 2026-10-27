@@ -177,9 +177,15 @@ while IFS= read -r TYPE; do
     OUT_DIR="$TEST_OUTPUT_DIR/opt_type_${SAFE}"
     print_info "B1 OPT: $TYPE"
 
-    zipper --loadfile-only --loadfile-format opt --count 500 \
-        --output-path "$OUT_DIR/run1" \
-        --chaos-mode --chaos-types "$TYPE" --chaos-amount 10 --seed 42
+    if [[ "$TYPE" == "opt-encoding" ]]; then
+        zipper --loadfile-only --loadfile-format opt --encoding ANSI --count 500 \
+            --output-path "$OUT_DIR/run1" \
+            --chaos-mode --chaos-types "$TYPE" --chaos-amount 10 --seed 42
+    else
+        zipper --loadfile-only --loadfile-format opt --count 500 \
+            --output-path "$OUT_DIR/run1" \
+            --chaos-mode --chaos-types "$TYPE" --chaos-amount 10 --seed 42
+    fi
 
     PROPS=$(find "$OUT_DIR/run1" -name "*_properties.json" -print -quit)
     [[ -z "$PROPS" ]] && print_error "No _properties.json for OPT type: $TYPE"
@@ -215,10 +221,19 @@ while IFS= read -r TYPE; do
     if cmp -s "$BASELINE_OPT" "$CHAOS_OPT" 2>/dev/null; then
         print_error "Chaos OPT identical to baseline for type: $TYPE — anomaly not injected?"
     fi
+    if [[ "$TYPE" == "opt-encoding" ]] && ! od -An -tx1 "$CHAOS_OPT" | tr -d ' \n' | grep -Fi 'efbbbf' >/dev/null; then
+        print_error "No UTF-8 BOM bytes found in OPT output for type: $TYPE"
+    fi
 
-    zipper --loadfile-only --loadfile-format opt --count 500 \
-        --output-path "$OUT_DIR/run2" \
-        --chaos-mode --chaos-types "$TYPE" --chaos-amount 10 --seed 42
+    if [[ "$TYPE" == "opt-encoding" ]]; then
+        zipper --loadfile-only --loadfile-format opt --encoding ANSI --count 500 \
+            --output-path "$OUT_DIR/run2" \
+            --chaos-mode --chaos-types "$TYPE" --chaos-amount 10 --seed 42
+    else
+        zipper --loadfile-only --loadfile-format opt --count 500 \
+            --output-path "$OUT_DIR/run2" \
+            --chaos-mode --chaos-types "$TYPE" --chaos-amount 10 --seed 42
+    fi
     CHAOS_OPT2=$(find "$OUT_DIR/run2" -name "*.opt" -print -quit)
     PROPS2=$(find "$OUT_DIR/run2" -name "*_properties.json" -print -quit)
     cmp -s "$CHAOS_OPT" "$CHAOS_OPT2" \

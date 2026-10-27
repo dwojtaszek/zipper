@@ -136,6 +136,24 @@ public class ChaosEngineBuilderTests
     }
 
     [Fact]
+    public void Build_WithFullChaosScenario_IncludesOptEncoding()
+    {
+        var request = new FileGenerationRequest();
+        request.Chaos = request.Chaos with
+        {
+            ChaosMode = true,
+            ChaosScenario = "full-chaos",
+        };
+
+        var engine = ChaosEngineBuilder.Build(request, 100, LoadFileFormat.Opt);
+
+        Assert.NotNull(engine);
+        var enabledTypes = GetPrivateField(engine, "enabledTypes") as HashSet<string>;
+        Assert.NotNull(enabledTypes);
+        Assert.Contains("opt-encoding", enabledTypes);
+    }
+
+    [Fact]
     public void Build_WithInvalidScenario_IgnoresScenarioAndUsesRequestSettings()
     {
         // Arrange

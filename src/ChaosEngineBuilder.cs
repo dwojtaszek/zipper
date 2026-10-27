@@ -29,7 +29,9 @@ internal static class ChaosEngineBuilder
             var scenario = ChaosScenarios.GetByName(request.Chaos.ChaosScenario);
             if (scenario != null)
             {
-                resolvedTypes = string.IsNullOrEmpty(scenario.ChaosTypes) ? null : scenario.ChaosTypes;
+                resolvedTypes = string.IsNullOrEmpty(scenario.ChaosTypes)
+                    ? string.Join(",", ChaosAnomalyTypes.ForFormat(format))
+                    : scenario.ChaosTypes;
                 if (string.IsNullOrEmpty(resolvedAmount))
                 {
                     resolvedAmount = scenario.DefaultAmount;

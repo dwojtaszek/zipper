@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using Xunit;
 using Zipper.Config;
 using Zipper.LoadFiles;
@@ -460,6 +461,77 @@ public class SourceDrivenGenerationTests : IDisposable
 
         var lines = File.ReadAllLines(result.LoadFilePath);
         Assert.True(lines.Length > 3, $"Expected synthetic page expansion, got {lines.Length} OPT lines for 3 records");
+    }
+
+    [Theory]
+    [InlineData("ANSI")]
+    [InlineData("UTF-8")]
+    public async Task LoadfileOnly_SourceTiffRow_OptEncodingTargetsExpandedPagesAtRecordBoundaries(string encodingName)
+    {
+        var request = this.CreateSourceRequest([Row("a.tiff", "tiff")]);
+        request.LoadfileOnly = true;
+        request.LoadFile = request.LoadFile with
+        {
+            Formats = [LoadFileFormat.Opt],
+            Encoding = encodingName,
+            IsEncodingExplicit = true,
+        };
+        request.Chaos = new ChaosConfig
+        {
+            ChaosMode = true,
+            ChaosAmount = "100%",
+            ChaosTypes = "opt-encoding",
+        };
+
+        var result = await LoadFileOnlyGenerator.GenerateAsync(request);
+
+        var outputEncoding = EncodingHelper.GetEncodingOrDefault(encodingName);
+        var output = await File.ReadAllBytesAsync(result.LoadFilePath);
+        var lines = File.ReadAllLines(result.LoadFilePath, outputEncoding);
+        Assert.True(lines.Length > 1, "Expected the source TIFF's synthetic pages to expand into multiple OPT records");
+
+        var bom = Encoding.UTF8.GetPreamble();
+        var outputPreamble = outputEncoding.GetPreamble();
+        var bomText = outputEncoding.GetString(bom);
+        Assert.Equal(outputPreamble, output.AsSpan(0, outputPreamble.Length).ToArray());
+
+        var eol = outputEncoding.GetBytes(LoadFileEmitter.GetEolString(request.Delimiters.EndOfLine));
+        int offset = outputPreamble.Length;
+        for (int i = 0; i < lines.Length; i++)
+        {
+            string line = lines[i];
+            if (i > 0)
+            {
+                Assert.StartsWith(bomText, line, StringComparison.Ordinal);
+                line = line[bomText.Length..];
+            }
+
+            var lineBytes = outputEncoding.GetBytes(line);
+            Assert.Equal(lineBytes, output.AsSpan(offset, lineBytes.Length).ToArray());
+            offset += lineBytes.Length;
+            Assert.Equal(eol, output.AsSpan(offset, eol.Length).ToArray());
+            offset += eol.Length;
+
+            if (i < lines.Length - 1)
+            {
+                Assert.Equal(bom, output.AsSpan(offset, bom.Length).ToArray());
+                offset += bom.Length;
+            }
+        }
+        Assert.Equal(output.Length, offset);
+
+        using var audit = JsonDocument.Parse(await File.ReadAllTextAsync(result.PropertiesFilePath));
+        var anomalies = audit.RootElement.GetProperty("chaosMode").GetProperty("injectedAnomalies");
+        Assert.Equal(lines.Length - 1, anomalies.GetArrayLength());
+        for (int i = 0; i < anomalies.GetArrayLength(); i++)
+        {
+            var anomaly = anomalies[i];
+            Assert.Equal($"Boundary {i + 1}-{i + 2}", anomaly.GetProperty("lineNumber").GetString());
+            Assert.Equal("N/A", anomaly.GetProperty("recordID").GetString());
+            Assert.Equal("N/A", anomaly.GetProperty("column").GetString());
+            Assert.Equal("opt-encoding", anomaly.GetProperty("errorType").GetString());
+            Assert.Contains("UTF-8 BOM", anomaly.GetProperty("description").GetString(), StringComparison.Ordinal);
+        }
     }
 
     [Fact]

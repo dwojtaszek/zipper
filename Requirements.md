@@ -678,7 +678,7 @@ This section clarifies behavior when multiple arguments interact:
 
 - **REQ-094**: A new optional command-line argument `--chaos-mode` shall be introduced. Requires `--loadfile-only`. Only supported for `dat` and `opt` Load File formats.
 - **REQ-095**: A new optional argument `--chaos-amount <N|N%>` shall specify the number or percentage of records to corrupt. Requires `--chaos-mode`. Defaults to 1%.
-- **REQ-096**: A new optional argument `--chaos-types <type1,type2,...>` shall filter specific anomaly types. Requires `--chaos-mode`. When not specified, all types are enabled.
+- **REQ-096**: A new optional argument `--chaos-types <type1,type2,...>` shall filter specific anomaly types. Requires `--chaos-mode`. When not specified, all DAT types and all existing OPT types except `opt-encoding` are enabled; `full-chaos` enables every type.
 - **REQ-097**: The following DAT chaos anomaly types shall be supported:
   - `mixed-delimiters`: Replace one column delimiter with an alternative character
   - `quotes`: Omit a closing quote delimiter to create an unclosed field
@@ -691,6 +691,7 @@ This section clarifies behavior when multiple arguments interact:
   - `opt-pagecount`: Replace the page count integer with an invalid value
   - `opt-path`: Corrupt the image path in column 3 with an invalid traversal path
   - `opt-batesnumber`: Remove the Bates Number from column 1
+  - `opt-encoding`: Inject a UTF-8 BOM between OPT records; ANSI/Windows-1252 readers render it as mojibake. This type is opt-in to preserve existing OPT chaos output, and `full-chaos` enables it.
 - **REQ-099**: All injected anomalies shall be tracked and documented in the `_properties.json` audit file, including line number, record ID, affected column, error type, and description. The `totalRecords` count in the audit file must reflect only the data records, not including the header.
 - **REQ-100**: The Chaos Engine shall use the `--seed` argument (when provided) for deterministic, reproducible anomaly injection.
 

@@ -179,7 +179,7 @@ All command-line flags recognized by Zipper:
 | `--nested-delim` | `\` | `ascii:N` or `char:C` | Nested value separator |
 | `--chaos-mode` | `false` | flag | Enable Chaos Engine anomaly injection |
 | `--chaos-amount` | `1%` | exact count `N` or percentage `N%` | Anomaly target count/percentage |
-| `--chaos-types` | all | comma-separated list | Filter specific chaos anomaly types |
+| `--chaos-types` | all (OPT excludes `opt-encoding`) | comma-separated list | Filter DAT types (`mixed-delimiters`, `quotes`, `columns`, `eol`, `encoding`) or OPT types (`opt-boundary`, `opt-columns`, `opt-pagecount`, `opt-path`, `opt-batesnumber`, `opt-encoding`); `opt-encoding` is enabled by `full-chaos` |
 | `--chaos-scenario` | none | scenario name | Predefined chaos scenario |
 | `--chaos-list` | `false` | flag | Print available chaos scenarios and exit |
 | `--production-set` | `false` | flag | Structured Production Set output |

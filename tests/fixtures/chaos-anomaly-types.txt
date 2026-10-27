@@ -12,3 +12,4 @@ opt-columns
 opt-pagecount
 opt-path
 opt-batesnumber
+opt-encoding

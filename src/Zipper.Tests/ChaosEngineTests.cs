@@ -204,6 +204,84 @@ public class ChaosEngineTests
     }
 
     [Fact]
+    public void OptEncodingAnomaly_ReturnsUtf8BomBetweenRecordsAndSkipsEndOfFile()
+    {
+        var engine = new ChaosEngine(
+            totalLines: 2,
+            chaosAmount: "2",
+            chaosTypes: "opt-encoding",
+            format: LoadFileFormat.Opt,
+            columnDelimiter: ",",
+            quoteDelimiter: string.Empty,
+            eol: "\r\n",
+            seed: 42);
+        const string line = "IMG001,VOL001,IMAGES\\IMG001.tif,Y,,,3";
+
+        for (int lineNumber = 1; lineNumber <= 2; lineNumber++)
+        {
+            Assert.True(engine.ShouldIntercept(lineNumber));
+            Assert.Equal(line, engine.Intercept(lineNumber, line, $"IMG{lineNumber:D3}"));
+        }
+        Assert.Empty(engine.Anomalies);
+
+        var bytes = engine.GetEncodingAnomaly(1, 2, Encoding.Latin1);
+
+        Assert.NotNull(bytes);
+        Assert.Equal(Encoding.UTF8.GetPreamble(), bytes);
+        var anomaly = Assert.Single(engine.Anomalies);
+        Assert.Equal("Boundary 1-2", anomaly.LineNumber);
+        Assert.Equal("opt-encoding", anomaly.ErrorType);
+        Assert.Null(engine.GetEncodingAnomaly(1, 2, Encoding.Latin1));
+        Assert.Null(engine.GetEncodingAnomaly(2, 3, Encoding.Latin1));
+        Assert.Single(engine.Anomalies);
+    }
+
+    [Fact]
+    public void OptEncodingAnomaly_DoesNotEmitBytesAtEndOfSingleRecordFile()
+    {
+        var engine = new ChaosEngine(
+            totalLines: 1,
+            chaosAmount: "1",
+            chaosTypes: "opt-encoding",
+            format: LoadFileFormat.Opt,
+            columnDelimiter: ",",
+            quoteDelimiter: string.Empty,
+            eol: "\r\n",
+            seed: 42);
+        const string line = "IMG001,VOL001,IMAGES\\IMG001.tif,Y,,,3";
+
+        Assert.True(engine.ShouldIntercept(1));
+        Assert.Equal(line, engine.Intercept(1, line, "IMG001"));
+
+        Assert.Null(engine.GetEncodingAnomaly(1, 2, Encoding.Latin1));
+        Assert.Empty(engine.Anomalies);
+    }
+
+    [Fact]
+    public void OptEncodingAnomaly_IsNotEnabledByDefault()
+    {
+        var engine = new ChaosEngine(
+            totalLines: 100,
+            chaosAmount: "100%",
+            chaosTypes: null,
+            format: LoadFileFormat.Opt,
+            columnDelimiter: ",",
+            quoteDelimiter: string.Empty,
+            eol: "\r\n",
+            seed: 42);
+        const string line = "IMG001,VOL001,IMAGES\\IMG001.tif,Y,,,3";
+
+        for (int lineNumber = 1; lineNumber < 100; lineNumber++)
+        {
+            Assert.True(engine.ShouldIntercept(lineNumber));
+            engine.Intercept(lineNumber, line, $"IMG{lineNumber:D3}");
+            Assert.Null(engine.GetEncodingAnomaly(lineNumber, lineNumber + 1, Encoding.Latin1));
+        }
+
+        Assert.DoesNotContain(engine.Anomalies, anomaly => anomaly.ErrorType == "opt-encoding");
+    }
+
+    [Fact]
     public void OptBoundary_FlipsDocumentBreakFlag()
     {
         var engine = new ChaosEngine(

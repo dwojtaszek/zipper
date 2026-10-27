@@ -152,6 +152,32 @@ public class DatAnomalyApplierTests
 public class OptAnomalyApplierTests
 {
     [Fact]
+    public void Apply_OptEncoding_DoesNotChangeLine_RecordsAnomalyInGetEncodingAnomaly()
+    {
+        var applier = new OptAnomalyApplier(new Random(42));
+        var anomalies = new List<ChaosAnomaly>();
+        const string line = "IMG001,VOL001,IMAGES\\IMG001.tif,Y,,,3";
+
+        string result = applier.Apply(1, line, "IMG001", "opt-encoding", anomalies);
+
+        Assert.Equal(line, result);
+        Assert.Empty(anomalies);
+        Assert.Null(applier.GetEncodingAnomaly(2, 3, System.Text.Encoding.Latin1, anomalies));
+
+        var bytes = applier.GetEncodingAnomaly(1, 2, System.Text.Encoding.Latin1, anomalies);
+
+        Assert.NotNull(bytes);
+        Assert.Equal(System.Text.Encoding.UTF8.GetPreamble(), bytes);
+        var anomaly = Assert.Single(anomalies);
+        Assert.Equal("Boundary 1-2", anomaly.LineNumber);
+        Assert.Equal("N/A", anomaly.RecordID);
+        Assert.Equal("N/A", anomaly.Column);
+        Assert.Equal("opt-encoding", anomaly.ErrorType);
+        Assert.Contains("UTF-8 BOM", anomaly.Description, StringComparison.Ordinal);
+        Assert.Null(applier.GetEncodingAnomaly(1, 2, System.Text.Encoding.Latin1, anomalies));
+    }
+
+    [Fact]
     public void Apply_OptBoundary_ValidLine_FlipsBoundary_AndRecordsAnomaly()
     {
         var applier = new OptAnomalyApplier(new Random(42));

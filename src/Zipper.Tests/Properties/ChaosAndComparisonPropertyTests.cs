@@ -180,7 +180,7 @@ public sealed class ChaosAndComparisonPropertyTests
         int pageCount = (batesInput.Count % 20) + 1;
         string optLine = $"{bates},VOL001,IMAGES\\001\\{bates}.tif,{boundaryFlag},,,{pageCount.ToString(CultureInfo.InvariantCulture)}";
 
-        string[] optTypes = ["opt-boundary", "opt-columns", "opt-pagecount", "opt-path", "opt-batesnumber", "unknown-opt"];
+        string[] optTypes = ["opt-boundary", "opt-columns", "opt-pagecount", "opt-path", "opt-batesnumber", "opt-encoding", "unknown-opt"];
         string chosenType = optTypes[rawTypeIndex % optTypes.Length];
 
         var anomalies = new List<ChaosAnomaly>();
@@ -190,7 +190,24 @@ public sealed class ChaosAndComparisonPropertyTests
         string mutated = applier.Apply(lineNumber, optLine, bates, chosenType, anomalies);
 
         // Anomaly is only recorded if the line was actually mutated
-        if (mutated != optLine)
+        if (string.Equals(chosenType, "opt-encoding", StringComparison.Ordinal))
+        {
+            Assert.Equal(optLine, mutated);
+            Assert.Empty(anomalies);
+
+            byte[]? injectedBytes = applier.GetEncodingAnomaly(lineNumber, lineNumber + 1, Encoding.Latin1, anomalies);
+
+            Assert.NotNull(injectedBytes);
+            Assert.Equal(Encoding.UTF8.GetPreamble(), injectedBytes);
+            ChaosAnomaly encodingAnomaly = Assert.Single(anomalies);
+            Assert.Equal($"Boundary {lineNumber.ToString(CultureInfo.InvariantCulture)}-{(lineNumber + 1).ToString(CultureInfo.InvariantCulture)}", encodingAnomaly.LineNumber);
+            Assert.Equal("N/A", encodingAnomaly.RecordID);
+            Assert.Equal("N/A", encodingAnomaly.Column);
+            Assert.Equal(chosenType, encodingAnomaly.ErrorType);
+            Assert.False(string.IsNullOrEmpty(encodingAnomaly.Description));
+            Assert.Null(applier.GetEncodingAnomaly(lineNumber, lineNumber + 1, Encoding.Latin1, anomalies));
+        }
+        else if (mutated != optLine)
         {
             ChaosAnomaly anomaly = Assert.Single(anomalies);
 

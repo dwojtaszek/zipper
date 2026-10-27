@@ -13,6 +13,7 @@ internal class ChaosEngine
 {
     private static readonly string[] DatChaosTypes = ChaosAnomalyTypes.Dat.ToArray();
     private static readonly string[] OptChaosTypes = ChaosAnomalyTypes.Opt.ToArray();
+    private static readonly string[] OptDefaultChaosTypes = OptChaosTypes.Where(type => type != "opt-encoding").ToArray();
 
     private readonly HashSet<string> enabledTypes;
     private readonly List<ChaosAnomaly> anomalies = new();
@@ -20,6 +21,8 @@ internal class ChaosEngine
 
     private readonly ChaosSampler sampler;
     private readonly IAnomalyApplier applier;
+    private readonly LoadFileFormat format;
+    private readonly long totalLines;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ChaosEngine"/> class.
@@ -42,6 +45,9 @@ internal class ChaosEngine
         string eol,
         int? seed = null)
     {
+        this.format = format;
+        this.totalLines = totalLines;
+
 #pragma warning disable S2245 // Pseudo-randomness is safe for mock metadata generation
         Random random = seed.HasValue ? new Random(seed.Value) : new Random();
 #pragma warning restore S2245
@@ -60,7 +66,8 @@ internal class ChaosEngine
         }
         else
         {
-            this.enabledTypes = new HashSet<string>(validTypes, StringComparer.OrdinalIgnoreCase);
+            var defaultTypes = format == LoadFileFormat.Opt ? OptDefaultChaosTypes : validTypes;
+            this.enabledTypes = new HashSet<string>(defaultTypes, StringComparer.OrdinalIgnoreCase);
         }
 
         // If quote-delim is "none", disable the quotes chaos type
@@ -105,16 +112,21 @@ internal class ChaosEngine
         var chosenType = typeList[this.anomalyTypeIndex % typeList.Length];
         this.anomalyTypeIndex++;
 
+        if (this.format == LoadFileFormat.Opt && lineNumber == this.totalLines && chosenType == "opt-encoding")
+        {
+            return line;
+        }
+
         return this.applier.Apply(lineNumber, line, recordId, chosenType, this.anomalies);
     }
 
     /// <summary>
-    /// Generates an encoding anomaly (invalid bytes) to inject between two lines.
+    /// Generates encoding-anomaly bytes to inject between two lines.
     /// </summary>
     /// <param name="lineNumber">Line number after which to inject.</param>
     /// <param name="nextLineNumber">Next line number.</param>
     /// <param name="encoding">Target encoding.</param>
-    /// <returns>Invalid byte array, or null if encoding chaos is not enabled or not targeted.</returns>
+    /// <returns>Injected byte array, or null if encoding chaos is not enabled or not targeted.</returns>
     public byte[]? GetEncodingAnomaly(long lineNumber, long nextLineNumber, Encoding encoding)
     {
         return this.applier.GetEncodingAnomaly(lineNumber, nextLineNumber, encoding, this.anomalies);
