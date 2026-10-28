@@ -149,11 +149,17 @@ internal sealed class CsvAnomalyApplier : IAnomalyApplier
     /// </summary>
     private string ApplyEmbeddedNewline(string line, out string column, out string description)
     {
-        var quotedFields = new List<(int Start, int End)>();
+        var quotedFields = new List<(int Start, int End, int FieldNumber)>();
+        int fieldNumber = 1;
         for (int i = 0; i < line.Length; i++)
         {
             if (line[i] != '"' || (i > 0 && line[i - 1] != ','))
             {
+                if (line[i] == ',')
+                {
+                    fieldNumber++;
+                }
+
                 continue;
             }
 
@@ -178,10 +184,17 @@ internal sealed class CsvAnomalyApplier : IAnomalyApplier
                 break;
             }
 
+            if (end < 0)
+            {
+                break;
+            }
+
             if (end > i + 1)
             {
-                quotedFields.Add((i, end));
+                quotedFields.Add((i, end, fieldNumber));
             }
+
+            i = end;
         }
 
         if (quotedFields.Count == 0)
@@ -206,19 +219,24 @@ internal sealed class CsvAnomalyApplier : IAnomalyApplier
 
         // Insert \r\n in the middle of the quoted field content
         int insertPos = field.Start + 1 + ((field.End - field.Start - 1) / 2);
-
-        // Count field number
-        int fieldNumber = 1;
-        for (int i = 0; i < field.Start; i++)
+        for (int i = field.Start + 1; i + 1 < field.End; i++)
         {
-            if (line[i] == ',')
+            if (line[i] != '"' || line[i + 1] != '"')
             {
-                fieldNumber++;
+                continue;
             }
+
+            if (insertPos == i + 1)
+            {
+                insertPos = i + 2;
+                break;
+            }
+
+            i++;
         }
 
-        column = $"Field {fieldNumber}";
-        description = $"Injected raw CRLF inside quoted field {fieldNumber}; RFC 4180 allows it but many parsers split the record here.";
+        column = $"Field {field.FieldNumber}";
+        description = $"Injected raw CRLF inside quoted field {field.FieldNumber}; RFC 4180 allows it but many parsers split the record here.";
 
         return line.Insert(insertPos, "\r\n");
     }

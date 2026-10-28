@@ -696,6 +696,42 @@ public class CsvAnomalyApplierTests
     }
 
     [Fact]
+    public void Apply_CsvEmbeddedNewline_WithCommaBeforeClosingQuote_OnlyMutatesQuotedField()
+    {
+        const string line = "\"a,\",x,\"b\"";
+        (string Line, string Column)[] validMutations =
+        [
+            ("\"a\r\n,\",x,\"b\"", "Field 1"),
+            ("\"a,\",x,\"\r\nb\"", "Field 3"),
+        ];
+
+        for (int seed = 0; seed < 20; seed++)
+        {
+            var applier = new CsvAnomalyApplier(new Random(seed));
+            var anomalies = new List<ChaosAnomaly>();
+
+            string result = applier.Apply(1, line, "DOC001", "csv-embedded-newline", anomalies);
+
+            var expected = Assert.Single(validMutations, mutation => mutation.Line == result);
+            Assert.Equal(expected.Column, Assert.Single(anomalies).Column);
+        }
+    }
+
+    [Theory]
+    [InlineData("\"ab\"\"cd\"", "\"ab\"\"\r\ncd\"")]
+    [InlineData("\"a\"\"\"\"b\"", "\"a\"\"\r\n\"\"b\"")]
+    public void Apply_CsvEmbeddedNewline_WithEscapedQuotes_MovesPastEscapePair(string line, string expected)
+    {
+        var applier = new CsvAnomalyApplier(new Random(42));
+        var anomalies = new List<ChaosAnomaly>();
+
+        string result = applier.Apply(1, line, "DOC001", "csv-embedded-newline", anomalies);
+
+        Assert.Equal(expected, result);
+        Assert.Equal("Field 1", Assert.Single(anomalies).Column);
+    }
+
+    [Fact]
     public void Apply_CsvEmbeddedNewline_WhenNoQuotedField_QuotesFieldAndInjectsNewline_AndRecordsAnomaly()
     {
         var applier = new CsvAnomalyApplier(new Random(42));

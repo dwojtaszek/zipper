@@ -418,6 +418,10 @@ public sealed class ChaosAndComparisonPropertyTests
             Assert.Equal(chaosType, anomaly.ErrorType);
             Assert.False(string.IsNullOrWhiteSpace(anomaly.Column));
             Assert.False(string.IsNullOrWhiteSpace(anomaly.Description));
+            if (chaosType == "csv-embedded-newline")
+            {
+                Assert.Equal(columns.Length, DelimitedTestParser.ParseLine(mutated, ',', '"').Count);
+            }
         }
     }
 
