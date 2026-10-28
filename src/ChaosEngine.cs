@@ -17,6 +17,10 @@ internal class ChaosEngine
     private static readonly HashSet<string> DatRecordOnlyChaosTypes = new(ChaosAnomalyTypes.DatRecordOnly, StringComparer.Ordinal);
     private static readonly string[] OptChaosTypes = ChaosAnomalyTypes.Opt.ToArray();
     private static readonly string[] OptDefaultChaosTypes = OptChaosTypes.Where(type => type != "opt-encoding").ToArray();
+    private static readonly string[] CsvChaosTypes = ChaosAnomalyTypes.Csv.ToArray();
+    private static readonly string[] CsvDefaultChaosTypes = CsvChaosTypes.Where(type => type != "csv-bom").ToArray();
+    private static readonly string[] ConcordanceChaosTypes = ChaosAnomalyTypes.Concordance.ToArray();
+    private static readonly string[] EdrmXmlChaosTypes = ChaosAnomalyTypes.EdrmXml.ToArray();
 
     private readonly HashSet<string> enabledTypes;
     private readonly List<ChaosAnomaly> anomalies = new();
@@ -97,7 +101,14 @@ internal class ChaosEngine
 
     private static HashSet<string> ResolveEnabledTypes(LoadFileFormat format, string? chaosTypes)
     {
-        var validTypes = format == LoadFileFormat.Opt ? OptChaosTypes : DatChaosTypes;
+        var validTypes = format switch
+        {
+            LoadFileFormat.Opt => OptChaosTypes,
+            LoadFileFormat.Csv => CsvChaosTypes,
+            LoadFileFormat.Concordance => ConcordanceChaosTypes,
+            LoadFileFormat.EdrmXml => EdrmXmlChaosTypes,
+            _ => DatChaosTypes,
+        };
         if (!string.IsNullOrEmpty(chaosTypes))
         {
             var resolvedTypes = new HashSet<string>(
@@ -111,7 +122,14 @@ internal class ChaosEngine
         // enables every DAT anomaly, including the opt-in record-level types.
         if (chaosTypes is null)
         {
-            var defaultTypes = format == LoadFileFormat.Opt ? OptDefaultChaosTypes : DatDefaultChaosTypes;
+            var defaultTypes = format switch
+            {
+                LoadFileFormat.Opt => OptDefaultChaosTypes,
+                LoadFileFormat.Csv => CsvDefaultChaosTypes,
+                LoadFileFormat.Concordance => ConcordanceChaosTypes,
+                LoadFileFormat.EdrmXml => EdrmXmlChaosTypes,
+                _ => DatDefaultChaosTypes,
+            };
             return new HashSet<string>(defaultTypes, StringComparer.OrdinalIgnoreCase);
         }
 
@@ -141,6 +159,27 @@ internal class ChaosEngine
         if (format == LoadFileFormat.Opt)
         {
             return new OptAnomalyApplier(random);
+        }
+
+        if (format == LoadFileFormat.Csv)
+        {
+            return new CsvAnomalyApplier(random);
+        }
+
+        if (format == LoadFileFormat.Concordance)
+        {
+            char fieldDelim = string.IsNullOrEmpty(columnDelimiter) ? '\u0014' : columnDelimiter[0];
+            char quoteDelim = string.IsNullOrEmpty(quoteDelimiter) ? '\u00fe' : quoteDelimiter[0];
+            return new ConcordanceAnomalyApplier(random, fieldDelim, quoteDelim);
+        }
+
+        if (format == LoadFileFormat.EdrmXml)
+        {
+            // EDRM-XML is a carve-out: XmlLoadFileWriter handles its own anomaly injection.
+            // The applier returned here is only used by ChaosEngine.Intercept, which is never
+            // called for EdrmXml (XmlLoadFileWriter does not invoke LoadFileEmitter).
+            // Return a no-op applier to satisfy the IAnomalyApplier contract.
+            return new XmlChaosAnomalyApplier(random);
         }
 
         return new DatAnomalyApplier(

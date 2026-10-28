@@ -82,9 +82,11 @@ public sealed class ChaosModule : CliModule
             {
                 foreach (var format in formats)
                 {
-                    if (format != LoadFileFormat.Dat && format != LoadFileFormat.Opt)
+                    if (!IsChaosSupported(format, _types))
                     {
-                        Console.Error.WriteLine("Error: --chaos-mode is only supported for dat and opt load file formats.");
+                        Console.Error.WriteLine(
+                            $"Error: --chaos-mode for {format.ToString().ToLowerInvariant()} requires explicit --chaos-types with {format.ToString().ToLowerInvariant()}-specific types " +
+                            $"(available: {string.Join(", ", ChaosAnomalyTypes.ForFormat(format))}).");
                         config = default!;
                         return false;
                     }
