@@ -225,12 +225,12 @@ public class FieldNamingTests : IDisposable
     }
 
     [Fact]
-    public void LoadFileModule_ShouldRejectInvalidFormatInLoadFileOnlyMode()
+    public void LoadFileModule_ShouldAcceptCsvFormatInLoadFileOnlyMode()
     {
-        // Phase 2: the loadfile-only DAT/OPT restriction moved to LoadFileModule.TryBuild.
+        // REQ-088 widened loadfile-only to CSV/Concordance/EDRM-XML; format rejection remains in TryBuild.
         var module = new Zipper.Cli.Modules.LoadFileModule();
         Assert.True(module.TryApply("--loadfile-only", null));
         Assert.True(module.TryApply("--load-file-format", "csv"));
-        Assert.False(module.TryBuild(0, null, false, null, null, false, out _));
+        Assert.True(module.TryBuild(0, null, false, null, null, false, out _));
     }
 }

@@ -60,6 +60,12 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
             // Intentionally UTF-8: EDRM XML schema requires UTF-8 per the XML declaration.
             Encoding = Encoding.UTF8,
             CloseOutput = false,
+
+            // Loadfile-Only Mode honours --eol so Line Ending validation matches the request;
+            // Standard mode keeps its historical platform newline.
+            NewLineChars = request.LoadfileOnly
+                ? LoadFileEmitter.GetEolString(request.Delimiters?.EndOfLine!)
+                : Environment.NewLine,
         };
 
         var writer = System.Xml.XmlWriter.Create(stream, settings);

@@ -3,8 +3,8 @@ namespace Zipper.LoadFiles;
 /// <summary>
 /// Drives the Concordance DAT format through the record seam (<see cref="ConcordanceComposer"/>
 /// + <see cref="ConcordanceSerializer"/> + <see cref="LoadFileEmitter"/>), replacing the fat
-/// <c>ConcordanceWriter</c>. Concordance is standard-only, never applies chaos, and uses the
-/// platform newline.
+/// <c>ConcordanceWriter</c>. Standard mode uses the platform newline; Loadfile-Only Mode honours
+/// the configured EOL and chaos.
 /// </summary>
 internal sealed class ConcordanceComposingWriter : ILoadFileWriter
 {

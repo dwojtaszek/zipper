@@ -3,7 +3,7 @@ namespace Zipper.LoadFiles;
 /// <summary>
 /// Drives the CSV format through the record seam (<see cref="CsvComposer"/> +
 /// <see cref="CsvSerializer"/> + <see cref="LoadFileEmitter"/>), replacing the fat
-/// <c>CsvWriter</c>. CSV is standard-only, never applies chaos, and uses the platform newline.
+/// <c>CsvWriter</c>. Standard mode uses the platform newline; Loadfile-Only Mode honours the configured EOL and chaos.
 /// </summary>
 internal sealed class CsvComposingWriter : ILoadFileWriter
 {

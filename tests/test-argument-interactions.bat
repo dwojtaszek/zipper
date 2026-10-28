@@ -48,9 +48,10 @@ call :assert_rejected "invalid --hash-algorithms" --type pdf --count 5 --output-
 call :assert_rejected "--hash-mode actual + --loadfile-only" --loadfile-only --count 5 --output-path ".\results\zi_test" --hash-mode actual
 call :assert_accepted "valid --hash-mode actual" --type pdf --count 5 --output-path ".\results\zi_test" --hash-mode actual --hash-algorithms md5,sha256
 call :assert_accepted "valid --hash-mode simulated" --loadfile-only --count 5 --output-path ".\results\zi_test" --hash-mode simulated
-call :assert_rejected "--loadfile-only + --load-file-format csv" --loadfile-only --count 5 --output-path ".\results\zi_test" --load-file-format csv
-call :assert_rejected "--loadfile-only + --load-file-format xml" --loadfile-only --count 5 --output-path ".\results\zi_test" --load-file-format xml
-call :assert_rejected "--loadfile-only + --load-file-format concordance" --loadfile-only --count 5 --output-path ".\results\zi_test" --load-file-format concordance
+call :assert_accepted "--loadfile-only + --load-file-format csv" --loadfile-only --count 5 --output-path ".\results\zi_test" --load-file-format csv
+call :assert_accepted "--loadfile-only + --load-file-format xml" --loadfile-only --count 5 --output-path ".\results\zi_test" --load-file-format xml
+call :assert_accepted "--loadfile-only + --load-file-format edrm-xml" --loadfile-only --count 5 --output-path ".\results\zi_test" --load-file-format edrm-xml
+call :assert_accepted "--loadfile-only + --load-file-format concordance" --loadfile-only --count 5 --output-path ".\results\zi_test" --load-file-format concordance
 
 echo.
 set /a TOTAL=!PASSED!+!FAILED!

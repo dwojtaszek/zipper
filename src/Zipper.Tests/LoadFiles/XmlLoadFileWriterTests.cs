@@ -9,6 +9,43 @@ namespace Zipper.Tests;
 public class XmlLoadFileWriterTests : TempDirectoryTestBase
 {
     [Fact]
+    public async Task WriteAsync_LoadfileOnly_UsesConfiguredEndOfLine()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { OutputPath = this.TempDir, FileCount = 1, FileType = "pdf" },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+            Delimiters = new DelimiterConfig { EndOfLine = "LF" },
+            Metadata = new MetadataConfig { WithMetadata = false },
+            LoadfileOnly = true
+        };
+
+        var files = new List<FileData>
+        {
+            new FileData
+            {
+                WorkItem = new FileWorkItem
+                {
+                    Index = 1,
+                    FolderNumber = 1,
+                    FileName = "doc1.pdf",
+                    FilePathInZip = "folder/doc1.pdf"
+                },
+                DataLength = 500,
+                Hash = "abcdef"
+            }
+        };
+
+        var writer = new XmlLoadFileWriter();
+        using var stream = new MemoryStream();
+        await writer.WriteAsync(stream, request, files);
+
+        string content = System.Text.Encoding.UTF8.GetString(stream.ToArray());
+        Assert.Contains("\n", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task WriteAsync_XmlLoadFileWriter_ProducesValidXmlOutput()
     {
         var request = new FileGenerationRequest

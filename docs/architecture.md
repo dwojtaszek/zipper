@@ -8,7 +8,7 @@ The diagrams in this file are a **contract**, not just documentation:
 
 - **The load-file pipeline is `composer → serializer → emitter`.** Column decisions live in a **Composer**, line rendering in a **Serializer** (pure — no I/O), and all I/O + chaos in the **Emitter**. Do not reintroduce a "fat writer" that owns more than one of these responsibilities.
 - **EDRM-XML is the only carve-out.** It keeps its own `ILoadFileWriter` because it is a hierarchical document tree, not a flat record. Do not force other formats out of the seam, and do not fold XML into it.
-- **`ILoadFileWriter` is the format-selection seam** the factory returns; the **Chaos Engine** runs in exactly one place (the emitter), scoped to Loadfile-Only mode (REQ-094).
+- **`ILoadFileWriter` is the format-selection seam** the factory returns; the **Chaos Engine** runs in exactly one place for delimited formats (the emitter). EDRM-XML applies its own document-scoped anomalies inside the carve-out writer. Chaos is scoped to Loadfile-Only mode (REQ-094).
 
 **Any deviation from these invariants — or any change that makes a diagram inaccurate — requires explicit human approval, plus a same-PR update to the affected diagram.** AI agents: stop and ask the maintainer (e.g. via the AskUserQuestion tool) before merging such a change. See the **Architecture** checklist in the PR template. Decision rationale is recorded in [ADR-0006](adr/ADR-0006-three-mode-pipeline.md) and [ADR-0007](adr/ADR-0007-loadfile-composition-seam.md). See also [ADR-0004](adr/ADR-0004-unified-column-generation.md) (unified column value generation via `IColumnValueGenerator`) and [ADR-0005](adr/ADR-0005-email-aggregate.md) (Email value object + `EmailFactory` as sole constructor).
 
@@ -37,7 +37,7 @@ Source-Driven Generation has exactly one semantic seam: `SourceRecordIntake` (in
 
 ## Chaos Engine (Loadfile-Only Mode only)
 
-`ChaosEngine` uses Floyd's algorithm for O(k) exact random sampling of lines to corrupt. DAT and OPT anomaly types are cataloged in `ChaosAnomalyTypes.cs` — see source for current list. Tracked in `_properties.json` via `LoadFileAuditWriter`.
+`ChaosEngine` uses Floyd's algorithm for O(k) exact random sampling of lines to corrupt. Per-format anomaly catalogs live in `ChaosAnomalyTypes.cs` (DAT, OPT, CSV, Concordance, EDRM-XML). Delimited formats apply anomalies in `LoadFileEmitter`; EDRM-XML applies document-scoped anomalies inside the `XmlLoadFileWriter` carve-out. All are tracked in `_properties.json` via `LoadFileAuditWriter`.
 
 ## Three-Mode Pipeline
 
@@ -57,7 +57,7 @@ graph TD
     LFO --> LF1["Load Files + Audit Files"]
 
     LoadFileOnlyMode --> LOG["LoadFileOnlyGenerator"]
-    LOG --> LF2["Load Files (DAT/OPT)"]
+    LOG --> LF2["Load Files (DAT/OPT/CSV/Concordance/EDRM-XML)"]
     LOG -->|"optional"| Chaos["ChaosEngine (Floyd's algorithm)"]
     Chaos --> Audit["_properties.json Audit"]
 
@@ -122,7 +122,7 @@ graph LR
         Composer["Composer<br/>(Dat/Opt/Csv/Concordance)"]
         Serializer["Serializer<br/>(Dat/Opt/Csv/Concordance)"]
         Emitter["LoadFileEmitter<br/>(preamble/EOL/chaos)"]
-        XMLW["XmlLoadFileWriter<br/>(carve-out)"]
+        XMLW["XmlLoadFileWriter<br/>(carve-out; XML chaos)"]
         LFO --> Factory
         Factory --> Composer --> Serializer --> Emitter
         Factory --> XMLW

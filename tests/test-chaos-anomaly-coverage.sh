@@ -84,13 +84,31 @@ zipper --loadfile-only --loadfile-format opt --count 500 \
 BASELINE_OPT=$(find "$TEST_OUTPUT_DIR/baseline_opt" -name "*.opt" -print -quit)
 [[ -z "$BASELINE_OPT" ]] && print_error "No baseline OPT file generated"
 
+print_info "Generating no-chaos CSV baseline (seed 42, count 500)..."
+zipper --loadfile-only --loadfile-format csv --count 500 \
+    --output-path "$TEST_OUTPUT_DIR/baseline_csv" --seed 42
+BASELINE_CSV=$(find "$TEST_OUTPUT_DIR/baseline_csv" -name "*.csv" -print -quit)
+[[ -z "$BASELINE_CSV" ]] && print_error "No baseline CSV file generated"
+
+print_info "Generating no-chaos Concordance baseline (seed 42, count 500)..."
+zipper --loadfile-only --loadfile-format concordance --count 500 \
+    --output-path "$TEST_OUTPUT_DIR/baseline_concordance" --seed 42
+BASELINE_CONCORDANCE=$(find "$TEST_OUTPUT_DIR/baseline_concordance" -name "*.concordance.dat" -print -quit)
+[[ -z "$BASELINE_CONCORDANCE" ]] && print_error "No baseline Concordance file generated"
+
+print_info "Generating no-chaos EDRM-XML baseline (seed 42, count 500)..."
+zipper --loadfile-only --loadfile-format edrm-xml --count 500 \
+    --output-path "$TEST_OUTPUT_DIR/baseline_xml" --seed 42
+BASELINE_XML=$(find "$TEST_OUTPUT_DIR/baseline_xml" -name "*.xml" -print -quit)
+[[ -z "$BASELINE_XML" ]] && print_error "No baseline EDRM-XML file generated"
+
 # ---------------------------------------------------------------------------
 # B1 — per-Anomaly-Type: DAT types (all non-'opt-' lines in fixture)
 # ---------------------------------------------------------------------------
 while IFS= read -r TYPE; do
-    # Skip comments, blank lines, and OPT types
+    # Skip comments, blank lines, and types owned by the other format loops
     case "$TYPE" in
-        ''|'#'*|opt-*) continue ;;
+        ''|'#'*|opt-*|csv-*|concordance-*|xml-*) continue ;;
     esac
 
     TOTAL=$((TOTAL + 1))
@@ -252,6 +270,70 @@ while IFS= read -r TYPE; do
 done < "$FIXTURES_DIR/chaos-anomaly-types.txt"
 
 # ---------------------------------------------------------------------------
+# B1 — per-Anomaly-Type: CSV, Concordance, and EDRM-XML types
+# ---------------------------------------------------------------------------
+function run_format_type_coverage() {
+    local type_prefix="$1"
+    local format="$2"
+    local baseline_file="$3"
+    local file_glob="$4"
+
+    while IFS= read -r TYPE; do
+        case "$TYPE" in
+            "$type_prefix"*) ;;
+            *) continue ;;
+        esac
+
+        TOTAL=$((TOTAL + 1))
+        SAFE="${TYPE//-/_}"
+        OUT_DIR="$TEST_OUTPUT_DIR/${format}_type_${SAFE}"
+        print_info "B1 ${format}: $TYPE"
+
+        zipper --loadfile-only --loadfile-format "$format" --count 500 \
+            --output-path "$OUT_DIR/run1" \
+            --chaos-mode --chaos-types "$TYPE" --chaos-amount 10 --seed 42
+
+        PROPS=$(find "$OUT_DIR/run1" -name "*_properties.json" -print -quit)
+        [[ -z "$PROPS" ]] && print_error "No _properties.json for $format type: $TYPE"
+
+        validate_properties_json "$PROPS"
+
+        ANOMALY_COUNT=$(jq '.chaosMode.totalAnomalies' "$PROPS")
+        [[ "$ANOMALY_COUNT" -le 0 ]] && print_error "No anomalies for $format type: $TYPE"
+
+        TYPES_PRESENT=$(jq -r '[.chaosMode.injectedAnomalies[]?.errorType] | unique | sort | .[]' \
+            "$PROPS" 2>/dev/null | paste -sd ',' - || true)
+        [[ "$TYPES_PRESENT" != "$TYPE" ]] \
+            && print_error "Type mismatch for $format $TYPE: got '$TYPES_PRESENT'"
+
+        CHAOS_FILE=$(find "$OUT_DIR/run1" -name "$file_glob" -print -quit)
+        [[ -z "$CHAOS_FILE" ]] && print_error "No $format Load File for type: $TYPE"
+        if cmp -s "$baseline_file" "$CHAOS_FILE" 2>/dev/null; then
+            print_error "Chaos $format identical to baseline for type: $TYPE — anomaly not injected?"
+        fi
+
+        zipper --loadfile-only --loadfile-format "$format" --count 500 \
+            --output-path "$OUT_DIR/run2" \
+            --chaos-mode --chaos-types "$TYPE" --chaos-amount 10 --seed 42
+        CHAOS_FILE2=$(find "$OUT_DIR/run2" -name "$file_glob" -print -quit)
+        PROPS2=$(find "$OUT_DIR/run2" -name "*_properties.json" -print -quit)
+        cmp -s "$CHAOS_FILE" "$CHAOS_FILE2" \
+            || print_error "Determinism failed ($format differs) for type: $TYPE"
+        PROPS_CANONICAL=$(canonicalize_props "$PROPS")
+        PROPS2_CANONICAL=$(canonicalize_props "$PROPS2")
+        [[ "$PROPS_CANONICAL" != "$PROPS2_CANONICAL" ]] \
+            && print_error "Determinism failed (_properties.json differs) for $format type: $TYPE"
+
+        PASSED=$((PASSED + 1))
+        print_success "B1 $format type '$TYPE' — PASSED (anomalies: $ANOMALY_COUNT)"
+    done < "$FIXTURES_DIR/chaos-anomaly-types.txt"
+}
+
+run_format_type_coverage "csv-" csv "$BASELINE_CSV" "*.csv"
+run_format_type_coverage "concordance-" concordance "$BASELINE_CONCORDANCE" "*.concordance.dat"
+run_format_type_coverage "xml-" xml "$BASELINE_XML" "*.xml"
+
+# ---------------------------------------------------------------------------
 # B2 — per-Scenario coverage
 # ---------------------------------------------------------------------------
 while IFS= read -r SCENARIO; do
@@ -270,7 +352,12 @@ while IFS= read -r SCENARIO; do
 
     # Build format arg
     FORMAT_FLAG=""
-    [[ "$FMT" == "opt" ]] && FORMAT_FLAG="--loadfile-format opt"
+    case "$FMT" in
+        opt) FORMAT_FLAG="--loadfile-format opt" ;;
+        csv) FORMAT_FLAG="--loadfile-format csv" ;;
+        concordance) FORMAT_FLAG="--loadfile-format concordance" ;;
+        xml) FORMAT_FLAG="--loadfile-format edrm-xml" ;;
+    esac
 
     # Run 1
     # shellcheck disable=SC2086
@@ -304,13 +391,15 @@ while IFS= read -r SCENARIO; do
 
     PROPS2=$(find "$OUT_DIR/run2" -name "*_properties.json" -print -quit)
 
-    if [[ "$FMT" == "opt" ]]; then
-        FILE1=$(find "$OUT_DIR/run1" -name "*.opt" -print -quit)
-        FILE2=$(find "$OUT_DIR/run2" -name "*.opt" -print -quit)
-    else
-        FILE1=$(find "$OUT_DIR/run1" -name "*.dat" -print -quit)
-        FILE2=$(find "$OUT_DIR/run2" -name "*.dat" -print -quit)
-    fi
+    case "$FMT" in
+        opt) FILE_GLOB="*.opt" ;;
+        csv) FILE_GLOB="*.csv" ;;
+        concordance) FILE_GLOB="*.concordance.dat" ;;
+        xml) FILE_GLOB="*.xml" ;;
+        *) FILE_GLOB="*.dat" ;;
+    esac
+    FILE1=$(find "$OUT_DIR/run1" -name "$FILE_GLOB" -print -quit)
+    FILE2=$(find "$OUT_DIR/run2" -name "$FILE_GLOB" -print -quit)
     cmp -s "$FILE1" "$FILE2" \
         || print_error "Determinism failed (load file differs) for scenario: $SCENARIO"
     PROPS_CANONICAL=$(canonicalize_props "$PROPS")

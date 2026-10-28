@@ -65,6 +65,13 @@ zipper --loadfile-only --count 100000 --output-path ./import-failures \
 ```
 Each `path-pointer` Anomaly is checked against its original File Path by `PathReconciliationValidator` and recorded in the Audit File as a `PathReconciliation` mismatch. If colliding Source Record paths prevent a safe missing-path candidate, the Anomaly uses an empty File Path instead.
 
+Format-specific chaos scenarios cover the other Load File formats: `csv-escaping-failures` for CSV, `concordance-import-failures` for Concordance, and `edrm-xml-structural-failures` for EDRM-XML. For example:
+
+```bash
+zipper --loadfile-only --loadfile-format edrm-xml --count 10000 --output-path ./xml-failures \
+    --chaos-mode --chaos-scenario edrm-xml-structural-failures --seed 42
+```
+
 #### 7. Publish Archive Test Fixture pairs
 Publish the frozen smoke suite (five cases: three valid controls plus a CRC lie and a missing EOCD) as flat `<fixtureId>.zip` / `<fixtureId>.json` pairs for extractor testing — see [Archive Test Suites](docs/archive-test-suites.md):
 ```bash
@@ -163,7 +170,7 @@ All command-line flags recognized by Zipper:
 | `--compression` | `deflate` | `store`, `deflate` (`deflate64`, `bzip2` planned — currently rejected) | ZIP compression method for output Archives (Standard mode, `--include-load-file`, `--production-zip`) |
 | `--load-file-format` | `dat` | `dat`, `opt`, `csv`, `edrm-xml`, `xml`, `concordance` | Single Load File format |
 | `--load-file-formats` | none | comma-separated list (e.g. `dat,opt,csv`) | Multiple simultaneous Load File formats |
-| `--loadfile-format` | `dat` | `dat`, `opt` | Alias for `--load-file-format` in Loadfile-Only mode |
+| `--loadfile-format` | `dat` | `dat`, `opt`, `csv`, `edrm-xml`, `xml`, `concordance` | Alias for `--load-file-format` in Loadfile-Only mode |
 | `--dat-delimiters` | `standard` | `standard`, `csv` | Preset delimiter style for DAT format |
 | `--delimiter-column` | ASCII 20 | ASCII code or single character | Custom column delimiter |
 | `--delimiter-quote` | ASCII 254 | ASCII code or single character | Custom quote delimiter |
@@ -187,7 +194,7 @@ All command-line flags recognized by Zipper:
 | `--nested-delim` | `\` | `ascii:N` or `char:C` | Nested value separator |
 | `--chaos-mode` | `false` | flag | Enable Chaos Engine anomaly injection |
 | `--chaos-amount` | `1%` | exact count `N` or percentage `N%` | Anomaly target count/percentage |
-| `--chaos-types` | existing DAT types (OPT excludes `opt-encoding`) | comma-separated list | Filter DAT types (`mixed-delimiters`, `quotes`, `columns`, `eol`, `encoding`, `path-pointer`, `field-length`, `date-format`, `null-byte`, `trailing-empties`) or OPT types (`opt-boundary`, `opt-columns`, `opt-pagecount`, `opt-path`, `opt-batesnumber`, `opt-encoding`); the new DAT types are opt-in and `full-chaos` enables all types |
+| `--chaos-types` | format defaults | comma-separated list | Filter anomaly types for the selected format: DAT (`mixed-delimiters`, `quotes`, `columns`, `eol`, `encoding`, `path-pointer`, `field-length`, `date-format`, `null-byte`, `trailing-empties`), OPT (`opt-boundary`, `opt-columns`, `opt-pagecount`, `opt-path`, `opt-batesnumber`, `opt-encoding`), CSV (`csv-quote-escape`, `csv-embedded-newline`, `csv-bom`), Concordance (`concordance-delimiter`, `concordance-quote-escape`), or EDRM-XML (`xml-unclosed-tag`, `xml-bad-entity`, `xml-encoding-lie`); the new DAT types are opt-in and `full-chaos` enables all types for the selected format |
 | `--chaos-scenario` | none | scenario name | Predefined chaos scenario |
 | `--chaos-list` | `false` | flag | Print available chaos scenarios and exit |
 | `--production-set` | `false` | flag | Structured Production Set output |
@@ -212,7 +219,7 @@ All command-line flags recognized by Zipper:
 | `--archive-test-cases` | none | comma-separated Case Keys | Filter the suite to the named cases (closed flag set; requires `--archive-test-suite`) |
 | `--version` | `false` | flag | Print full embedded version string and exit |
 
-Chaos requires `--loadfile-only`; `--chaos-scenario` conflicts with `--chaos-types`. The five documented platform import-failure DAT types are opt-in, and `realistic-import-failures` requires DAT. `full-chaos` enables every anomaly type.
+Chaos requires `--loadfile-only`; `--chaos-scenario` conflicts with `--chaos-types`. The five documented platform import-failure DAT types are opt-in, and `realistic-import-failures` requires DAT. Each format has its own anomaly catalog: CSV, Concordance, and EDRM-XML no longer inherit the DAT arms. `full-chaos` enables every anomaly type for the selected format.
 
 ### Standard Load File Columns
 

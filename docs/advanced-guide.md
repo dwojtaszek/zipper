@@ -292,7 +292,9 @@ Two modes write no **Archive** at all, so the column there reports the requested
 
 ### Chaos Engine
 
-Inject deliberate structural and encoding anomalies into Load Files for ingestion testing. Requires `--loadfile-only` and `dat` or `opt` format.
+Inject deliberate structural and encoding anomalies into Load Files for ingestion testing. Requires `--loadfile-only` and one of the `dat`, `opt`, `csv`, `concordance`, or `edrm-xml` formats.
+
+Each format has its own anomaly catalog — no format silently inherits the DAT arms. CSV uses RFC 4180 escaping lies (`csv-quote-escape`, `csv-embedded-newline`, `csv-bom`); Concordance uses its own delimiter conventions (`concordance-delimiter`, `concordance-quote-escape`); EDRM-XML gets structural document damage (`xml-unclosed-tag`, `xml-bad-entity`, `xml-encoding-lie`) applied inside the documented `XmlLoadFileWriter` carve-out rather than through the emitter.
 
 DAT also supports `path-pointer`, `field-length`, `date-format`, `null-byte`, and `trailing-empties` for documented platform import failures. These record-level types are opt-in to preserve existing default output. `path-pointer` and `date-format` target the resolved DAT Columns; all five record-level types are audited with their affected Column. Use `realistic-import-failures` to enable them together.
 
@@ -313,6 +315,15 @@ zipper --loadfile-only --count 100000 --output-path ./platform_test \
 # Documented platform import failures
 zipper --loadfile-only --count 100000 --output-path ./realistic_import_failures \
     --chaos-mode --chaos-scenario realistic-import-failures --seed 42
+# RFC 4180 CSV escaping failures
+zipper --loadfile-only --loadfile-format csv --count 100000 --output-path ./csv_escaping_failures \
+    --chaos-mode --chaos-scenario csv-escaping-failures --seed 42
+# Concordance delimiter and quote corruption
+zipper --loadfile-only --loadfile-format concordance --count 100000 --output-path ./concordance_failures \
+    --chaos-mode --chaos-scenario concordance-import-failures --seed 42
+# EDRM-XML structural failures (inside the XmlLoadFileWriter carve-out)
+zipper --loadfile-only --loadfile-format edrm-xml --count 10000 --output-path ./xml_failures \
+    --chaos-mode --chaos-scenario edrm-xml-structural-failures --seed 42
 ```
 
 List available scenarios: `zipper --chaos-list`
@@ -547,7 +558,7 @@ Written by `--compare-production-manifests` to `--comparison-output`. Records co
 | `--chaos-mode` + `--production-set` | **Conflict**: chaos requires `--loadfile-only` |
 | `--chaos-amount`, `--chaos-types` | Require `--chaos-mode` |
 | `--chaos-scenario` | Requires `--chaos-mode`; conflicts with `--chaos-types` |
-| `--chaos-scenario` + format | Some scenarios require specific `--loadfile-format` (e.g., `broken-boundaries` requires `opt`, `realistic-import-failures` requires `dat`) |
+| `--chaos-scenario` + format | Some scenarios require specific `--loadfile-format` (e.g., `broken-boundaries` requires `opt`, `realistic-import-failures` requires `dat`, `csv-escaping-failures` requires `csv`, `concordance-import-failures` requires `concordance`, `edrm-xml-structural-failures` requires `edrm-xml`) |
 | `--production-set` | Requires `--bates-prefix`; conflicts with `--loadfile-only` |
 | `--redacted-production` | Requires `--production-set`; conflicts with `--loadfile-only`. Redacted text files are only written when `--with-text` is enabled; without it, `REDACTED_TEXT_PATH` is empty in the Load File. |
 | `--withheld-native-policy` | Requires `--redacted-production` |

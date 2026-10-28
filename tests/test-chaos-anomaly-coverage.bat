@@ -90,6 +90,11 @@ if not errorlevel 1 (
     set /a FAILED+=1
 )
 
+REM Test format-aware chaos scenarios (CSV/Concordance/EDRM-XML)
+call :assert_chaos_scenario "csv-escaping-failures" "csv" "csv-quote-escape,csv-embedded-newline,csv-bom"
+call :assert_chaos_scenario "concordance-import-failures" "concordance" "concordance-delimiter,concordance-quote-escape"
+call :assert_chaos_scenario "edrm-xml-structural-failures" "edrm-xml" "xml-unclosed-tag,xml-bad-entity,xml-encoding-lie"
+
 REM --- Cleanup ---
 if exist "%TEST_OUTPUT_DIR%" rmdir /s /q "%TEST_OUTPUT_DIR%"
 
@@ -102,3 +107,24 @@ if %FAILED% equ 0 (
     exit /b 1
 )
 exit /b 0
+
+:assert_chaos_scenario
+set "SCEN=%~1"
+set "FMT=%~2"
+set "EXPECTED=%~3"
+set "SCEN_DIR=%TEST_OUTPUT_DIR%\scenario_%SCEN%"
+%ZIPPER_CMD% --loadfile-only --loadfile-format %FMT% --count 100 --output-path "%SCEN_DIR%" --chaos-mode --chaos-scenario "%SCEN%" --seed 42 >nul 2>&1
+if errorlevel 1 (
+    echo [ ERROR ] FAIL: %SCEN% scenario rejected
+    set /a FAILED+=1
+    goto :eof
+)
+powershell -NoProfile -Command "$p=Get-Content -Raw (Get-ChildItem '%SCEN_DIR%\*_properties.json' | Select-Object -First 1).FullName | ConvertFrom-Json; $expected='%EXPECTED%'.Split(','); $actual=@($p.chaosMode.injectedAnomalies | ForEach-Object { $_.errorType }); if (@($expected | Where-Object { $_ -notin $actual }).Count -eq 0 -and $p.chaosMode.totalAnomalies -gt 0) { exit 0 } else { exit 1 }" >nul 2>&1
+if not errorlevel 1 (
+    echo [ INFO ] PASS: %SCEN% injects and audits its format-specific anomalies
+    set /a PASSED+=1
+) else (
+    echo [ ERROR ] FAIL: %SCEN% output or audit
+    set /a FAILED+=1
+)
+goto :eof
