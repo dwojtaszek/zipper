@@ -1,10 +1,15 @@
-# DAT chaos anomaly types (LoadFileFormat.Dat — default)
+# DAT chaos anomaly types (LoadFileFormat.Dat — supported; record-level types are opt-in)
 # Source: ChaosEngine.cs DatChaosTypes
 mixed-delimiters
 quotes
 columns
 eol
 encoding
+path-pointer
+field-length
+date-format
+null-byte
+trailing-empties
 # OPT chaos anomaly types (LoadFileFormat.Opt — requires --loadfile-format opt)
 # Source: ChaosEngine.cs OptChaosTypes
 opt-boundary

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Xunit;
+using Zipper.Validation;
 
 namespace Zipper.Tests;
 
@@ -117,6 +118,13 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
         Assert.Equal("mixed-delimiters,encoding,quotes", transfer.ChaosTypes);
         Assert.Equal("4%", transfer.DefaultAmount);
         Assert.Equal(LoadFileFormat.Dat, transfer.RequiredFormat);
+
+        // 7. realistic-import-failures
+        var realistic = ChaosScenarios.GetByName("realistic-import-failures");
+        Assert.NotNull(realistic);
+        Assert.Equal("path-pointer,field-length,date-format,null-byte,trailing-empties", realistic.ChaosTypes);
+        Assert.Equal("5%", realistic.DefaultAmount);
+        Assert.Equal(LoadFileFormat.Dat, realistic.RequiredFormat);
     }
 
     // --- CLI integration tests ---
@@ -127,6 +135,7 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
         Assert.Equal(0, exitCode);
         Assert.Contains("Available Chaos Scenarios", stdout, StringComparison.Ordinal);
         Assert.Contains("structured-import-failures", stdout, StringComparison.Ordinal);
+        Assert.Contains("realistic-import-failures", stdout, StringComparison.Ordinal);
         Assert.Contains("full-chaos", stdout, StringComparison.Ordinal);
     }
 
@@ -272,6 +281,149 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
                 Directory.Delete(tempPath, true);
             }
         }
+    }
+
+    [Fact]
+    public async Task ChaosScenario_RealisticImportFailures_GeneratesAllAuditedAnomalies()
+    {
+        var tempPath = Path.Combine(this.TempDir, $"zipper_{Guid.NewGuid():N}");
+        var baselinePath = Path.Combine(this.TempDir, $"zipper_baseline_{Guid.NewGuid():N}");
+        try
+        {
+            var (exitCode, _, _) = await RunWithCapture(new[]
+            {
+                "--loadfile-only", "--count", "5", "--output-path", tempPath,
+                "--chaos-mode", "--chaos-scenario", "realistic-import-failures",
+                "--chaos-amount", "5", "--seed", "42",
+            });
+            Assert.Equal(0, exitCode);
+
+            string propertiesPath = Assert.Single(Directory.GetFiles(tempPath, "*_properties.json"));
+            using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(propertiesPath));
+            var anomalies = doc.RootElement.GetProperty("chaosMode").GetProperty("injectedAnomalies")
+                .EnumerateArray()
+                .ToArray();
+            var expectedTypes = new HashSet<string>(ChaosAnomalyTypes.DatRecordOnly, StringComparer.Ordinal);
+            var actualTypes = anomalies.Select(anomaly => anomaly.GetProperty("errorType").GetString()!).ToHashSet(StringComparer.Ordinal);
+            JsonElement pathPointer = Assert.Single(anomalies, anomaly => anomaly.GetProperty("errorType").GetString() == "path-pointer");
+
+            Assert.Equal(expectedTypes, actualTypes);
+            Assert.Contains(
+                "PathReconciliation:",
+                pathPointer.GetProperty("description").GetString(),
+                StringComparison.Ordinal);
+            Assert.All(anomalies, anomaly =>
+            {
+                Assert.False(string.IsNullOrWhiteSpace(anomaly.GetProperty("column").GetString()));
+                Assert.NotEqual("N/A", anomaly.GetProperty("column").GetString());
+            });
+
+            var (baselineExitCode, _, _) = await RunWithCapture(new[]
+            {
+                "--loadfile-only", "--count", "5", "--output-path", baselinePath, "--seed", "42",
+            });
+            Assert.Equal(0, baselineExitCode);
+
+            string chaosLoadFile = Assert.Single(Directory.GetFiles(tempPath, "*.dat"));
+            string baselineLoadFile = Assert.Single(Directory.GetFiles(baselinePath, "*.dat"));
+            var chaosLines = await File.ReadAllLinesAsync(chaosLoadFile);
+            var baselineLines = await File.ReadAllLinesAsync(baselineLoadFile);
+            int lineNumber = int.Parse(pathPointer.GetProperty("lineNumber").GetString()!, System.Globalization.CultureInfo.InvariantCulture);
+            var header = DatLineParser.Parse(chaosLines[0], '\u0014', '\u00fe');
+            int pathIndex = header.FindIndex(column => string.Equals(column, "File Path", StringComparison.Ordinal));
+            Assert.True(pathIndex >= 0);
+            string corruptedPath = DatLineParser.Parse(chaosLines[lineNumber - 1], '\u0014', '\u00fe')[pathIndex];
+            string originalPath = DatLineParser.Parse(baselineLines[lineNumber - 1], '\u0014', '\u00fe')[pathIndex];
+            string archiveEntry = originalPath.Replace('\\', '/');
+            var validator = new PathReconciliationValidator();
+            var originalValidation = new ValidationResult();
+            validator.Validate([originalPath], [archiveEntry], chaosLoadFile, originalValidation);
+            Assert.Empty(originalValidation.Findings);
+
+            var validation = new ValidationResult();
+            validator.Validate([corruptedPath], [archiveEntry], chaosLoadFile, validation);
+            Assert.Contains(validation.Findings, finding => finding.Category == "PathReconciliation");
+        }
+        finally
+        {
+            if (Directory.Exists(tempPath))
+            {
+                Directory.Delete(tempPath, true);
+            }
+            if (Directory.Exists(baselinePath))
+            {
+                Directory.Delete(baselinePath, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ChaosScenario_SourceDrivenPathPointer_AvoidsPathAndSidecarCollisions()
+    {
+        string sourceCsv = Path.Combine(this.TempDir, "source-paths.csv");
+        string outputPath = Path.Combine(this.TempDir, $"zipper_source_chaos_{Guid.NewGuid():N}");
+        await File.WriteAllTextAsync(sourceCsv, "FilePath,FileType\nfolder\\doc.pdf,pdf\nfolder\\doc_MISSING.docx,docx\n");
+
+        var (exitCode, _, stderr) = await RunWithCapture(new[]
+        {
+            "--loadfile-only", "--input-csv", sourceCsv, "--count", "2", "--output-path", outputPath,
+            "--chaos-mode", "--chaos-types", "path-pointer", "--chaos-amount", "2", "--seed", "42",
+        });
+        Assert.Equal(0, exitCode);
+        Assert.Empty(stderr);
+
+        string loadFile = Assert.Single(Directory.GetFiles(outputPath, "*.dat"));
+        var lines = await File.ReadAllLinesAsync(loadFile);
+        var columns = DatLineParser.Parse(lines[0], '\u0014', '\u00fe');
+        int pathIndex = columns.FindIndex(column => string.Equals(column, "File Path", StringComparison.Ordinal));
+        Assert.True(pathIndex >= 0);
+
+        var mutatedPaths = lines.Skip(1)
+            .Select(line => DatLineParser.Parse(line, '\u0014', '\u00fe')[pathIndex])
+            .ToArray();
+        Assert.Equal(
+            new[] { "folder/doc_MISSING_1.pdf", "folder/doc_MISSING_MISSING.docx" },
+            mutatedPaths);
+
+        var validation = new ValidationResult();
+        new PathReconciliationValidator().Validate(
+            mutatedPaths,
+            ["folder/doc.pdf", "folder/doc_MISSING.docx"],
+            loadFile,
+            validation);
+        Assert.Equal(2, validation.Findings.Count);
+    }
+
+    [Fact]
+    public async Task ChaosScenario_DirectoryTemplatePathPointer_AvoidsSourcePathCollisions()
+    {
+        string sourceDirectory = Path.Combine(this.TempDir, "source-template");
+        string sourceFolder = Path.Combine(sourceDirectory, "folder");
+        string outputPath = Path.Combine(this.TempDir, $"zipper_template_chaos_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(sourceFolder);
+        await File.WriteAllTextAsync(Path.Combine(sourceFolder, "doc.pdf"), string.Empty);
+        await File.WriteAllTextAsync(Path.Combine(sourceFolder, "doc_MISSING.docx"), string.Empty);
+
+        var (exitCode, _, stderr) = await RunWithCapture(new[]
+        {
+            "--loadfile-only", "--directory-template", sourceDirectory, "--count", "2", "--output-path", outputPath,
+            "--chaos-mode", "--chaos-types", "path-pointer", "--chaos-amount", "2", "--seed", "42",
+        });
+        Assert.Equal(0, exitCode);
+        Assert.Empty(stderr);
+
+        string loadFile = Assert.Single(Directory.GetFiles(outputPath, "*.dat"));
+        var lines = await File.ReadAllLinesAsync(loadFile);
+        var columns = DatLineParser.Parse(lines[0], '\u0014', '\u00fe');
+        int pathIndex = columns.FindIndex(column => string.Equals(column, "File Path", StringComparison.Ordinal));
+        Assert.True(pathIndex >= 0);
+
+        var mutatedPaths = lines.Skip(1)
+            .Select(line => DatLineParser.Parse(line, '\u0014', '\u00fe')[pathIndex])
+            .ToArray();
+        Assert.Equal(
+            new[] { "folder/doc_MISSING_1.pdf", "folder/doc_MISSING_MISSING.docx" },
+            mutatedPaths);
     }
 
     [Fact]

@@ -45,6 +45,36 @@ public class ChaosModuleTests
         Assert.Equal("quotes,columns", config.ChaosTypes);
     }
 
+    [Theory]
+    [InlineData(null, null, false)]
+    [InlineData("", null, true)]
+    [InlineData("mixed-delimiters", null, false)]
+    [InlineData("path-pointer", null, true)]
+    [InlineData(null, "structured-import-failures", false)]
+    [InlineData(null, "realistic-import-failures", true)]
+    [InlineData(null, "full-chaos", true)]
+    [InlineData("", "structured-import-failures", false)]
+    [InlineData("", "full-chaos", true)]
+    public void RequiresSourcePaths_UsesEffectiveDatAnomalyTypes(
+        string? chaosTypes,
+        string? scenario,
+        bool expected)
+    {
+        var module = new ChaosModule();
+        Assert.True(module.TryApply("--chaos-mode", null));
+        if (chaosTypes is not null)
+        {
+            Assert.True(module.TryApply("--chaos-types", chaosTypes));
+        }
+        if (scenario is not null)
+        {
+            Assert.True(module.TryApply("--chaos-scenario", scenario));
+        }
+
+        Assert.Equal(expected, module.RequiresSourcePaths([LoadFileFormat.Dat]));
+        Assert.False(module.RequiresSourcePaths([LoadFileFormat.Opt]));
+    }
+
     [Fact]
     public void TryBuild_ChaosTypesWithWhitespace_StoresTrimmedNames()
     {

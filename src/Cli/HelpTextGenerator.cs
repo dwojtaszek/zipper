@@ -61,8 +61,9 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine("Chaos Engine Options:");
         Console.Error.WriteLine("  --chaos-mode             Activate deliberate anomaly injection");
         Console.Error.WriteLine("  --chaos-amount <value>   Anomaly count: percentage (1%) or exact (500)");
-        Console.Error.WriteLine("  --chaos-types <list>     DAT: mixed-delimiters,quotes,columns,eol,encoding");
+        Console.Error.WriteLine("  --chaos-types <list>     DAT: mixed-delimiters,quotes,columns,eol,encoding,path-pointer,field-length,date-format,null-byte,trailing-empties");
         Console.Error.WriteLine("                           OPT: opt-boundary,opt-columns,opt-pagecount,opt-path,opt-batesnumber,opt-encoding");
+        Console.Error.WriteLine("                           DAT record anomalies are opt-in; full-chaos enables all DAT types");
         Console.Error.WriteLine("                           OPT opt-encoding is opt-in; full-chaos enables it");
         Console.Error.WriteLine("  --chaos-scenario <name>  Use a predefined chaos scenario (conflicts with --chaos-types)");
         Console.Error.WriteLine("  --chaos-list             List available chaos scenarios and exit");

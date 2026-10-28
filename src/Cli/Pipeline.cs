@@ -27,7 +27,13 @@ public static class Pipeline
 
         if (!modules.Production.TryBuild(out var production) ||
             !modules.Bates.TryBuild(production.ProductionSet, production.RollingCount, production.RollingBatesMode.ToString(), modules.Output.Count, out var bates) ||
-            !modules.SourceInput.TryBuild(modules.Output.Count, production.ProductionSet, bates, out var sourceRecords) ||
+            !modules.SourceInput.TryBuild(
+                modules.Output.Count,
+                production.ProductionSet,
+                bates,
+                modules.Chaos.RequiresSourcePaths(modules.LoadFile.Formats),
+                out var sourceRecords,
+                out var sourcePaths) ||
             !modules.Output.TryBuild(sourceRecords, out var output) ||
             !modules.Metadata.TryBuild(output.HasFileType("eml"), modules.SourceInput.HasSourceInput, out var metadata) ||
             !modules.LoadFile.TryBuild(modules.Metadata.AttachmentRate, modules.Output.Encoding, modules.Output.IsEncodingExplicit, modules.Output.Distribution, modules.Output.TargetZipSize, modules.Output.IncludeLoadFile, out var loadFile) ||
@@ -52,6 +58,7 @@ public static class Pipeline
             LoadfileOnly = modules.LoadFile.LoadfileOnly,
             Hash = hash,
             SourceRecords = sourceRecords,
+            SourcePaths = sourcePaths,
         };
     }
 

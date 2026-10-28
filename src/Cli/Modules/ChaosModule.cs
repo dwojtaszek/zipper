@@ -17,6 +17,34 @@ public sealed class ChaosModule : CliModule
     /// </summary>
     public string? ChaosTypes => _types;
 
+    internal bool RequiresSourcePaths(IReadOnlyList<LoadFileFormat>? formats)
+    {
+        if (!this._mode || formats is { Count: > 0 } && !formats.Contains(LoadFileFormat.Dat))
+        {
+            return false;
+        }
+
+        string? chaosTypes = this._types;
+        if (string.IsNullOrEmpty(chaosTypes) && !string.IsNullOrEmpty(this._scenario))
+        {
+            var scenario = ChaosScenarios.GetByName(this._scenario);
+            if (scenario is null)
+            {
+                return false;
+            }
+
+            chaosTypes = string.Join(",", ChaosScenarios.ResolveTypes(scenario, LoadFileFormat.Dat));
+        }
+        else if (chaosTypes is null)
+        {
+            return ChaosAnomalyTypes.DatDefault.Contains("path-pointer", StringComparer.OrdinalIgnoreCase);
+        }
+
+        return chaosTypes is not null
+            && (chaosTypes.Length == 0
+                || chaosTypes.Split(',').Any(type => string.Equals(type.Trim(), "path-pointer", StringComparison.OrdinalIgnoreCase)));
+    }
+
     private string? _amount;
     private string? _types;
     private string? _scenario;

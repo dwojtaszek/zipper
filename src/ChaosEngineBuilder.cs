@@ -6,6 +6,11 @@ namespace Zipper;
 /// </summary>
 internal static class ChaosEngineBuilder
 {
+    private static readonly HashSet<string> DateColumnTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "date", "datetime", "legacydatesent", "legacydatecreated", "emailsentdate", "syntheticemailsentdate",
+    };
+
     /// <summary>
     /// Builds a <see cref="ChaosEngine"/> for the specified request and format,
     /// or returns <c>null</c> when chaos is disabled.
@@ -29,9 +34,7 @@ internal static class ChaosEngineBuilder
             var scenario = ChaosScenarios.GetByName(request.Chaos.ChaosScenario);
             if (scenario != null)
             {
-                resolvedTypes = string.IsNullOrEmpty(scenario.ChaosTypes)
-                    ? string.Join(",", ChaosAnomalyTypes.ForFormat(format))
-                    : scenario.ChaosTypes;
+                resolvedTypes = string.Join(",", ChaosScenarios.ResolveTypes(scenario, format));
                 if (string.IsNullOrEmpty(resolvedAmount))
                 {
                     resolvedAmount = scenario.DefaultAmount;
@@ -51,6 +54,58 @@ internal static class ChaosEngineBuilder
             chaosColDelim,
             chaosQuoteDelim,
             eolString,
-            request.Metadata.Seed);
+            request.Metadata.Seed,
+            GetDateColumnNames(request),
+            format == LoadFileFormat.Dat ? request.SourcePaths : null,
+            GetDateColumnIndexes(request));
+    }
+
+    private static IReadOnlyCollection<string> GetDateColumnNames(FileGenerationRequest request)
+    {
+        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (request.Metadata.ColumnProfile is not null)
+        {
+            return columns;
+        }
+
+        if (request.LoadfileOnly && request.SourceRecords is null)
+        {
+            columns.Add("Date Sent");
+            columns.Add("EmailSentDate");
+        }
+        else
+        {
+            if (request.Metadata.ShouldIncludeMetadataColumns(request.Output))
+            {
+                columns.Add("Date Sent");
+            }
+
+            if (request.Metadata.ShouldIncludeEmlColumns(request.Output))
+            {
+                columns.Add("Sent Date");
+                columns.Add("EmailSentDate");
+            }
+
+            if (request.Metadata.ShouldIncludeCollectionMetadataColumns())
+            {
+                columns.Add("Collection Date");
+            }
+        }
+
+        return columns;
+    }
+
+    private static IReadOnlySet<int>? GetDateColumnIndexes(FileGenerationRequest request)
+    {
+        if (request.Metadata.ColumnProfile is not { } profile)
+        {
+            return null;
+        }
+
+        return profile.Columns
+            .Select((column, index) => (Column: column, Index: index))
+            .Where(column => DateColumnTypes.Contains(column.Column.Type))
+            .Select(column => column.Index)
+            .ToHashSet();
     }
 }

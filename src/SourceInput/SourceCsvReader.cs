@@ -13,8 +13,17 @@ namespace Zipper.SourceInput;
 internal static class SourceCsvReader
 {
     internal static bool TryRead(string filePath, out IReadOnlyList<SourceRecord> records, out string? error, int maxRecords = SourceRecordIntake.MaxSourceRecords)
+        => TryRead(filePath, out records, out _, out error, maxRecords);
+
+    internal static bool TryRead(
+        string filePath,
+        out IReadOnlyList<SourceRecord> records,
+        out IReadOnlySet<string>? sourcePaths,
+        out string? error,
+        int maxRecords = SourceRecordIntake.MaxSourceRecords)
     {
         records = Array.Empty<SourceRecord>();
+        sourcePaths = null;
         error = null;
 
         List<(int RecordNumber, List<string> Fields)> rows;
@@ -75,7 +84,13 @@ internal static class SourceCsvReader
             }
         }
 
-        return intake.TryBuild(out records, out error);
+        if (!intake.TryBuild(out records, out error))
+        {
+            return false;
+        }
+
+        sourcePaths = intake.SourcePaths;
+        return true;
     }
 
     private static string? NullIfEmpty(string value) => value.Length == 0 ? null : value;

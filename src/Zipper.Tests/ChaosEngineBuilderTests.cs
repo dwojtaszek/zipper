@@ -1,5 +1,10 @@
 using System.Reflection;
 using Xunit;
+using Zipper.Config;
+using Zipper.LoadFiles;
+using Zipper.Profiles;
+using Zipper.SourceInput;
+using Zipper.Validation;
 
 namespace Zipper.Tests;
 
@@ -68,6 +73,193 @@ public class ChaosEngineBuilderTests
         Assert.Contains("mixed-delimiters", enabledTypes);
         Assert.Contains("quotes", enabledTypes);
         Assert.Equal(2, enabledTypes.Count);
+    }
+
+    [Theory]
+    [InlineData("date")]
+    [InlineData("datetime")]
+    [InlineData("legacydatesent")]
+    [InlineData("legacydatecreated")]
+    [InlineData("emailsentdate")]
+    [InlineData("syntheticemailsentdate")]
+    public void Build_DateFormat_UsesProfileTypesWithoutNameHeuristics(string dateType)
+    {
+        var request = new FileGenerationRequest { LoadfileOnly = true };
+        request.Metadata = request.Metadata with
+        {
+            Seed = 42,
+            ColumnProfile = new ColumnProfile
+            {
+                Columns =
+                [
+                    new ColumnDefinition { Name = "Updated By", Type = "text" },
+                    new ColumnDefinition { Name = "ReviewStamp", Type = dateType },
+                ],
+            },
+        };
+        request.Delimiters = request.Delimiters with { ColumnDelimiter = "|", QuoteDelimiter = "\"", EndOfLine = "CRLF" };
+        request.Chaos = request.Chaos with { ChaosMode = true, ChaosAmount = "1", ChaosTypes = "date-format" };
+        var record = new LoadFileRecord
+        {
+            Columns = ["Updated By", "ReviewStamp"],
+            Values = ["jdoe", "2024-01-15"],
+            RecordId = "DOC00000001",
+        };
+        var serializer = new DatSerializer('|', '"', "~");
+        string line = serializer.RenderRecord(record);
+        var engine = ChaosEngineBuilder.Build(request, 2, LoadFileFormat.Dat);
+        Assert.NotNull(engine);
+        Assert.True(engine.ShouldIntercept(2));
+
+        string result = engine.Intercept(2, line, record.RecordId, record, serializer);
+
+        var fields = DatLineParser.Parse(result, '|', '"');
+        Assert.Equal("jdoe", fields[0]);
+        Assert.Contains(fields[1], new[] { "00/00/0000", "2018-01-15 a.m.", "2018-044-09" });
+        Assert.Equal("ReviewStamp", Assert.Single(engine.Anomalies).Column);
+    }
+
+    [Fact]
+    public void Build_DateFormat_DoesNotTargetTextTypedBuiltInColumn()
+    {
+        var request = new FileGenerationRequest
+        {
+            LoadfileOnly = true,
+            Output = new OutputConfig { FileType = "eml", FileCount = 1 },
+        };
+        request.Metadata = request.Metadata with
+        {
+            Seed = 42,
+            ColumnProfile = new ColumnProfile
+            {
+                Columns = [new ColumnDefinition { Name = "Sent Date", Type = "text" }],
+            },
+        };
+        request.Chaos = request.Chaos with { ChaosMode = true, ChaosAmount = "1", ChaosTypes = "date-format" };
+
+        var record = new LoadFileRecord
+        {
+            Columns = ["Sent Date"],
+            Values = ["Jane Doe"],
+            RecordId = "DOC00000001",
+        };
+        var serializer = new DatSerializer('|', '"', "~");
+        string line = serializer.RenderRecord(record);
+        var engine = ChaosEngineBuilder.Build(request, 2, LoadFileFormat.Dat);
+        Assert.NotNull(engine);
+        Assert.True(engine.ShouldIntercept(2));
+
+        string result = engine.Intercept(2, line, record.RecordId, record, serializer);
+
+        Assert.Equal(line, result);
+        Assert.Empty(engine.Anomalies);
+    }
+
+    [Fact]
+    public void Build_DateFormat_UsesProfileDateColumnByIndex_WhenNamesNormalizeTheSame()
+    {
+        var profile = new ColumnProfile
+        {
+            Name = "punctuation-distinct-columns",
+            Columns =
+            [
+                new ColumnDefinition { Name = "Control Number", Type = "identifier" },
+                new ColumnDefinition { Name = "Review-Stamp", Type = "text" },
+                new ColumnDefinition { Name = "Review Stamp", Type = "date" },
+            ],
+        };
+        ColumnProfileLoader.Validate(profile);
+
+        var request = new FileGenerationRequest { LoadfileOnly = true };
+        request.Metadata = request.Metadata with { Seed = 42, ColumnProfile = profile };
+        request.Chaos = request.Chaos with { ChaosMode = true, ChaosAmount = "1", ChaosTypes = "date-format" };
+        var record = new LoadFileRecord
+        {
+            Columns = ["Control Number", "Review-Stamp", "Review Stamp"],
+            Values = ["DOC00000001", "review value", "2024-01-15"],
+            RecordId = "DOC00000001",
+        };
+        var serializer = new DatSerializer('|', '"', "~");
+        string line = serializer.RenderRecord(record);
+        var engine = ChaosEngineBuilder.Build(request, 2, LoadFileFormat.Dat);
+        Assert.NotNull(engine);
+        Assert.True(engine.ShouldIntercept(2));
+
+        string result = engine.Intercept(2, line, record.RecordId, record, serializer);
+
+        var fields = DatLineParser.Parse(result, '|', '"');
+        Assert.Equal("review value", fields[1]);
+        Assert.Contains(fields[2], new[] { "00/00/0000", "2018-01-15 a.m.", "2018-044-09" });
+        Assert.Equal("Review Stamp", Assert.Single(engine.Anomalies).Column);
+    }
+
+    [Fact]
+    public void Build_DateFormat_UsesLoadfileOnlyDefaultDateColumn_WhenProfileIsAbsent()
+    {
+        var request = new FileGenerationRequest { LoadfileOnly = true };
+        request.Metadata = request.Metadata with { Seed = 42 };
+        request.Chaos = request.Chaos with { ChaosMode = true, ChaosAmount = "1", ChaosTypes = "date-format" };
+        var record = new LoadFileRecord
+        {
+            Columns = ["Date Sent", "Author"],
+            Values = ["2024-01-15", "Jane Doe"],
+            RecordId = "DOC00000001",
+        };
+        var serializer = new DatSerializer('|', '"', "~");
+        string line = serializer.RenderRecord(record);
+        var engine = ChaosEngineBuilder.Build(request, 2, LoadFileFormat.Dat);
+        Assert.NotNull(engine);
+        Assert.True(engine.ShouldIntercept(2));
+
+        string result = engine.Intercept(2, line, record.RecordId, record, serializer);
+
+        var fields = DatLineParser.Parse(result, '|', '"');
+        Assert.Contains(fields[0], new[] { "00/00/0000", "2018-01-15 a.m.", "2018-044-09" });
+        Assert.Equal("Jane Doe", fields[1]);
+        Assert.Equal("Date Sent", Assert.Single(engine.Anomalies).Column);
+    }
+
+    [Fact]
+    public void Build_PathPointer_AvoidsExistingSourcePaths()
+    {
+        var sourceRecords = new[]
+        {
+            new SourceRecord { RelativePath = "folder/doc.pdf", FileType = "pdf" },
+            new SourceRecord { RelativePath = "folder/doc_MISSING.docx", FileType = "docx" },
+        };
+        var request = new FileGenerationRequest
+        {
+            LoadfileOnly = true,
+            SourceRecords = sourceRecords,
+            SourcePaths = new HashSet<string>(
+                sourceRecords.Select(sourceRecord => sourceRecord.RelativePath),
+                StringComparer.OrdinalIgnoreCase),
+        };
+        request.Chaos = request.Chaos with { ChaosMode = true, ChaosAmount = "2", ChaosTypes = "path-pointer" };
+        request.Delimiters = request.Delimiters with { ColumnDelimiter = "|", QuoteDelimiter = "\"", EndOfLine = "CRLF" };
+        request.Metadata = request.Metadata with { Seed = 42 };
+
+        var engine = ChaosEngineBuilder.Build(request, 3, LoadFileFormat.Dat);
+        Assert.NotNull(engine);
+        Assert.False(engine.ShouldIntercept(1));
+        Assert.True(engine.ShouldIntercept(2));
+
+        var record = new LoadFileRecord
+        {
+            Columns = ["File Path"],
+            Values = [sourceRecords[0].RelativePath],
+            RecordId = "DOC00000001",
+        };
+        var serializer = new DatSerializer('|', '"', "~");
+        string line = serializer.RenderRecord(record);
+
+        string result = engine.Intercept(2, line, record.RecordId, record, serializer);
+        string mutatedPath = DatLineParser.Parse(result, '|', '"')[0];
+
+        Assert.Equal("folder/doc_MISSING_1.pdf", mutatedPath);
+        Assert.DoesNotContain(sourceRecords, sourceRecord =>
+            string.Equals(sourceRecord.RelativePath, mutatedPath, StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("path-pointer", Assert.Single(engine.Anomalies).ErrorType);
     }
 
     [Fact]

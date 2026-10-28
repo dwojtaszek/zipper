@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Xunit;
+using Zipper.LoadFiles;
 
 namespace Zipper.Tests;
 
@@ -784,30 +785,35 @@ public class ChaosEngineTests
             chaosAmount: "10",
             chaosTypes: string.Empty,
             format: LoadFileFormat.Dat,
-            columnDelimiter: "\u0014",
-            quoteDelimiter: "\u00fe",
+            columnDelimiter: "|",
+            quoteDelimiter: "\"",
             eol: "\r\n",
-            seed: 42);
+            seed: 42,
+            dateColumnNames: ["Date Created"]);
 
-        string line = "\u00feValue1\u00fe\u0014\u00feValue2\u00fe";
+        var record = new LoadFileRecord
+        {
+            Columns = ["Control Number", "File Path", "Date Created", "Author"],
+            Values = ["DOC00000001", "NATIVES\\001\\DOC00000001.pdf", "2024-01-15", "Jane Doe"],
+            RecordId = "DOC00000001",
+        };
+        var serializer = new DatSerializer('|', '"', "~");
+        string line = serializer.RenderRecord(record);
 
         int interceptedCount = 0;
         for (int i = 1; i <= 100; i++)
         {
             if (engine.ShouldIntercept(i))
             {
-                engine.Intercept(i, line, $"DOC{i:D8}");
+                engine.Intercept(i, line, record.RecordId, record, serializer);
+                _ = engine.GetEncodingAnomaly(i, i + 1, Encoding.UTF8);
                 interceptedCount++;
             }
         }
 
         Assert.Equal(10, interceptedCount);
-        Assert.True(engine.Anomalies.Count > 0);
-
-        var types = engine.Anomalies.Select(a => a.ErrorType).Distinct(StringComparer.Ordinal).ToList();
-        Assert.True(
-            types.Count >= 2,
-            $"Expected at least 2 distinct anomaly types with all types enabled, got {types.Count}: {string.Join(", ", types)}");
+        var actualTypes = engine.Anomalies.Select(anomaly => anomaly.ErrorType).ToHashSet(StringComparer.Ordinal);
+        Assert.True(new HashSet<string>(ChaosAnomalyTypes.Dat, StringComparer.Ordinal).SetEquals(actualTypes));
     }
 
     [Fact]
@@ -964,5 +970,160 @@ public class ChaosEngineTests
 
         Assert.Equal(interceptedCount, engine.Anomalies.Count);
         Assert.All(engine.Anomalies, a => Assert.Equal("opt-boundary", a.ErrorType));
+    }
+
+    [Theory]
+    [InlineData("path-pointer", "File Path")]
+    [InlineData("field-length", "Author")]
+    [InlineData("date-format", "Date Created")]
+    [InlineData("null-byte", "Author")]
+    [InlineData("trailing-empties", "Trailing empty columns after Author")]
+    public void DatRecordAnomalies_OnlyInterceptDataRecords_AndAuditTheColumn(string type, string expectedColumn)
+    {
+        IReadOnlyList<string> columns = ["Control Number", "File Path", "Date Created", "Author"];
+        var record = new LoadFileRecord
+        {
+            Columns = columns,
+            Values = ["DOC00000001", "NATIVES\\001\\DOC00000001.pdf", "2024-01-15", "Jane Doe"],
+            RecordId = "DOC00000001",
+        };
+        var serializer = new DatSerializer('|', '"', "~");
+        string line = serializer.RenderRecord(record);
+        var engine = new ChaosEngine(
+            totalLines: 2,
+            chaosAmount: "1",
+            chaosTypes: type,
+            format: LoadFileFormat.Dat,
+            columnDelimiter: "|",
+            quoteDelimiter: "\"",
+            eol: "\r\n",
+            seed: 42,
+            dateColumnNames: ["Date Created"]);
+
+        Assert.False(engine.ShouldIntercept(1), "Record anomalies must never target the header.");
+        Assert.True(engine.ShouldIntercept(2), "An exact count should target the sole data record.");
+
+        string result = engine.Intercept(2, line, record.RecordId, record, serializer);
+
+        Assert.NotEqual(line, result);
+        var anomaly = Assert.Single(engine.Anomalies);
+        Assert.Equal(type, anomaly.ErrorType);
+        Assert.Equal(expectedColumn, anomaly.Column);
+        Assert.Equal(record.RecordId, anomaly.RecordID);
+    }
+
+    [Theory]
+    [InlineData("path-pointer")]
+    [InlineData("field-length")]
+    [InlineData("date-format")]
+    [InlineData("null-byte")]
+    [InlineData("trailing-empties")]
+    public void DatRecordAnomalies_HeaderOnlyFile_DoesNotInterceptHeader(string type)
+    {
+        var engine = new ChaosEngine(
+            totalLines: 1,
+            chaosAmount: "1",
+            chaosTypes: type,
+            format: LoadFileFormat.Dat,
+            columnDelimiter: "|",
+            quoteDelimiter: "\"",
+            eol: "\r\n",
+            seed: 42);
+
+        Assert.False(engine.ShouldIntercept(1));
+        Assert.Empty(engine.Anomalies);
+    }
+
+    [Fact]
+    public void DatRecordAnomalies_MixedWithLegacyTypes_OnlyInterceptDataRecords()
+    {
+        var engine = new ChaosEngine(
+            totalLines: 5,
+            chaosAmount: "100%",
+            chaosTypes: "mixed-delimiters,path-pointer",
+            format: LoadFileFormat.Dat,
+            columnDelimiter: "|",
+            quoteDelimiter: "\"",
+            eol: "\r\n",
+            seed: 42);
+        var serializer = new DatSerializer('|', '"', "~");
+
+        Assert.False(engine.ShouldIntercept(1));
+        for (int lineNumber = 2; lineNumber <= 5; lineNumber++)
+        {
+            Assert.True(engine.ShouldIntercept(lineNumber));
+            var record = new LoadFileRecord
+            {
+                Columns = ["File Path", "Author"],
+                Values = [$"NATIVES\\001\\DOC{lineNumber.ToString("D8", CultureInfo.InvariantCulture)}.pdf", "Jane Doe"],
+                RecordId = $"DOC{lineNumber.ToString("D8", CultureInfo.InvariantCulture)}",
+            };
+            string line = serializer.RenderRecord(record);
+
+            string result = engine.Intercept(lineNumber, line, record.RecordId, record, serializer);
+
+            Assert.NotEqual(line, result);
+        }
+
+        Assert.Equal(2, engine.Anomalies.Count(anomaly => anomaly.ErrorType == "mixed-delimiters"));
+        Assert.Equal(2, engine.Anomalies.Count(anomaly => anomaly.ErrorType == "path-pointer"));
+    }
+
+    [Fact]
+    public void DatDefaultAnomalies_PreservePreviouslyEnabledTypes()
+    {
+        const int totalLines = 100;
+        var engine = new ChaosEngine(
+            totalLines,
+            chaosAmount: "10",
+            chaosTypes: null,
+            format: LoadFileFormat.Dat,
+            columnDelimiter: "|",
+            quoteDelimiter: "\"",
+            eol: "\r\n",
+            seed: 42);
+        var legacyEngine = new ChaosEngine(
+            totalLines,
+            chaosAmount: "10",
+            chaosTypes: "mixed-delimiters,quotes,columns,eol,encoding",
+            format: LoadFileFormat.Dat,
+            columnDelimiter: "|",
+            quoteDelimiter: "\"",
+            eol: "\r\n",
+            seed: 42);
+        var headerEngine = new ChaosEngine(
+            totalLines: 2,
+            chaosAmount: "100%",
+            chaosTypes: null,
+            format: LoadFileFormat.Dat,
+            columnDelimiter: "|",
+            quoteDelimiter: "\"",
+            eol: "\r\n",
+            seed: 42);
+        Assert.True(headerEngine.ShouldIntercept(1));
+        Assert.True(headerEngine.ShouldIntercept(2));
+        string line = "\"DOC00000001\"|\"NATIVES\\DOC00000001.pdf\"|\"2024-01-15\"|\"Jane Doe\"";
+
+        for (int i = 1; i <= totalLines; i++)
+        {
+            bool shouldIntercept = engine.ShouldIntercept(i);
+            Assert.Equal(legacyEngine.ShouldIntercept(i), shouldIntercept);
+            if (shouldIntercept)
+            {
+                string recordId = $"DOC{i:D8}";
+                Assert.Equal(
+                    legacyEngine.Intercept(i, line, recordId),
+                    engine.Intercept(i, line, recordId));
+                _ = engine.GetEncodingAnomaly(i, i + 1, Encoding.UTF8);
+                _ = legacyEngine.GetEncodingAnomaly(i, i + 1, Encoding.UTF8);
+            }
+        }
+
+        Assert.Equal(10, engine.Anomalies.Count);
+        Assert.DoesNotContain(engine.Anomalies, anomaly =>
+            ChaosAnomalyTypes.DatRecordOnly.Contains(anomaly.ErrorType, StringComparer.Ordinal));
+        Assert.Equal(
+            legacyEngine.Anomalies.Select(anomaly => (anomaly.LineNumber, anomaly.ErrorType, anomaly.Column, anomaly.Description)),
+            engine.Anomalies.Select(anomaly => (anomaly.LineNumber, anomaly.ErrorType, anomaly.Column, anomaly.Description)));
     }
 }

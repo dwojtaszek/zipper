@@ -3,9 +3,11 @@ using System.Text;
 using System.Text.Json;
 using FsCheck.Xunit;
 using Xunit;
+using Zipper.LoadFiles;
 using Zipper.ManifestComparison;
 using Zipper.Profiles;
 using Zipper.Profiles.Generation;
+using Zipper.Validation;
 
 namespace Zipper.Tests.Properties;
 
@@ -166,6 +168,115 @@ public sealed class ChaosAndComparisonPropertyTests
         // After fix: anomalies only recorded when line was modified
         // eol always modifies, others may not with empty delimiters
         Assert.Contains(edgeAnomalies, a => a.ErrorType == "eol");
+    }
+
+    [Property]
+    public void DatAnomalyApplier_ApplyRecord_ShouldBeDeterministicAndAuditTheColumn(
+        byte rawTypeIndex,
+        ChaosSeedPropertyInput seedInput)
+    {
+        string[] chaosTypes = ["path-pointer", "field-length", "date-format", "null-byte", "trailing-empties"];
+        string chaosType = chaosTypes[rawTypeIndex % chaosTypes.Length];
+        IReadOnlyList<string> columns = ["Control Number", "File Path", "Date Created", "Author"];
+        var record = new LoadFileRecord
+        {
+            Columns = columns,
+            Values = ["DOC00000001", "NATIVES\\001\\DOC00000001.pdf", "2024-01-15", "Jane Doe"],
+            RecordId = $"DOC{seedInput.RecordOrdinal:D4}",
+        };
+        var serializer = new DatSerializer('|', '"', "~");
+        string line = serializer.RenderRecord(record);
+        var firstAnomalies = new List<ChaosAnomaly>();
+        var replayAnomalies = new List<ChaosAnomaly>();
+        var first = new DatAnomalyApplier(new Random(seedInput.Seed), "|", "\"", "\r\n", ["Date Created"]);
+        var replay = new DatAnomalyApplier(new Random(seedInput.Seed), "|", "\"", "\r\n", ["Date Created"]);
+
+        string mutated = first.Apply(2, line, record.RecordId, chaosType, firstAnomalies, record, serializer);
+        string replayed = replay.Apply(2, line, record.RecordId, chaosType, replayAnomalies, record, serializer);
+
+        Assert.NotEqual(line, mutated);
+        Assert.Equal(mutated, replayed);
+        var anomaly = Assert.Single(firstAnomalies);
+        Assert.Equal(anomaly, Assert.Single(replayAnomalies));
+        Assert.Equal(chaosType, anomaly.ErrorType);
+        Assert.Equal(record.RecordId, anomaly.RecordID);
+        Assert.False(string.IsNullOrWhiteSpace(anomaly.Column));
+        Assert.NotEqual("N/A", anomaly.Column);
+    }
+
+    [Property]
+    public void DatAnomalyApplier_PathPointer_ShouldAvoidExistingSourcePaths(
+        byte rawCollisionDepth,
+        bool useBackslashes,
+        ChaosSeedPropertyInput seedInput)
+    {
+        const string originalPath = "folder/doc.pdf";
+        int collisionDepth = (rawCollisionDepth % 5) + 1;
+        var existingFilePaths = new List<string> { originalPath };
+        for (int depth = 1; depth <= collisionDepth; depth++)
+        {
+            string suffix = depth == 1 ? "_MISSING" : $"_MISSING_{depth - 1}";
+            string extension = depth == 1 || depth % 2 == 0 ? ".docx" : ".pdf";
+            string existingPath = $"folder/doc{suffix}{extension}";
+            if (useBackslashes)
+            {
+                existingPath = existingPath.Replace('/', '\\');
+            }
+            else if (depth % 2 == 0)
+            {
+                existingPath = existingPath.ToUpperInvariant();
+            }
+
+            existingFilePaths.Add(existingPath);
+        }
+
+        var record = new LoadFileRecord
+        {
+            Columns = ["File Path"],
+            Values = [originalPath],
+            RecordId = $"DOC{seedInput.RecordOrdinal:D4}",
+        };
+        var serializer = new DatSerializer('|', '"', "~");
+        var anomalies = new List<ChaosAnomaly>();
+        var applier = new DatAnomalyApplier(
+            new Random(seedInput.Seed),
+            "|",
+            "\"",
+            "\r\n",
+            sourceFilePaths: existingFilePaths
+                .Select(path => path.Replace('\\', '/'))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase));
+        string line = serializer.RenderRecord(record);
+
+        string result = applier.Apply(2, line, record.RecordId, "path-pointer", anomalies, record, serializer);
+        string mutatedPath = DatLineParser.Parse(result, '|', '"')[0].Replace('\\', '/');
+
+        Assert.NotEqual(line, result);
+        Assert.Equal(
+            $"folder/doc_MISSING_{collisionDepth.ToString(CultureInfo.InvariantCulture)}.pdf",
+            mutatedPath);
+
+        var reorderedRecord = new LoadFileRecord
+        {
+            Columns = ["Author", "File Path"],
+            Values = ["Jane Doe", originalPath],
+            RecordId = $"DOC{seedInput.RecordOrdinal:D4}_REORDERED",
+        };
+        string reorderedLine = serializer.RenderRecord(reorderedRecord);
+        string reorderedResult = applier.Apply(
+            3,
+            reorderedLine,
+            reorderedRecord.RecordId,
+            "path-pointer",
+            anomalies,
+            reorderedRecord,
+            serializer);
+        var reorderedValues = DatLineParser.Parse(reorderedResult, '|', '"');
+
+        Assert.Equal("Jane Doe", reorderedValues[0]);
+        Assert.Equal(mutatedPath, reorderedValues[1].Replace('\\', '/'));
+        Assert.Equal(2, anomalies.Count);
+        Assert.All(anomalies, anomaly => Assert.Equal("path-pointer", anomaly.ErrorType));
     }
 
     [Property]

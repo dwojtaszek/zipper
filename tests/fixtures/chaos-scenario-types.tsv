@@ -5,3 +5,4 @@ broken-boundaries	opt-boundary,opt-pagecount,opt-path	opt
 field-overflow	eol,columns	dat
 full-chaos		dat
 transfer-encoding-failures	mixed-delimiters,encoding,quotes	dat
+realistic-import-failures	path-pointer,field-length,date-format,null-byte,trailing-empties	dat

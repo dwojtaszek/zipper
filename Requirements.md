@@ -678,13 +678,18 @@ This section clarifies behavior when multiple arguments interact:
 
 - **REQ-094**: A new optional command-line argument `--chaos-mode` shall be introduced. Requires `--loadfile-only`. Only supported for `dat` and `opt` Load File formats.
 - **REQ-095**: A new optional argument `--chaos-amount <N|N%>` shall specify the number or percentage of records to corrupt. Requires `--chaos-mode`. Defaults to 1%.
-- **REQ-096**: A new optional argument `--chaos-types <type1,type2,...>` shall filter specific anomaly types. Requires `--chaos-mode`. When not specified, all DAT types and all existing OPT types except `opt-encoding` are enabled; `full-chaos` enables every type.
+- **REQ-096**: A new optional argument `--chaos-types <type1,type2,...>` shall filter specific anomaly types. Requires `--chaos-mode`. When not specified, the original DAT types and all existing OPT types except `opt-encoding` are enabled; the new DAT record-level types are opt-in to preserve existing output. `full-chaos` enables every type.
 - **REQ-097**: The following DAT chaos anomaly types shall be supported:
   - `mixed-delimiters`: Replace one column delimiter with an alternative character
   - `quotes`: Omit a closing quote delimiter to create an unclosed field
   - `columns`: Add or remove a column delimiter to break expected column count
   - `eol`: Inject a raw unescaped newline within a data field
   - `encoding`: Insert invalid byte sequences between lines for the configured encoding
+  - `path-pointer`: Replace a File Path value with a plausible path that does not resolve; validate and audit the mismatch with `PathReconciliationValidator`, using an empty path if bounded collision retries cannot find a non-resolving candidate
+  - `field-length`: Replace a field value with a value longer than common platform limits
+  - `date-format`: Replace a date value with a documented malformed value
+  - `null-byte`: Insert a NULL byte and unsupported control character into a field
+  - `trailing-empties`: Append a long run of empty delimited columns
 - **REQ-098**: The following OPT chaos anomaly types shall be supported:
   - `opt-boundary`: Flip the document break flag (Y ↔ blank) in column 4
   - `opt-columns`: Add or remove a comma to break the 7-column format
@@ -737,6 +742,7 @@ This section clarifies behavior when multiple arguments interact:
 | `field-overflow` | Unescaped newlines and extra columns | `eol`, `columns` | 2% | DAT |
 | `full-chaos` | All anomaly types at high density | all types enabled | 10% | Any |
 | `transfer-encoding-failures` | Cross-platform transfer errors | `mixed-delimiters`, `encoding`, `quotes` | 4% | DAT |
+| `realistic-import-failures` | Documented DAT ingest failures | `path-pointer`, `field-length`, `date-format`, `null-byte`, `trailing-empties` | 5% | DAT |
 
 ---
 

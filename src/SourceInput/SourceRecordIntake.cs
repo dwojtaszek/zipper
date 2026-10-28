@@ -19,6 +19,8 @@ internal sealed class SourceRecordIntake
     private readonly HashSet<string> _seenControlNumbers = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _seenBatesNumbers = new(StringComparer.OrdinalIgnoreCase);
 
+    internal IReadOnlySet<string> SourcePaths => this._seenPaths;
+
     internal SourceRecordIntake(string sourceLabel, int maxRecords = MaxSourceRecords)
     {
         this._sourceLabel = sourceLabel;

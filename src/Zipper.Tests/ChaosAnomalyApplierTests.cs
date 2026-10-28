@@ -1,9 +1,23 @@
 using Xunit;
+using Zipper.LoadFiles;
+using Zipper.Validation;
 
 namespace Zipper.Tests;
 
 public class DatAnomalyApplierTests
 {
+    private static readonly IReadOnlyList<string> RecordColumns =
+        ["Control Number", "File Path", "Date Created", "Author"];
+
+    private static LoadFileRecord CreateRecord() => new()
+    {
+        Columns = RecordColumns,
+        Values = ["DOC00000001", "NATIVES\\001\\DOC00000001.pdf", "2024-01-15", "Jane Doe"],
+        RecordId = "DOC00000001",
+    };
+
+    private static readonly DatSerializer Serializer = new('|', '"', "~");
+
     [Fact]
     public void Apply_MixedDelimiters_NoDelimiterInLine_ReturnsUnchangedLine_AndDoesNotRecordAnomaly()
     {
@@ -127,6 +141,295 @@ public class DatAnomalyApplierTests
         Assert.NotEqual(line, result);
         Assert.Single(anomalies);
         Assert.Equal("eol", anomalies[0].ErrorType);
+    }
+
+    [Fact]
+    public void Apply_PathPointer_ReplacesPathWithMissingPath_AndPathReconciliationFindsIt()
+    {
+        var record = CreateRecord();
+        string line = Serializer.RenderRecord(record);
+        var anomalies = new List<ChaosAnomaly>();
+        var applier = new DatAnomalyApplier(new Random(42), "|", "\"", "\r\n");
+
+        string result = applier.Apply(2, line, record.RecordId, "path-pointer", anomalies, record, Serializer);
+
+        var fields = DatLineParser.Parse(result, '|', '"');
+        Assert.NotEqual(record.Values[1], fields[1]);
+        Assert.EndsWith("_MISSING.pdf", fields[1], StringComparison.Ordinal);
+        var anomaly = Assert.Single(anomalies);
+        Assert.Equal("path-pointer", anomaly.ErrorType);
+        Assert.Equal("File Path", anomaly.Column);
+
+        string archiveEntry = record.Values[1].Replace('\\', '/');
+        var validator = new PathReconciliationValidator();
+        var originalValidation = new ValidationResult();
+        validator.Validate([record.Values[1]], [archiveEntry], "test.dat", originalValidation);
+        Assert.Empty(originalValidation.Findings);
+
+        var validation = new ValidationResult();
+        validator.Validate([fields[1]], [archiveEntry], "test.dat", validation);
+        Assert.Contains(validation.Findings, finding => finding.Category == "PathReconciliation");
+    }
+
+    [Fact]
+    public void Apply_PathPointer_WhenTextPathPrecedesFilePath_ShouldTargetFilePath()
+    {
+        var record = new LoadFileRecord
+        {
+            Columns = ["Text Path", "File Path"],
+            Values = ["TEXT\\001\\DOC00000001.txt", "NATIVES\\001\\DOC00000001.pdf"],
+            RecordId = "DOC00000001",
+        };
+        string line = Serializer.RenderRecord(record);
+        var anomalies = new List<ChaosAnomaly>();
+        var applier = new DatAnomalyApplier(new Random(42), "|", "\"", "\r\n");
+
+        string result = applier.Apply(2, line, record.RecordId, "path-pointer", anomalies, record, Serializer);
+
+        var fields = DatLineParser.Parse(result, '|', '"');
+        Assert.Equal(record.Values[0], fields[0]);
+        Assert.EndsWith("_MISSING.pdf", fields[1], StringComparison.Ordinal);
+        Assert.Equal("File Path", Assert.Single(anomalies).Column);
+    }
+
+    [Fact]
+    public void Apply_PathPointer_WhenRecordColumnsChange_RecomputesFilePathIndex()
+    {
+        var applier = new DatAnomalyApplier(new Random(42), "|", "\"", "\r\n");
+        var firstRecord = new LoadFileRecord
+        {
+            Columns = ["File Path", "Author"],
+            Values = ["NATIVES\\001\\DOC00000001.pdf", "Jane Doe"],
+            RecordId = "DOC00000001",
+        };
+        var firstAnomalies = new List<ChaosAnomaly>();
+        _ = applier.Apply(
+            2,
+            Serializer.RenderRecord(firstRecord),
+            firstRecord.RecordId,
+            "path-pointer",
+            firstAnomalies,
+            firstRecord,
+            Serializer);
+
+        var secondRecord = new LoadFileRecord
+        {
+            Columns = ["Author", "File Path"],
+            Values = ["Jane Doe", "NATIVES\\001\\DOC00000002.pdf"],
+            RecordId = "DOC00000002",
+        };
+        var secondAnomalies = new List<ChaosAnomaly>();
+        string result = applier.Apply(
+            3,
+            Serializer.RenderRecord(secondRecord),
+            secondRecord.RecordId,
+            "path-pointer",
+            secondAnomalies,
+            secondRecord,
+            Serializer);
+
+        var fields = DatLineParser.Parse(result, '|', '"');
+        Assert.Equal("Jane Doe", fields[0]);
+        Assert.EndsWith("_MISSING.pdf", fields[1], StringComparison.Ordinal);
+        Assert.Equal("File Path", Assert.Single(secondAnomalies).Column);
+    }
+
+    [Fact]
+    public void Apply_PathPointer_WhenMissingPathCandidatesCollide_EmptiesPathAfterBoundedAttempts()
+    {
+        var sourcePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "folder/doc.pdf",
+            "folder/doc_MISSING.pdf",
+        };
+        for (int collisionIndex = 1; collisionIndex <= 64; collisionIndex++)
+        {
+            sourcePaths.Add($"folder/doc_MISSING_{collisionIndex}.pdf");
+        }
+
+        var record = new LoadFileRecord
+        {
+            Columns = ["File Path"],
+            Values = ["folder/doc.pdf"],
+            RecordId = "DOC00000001",
+        };
+        var anomalies = new List<ChaosAnomaly>();
+        var applier = new DatAnomalyApplier(
+            new Random(42),
+            "|",
+            "\"",
+            "\r\n",
+            sourceFilePaths: sourcePaths);
+
+        string result = applier.Apply(
+            2,
+            Serializer.RenderRecord(record),
+            record.RecordId,
+            "path-pointer",
+            anomalies,
+            record,
+            Serializer);
+
+        Assert.Equal(string.Empty, Assert.Single(DatLineParser.Parse(result, '|', '"')));
+        var anomaly = Assert.Single(anomalies);
+        Assert.Equal("File Path", anomaly.Column);
+        Assert.Contains("PathReconciliation:", anomaly.Description, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Apply_PathPointer_EmptyOriginalPath_ReplacesAndAuditsPath()
+    {
+        var record = new LoadFileRecord
+        {
+            Columns = ["File Path"],
+            Values = [string.Empty],
+            RecordId = "DOC00000001",
+        };
+        var anomalies = new List<ChaosAnomaly>();
+        var applier = new DatAnomalyApplier(new Random(42), "|", "\"", "\r\n");
+
+        string result = applier.Apply(
+            2,
+            Serializer.RenderRecord(record),
+            record.RecordId,
+            "path-pointer",
+            anomalies,
+            record,
+            Serializer);
+
+        Assert.Equal("NATIVES\\__MISSING__\\DOCUMENT.pdf", Assert.Single(DatLineParser.Parse(result, '|', '"')));
+        var anomaly = Assert.Single(anomalies);
+        Assert.Equal("File Path", anomaly.Column);
+        Assert.Contains("PathReconciliation:", anomaly.Description, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Apply_PathPointer_WithoutPathColumn_ReturnsUnchangedLine_AndDoesNotRecordAnomaly()
+    {
+        var record = new LoadFileRecord
+        {
+            Columns = ["Control Number", "Author"],
+            Values = ["DOC00000001", "Jane Doe"],
+            RecordId = "DOC00000001",
+        };
+        string line = Serializer.RenderRecord(record);
+        var anomalies = new List<ChaosAnomaly>();
+        var applier = new DatAnomalyApplier(new Random(42), "|", "\"", "\r\n");
+
+        string result = applier.Apply(2, line, record.RecordId, "path-pointer", anomalies, record, Serializer);
+
+        Assert.Equal(line, result);
+        Assert.Empty(anomalies);
+    }
+
+    [Theory]
+    [InlineData("field-length")]
+    [InlineData("null-byte")]
+    public void Apply_FieldAnomalies_WithoutEligibleColumn_ReturnUnchangedLine_AndDoNotRecordAnomaly(string type)
+    {
+        var record = new LoadFileRecord
+        {
+            Columns = ["Control Number", "File Path", "Date Created"],
+            Values = ["DOC00000001", "NATIVES\\001\\DOC00000001.pdf", "2024-01-15"],
+            RecordId = "DOC00000001",
+        };
+        string line = Serializer.RenderRecord(record);
+        var anomalies = new List<ChaosAnomaly>();
+        var applier = new DatAnomalyApplier(new Random(42), "|", "\"", "\r\n", ["Date Created"]);
+
+        string result = applier.Apply(2, line, record.RecordId, type, anomalies, record, Serializer);
+
+        Assert.Equal(line, result);
+        Assert.Empty(anomalies);
+    }
+
+    [Fact]
+    public void Apply_FieldLength_ExceedsCommonLimit_AndRecordsColumn()
+    {
+        var record = CreateRecord();
+        string line = Serializer.RenderRecord(record);
+        var anomalies = new List<ChaosAnomaly>();
+        var applier = new DatAnomalyApplier(new Random(42), "|", "\"", "\r\n", ["Date Created"]);
+
+        string result = applier.Apply(2, line, record.RecordId, "field-length", anomalies, record, Serializer);
+
+        var fields = DatLineParser.Parse(result, '|', '"');
+        Assert.True(fields[3].Length > 32_767);
+        var anomaly = Assert.Single(anomalies);
+        Assert.Equal("field-length", anomaly.ErrorType);
+        Assert.Equal("Author", anomaly.Column);
+    }
+
+    [Fact]
+    public void Apply_DateFormat_UsesMalformedDate_AndRecordsColumn()
+    {
+        var record = CreateRecord();
+        string line = Serializer.RenderRecord(record);
+        var anomalies = new List<ChaosAnomaly>();
+        var applier = new DatAnomalyApplier(new Random(42), "|", "\"", "\r\n", ["Date Created"]);
+
+        string result = applier.Apply(2, line, record.RecordId, "date-format", anomalies, record, Serializer);
+
+        var fields = DatLineParser.Parse(result, '|', '"');
+        Assert.Contains(fields[2], new[] { "00/00/0000", "2018-01-15 a.m.", "2018-044-09" });
+        var anomaly = Assert.Single(anomalies);
+        Assert.Equal("date-format", anomaly.ErrorType);
+        Assert.Equal("Date Created", anomaly.Column);
+    }
+
+    [Fact]
+    public void Apply_DateFormat_WithoutDateColumn_ReturnsUnchangedLine_AndDoesNotRecordAnomaly()
+    {
+        var record = new LoadFileRecord
+        {
+            Columns = ["Control Number", "File Path", "Author"],
+            Values = ["DOC00000001", "NATIVES\\001\\DOC00000001.pdf", "Jane Doe"],
+            RecordId = "DOC00000001",
+        };
+        string line = Serializer.RenderRecord(record);
+        var anomalies = new List<ChaosAnomaly>();
+        var applier = new DatAnomalyApplier(new Random(42), "|", "\"", "\r\n", ["Date Created"]);
+
+        string result = applier.Apply(2, line, record.RecordId, "date-format", anomalies, record, Serializer);
+
+        Assert.Equal(line, result);
+        Assert.Empty(anomalies);
+    }
+
+    [Fact]
+    public void Apply_NullByte_InsertsUnsupportedControls_AndRecordsColumn()
+    {
+        var record = CreateRecord();
+        string line = Serializer.RenderRecord(record);
+        var anomalies = new List<ChaosAnomaly>();
+        var applier = new DatAnomalyApplier(new Random(42), "|", "\"", "\r\n", ["Date Created"]);
+
+        string result = applier.Apply(2, line, record.RecordId, "null-byte", anomalies, record, Serializer);
+
+        var fields = DatLineParser.Parse(result, '|', '"');
+        Assert.Contains('\0', fields[3]);
+        Assert.Contains('\u0001', fields[3]);
+        var anomaly = Assert.Single(anomalies);
+        Assert.Equal("null-byte", anomaly.ErrorType);
+        Assert.Equal("Author", anomaly.Column);
+    }
+
+    [Fact]
+    public void Apply_TrailingEmpties_AppendsLongEmptyTail_AndRecordsAnomaly()
+    {
+        var record = CreateRecord();
+        string line = Serializer.RenderRecord(record);
+        var anomalies = new List<ChaosAnomaly>();
+        var applier = new DatAnomalyApplier(new Random(42), "|", "\"", "\r\n");
+
+        string result = applier.Apply(2, line, record.RecordId, "trailing-empties", anomalies, record, Serializer);
+
+        var fields = DatLineParser.Parse(result, '|', '"');
+        Assert.Equal(record.Columns.Count + 4096, fields.Count);
+        Assert.All(fields.Skip(record.Columns.Count), Assert.Empty);
+        var anomaly = Assert.Single(anomalies);
+        Assert.Equal("trailing-empties", anomaly.ErrorType);
+        Assert.Equal("Trailing empty columns after Author", anomaly.Column);
     }
 
     [Fact]
