@@ -230,7 +230,7 @@ if not errorlevel 1 ( echo [ ERROR ] Should have rejected --loadfile-only with -
 %BINARY% --loadfile-only --count 10 --output-path "%TEST_OUTPUT_DIR%\reject_5" --col-delim "20" 2>nul
 if not errorlevel 1 ( echo [ ERROR ] Should have rejected --col-delim without prefix & goto :cleanup )
 
-%BINARY% --loadfile-only --loadfile-format csv --count 10 --output-path "%TEST_OUTPUT_DIR%\accept_6" --chaos-mode --seed 42
+%BINARY% --loadfile-only --loadfile-format csv --count 10 --output-path "%TEST_OUTPUT_DIR%\accept_6" --chaos-mode --chaos-types csv-quote-escape --chaos-amount "100%%" --seed 42
 if errorlevel 1 ( echo [ ERROR ] CSV chaos mode should be supported & goto :cleanup )
 set "props_file="
 for %%F in ("%TEST_OUTPUT_DIR%\accept_6\*_properties.json") do set "props_file=%%F"
