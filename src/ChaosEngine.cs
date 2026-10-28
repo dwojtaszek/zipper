@@ -331,11 +331,12 @@ internal class ChaosEngine
                 }
                 else if (xmlApplier.TryApplyToDocument(documentXml, chosenType, out string mutated, out string column, out string description))
                 {
+                    string recordId = GetXmlRecordId(documentXml);
                     documentXml = mutated;
                     this.anomalies.Add(new ChaosAnomaly
                     {
                         LineNumber = documentIndex.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                        RecordID = GetXmlRecordId(documentXml),
+                        RecordID = recordId,
                         Column = column,
                         ErrorType = chosenType,
                         Description = description,

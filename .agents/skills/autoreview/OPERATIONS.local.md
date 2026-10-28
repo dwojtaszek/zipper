@@ -344,4 +344,12 @@
 - **outcome**: aligned direct XML Chaos Engine tests to emitted document counts and added exact-count two-document coverage. Production already passes EDRM-XML's document count without a header. Focused tests (10) and formatting passed; CodeRabbit's follow-up was verified.
 - **telemetry**: host=droid mode=branch specialists=6 bundle=~4K
 - **lessons**: EDRM-XML Chaos Engine tests should count emitted `<Document>` elements, not delimited-file header lines.
+
+### 2026-10-28 droid:local:pr1376-recordid
+
+- **findings**: 0 (one fast-pass correctness reviewer).
+- **outcome**: clean autoreview after capturing the original XML RecordID before mutation. Focused ChaosEngine tests (59) passed; mutation smoke killed all 3 tested mutations.
+- **telemetry**: host=droid mode=local specialists=1 bundle=~500c
+- **lessons**: none
+- **suppressions**: none
 - **suppressions**: none
