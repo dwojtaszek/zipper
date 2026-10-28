@@ -7,6 +7,7 @@ using Zipper.LoadFiles;
 using Zipper.ManifestComparison;
 using Zipper.Profiles;
 using Zipper.Profiles.Generation;
+using Zipper.Tests.TestHelpers;
 using Zipper.Validation;
 
 namespace Zipper.Tests.Properties;
@@ -458,6 +459,19 @@ public sealed class ChaosAndComparisonPropertyTests
         Assert.Equal(chaosType, anomaly.ErrorType);
         Assert.False(string.IsNullOrWhiteSpace(anomaly.Column));
         Assert.False(string.IsNullOrWhiteSpace(anomaly.Description));
+
+        if (chaosType == "concordance-delimiter")
+        {
+            Assert.Equal(
+                columns.Length - 1,
+                DelimitedTestParser.ParseLine(mutated, input.ColumnDelimiter, input.QuoteDelimiter).Count);
+        }
+        else
+        {
+            Assert.Equal($"Column {columns.Length}", anomaly.Column);
+            Assert.Throws<FormatException>(
+                () => DelimitedTestParser.ParseLine(mutated, input.ColumnDelimiter, input.QuoteDelimiter));
+        }
     }
 
     [Property]

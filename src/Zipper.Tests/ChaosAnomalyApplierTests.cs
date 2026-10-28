@@ -782,6 +782,40 @@ public class ConcordanceAnomalyApplierTests
     }
 
     [Fact]
+    public void Apply_ConcordanceDelimiter_IgnoresQuotedDelimiters_AndReportsBoundaryColumn()
+    {
+        var applier = new ConcordanceAnomalyApplier(new Random(42), ',', '"');
+        var anomalies = new List<ChaosAnomaly>();
+        const string line = "\"a,b\",\"c\"";
+
+        string result = applier.Apply(1, line, "DOC001", "concordance-delimiter", anomalies);
+
+        Assert.Equal("\"a,b\"\t\"c\"", result);
+        Assert.Equal("Delimiter 1", Assert.Single(anomalies).Column);
+    }
+
+    [Fact]
+    public void Apply_ConcordanceAnomalies_WithDoubledQuotes_UsesOnlyFieldBoundaries()
+    {
+        const string line = "\"a,\"\"b,c\"\"\",\"d\"";
+        var delimiterAnomalies = new List<ChaosAnomaly>();
+        var delimiterApplier = new ConcordanceAnomalyApplier(new Random(42), ',', '"');
+
+        string corruptedLine = delimiterApplier.Apply(1, line, "DOC001", "concordance-delimiter", delimiterAnomalies);
+
+        Assert.Equal("\"a,\"\"b,c\"\"\"\t\"d\"", corruptedLine);
+        Assert.Equal("Delimiter 1", Assert.Single(delimiterAnomalies).Column);
+
+        var quoteAnomalies = new List<ChaosAnomaly>();
+        var quoteApplier = new ConcordanceAnomalyApplier(new Random(42), ',', '"');
+
+        string escapedLine = quoteApplier.Apply(1, line, "DOC001", "concordance-quote-escape", quoteAnomalies);
+
+        Assert.Equal("\"a,\"\"b,c\"\"\",\"d", escapedLine);
+        Assert.Equal("Column 2", Assert.Single(quoteAnomalies).Column);
+    }
+
+    [Fact]
     public void Apply_ConcordanceDelimiter_WhenNoDelimiterInLine_ReturnsUnchanged_AndDoesNotRecordAnomaly()
     {
         var applier = new ConcordanceAnomalyApplier(new Random(42), '\u0014', '\u00fe');
@@ -807,6 +841,19 @@ public class ConcordanceAnomalyApplierTests
         Assert.NotEqual(line, result);
         Assert.Single(anomalies);
         Assert.Equal("concordance-quote-escape", anomalies[0].ErrorType);
+    }
+
+    [Fact]
+    public void Apply_ConcordanceQuoteEscape_CountsOnlyFieldDelimiters_AndReportsCorrectColumn()
+    {
+        var applier = new ConcordanceAnomalyApplier(new Random(42), ',', '"');
+        var anomalies = new List<ChaosAnomaly>();
+        const string line = "\"a,b\",\"c\"";
+
+        string result = applier.Apply(1, line, "DOC001", "concordance-quote-escape", anomalies);
+
+        Assert.Equal("\"a,b\",\"c", result);
+        Assert.Equal("Column 2", Assert.Single(anomalies).Column);
     }
 
     [Fact]

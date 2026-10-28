@@ -72,21 +72,39 @@ internal sealed class ConcordanceAnomalyApplier : IAnomalyApplier
     public byte[]? GetEncodingAnomaly(long lineNumber, long nextLineNumber, Encoding encoding, List<ChaosAnomaly> anomalies)
         => null;
 
+    private List<int> GetFieldDelimiterPositions(string line, int endPosition)
+    {
+        var positions = new List<int>();
+        bool inQuotes = false;
+        for (int i = 0; i < endPosition; i++)
+        {
+            if (line[i] == this.quoteDelim)
+            {
+                if (inQuotes && i + 1 < endPosition && line[i + 1] == this.quoteDelim)
+                {
+                    i++;
+                }
+                else
+                {
+                    inQuotes = !inQuotes;
+                }
+            }
+            else if (line[i] == this.fieldDelim && !inQuotes)
+            {
+                positions.Add(i);
+            }
+        }
+
+        return positions;
+    }
+
     /// <summary>
     /// Replaces one configured Concordance field delimiter with an unexpected delimiter,
     /// deliberately diverging from the Concordance convention to break import.
     /// </summary>
     private string ApplyConcordanceDelimiterCorruption(string line, out string column, out string description)
     {
-        // Collect all positions of the Concordance field delimiter
-        var positions = new List<int>();
-        for (int i = 0; i < line.Length; i++)
-        {
-            if (line[i] == this.fieldDelim)
-            {
-                positions.Add(i);
-            }
-        }
+        List<int> positions = GetFieldDelimiterPositions(line, line.Length);
 
         if (positions.Count == 0)
         {
@@ -95,8 +113,9 @@ internal sealed class ConcordanceAnomalyApplier : IAnomalyApplier
             return line;
         }
 
-        int targetPos = positions[this.random.Next(positions.Count)];
-        int delimIndex = positions.IndexOf(targetPos) + 1;
+        int targetIndex = this.random.Next(positions.Count);
+        int targetPos = positions[targetIndex];
+        int delimIndex = targetIndex + 1;
         string replacement = this.fieldDelim == ',' ? "\t" : ",";
         column = $"Delimiter {delimIndex}";
         description = $"Replaced Concordance field delimiter (ascii:{(int)this.fieldDelim}) at position {targetPos} with unexpected delimiter (ascii:{(int)replacement[0]}), breaking Concordance import parsing.";
@@ -120,14 +139,7 @@ internal sealed class ConcordanceAnomalyApplier : IAnomalyApplier
         }
 
         // Determine which field (1-based count of field delimiters before lastQuotePos)
-        int delimCount = 0;
-        for (int i = 0; i < lastQuotePos; i++)
-        {
-            if (line[i] == this.fieldDelim)
-            {
-                delimCount++;
-            }
-        }
+        int delimCount = GetFieldDelimiterPositions(line, lastQuotePos).Count;
 
         column = $"Column {delimCount + 1}";
         description = $"Dropped the closing Concordance quote delimiter (ascii:{(int)this.quoteDelim}) on column {delimCount + 1}, breaking Concordance field parsing.";
