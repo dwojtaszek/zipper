@@ -337,3 +337,11 @@
 - **telemetry**: host=droid mode=branch specialists=7 bundle=41490c
 - **lessons**: none
 - **suppressions**: none
+
+### 2026-10-28 droid:branch:issue-1300-edrm-xml-chaos-followup
+
+- **findings**: 0 ACTION, 0 INFO across 6 reviewers (correctness, testing, maintainability, adversarial, performance, API contract).
+- **outcome**: aligned direct XML Chaos Engine tests to emitted document counts and added exact-count two-document coverage. Production already passes EDRM-XML's document count without a header. Focused tests (10) and formatting passed; CodeRabbit's follow-up was verified.
+- **telemetry**: host=droid mode=branch specialists=6 bundle=~4K
+- **lessons**: EDRM-XML Chaos Engine tests should count emitted `<Document>` elements, not delimited-file header lines.
+- **suppressions**: none
