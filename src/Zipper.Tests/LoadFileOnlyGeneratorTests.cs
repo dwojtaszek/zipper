@@ -174,8 +174,7 @@ public class LoadFileOnlyGeneratorTests : IDisposable
     [Fact]
     public async Task GenerateAsync_EdrmXmlWithOneChaosTarget_AppliesAnomalyToTheDocument()
     {
-        int seed = Enumerable.Range(0, 100)
-            .First(candidate => ChaosSampler.SelectTargetLines(2, 1, new Random(candidate)).Contains(2));
+        const int seed = 42;
         var request = this.CreateRequest(LoadFileFormat.EdrmXml, count: 1);
         request.Metadata = request.Metadata with { Seed = seed };
         request.Chaos = request.Chaos with
