@@ -353,3 +353,11 @@
 - **lessons**: none
 - **suppressions**: none
 - **suppressions**: none
+
+### 2026-10-28 droid:branch:pr1376-quote-aware-anomalies
+
+- **findings**: Initial review found a doubled-quote test gap; CodeRabbit found two CSV embedded-newline defects. Final autoreview and CodeRabbit returned no findings.
+- **outcome**: Fixed quote-aware Concordance boundary counting and CSV newline placement. Added regression/property coverage. Focused tests, 90 properties, mutation smoke, formatting, and 3,636 unit tests passed. Two commits created locally; no publication performed.
+- **telemetry**: host=droid mode=branch specialists=6 bundle=~13K across follow-up review waves
+- **lessons**: Quoted-delimited anomaly tests should cover embedded delimiters and consecutive doubled-quote pairs.
+- **suppressions**: none
