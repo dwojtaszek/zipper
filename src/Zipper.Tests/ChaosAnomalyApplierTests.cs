@@ -661,6 +661,7 @@ public class CsvAnomalyApplierTests
         Assert.NotEqual(line, result);
         Assert.Single(anomalies);
         Assert.Equal("csv-quote-escape", anomalies[0].ErrorType);
+        Assert.Contains("doubled-quote escape (\"\")", anomalies[0].Description, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -138,7 +138,7 @@ internal sealed class CsvAnomalyApplier : IAnomalyApplier
         }
 
         column = $"Field {targetField}";
-        description = $"Reduced RFC 4180 doubled-quote escape (\"\"\"\") to a single quote in field {targetField}, breaking round-trip CSV parsing.";
+        description = $"Reduced RFC 4180 doubled-quote escape (\"\") to a single quote in field {targetField}, breaking round-trip CSV parsing.";
 
         return string.Concat(line.AsSpan(0, targetPos), "\"", line.AsSpan(targetPos + 2));
     }
