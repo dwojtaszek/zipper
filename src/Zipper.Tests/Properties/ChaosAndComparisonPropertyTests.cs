@@ -374,6 +374,133 @@ public sealed class ChaosAndComparisonPropertyTests
     }
 
     [Property]
+    public void CsvAnomalyApplier_Apply_ShouldMutateAndReplayFormatSpecificAnomalies(
+        DelimitedRecordPropertyInput input,
+        byte rawTypeIndex,
+        ChaosSeedPropertyInput seedInput)
+    {
+        string[] chaosTypes = ["csv-quote-escape", "csv-embedded-newline", "csv-bom"];
+        string chaosType = chaosTypes[rawTypeIndex % chaosTypes.Length];
+        string[] values = input.Values.Append("chaos-probe").ToArray();
+        string[] columns = input.Columns.Append("CHAOS_PROBE").ToArray();
+        var record = LoadFileRecordBuilder.Build(columns, values, $"DOC{seedInput.RecordOrdinal:D4}");
+        string line = new CsvSerializer().RenderRecord(record);
+        var firstAnomalies = new List<ChaosAnomaly>();
+        var replayAnomalies = new List<ChaosAnomaly>();
+        var first = new CsvAnomalyApplier(new Random(seedInput.Seed));
+        var replay = new CsvAnomalyApplier(new Random(seedInput.Seed));
+
+        string mutated = first.Apply(seedInput.LineNumber, line, record.RecordId, chaosType, firstAnomalies);
+        string replayed = replay.Apply(seedInput.LineNumber, line, record.RecordId, chaosType, replayAnomalies);
+
+        Assert.Equal(mutated, replayed);
+
+        if (chaosType == "csv-bom")
+        {
+            Assert.Equal(line, mutated);
+            byte[]? bytes = first.GetEncodingAnomaly(seedInput.LineNumber, seedInput.LineNumber + 1, Encoding.UTF8, firstAnomalies);
+            byte[]? replayBytes = replay.GetEncodingAnomaly(seedInput.LineNumber, seedInput.LineNumber + 1, Encoding.UTF8, replayAnomalies);
+            Assert.Equal(Encoding.UTF8.GetPreamble(), bytes);
+            Assert.Equal(bytes, replayBytes);
+            ChaosAnomaly anomaly = Assert.Single(firstAnomalies);
+            Assert.Equal(anomaly, Assert.Single(replayAnomalies));
+            Assert.Equal($"Boundary {seedInput.LineNumber.ToString(CultureInfo.InvariantCulture)}-{(seedInput.LineNumber + 1).ToString(CultureInfo.InvariantCulture)}", anomaly.LineNumber);
+            Assert.Equal("N/A", anomaly.RecordID);
+        }
+        else
+        {
+            Assert.NotEqual(line, mutated);
+            ChaosAnomaly anomaly = Assert.Single(firstAnomalies);
+            Assert.Equal(anomaly, Assert.Single(replayAnomalies));
+            Assert.Equal(seedInput.LineNumber.ToString(CultureInfo.InvariantCulture), anomaly.LineNumber);
+            Assert.Equal(record.RecordId, anomaly.RecordID);
+            Assert.Equal(chaosType, anomaly.ErrorType);
+            Assert.False(string.IsNullOrWhiteSpace(anomaly.Column));
+            Assert.False(string.IsNullOrWhiteSpace(anomaly.Description));
+        }
+    }
+
+    [Property]
+    public void ConcordanceAnomalyApplier_Apply_ShouldMutateAndReplayFormatSpecificAnomalies(
+        DelimitedRecordPropertyInput input,
+        byte rawTypeIndex,
+        ChaosSeedPropertyInput seedInput)
+    {
+        string[] chaosTypes = ["concordance-delimiter", "concordance-quote-escape"];
+        string chaosType = chaosTypes[rawTypeIndex % chaosTypes.Length];
+        string[] values = input.Values.Append("chaos-probe").ToArray();
+        string[] columns = input.Columns.Append("CHAOS_PROBE").ToArray();
+        var record = LoadFileRecordBuilder.Build(columns, values, $"DOC{seedInput.RecordOrdinal:D4}");
+        var request = new FileGenerationRequest
+        {
+            Delimiters = new Config.DelimiterConfig
+            {
+                ColumnDelimiter = input.ColumnDelimiter.ToString(),
+                QuoteDelimiter = input.QuoteDelimiter.ToString(),
+            },
+        };
+        var serializer = new ConcordanceSerializer(request);
+        string line = serializer.RenderRecord(record);
+        var firstAnomalies = new List<ChaosAnomaly>();
+        var replayAnomalies = new List<ChaosAnomaly>();
+        var first = new ConcordanceAnomalyApplier(new Random(seedInput.Seed), input.ColumnDelimiter, input.QuoteDelimiter);
+        var replay = new ConcordanceAnomalyApplier(new Random(seedInput.Seed), input.ColumnDelimiter, input.QuoteDelimiter);
+
+        string mutated = first.Apply(seedInput.LineNumber, line, record.RecordId, chaosType, firstAnomalies, record, serializer);
+        string replayed = replay.Apply(seedInput.LineNumber, line, record.RecordId, chaosType, replayAnomalies, record, serializer);
+
+        Assert.NotEqual(line, mutated);
+        Assert.Equal(mutated, replayed);
+        ChaosAnomaly anomaly = Assert.Single(firstAnomalies);
+        Assert.Equal(anomaly, Assert.Single(replayAnomalies));
+        Assert.Equal(seedInput.LineNumber.ToString(CultureInfo.InvariantCulture), anomaly.LineNumber);
+        Assert.Equal(record.RecordId, anomaly.RecordID);
+        Assert.Equal(chaosType, anomaly.ErrorType);
+        Assert.False(string.IsNullOrWhiteSpace(anomaly.Column));
+        Assert.False(string.IsNullOrWhiteSpace(anomaly.Description));
+    }
+
+    [Property]
+    public void ChaosEngine_ApplyXmlChaos_ShouldReplayAndAuditDocumentOrFileAnomalies(
+        byte rawTypeIndex,
+        ChaosSeedPropertyInput seedInput)
+    {
+        string[] chaosTypes = ["xml-unclosed-tag", "xml-bad-entity", "xml-encoding-lie"];
+        string chaosType = chaosTypes[rawTypeIndex % chaosTypes.Length];
+        int documentCount = Math.Clamp(seedInput.LineNumber, 1, 6);
+        string documents = string.Concat(Enumerable.Range(1, documentCount)
+            .Select(index => $"<Document DocID=\"DOC{index:D8}\"><Tags/></Document>"));
+        string xml = $"<?xml version=\"1.0\" encoding=\"utf-8\"?><Root><Batch>{documents}</Batch></Root>";
+        var first = new ChaosEngine(documentCount, "100%", chaosType, LoadFileFormat.EdrmXml, "|", "\"", "\r\n", seedInput.Seed);
+        var replay = new ChaosEngine(documentCount, "100%", chaosType, LoadFileFormat.EdrmXml, "|", "\"", "\r\n", seedInput.Seed);
+
+        string result = first.ApplyXmlChaos(xml);
+        string replayed = replay.ApplyXmlChaos(xml);
+
+        Assert.Equal(result, replayed);
+        Assert.Equal(first.Anomalies, replay.Anomalies);
+
+        if (chaosType == "xml-encoding-lie")
+        {
+            Assert.Contains("encoding=\"utf-16\"", result, StringComparison.Ordinal);
+            ChaosAnomaly anomaly = Assert.Single(first.Anomalies);
+            Assert.Equal("1", anomaly.LineNumber);
+            Assert.Equal("N/A", anomaly.RecordID);
+            Assert.Equal("XML declaration", anomaly.Column);
+        }
+        else
+        {
+            Assert.Throws<System.Xml.XmlException>(() => System.Xml.Linq.XDocument.Parse(result));
+            Assert.Equal(documentCount, first.Anomalies.Count);
+            Assert.All(first.Anomalies, anomaly =>
+            {
+                Assert.Equal(chaosType, anomaly.ErrorType);
+                Assert.NotEqual("N/A", anomaly.RecordID);
+            });
+        }
+    }
+
+    [Property]
     public void ProductionMetadataBudget_SanitizeAndValidate_ShouldEnforceAsciiAndByteBudget(
         PathSegmentPropertyInput segmentInput,
         ushort repeatFactor)

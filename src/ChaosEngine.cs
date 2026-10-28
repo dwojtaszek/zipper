@@ -18,7 +18,6 @@ internal class ChaosEngine
     private static readonly string[] OptChaosTypes = ChaosAnomalyTypes.Opt.ToArray();
     private static readonly string[] OptDefaultChaosTypes = OptChaosTypes.Where(type => type != "opt-encoding").ToArray();
     private static readonly string[] CsvChaosTypes = ChaosAnomalyTypes.Csv.ToArray();
-    private static readonly string[] CsvDefaultChaosTypes = CsvChaosTypes.Where(type => type != "csv-bom").ToArray();
     private static readonly string[] ConcordanceChaosTypes = ChaosAnomalyTypes.Concordance.ToArray();
     private static readonly string[] EdrmXmlChaosTypes = ChaosAnomalyTypes.EdrmXml.ToArray();
 
@@ -30,6 +29,7 @@ internal class ChaosEngine
     private readonly LoadFileFormat format;
     private readonly long totalLines;
     private readonly bool onlyOptEncoding;
+    private readonly bool onlyCsvBom;
     private readonly bool hasDatRecordOnlyTypes;
     private readonly bool noDatRecords;
     private readonly ChaosSampler sampler;
@@ -73,12 +73,15 @@ internal class ChaosEngine
         this.onlyOptEncoding = format == LoadFileFormat.Opt
             && this.enabledTypes.Count == 1
             && this.enabledTypes.Contains("opt-encoding");
+        this.onlyCsvBom = format == LoadFileFormat.Csv
+            && this.enabledTypes.Count == 1
+            && this.enabledTypes.Contains("csv-bom");
         this.hasDatRecordOnlyTypes = format == LoadFileFormat.Dat
             && this.enabledTypes.Count > 0
             && this.enabledTypes.Any(DatRecordOnlyChaosTypes.Contains);
         this.noDatRecords = this.hasDatRecordOnlyTypes && totalLines == 1;
         ChaosSampler.ValidateTotalLines(totalLines);
-        long targetableLines = GetTargetableLines(totalLines, this.onlyOptEncoding, this.hasDatRecordOnlyTypes);
+        long targetableLines = GetTargetableLines(totalLines, this.onlyOptEncoding, this.onlyCsvBom, this.hasDatRecordOnlyTypes);
         this.sampler = new ChaosSampler(targetableLines, chaosAmount, random);
 
         // If quote-delim is "none", disable the quotes chaos type
@@ -125,7 +128,7 @@ internal class ChaosEngine
             var defaultTypes = format switch
             {
                 LoadFileFormat.Opt => OptDefaultChaosTypes,
-                LoadFileFormat.Csv => CsvDefaultChaosTypes,
+                LoadFileFormat.Csv => CsvChaosTypes,
                 LoadFileFormat.Concordance => ConcordanceChaosTypes,
                 LoadFileFormat.EdrmXml => EdrmXmlChaosTypes,
                 _ => DatDefaultChaosTypes,
@@ -136,14 +139,14 @@ internal class ChaosEngine
         return new HashSet<string>(validTypes, StringComparer.OrdinalIgnoreCase);
     }
 
-    private static long GetTargetableLines(long totalLines, bool onlyOptEncoding, bool hasDatRecordOnlyTypes)
+    private static long GetTargetableLines(long totalLines, bool onlyOptEncoding, bool onlyCsvBom, bool hasDatRecordOnlyTypes)
     {
         if (hasDatRecordOnlyTypes)
         {
             return Math.Max(1, totalLines - 1);
         }
 
-        return onlyOptEncoding && totalLines > 1 ? totalLines - 1 : totalLines;
+        return (onlyOptEncoding || onlyCsvBom) && totalLines > 1 ? totalLines - 1 : totalLines;
     }
 
     private static IAnomalyApplier CreateApplier(
@@ -210,6 +213,11 @@ internal class ChaosEngine
                 && this.sampler.ShouldIntercept(lineNumber - 1);
         }
 
+        if (this.onlyCsvBom)
+        {
+            return this.totalLines > 1 && lineNumber < this.totalLines && this.sampler.ShouldIntercept(lineNumber);
+        }
+
         return !(this.onlyOptEncoding && lineNumber >= this.totalLines) && this.sampler.ShouldIntercept(lineNumber);
     }
 
@@ -259,6 +267,16 @@ internal class ChaosEngine
             chosenType = typeList.First(type => type != "opt-encoding");
         }
 
+        if (this.format == LoadFileFormat.Csv && lineNumber == this.totalLines && chosenType == "csv-bom")
+        {
+            if (this.onlyCsvBom)
+            {
+                return line;
+            }
+
+            chosenType = typeList.First(type => type != "csv-bom");
+        }
+
         return this.applier.Apply(lineNumber, line, recordId, chosenType, this.anomalies, record, serializer);
     }
 
@@ -280,7 +298,7 @@ internal class ChaosEngine
         var builder = new StringBuilder(xml.Length + 64);
         long documentIndex = 0;
         int searchFrom = 0;
-        bool encodingLieApplied = false;
+        bool encodingLieRequested = false;
 
         while (true)
         {
@@ -309,15 +327,7 @@ internal class ChaosEngine
 
                 if (chosenType == "xml-encoding-lie")
                 {
-                    encodingLieApplied = true;
-                    this.anomalies.Add(new ChaosAnomaly
-                    {
-                        LineNumber = documentIndex.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                        RecordID = GetXmlRecordId(documentXml),
-                        Column = "XML declaration",
-                        ErrorType = chosenType,
-                        Description = "Changed the XML declaration to claim UTF-16 while the emitted bytes remain UTF-8.",
-                    });
+                    encodingLieRequested = true;
                 }
                 else if (xmlApplier.TryApplyToDocument(documentXml, chosenType, out string mutated, out string column, out string description))
                 {
@@ -340,9 +350,17 @@ internal class ChaosEngine
         builder.Append(xml, searchFrom, xml.Length - searchFrom);
         string result = builder.ToString();
 
-        if (encodingLieApplied && XmlChaosAnomalyApplier.TryApplyEncodingLie(result, out string rewritten))
+        if (encodingLieRequested && XmlChaosAnomalyApplier.TryApplyEncodingLie(result, out string rewritten))
         {
             result = rewritten;
+            this.anomalies.Add(new ChaosAnomaly
+            {
+                LineNumber = "1",
+                RecordID = "N/A",
+                Column = "XML declaration",
+                ErrorType = "xml-encoding-lie",
+                Description = "Changed the XML declaration to claim UTF-16 while the emitted bytes remain UTF-8.",
+            });
         }
 
         return result;
@@ -371,6 +389,11 @@ internal class ChaosEngine
     /// <returns>Injected byte array, or null if encoding chaos is not enabled or not targeted.</returns>
     public byte[]? GetEncodingAnomaly(long lineNumber, long nextLineNumber, Encoding encoding)
     {
+        if (this.format == LoadFileFormat.Csv && nextLineNumber > this.totalLines)
+        {
+            return null;
+        }
+
         return this.applier.GetEncodingAnomaly(lineNumber, nextLineNumber, encoding, this.anomalies);
     }
 }

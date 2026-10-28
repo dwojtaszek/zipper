@@ -5,7 +5,7 @@ namespace Zipper;
 
 /// <summary>
 /// Applies Concordance-specific chaos anomalies to Concordance DAT lines.
-/// Concordance uses ASCII 20 (§) as the column delimiter and ASCII 254 (þ) as the
+/// Concordance uses ASCII 20 (DC4) as the column delimiter and ASCII 254 (þ) as the
 /// quote delimiter — distinct from the generic DAT arms in <see cref="DatAnomalyApplier"/>.
 /// <list type="bullet">
 ///   <item><term>concordance-delimiter</term><description>Replaces one Concordance field delimiter (ASCII 20) with an ASCII comma, breaking Concordance import while leaving standard-DAT parsers confused.</description></item>
@@ -73,8 +73,8 @@ internal sealed class ConcordanceAnomalyApplier : IAnomalyApplier
         => null;
 
     /// <summary>
-    /// Replaces one Concordance field delimiter (ASCII 20) with an ASCII comma,
-    /// deliberately diverging from the Concordance delimiter convention to break import.
+    /// Replaces one configured Concordance field delimiter with an unexpected delimiter,
+    /// deliberately diverging from the Concordance convention to break import.
     /// </summary>
     private string ApplyConcordanceDelimiterCorruption(string line, out string column, out string description)
     {
@@ -97,10 +97,11 @@ internal sealed class ConcordanceAnomalyApplier : IAnomalyApplier
 
         int targetPos = positions[this.random.Next(positions.Count)];
         int delimIndex = positions.IndexOf(targetPos) + 1;
+        string replacement = this.fieldDelim == ',' ? "\t" : ",";
         column = $"Delimiter {delimIndex}";
-        description = $"Replaced Concordance field delimiter (ascii:{(int)this.fieldDelim}) at position {targetPos} with comma (ascii:44), breaking Concordance import parsing.";
+        description = $"Replaced Concordance field delimiter (ascii:{(int)this.fieldDelim}) at position {targetPos} with unexpected delimiter (ascii:{(int)replacement[0]}), breaking Concordance import parsing.";
 
-        return string.Concat(line.AsSpan(0, targetPos), ",", line.AsSpan(targetPos + 1));
+        return string.Concat(line.AsSpan(0, targetPos), replacement, line.AsSpan(targetPos + 1));
     }
 
     /// <summary>

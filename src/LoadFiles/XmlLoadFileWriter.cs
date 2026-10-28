@@ -33,7 +33,14 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
                 await WriteDocumentAsync(buffered, request, processedFiles, cancellationToken).ConfigureAwait(false);
                 string xml = Encoding.UTF8.GetString(buffered.GetBuffer(), 0, checked((int)buffered.Length));
                 string chaosXml = chaosEngine.ApplyXmlChaos(xml);
-                await stream.WriteAsync(Encoding.UTF8.GetBytes(chaosXml), cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    await stream.WriteAsync(Encoding.UTF8.GetBytes(chaosXml), cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is IOException or InvalidOperationException)
+                {
+                    throw new InvalidOperationException($"Failed to write XML load file: {ex.Message}", ex);
+                }
             }
             finally
             {
@@ -60,13 +67,12 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
             // Intentionally UTF-8: EDRM XML schema requires UTF-8 per the XML declaration.
             Encoding = Encoding.UTF8,
             CloseOutput = false,
-
-            // Loadfile-Only Mode honours --eol so Line Ending validation matches the request;
-            // Standard mode keeps its historical platform newline.
-            NewLineChars = request.LoadfileOnly
-                ? LoadFileEmitter.GetEolString(request.Delimiters?.EndOfLine!)
-                : Environment.NewLine,
         };
+        if (request.LoadfileOnly)
+        {
+            // Loadfile-Only Mode honours --eol so Line Ending validation matches the request.
+            settings.NewLineChars = LoadFileEmitter.GetEolString(request.Delimiters?.EndOfLine!);
+        }
 
         var writer = System.Xml.XmlWriter.Create(stream, settings);
         try

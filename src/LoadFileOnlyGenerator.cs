@@ -231,12 +231,14 @@ internal static class LoadFileOnlyGenerator
             var pageCount = request.Tiff.PageRange.HasValue
                 ? TiffMultiPageGenerator.GetPageCount(request.Tiff.PageRange, request.Metadata.Seed, index)
                 : random.Next(1, 11);
+            bool hasAttachment = FamilyPlan.HasAttachment(request, index);
 
             shells.Add(new FileData
             {
                 WorkItem = workItem,
                 DataLength = random.Next(1024, 10_485_760),
                 PageCount = pageCount,
+                Attachment = hasAttachment ? ("attachment.pdf", Array.Empty<byte>()) : null,
                 Hashes = request.Hash.Mode == Config.HashMode.Simulated ? GenerateSimulatedHashes(request, workItem) : null,
             });
         }

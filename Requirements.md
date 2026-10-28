@@ -659,7 +659,7 @@ This section clarifies behavior when multiple arguments interact:
 - **REQ-090**: The `--loadfile-only` mode shall generate a companion `_properties.json` audit file containing format details, encoding, delimiter configuration, and chaos anomaly manifest, including a `totalRecords` count of data records (excluding the header row).
 - **REQ-091**: The `--loadfile-only` flag shall conflict with `--target-zip-size` and `--include-load-file`. The application must reject these combinations with a clear error message.
 - **REQ-092**: A new optional argument `--eol <CRLF|LF|CR>` shall control the line ending format. Defaults to `CRLF`. Standard mode uses the platform newline irrespective of this argument.
-- **REQ-123**: A new optional argument `--loadfile-format <dat|opt>` shall be introduced as an alias for `--load-file-format` specifically for use in loadfile-only mode. Defaults to `dat`.
+- **REQ-123**: A new optional argument `--loadfile-format <dat|opt|csv|concordance|edrm-xml>` shall be introduced as an alias for `--load-file-format` specifically for use in loadfile-only mode. `xml` is accepted as an alias for `edrm-xml`. Defaults to `dat`.
 - **REQ-093**: New strict-prefix delimiter arguments shall be introduced (supported in all modes (standard, loadfile-only, production-set)):
   - `--col-delim <ascii:N|char:C>`: Column delimiter
   - `--quote-delim <ascii:N|char:C|none>`: Quote delimiter (supports `none` to omit quotes)
@@ -678,7 +678,7 @@ This section clarifies behavior when multiple arguments interact:
 
 - **REQ-094**: A new optional command-line argument `--chaos-mode` shall be introduced. Requires `--loadfile-only`. Supported for the `dat`, `opt`, `csv`, `concordance`, and `edrm-xml` Load File formats, each with its own anomaly catalog.
 - **REQ-095**: A new optional argument `--chaos-amount <N|N%>` shall specify the number or percentage of records to corrupt. Requires `--chaos-mode`. Defaults to 1%.
-- **REQ-096**: A new optional argument `--chaos-types <type1,type2,...>` shall filter specific anomaly types. Requires `--chaos-mode`. When not specified, the original DAT types, all existing OPT types except `opt-encoding`, and every type in the selected non-DAT/OPT format's catalog are enabled; the new DAT record-level types are opt-in to preserve existing output. `full-chaos` enables every type for the selected format.
+- **REQ-096**: A new optional argument `--chaos-types <type1,type2,...>` shall filter specific anomaly types. Requires `--chaos-mode`. When not specified, the original DAT types, all existing OPT types except `opt-encoding`, and every type in the selected CSV, Concordance, or EDRM-XML catalog are enabled; the new DAT record-level types are opt-in to preserve existing output. `full-chaos` enables every type for the selected format.
 - **REQ-097**: The following DAT chaos anomaly types shall be supported:
   - `mixed-delimiters`: Replace one column delimiter with an alternative character
   - `quotes`: Omit a closing quote delimiter to create an unclosed field

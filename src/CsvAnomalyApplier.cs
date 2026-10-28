@@ -225,14 +225,20 @@ internal sealed class CsvAnomalyApplier : IAnomalyApplier
 
     private bool TryChooseField(string line, out int start, out int end, out int fieldNumber)
     {
-        var fields = new List<(int Start, int End)>();
+        var fields = new List<(int Start, int End, int Number)>();
         int fieldStart = 0;
+        int currentFieldNumber = 1;
         for (int i = 0; i <= line.Length; i++)
         {
             if (i == line.Length || line[i] == ',')
             {
-                fields.Add((fieldStart, i));
+                if (i > fieldStart)
+                {
+                    fields.Add((fieldStart, i, currentFieldNumber));
+                }
+
                 fieldStart = i + 1;
+                currentFieldNumber++;
             }
         }
 
@@ -244,9 +250,7 @@ internal sealed class CsvAnomalyApplier : IAnomalyApplier
             return false;
         }
 
-        int chosen = this.random.Next(fields.Count);
-        (start, end) = fields[chosen];
-        fieldNumber = chosen + 1;
+        (start, end, fieldNumber) = fields[this.random.Next(fields.Count)];
         return true;
     }
 }

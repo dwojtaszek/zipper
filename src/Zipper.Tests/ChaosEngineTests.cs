@@ -1206,4 +1206,75 @@ public class ChaosEngineTests
         Assert.Equal("xml-encoding-lie", anomaly.ErrorType);
         Assert.Equal("XML declaration", anomaly.Column);
     }
+
+    [Fact]
+    public void ApplyXmlChaos_WithEncodingLieAcrossMultipleDocuments_AuditsOneFileWideAnomaly()
+    {
+        var engine = new ChaosEngine(2, "100%", "xml-encoding-lie", LoadFileFormat.EdrmXml, "|", "\"", "\r\n", 42);
+        const string xml = "<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?><Root><Batch><Document DocID=\"DOC1\"><Tags/></Document><Document DocID=\"DOC2\"><Tags/></Document></Batch></Root>";
+
+        string result = engine.ApplyXmlChaos(xml);
+
+        Assert.Contains("encoding=\"utf-16\"", result, StringComparison.Ordinal);
+        var anomaly = Assert.Single(engine.Anomalies);
+        Assert.Equal("xml-encoding-lie", anomaly.ErrorType);
+        Assert.Equal("1", anomaly.LineNumber);
+        Assert.Equal("N/A", anomaly.RecordID);
+        Assert.Equal("XML declaration", anomaly.Column);
+    }
+
+    [Fact]
+    public void CsvBom_WithEveryRecordTargeted_DoesNotInjectAtEndOfFile()
+    {
+        var engine = new ChaosEngine(3, "100%", "csv-bom", LoadFileFormat.Csv, ",", "\"", "\r\n", 42);
+
+        for (int lineNumber = 1; lineNumber <= 3; lineNumber++)
+        {
+            if (engine.ShouldIntercept(lineNumber))
+            {
+                _ = engine.Intercept(lineNumber, "value,field", $"DOC{lineNumber:D8}");
+            }
+
+            _ = engine.GetEncodingAnomaly(lineNumber, lineNumber + 1, Encoding.UTF8);
+        }
+
+        Assert.Equal(2, engine.Anomalies.Count);
+        Assert.DoesNotContain(engine.Anomalies, anomaly => anomaly.LineNumber == "Boundary 3-4");
+    }
+
+    [Fact]
+    public void Intercept_CsvBomWithOtherAnomalyTypes_KeepsLastRecordTargetable()
+    {
+        var engine = new ChaosEngine(3, "100%", "csv-bom,csv-quote-escape", LoadFileFormat.Csv, ",", "\"", "\r\n", 42);
+
+        for (int lineNumber = 1; lineNumber <= 3; lineNumber++)
+        {
+            if (engine.ShouldIntercept(lineNumber))
+            {
+                _ = engine.Intercept(lineNumber, "value,field", $"DOC{lineNumber:D8}");
+            }
+
+            _ = engine.GetEncodingAnomaly(lineNumber, lineNumber + 1, Encoding.UTF8);
+        }
+
+        Assert.Contains(engine.Anomalies, anomaly => anomaly.LineNumber == "3" && anomaly.ErrorType == "csv-quote-escape");
+    }
+
+    [Fact]
+    public void Intercept_CsvDefaults_IncludesCsvBomAnomaly()
+    {
+        var engine = new ChaosEngine(6, "100%", null, LoadFileFormat.Csv, ",", "\"", "\r\n", 42);
+
+        for (int lineNumber = 1; lineNumber <= 6; lineNumber++)
+        {
+            if (engine.ShouldIntercept(lineNumber))
+            {
+                _ = engine.Intercept(lineNumber, "value,field", $"DOC{lineNumber:D8}");
+            }
+
+            _ = engine.GetEncodingAnomaly(lineNumber, lineNumber + 1, Encoding.UTF8);
+        }
+
+        Assert.Contains(engine.Anomalies, anomaly => anomaly.ErrorType == "csv-bom");
+    }
 }

@@ -709,6 +709,25 @@ public class CsvAnomalyApplierTests
         Assert.Equal("csv-embedded-newline", anomaly.ErrorType);
     }
 
+    [Theory]
+    [InlineData("csv-quote-escape")]
+    [InlineData("csv-embedded-newline")]
+    public void Apply_WithOnlyOneNonEmptyField_AlwaysMutatesThatField(string chaosType)
+    {
+        const string line = ",value,";
+
+        for (int seed = 0; seed < 20; seed++)
+        {
+            var applier = new CsvAnomalyApplier(new Random(seed));
+            var anomalies = new List<ChaosAnomaly>();
+
+            string result = applier.Apply(1, line, "DOC001", chaosType, anomalies);
+
+            Assert.NotEqual(line, result);
+            Assert.Equal(chaosType, Assert.Single(anomalies).ErrorType);
+        }
+    }
+
     [Fact]
     public void Apply_CsvBom_DoesNotChangeLine_RecordsAnomalyInGetEncodingAnomaly()
     {
