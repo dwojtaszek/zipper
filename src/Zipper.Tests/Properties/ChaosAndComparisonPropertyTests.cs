@@ -469,7 +469,7 @@ public sealed class ChaosAndComparisonPropertyTests
         string chaosType = chaosTypes[rawTypeIndex % chaosTypes.Length];
         int documentCount = Math.Clamp(seedInput.LineNumber, 1, 6);
         string documents = string.Concat(Enumerable.Range(1, documentCount)
-            .Select(index => $"<Document DocID=\"DOC{index:D8}\"><Tags/></Document>"));
+            .Select(index => $"<Document DocID=\"DOC{index:D8}\"><Tags><Tag>encoding=\"utf-8\"</Tag></Tags></Document>"));
         string xml = $"<?xml version=\"1.0\" encoding=\"utf-8\"?><Root><Batch>{documents}</Batch></Root>";
         var first = new ChaosEngine(documentCount, "100%", chaosType, LoadFileFormat.EdrmXml, "|", "\"", "\r\n", seedInput.Seed);
         var replay = new ChaosEngine(documentCount, "100%", chaosType, LoadFileFormat.EdrmXml, "|", "\"", "\r\n", seedInput.Seed);
@@ -483,6 +483,7 @@ public sealed class ChaosAndComparisonPropertyTests
         if (chaosType == "xml-encoding-lie")
         {
             Assert.Contains("encoding=\"utf-16\"", result, StringComparison.Ordinal);
+            Assert.Equal(documentCount, result.Split("encoding=\"utf-8\"", StringSplitOptions.None).Length - 1);
             ChaosAnomaly anomaly = Assert.Single(first.Anomalies);
             Assert.Equal("1", anomaly.LineNumber);
             Assert.Equal("N/A", anomaly.RecordID);

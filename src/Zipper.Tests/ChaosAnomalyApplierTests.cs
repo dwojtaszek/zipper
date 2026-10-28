@@ -913,20 +913,77 @@ public class XmlChaosAnomalyApplierTests
     }
 
     [Fact]
-    public void TryApplyEncodingLie_WithUtf8Declaration_ClaimsUtf16()
+    public void TryApplyEncodingLie_WithUtf8Declaration_ChangesOnlyDeclaration()
     {
-        const string xml = "<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?><Root/>";
+        const string xml = "<?xml version=\"1.0\" encoding=\"utf-8\"?><Root><Text>encoding=\"utf-8\"</Text></Root>";
+        const string expected = "<?xml version=\"1.0\" encoding=\"utf-16\"?><Root><Text>encoding=\"utf-8\"</Text></Root>";
 
         bool changed = XmlChaosAnomalyApplier.TryApplyEncodingLie(xml, out string result);
 
         Assert.True(changed);
-        Assert.Contains("encoding=\"utf-16\"", result, StringComparison.Ordinal);
+        Assert.Equal(expected, result);
     }
 
     [Fact]
-    public void TryApplyEncodingLie_WithoutDeclaration_ReturnsUnchanged()
+    public void TryApplyEncodingLie_WithoutDeclarationContainingUtf8Text_ReturnsUnchanged()
     {
-        const string xml = "<Root/>";
+        const string xml = "<Root><Text>encoding=\"utf-8\"</Text></Root>";
+
+        bool changed = XmlChaosAnomalyApplier.TryApplyEncodingLie(xml, out string result);
+
+        Assert.False(changed);
+        Assert.Equal(xml, result);
+    }
+
+    [Fact]
+    public void TryApplyEncodingLie_WithBomPrefixedDeclaration_ChangesOnlyDeclaration()
+    {
+        const string xml = "\uFEFF<?xml version=\"1.0\" encoding=\"utf-8\"?><Root><Text>encoding=\"utf-8\"</Text></Root>";
+        const string expected = "\uFEFF<?xml version=\"1.0\" encoding=\"utf-16\"?><Root><Text>encoding=\"utf-8\"</Text></Root>";
+
+        bool changed = XmlChaosAnomalyApplier.TryApplyEncodingLie(xml, out string result);
+
+        Assert.True(changed);
+        Assert.Equal(expected, result);
+    }
+
+    [Fact]
+    public void TryApplyEncodingLie_WithDeclarationWithoutUtf8Encoding_ReturnsUnchanged()
+    {
+        const string xml = "<?xml version=\"1.0\"?><Root><Text>encoding=\"utf-8\"</Text></Root>";
+
+        bool changed = XmlChaosAnomalyApplier.TryApplyEncodingLie(xml, out string result);
+
+        Assert.False(changed);
+        Assert.Equal(xml, result);
+    }
+
+    [Fact]
+    public void TryApplyEncodingLie_WithUtf16Declaration_ReturnsUnchanged()
+    {
+        const string xml = "<?xml version=\"1.0\" encoding=\"utf-16\"?><Root><Text>encoding=\"utf-8\"</Text></Root>";
+
+        bool changed = XmlChaosAnomalyApplier.TryApplyEncodingLie(xml, out string result);
+
+        Assert.False(changed);
+        Assert.Equal(xml, result);
+    }
+
+    [Fact]
+    public void TryApplyEncodingLie_WithXmlStylesheetProcessingInstruction_ReturnsUnchanged()
+    {
+        const string xml = "<?xml-stylesheet encoding=\"utf-8\"?><Root/>";
+
+        bool changed = XmlChaosAnomalyApplier.TryApplyEncodingLie(xml, out string result);
+
+        Assert.False(changed);
+        Assert.Equal(xml, result);
+    }
+
+    [Fact]
+    public void TryApplyEncodingLie_WithUnterminatedDeclaration_ReturnsUnchanged()
+    {
+        const string xml = "<?xml version=\"1.0\" encoding=\"utf-8\"";
 
         bool changed = XmlChaosAnomalyApplier.TryApplyEncodingLie(xml, out string result);
 

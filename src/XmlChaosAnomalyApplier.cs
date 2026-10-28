@@ -91,16 +91,34 @@ internal sealed class XmlChaosAnomalyApplier : IAnomalyApplier
     /// </summary>
     public static bool TryApplyEncodingLie(string xml, out string result)
     {
+        const string xmlDeclarationPrefix = "<?xml";
         const string utf8Declaration = "encoding=\"utf-8\"";
         const string utf16Declaration = "encoding=\"utf-16\"";
+        int declarationStart = xml.StartsWith('\uFEFF') ? 1 : 0;
 
-        if (!xml.Contains(utf8Declaration, StringComparison.Ordinal))
+        if (!xml.AsSpan(declarationStart).StartsWith(xmlDeclarationPrefix, StringComparison.Ordinal)
+            || xml.Length <= declarationStart + xmlDeclarationPrefix.Length
+            || xml[declarationStart + xmlDeclarationPrefix.Length] is not (' ' or '\t' or '\r' or '\n'))
         {
             result = xml;
             return false;
         }
 
-        result = xml.Replace(utf8Declaration, utf16Declaration, StringComparison.Ordinal);
+        int declarationEnd = xml.IndexOf("?>", declarationStart, StringComparison.Ordinal);
+        int encodingIndex = declarationEnd < 0
+            ? -1
+            : xml.IndexOf(utf8Declaration, declarationStart, declarationEnd - declarationStart, StringComparison.Ordinal);
+
+        if (encodingIndex < 0)
+        {
+            result = xml;
+            return false;
+        }
+
+        result = string.Concat(
+            xml.AsSpan(0, encodingIndex),
+            utf16Declaration,
+            xml.AsSpan(encodingIndex + utf8Declaration.Length));
         return true;
     }
 }
