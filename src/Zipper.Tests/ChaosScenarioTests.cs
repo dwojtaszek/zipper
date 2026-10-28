@@ -125,6 +125,27 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
         Assert.Equal("path-pointer,field-length,date-format,null-byte,trailing-empties", realistic.ChaosTypes);
         Assert.Equal("5%", realistic.DefaultAmount);
         Assert.Equal(LoadFileFormat.Dat, realistic.RequiredFormat);
+
+        // 8. csv-escaping-failures
+        var csv = ChaosScenarios.GetByName("csv-escaping-failures");
+        Assert.NotNull(csv);
+        Assert.Equal("csv-quote-escape,csv-embedded-newline,csv-bom", csv.ChaosTypes);
+        Assert.Equal("5%", csv.DefaultAmount);
+        Assert.Equal(LoadFileFormat.Csv, csv.RequiredFormat);
+
+        // 9. concordance-import-failures
+        var concordance = ChaosScenarios.GetByName("concordance-import-failures");
+        Assert.NotNull(concordance);
+        Assert.Equal("concordance-delimiter,concordance-quote-escape", concordance.ChaosTypes);
+        Assert.Equal("5%", concordance.DefaultAmount);
+        Assert.Equal(LoadFileFormat.Concordance, concordance.RequiredFormat);
+
+        // 10. edrm-xml-structural-failures
+        var xml = ChaosScenarios.GetByName("edrm-xml-structural-failures");
+        Assert.NotNull(xml);
+        Assert.Equal("xml-unclosed-tag,xml-bad-entity,xml-encoding-lie", xml.ChaosTypes);
+        Assert.Equal("5%", xml.DefaultAmount);
+        Assert.Equal(LoadFileFormat.EdrmXml, xml.RequiredFormat);
     }
 
     // --- CLI integration tests ---

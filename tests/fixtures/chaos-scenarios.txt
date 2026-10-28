@@ -5,3 +5,6 @@ field-overflow
 full-chaos
 transfer-encoding-failures
 realistic-import-failures
+csv-escaping-failures
+concordance-import-failures
+edrm-xml-structural-failures

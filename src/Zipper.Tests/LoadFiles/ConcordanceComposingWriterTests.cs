@@ -513,5 +513,38 @@ public class ConcordanceComposingWriterTests : TempDirectoryTestBase
         Assert.Contains("'folder/file_with_''quote\r\nand_newline.pdf'", content, StringComparison.Ordinal);
         Assert.Contains("|", content, StringComparison.Ordinal);
     }
-}
 
+    [Fact]
+    public async Task ConcordanceWriter_WithChaosEngine_InjectsConcordanceSpecificAnomaly()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { OutputPath = this.TempDir, FileCount = 1, FileType = "pdf" },
+            LoadFile = new LoadFileConfig { Encoding = "ANSI" },
+            Metadata = new MetadataConfig { WithMetadata = true, Seed = 42 },
+        };
+        var files = new List<FileData>
+        {
+            new()
+            {
+                WorkItem = new FileWorkItem
+                {
+                    Index = 1,
+                    FolderNumber = 1,
+                    FileName = "doc1.pdf",
+                    FilePathInZip = "folder/doc1.pdf",
+                    FileType = "pdf",
+                },
+                DataLength = 1234,
+            },
+        };
+        var engine = new ChaosEngine(2, "1", "concordance-delimiter", LoadFileFormat.Concordance, "\u0014", "\u00fe", "\r\n", seed: 42);
+
+        using var stream = new MemoryStream();
+        await new ConcordanceComposingWriter().WriteAsync(stream, request, files, engine);
+
+        var anomaly = Assert.Single(engine.Anomalies);
+        Assert.Equal("concordance-delimiter", anomaly.ErrorType);
+        Assert.Contains(anomaly.ErrorType, ChaosAnomalyTypes.Concordance);
+    }
+}

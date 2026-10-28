@@ -123,27 +123,6 @@ public sealed class LoadFileModule : CliModule
                 return false;
             }
 
-            var currentFormat = ArgumentHelpers.GetLoadFileFormat(_loadFileFormat) ?? LoadFileFormat.Dat;
-            if (currentFormat != LoadFileFormat.Dat && currentFormat != LoadFileFormat.Opt)
-            {
-                Console.Error.WriteLine("Error: --loadfile-only mode is only supported for 'dat' and 'opt' load file formats.");
-                config = default!;
-                return false;
-            }
-
-            if (!string.IsNullOrEmpty(_loadFileFormats))
-            {
-                foreach (var fmt in _loadFileFormats.Split(','))
-                {
-                    var multiFormat = ArgumentHelpers.GetLoadFileFormat(fmt.Trim());
-                    if (multiFormat.HasValue && multiFormat.Value != LoadFileFormat.Dat && multiFormat.Value != LoadFileFormat.Opt)
-                    {
-                        Console.Error.WriteLine("Error: --loadfile-only mode is only supported for 'dat' and 'opt' load file formats.");
-                        config = default!;
-                        return false;
-                    }
-                }
-            }
         }
 
         IReadOnlyList<LoadFileFormat> formats;

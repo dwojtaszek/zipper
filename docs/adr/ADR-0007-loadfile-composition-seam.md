@@ -19,17 +19,21 @@ Split delimited load file generation into three deep modules with a single, real
 
 - **Composer** decides *what columns, in what order, with what raw values*. `DatComposer` absorbs all three writer modes plus the column-profile path (retiring `ProfileDrivenDatWriter`). Values are emitted **raw**; the serializer escapes once.
 - **Serializer** is **pure**: record/header → line. No stream, no EOL, no chaos.
-- **Emitter** is the single I/O and chaos authority. Both paths stream lazily (O(1) auxiliary memory, no row materialization): non-chaos output goes through a buffered `StreamWriter` (BOM once); the chaos path renders each line, applies line-targeted interception, and writes cross-line encoding-anomaly bytes straight to the stream after it, preserving byte order. Chaos now runs in exactly one place.
+- **Emitter** is the single I/O and chaos authority for delimited formats. Both paths stream lazily (O(1) auxiliary memory, no row materialization): non-chaos output goes through a buffered `StreamWriter` (BOM once); the chaos path renders each line, applies line-targeted interception, and writes cross-line encoding-anomaly bytes straight to the stream after it, preserving byte order. Chaos runs in exactly one place for delimited formats (the emitter); EDRM-XML keeps its own writer-scoped anomalies (see the amendment below).
 
 `ILoadFileWriter` is **retained** as the format-selection seam the factory returns. It now has five real adapters (four thin composing writers + the XML carve-out), so it earns its keep rather than being a pass-through.
 
 ## Deviation: EDRM-XML keeps its own writer
 
-`ILoadFileSerializer` is row/record-shaped; EDRM-XML is a hierarchical document tree (`Document > Files > Tags` with native/text file refs and hashes). Modelling it as a flat `LoadFileRecord` would bloat the record for one format and fail the deletion test. `XmlLoadFileWriter` therefore stays a dedicated `ILoadFileWriter` (it is already deep, format-aware, and uses no chaos).
+`ILoadFileSerializer` is row/record-shaped; EDRM-XML is a hierarchical document tree (`Document > Files > Tags` with native/text file refs and hashes). Modelling it as a flat `LoadFileRecord` would bloat the record for one format and fail the deletion test. `XmlLoadFileWriter` therefore stays a dedicated `ILoadFileWriter` (it is already deep, format-aware, and applies its document-scoped XML anomalies within the carve-out).
+
+## Amendment: EDRM-XML chaos stays inside the carve-out
+
+The XML anomaly types (`xml-unclosed-tag`, `xml-bad-entity`, `xml-encoding-lie`) are applied by `XmlLoadFileWriter` after rendering, because forcing the document tree through the flat emitter would violate the carve-out. This does not add a new seam and does not route XML through the composer → serializer → emitter path; see `docs/architecture.md` for the updated invariant wording.
 
 ## Consequences
 
-- One place to add a column (composer), one place to render a format (serializer), one place chaos runs (emitter). `DatWriter`, `OptWriter`, `CsvWriter`, `ConcordanceWriter`, `ProfileDrivenDatWriter`, and `LoadFileWriterBase` are deleted.
+- One place to add a column (composer), one place to render a format (serializer), one place chaos runs for delimited formats (emitter); EDRM-XML applies its anomalies in the carve-out writer. `DatWriter`, `OptWriter`, `CsvWriter`, `ConcordanceWriter`, `ProfileDrivenDatWriter`, and `LoadFileWriterBase` are deleted.
 - **Known quirk preserved for byte parity:** standard (in-archive) generation uses the platform newline, while loadfile-only / production / all chaos use the configured EOL. The emitter takes `eol` as a caller-supplied parameter rather than deriving it, so this historical inconsistency is reproduced exactly. Normalising it is a future follow-up that would change golden output.
 - OPT standard mode keeps its existing behaviour of ignoring chaos and using ANSI default encoding.
 - Adding a new delimited format = one composer + one serializer + one thin composing writer; no orchestrator or call-site changes.

@@ -443,5 +443,36 @@ public class CsvComposingWriterTests : TempDirectoryTestBase
         Assert.Contains("DEDUPE_GROUP_ID", content, StringComparison.Ordinal);
         Assert.Contains("PROCESSING_STATUS", content, StringComparison.Ordinal);
     }
-}
 
+    [Fact]
+    public async Task CsvWriter_WithChaosEngine_InjectsCsvSpecificAnomaly()
+    {
+        var request = this.CreateTestRequest();
+        var files = new List<FileData>
+        {
+            new()
+            {
+                WorkItem = new FileWorkItem
+                {
+                    Index = 1,
+                    FolderNumber = 1,
+                    FileName = "file_with_\"quote\".pdf",
+                    FilePathInZip = "folder_001/file_with_\"quote\".pdf",
+                    FileType = "pdf",
+                },
+                DataLength = 128,
+            },
+        };
+        var engine = new ChaosEngine(2, "2", "csv-quote-escape", LoadFileFormat.Csv, ",", "\"", "\n", seed: 42);
+
+        using var stream = new MemoryStream();
+        await new CsvComposingWriter().WriteAsync(stream, request, files, engine);
+
+        Assert.NotEmpty(engine.Anomalies);
+        Assert.All(engine.Anomalies, anomaly =>
+        {
+            Assert.Equal("csv-quote-escape", anomaly.ErrorType);
+            Assert.Contains(anomaly.ErrorType, ChaosAnomalyTypes.Csv);
+        });
+    }
+}

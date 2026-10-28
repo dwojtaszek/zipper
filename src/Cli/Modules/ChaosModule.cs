@@ -77,19 +77,6 @@ public sealed class ChaosModule : CliModule
                 config = default!;
                 return false;
             }
-
-            if (formats is { Count: > 0 })
-            {
-                foreach (var format in formats)
-                {
-                    if (format != LoadFileFormat.Dat && format != LoadFileFormat.Opt)
-                    {
-                        Console.Error.WriteLine("Error: --chaos-mode is only supported for dat and opt load file formats.");
-                        config = default!;
-                        return false;
-                    }
-                }
-            }
         }
         else
         {

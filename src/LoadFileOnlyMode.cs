@@ -64,18 +64,20 @@ internal class LoadFileOnlyMode : IGenerationMode
         {
             var formats = request.LoadFile.Formats.Count > 0 ? request.LoadFile.Formats : new[] { LoadFileFormat.Dat };
             var loadFiles = new Dictionary<string, string>();
-            foreach (var format in formats)
+            string firstExtension = GetLoadFileExtension(formats[0]);
+            string? basePath = result.LoadFilePath.EndsWith(firstExtension, StringComparison.OrdinalIgnoreCase)
+                ? result.LoadFilePath[..^firstExtension.Length]
+                : null;
+            for (int i = 0; i < formats.Count; i++)
             {
-                var name = format switch
+                if (i > 0 && basePath is null)
                 {
-                    LoadFileFormat.Opt => "opt",
-                    LoadFileFormat.Csv => "csv",
-                    LoadFileFormat.Concordance => "concordance",
-                    _ => "dat",
-                };
-                var filePath = format == LoadFileFormat.Opt
-                    ? Path.ChangeExtension(result.LoadFilePath, ".opt")
-                    : result.LoadFilePath;
+                    continue;
+                }
+
+                var format = formats[i];
+                var name = GetLoadFileName(format);
+                var filePath = i == 0 ? result.LoadFilePath : basePath + GetLoadFileExtension(format);
                 if (File.Exists(filePath))
                     loadFiles[name] = filePath;
             }
@@ -88,4 +90,22 @@ internal class LoadFileOnlyMode : IGenerationMode
             ValidationOrchestrator.RunAfterGeneration(context);
         }
     }
+
+    private static string GetLoadFileName(LoadFileFormat format) => format switch
+    {
+        LoadFileFormat.Opt => "opt",
+        LoadFileFormat.Csv => "csv",
+        LoadFileFormat.EdrmXml => "edrmxml",
+        LoadFileFormat.Concordance => "concordance",
+        _ => "dat",
+    };
+
+    private static string GetLoadFileExtension(LoadFileFormat format) => format switch
+    {
+        LoadFileFormat.Opt => ".opt",
+        LoadFileFormat.Csv => ".csv",
+        LoadFileFormat.EdrmXml => ".xml",
+        LoadFileFormat.Concordance => ".concordance.dat",
+        _ => ".dat",
+    };
 }

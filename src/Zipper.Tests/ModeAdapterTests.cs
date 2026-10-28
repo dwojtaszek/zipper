@@ -80,6 +80,81 @@ public class StandardModeTests
 public class LoadFileOnlyModeTests
 {
     [Fact]
+    public async Task RunAsync_SingleConcordanceFormat_WhenPathLacksExtension_DoesNotThrow()
+    {
+        var mode = new LoadFileOnlyMode((_, _) => Task.FromResult(new LoadFileOnlyResult
+        {
+            LoadFilePath = "x",
+            PropertiesFilePath = "loadfile_properties.json",
+            TotalRecords = 1,
+        }));
+        var request = new FileGenerationRequest
+        {
+            LoadFile = new Config.LoadFileConfig
+            {
+                Formats = [LoadFileFormat.Concordance],
+                Encoding = "UTF-8",
+            },
+            Output = new Config.OutputConfig
+            {
+                FileCount = 1,
+                OutputPath = Path.GetTempPath(),
+            },
+            Delimiters = new Config.DelimiterConfig { EndOfLine = "CRLF" },
+        };
+
+        await mode.RunAsync(request);
+    }
+
+    [Theory]
+    [InlineData(LoadFileFormat.Csv, "COLUMN_A,COLUMN_B\r\nvalue\r\n")]
+    [InlineData(LoadFileFormat.Concordance, "\u00feCOLUMN_A\u00fe\u0014\u00feCOLUMN_B\u00fe\r\n\u00fevalue\u00fe\r\n")]
+    public async Task RunAsync_MultiFormat_ValidatesEachDelimitedFileFromItsOwnPath(
+        LoadFileFormat format,
+        string invalidLoadFile)
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+
+        try
+        {
+            var xmlPath = Path.Combine(tempDir, "loadfile.xml");
+            await File.WriteAllTextAsync(xmlPath, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n<Root/>\r\n");
+            string invalidPath = Path.Combine(tempDir, format == LoadFileFormat.Csv ? "loadfile.csv" : "loadfile.concordance.dat");
+            await File.WriteAllTextAsync(invalidPath, invalidLoadFile);
+
+            var mode = new LoadFileOnlyMode((_, _) => Task.FromResult(new LoadFileOnlyResult
+            {
+                LoadFilePath = xmlPath,
+                PropertiesFilePath = Path.Combine(tempDir, "loadfile_properties.json"),
+                TotalRecords = 1,
+            }));
+            var request = new FileGenerationRequest
+            {
+                LoadFile = new Config.LoadFileConfig
+                {
+                    Formats = [LoadFileFormat.EdrmXml, format],
+                    Encoding = "UTF-8",
+                },
+                Output = new Config.OutputConfig
+                {
+                    FileCount = 1,
+                    OutputPath = tempDir,
+                },
+                Delimiters = new Config.DelimiterConfig { EndOfLine = "CRLF" },
+            };
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => mode.RunAsync(request));
+
+            Assert.Equal("Post-generation validation failed.", exception.Message);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task RunAsync_WithValidRequest_LogsResult()
     {
         var output = new StringWriter();

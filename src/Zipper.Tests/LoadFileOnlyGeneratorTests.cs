@@ -172,6 +172,86 @@ public class LoadFileOnlyGeneratorTests : IDisposable
     }
 
     [Fact]
+    public async Task GenerateAsync_EdrmXmlWithOneChaosTarget_AppliesAnomalyToTheDocument()
+    {
+        const int seed = 42;
+        var request = this.CreateRequest(LoadFileFormat.EdrmXml, count: 1);
+        request.Metadata = request.Metadata with { Seed = seed };
+        request.Chaos = request.Chaos with
+        {
+            ChaosMode = true,
+            ChaosAmount = "1",
+            ChaosTypes = "xml-bad-entity",
+        };
+
+        var result = await LoadFileOnlyGenerator.GenerateAsync(request);
+        using var properties = JsonDocument.Parse(await File.ReadAllTextAsync(result.PropertiesFilePath));
+        string content = await File.ReadAllTextAsync(result.LoadFilePath);
+
+        Assert.Contains("&chaos;", content, StringComparison.Ordinal);
+        var chaosMode = properties.RootElement.GetProperty("chaosMode");
+        Assert.Equal(1, chaosMode.GetProperty("totalAnomalies").GetInt32());
+        Assert.Equal(
+            "xml-bad-entity",
+            chaosMode.GetProperty("injectedAnomalies")[0].GetProperty("errorType").GetString());
+    }
+
+    [Fact]
+    public async Task GenerateAsync_EdrmXmlWithTwoChaosTargets_AppliesAnomalyToEachDocument()
+    {
+        var request = this.CreateRequest(LoadFileFormat.EdrmXml, count: 2);
+        request.Metadata = request.Metadata with { Seed = 42 };
+        request.Chaos = request.Chaos with
+        {
+            ChaosMode = true,
+            ChaosAmount = "2",
+            ChaosTypes = "xml-bad-entity",
+        };
+
+        var result = await LoadFileOnlyGenerator.GenerateAsync(request);
+        using var properties = JsonDocument.Parse(await File.ReadAllTextAsync(result.PropertiesFilePath));
+        string content = await File.ReadAllTextAsync(result.LoadFilePath);
+        var chaosMode = properties.RootElement.GetProperty("chaosMode");
+
+        Assert.Equal(2, chaosMode.GetProperty("totalAnomalies").GetInt32());
+        Assert.Equal(2, chaosMode.GetProperty("injectedAnomalies").GetArrayLength());
+        Assert.Equal(2, content.Split("&chaos;", StringSplitOptions.None).Length - 1);
+    }
+
+    [Theory]
+    [InlineData(LoadFileFormat.Csv)]
+    [InlineData(LoadFileFormat.Concordance)]
+    [InlineData(LoadFileFormat.EdrmXml)]
+    public async Task GenerateAsync_WithFamiliesForSyntheticRows_IncludesChildRecordsAndAuditsThem(LoadFileFormat format)
+    {
+        var request = this.CreateRequest(format, count: 10);
+        request.Output = request.Output with { FileType = "eml" };
+        request.Metadata = request.Metadata with { WithFamilies = true, Seed = 42 };
+        request.LoadFile = request.LoadFile with { AttachmentRate = 100 };
+
+        var result = await LoadFileOnlyGenerator.GenerateAsync(request);
+        long childCount = Zipper.LoadFiles.FamilyPlan.GetSimulatedChildCount(request);
+        using var properties = JsonDocument.Parse(await File.ReadAllTextAsync(result.PropertiesFilePath));
+
+        Assert.Equal(10, childCount);
+        Assert.Equal(20, properties.RootElement.GetProperty("totalRecords").GetInt64());
+        Assert.Equal(20, result.TotalRecords);
+
+        if (format == LoadFileFormat.EdrmXml)
+        {
+            var xml = System.Xml.Linq.XDocument.Load(result.LoadFilePath);
+            Assert.Equal(20, xml.Descendants("Document").Count());
+            Assert.Equal(10, xml.Descendants("Relationship").Count());
+        }
+        else
+        {
+            string[] lines = await File.ReadAllLinesAsync(result.LoadFilePath);
+            Assert.Equal(21, lines.Length);
+            Assert.Contains("_A001", string.Join(Environment.NewLine, lines), StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public async Task GenerateAsync_Dat_WithLfEol_UsesCorrectLineEndings()
     {
         var request = this.CreateRequest(count: 5);

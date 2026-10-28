@@ -337,3 +337,27 @@
 - **telemetry**: host=droid mode=branch specialists=7 bundle=41490c
 - **lessons**: none
 - **suppressions**: none
+
+### 2026-10-28 droid:branch:issue-1300-edrm-xml-chaos-followup
+
+- **findings**: 0 ACTION, 0 INFO across 6 reviewers (correctness, testing, maintainability, adversarial, performance, API contract).
+- **outcome**: aligned direct XML Chaos Engine tests to emitted document counts and added exact-count two-document coverage. Production already passes EDRM-XML's document count without a header. Focused tests (10) and formatting passed; CodeRabbit's follow-up was verified.
+- **telemetry**: host=droid mode=branch specialists=6 bundle=~4K
+- **lessons**: EDRM-XML Chaos Engine tests should count emitted `<Document>` elements, not delimited-file header lines.
+
+### 2026-10-28 droid:local:pr1376-recordid
+
+- **findings**: 0 (one fast-pass correctness reviewer).
+- **outcome**: clean autoreview after capturing the original XML RecordID before mutation. Focused ChaosEngine tests (59) passed; mutation smoke killed all 3 tested mutations.
+- **telemetry**: host=droid mode=local specialists=1 bundle=~500c
+- **lessons**: none
+- **suppressions**: none
+- **suppressions**: none
+
+### 2026-10-28 droid:branch:pr1376-quote-aware-anomalies
+
+- **findings**: Initial review found a doubled-quote test gap; CodeRabbit found two CSV embedded-newline defects. Final autoreview and CodeRabbit returned no findings.
+- **outcome**: Fixed quote-aware Concordance boundary counting and CSV newline placement. Added regression/property coverage. Focused tests, 90 properties, mutation smoke, formatting, and 3,636 unit tests passed. Two commits created locally; no publication performed.
+- **telemetry**: host=droid mode=branch specialists=6 bundle=~13K across follow-up review waves
+- **lessons**: Quoted-delimited anomaly tests should cover embedded delimiters and consecutive doubled-quote pairs.
+- **suppressions**: none

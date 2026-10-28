@@ -9,6 +9,63 @@ namespace Zipper.Tests;
 public class XmlLoadFileWriterTests : TempDirectoryTestBase
 {
     [Fact]
+    public async Task WriteAsync_StandardMode_PreservesXmlWriterDefaultLineEndings()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { OutputPath = this.TempDir, FileCount = 1, FileType = "pdf" },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+            Delimiters = new DelimiterConfig { EndOfLine = "CR" },
+            Metadata = new MetadataConfig { WithMetadata = false }
+        };
+        var writer = new XmlLoadFileWriter();
+        using var stream = new MemoryStream();
+
+        await writer.WriteAsync(stream, request, this.CreateTestFileData());
+
+        string content = System.Text.Encoding.UTF8.GetString(stream.ToArray());
+        string expectedLineEnding = new System.Xml.XmlWriterSettings().NewLineChars;
+        Assert.Contains(expectedLineEnding, content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WriteAsync_LoadfileOnly_UsesConfiguredEndOfLine()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { OutputPath = this.TempDir, FileCount = 1, FileType = "pdf" },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+            Delimiters = new DelimiterConfig { EndOfLine = "LF" },
+            Metadata = new MetadataConfig { WithMetadata = false },
+            LoadfileOnly = true
+        };
+
+        var files = new List<FileData>
+        {
+            new FileData
+            {
+                WorkItem = new FileWorkItem
+                {
+                    Index = 1,
+                    FolderNumber = 1,
+                    FileName = "doc1.pdf",
+                    FilePathInZip = "folder/doc1.pdf"
+                },
+                DataLength = 500,
+                Hash = "abcdef"
+            }
+        };
+
+        var writer = new XmlLoadFileWriter();
+        using var stream = new MemoryStream();
+        await writer.WriteAsync(stream, request, files);
+
+        string content = System.Text.Encoding.UTF8.GetString(stream.ToArray());
+        Assert.Contains("\n", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("\r\n", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task WriteAsync_XmlLoadFileWriter_ProducesValidXmlOutput()
     {
         var request = new FileGenerationRequest
@@ -305,6 +362,22 @@ public class XmlLoadFileWriterTests : TempDirectoryTestBase
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             writer.WriteAsync(stream, request, fileData));
+
+        Assert.Contains("Failed to write XML load file", ex.Message, StringComparison.Ordinal);
+        Assert.IsType<IOException>(ex.InnerException);
+    }
+
+    [Fact]
+    public async Task WriteAsync_WithChaosAndStreamThrowsIOException_WrapsWithContext()
+    {
+        var request = this.CreateTestRequest();
+        var fileData = this.CreateTestFileData();
+        var chaosEngine = new ChaosEngine(3, "1", "xml-bad-entity", LoadFileFormat.EdrmXml, "|", "\"", "\r\n", 42);
+        var writer = new XmlLoadFileWriter();
+        using var stream = new ThrowingStream(new IOException("simulated disk failure"));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            writer.WriteAsync(stream, request, fileData, chaosEngine));
 
         Assert.Contains("Failed to write XML load file", ex.Message, StringComparison.Ordinal);
         Assert.IsType<IOException>(ex.InnerException);

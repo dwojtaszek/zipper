@@ -3,7 +3,7 @@ namespace Zipper.LoadFiles;
 /// <summary>
 /// Drives the CSV format through the record seam (<see cref="CsvComposer"/> +
 /// <see cref="CsvSerializer"/> + <see cref="LoadFileEmitter"/>), replacing the fat
-/// <c>CsvWriter</c>. CSV is standard-only, never applies chaos, and uses the platform newline.
+/// <c>CsvWriter</c>. Standard mode uses the platform newline; Loadfile-Only Mode honours the configured EOL and chaos.
 /// </summary>
 internal sealed class CsvComposingWriter : ILoadFileWriter
 {
@@ -20,9 +20,10 @@ internal sealed class CsvComposingWriter : ILoadFileWriter
     {
         var composer = new CsvComposer(request);
         var serializer = new CsvSerializer();
-        var policy = new TextOutputPolicy(request, LoadFileFormat.Csv, WriterMode.Standard, hasChaos: false);
+        var mode = request.LoadfileOnly ? WriterMode.LoadfileOnly : WriterMode.Standard;
+        var policy = new TextOutputPolicy(request, LoadFileFormat.Csv, mode, hasChaos: chaosEngine is not null);
 
         await LoadFileEmitter.EmitAsync(
-            stream, serializer, composer.HeaderColumns, composer.Compose(processedFiles), policy.Encoding, policy.EndOfLine, chaosEngine: null, cancellationToken).ConfigureAwait(false);
+            stream, serializer, composer.HeaderColumns, composer.Compose(processedFiles), policy.Encoding, policy.EndOfLine, chaosEngine, cancellationToken).ConfigureAwait(false);
     }
 }

@@ -637,14 +637,15 @@ public class CliPipelineTests : WorkingDirectoryTestBase
     [Theory]
     [InlineData("csv")]
     [InlineData("xml")]
-    public void ValidateAndParseArguments_ChaosMode_WithUnsupportedFormat_ShouldReturnNull(string format)
+    [InlineData("concordance")]
+    public void ValidateAndParseArguments_ChaosMode_WithFormatSpecificTypes_ShouldSucceed(string format)
     {
         var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--load-file-format", format, "--chaos-mode" };
 
-        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
+        var (result, _, _) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
-        Assert.Null(result);
-        Assert.Contains("Error: --loadfile-only mode is only supported for 'dat' and 'opt' load file formats.", stderr, StringComparison.Ordinal);
+        Assert.NotNull(result);
+        Assert.True(result!.Chaos.ChaosMode);
     }
 
     [Fact]

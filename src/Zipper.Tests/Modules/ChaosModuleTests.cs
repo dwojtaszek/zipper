@@ -222,11 +222,32 @@ public class ChaosModuleTests
     }
 
     [Fact]
-    public void TryBuild_ChaosModeWithCsvFormat_ReturnsFalse()
+    public void TryBuild_ChaosModeWithCsvFormat_UsesCsvDefaults()
     {
-        // Formats list with a non-DAT/OPT format rejects --chaos-mode.
         var spec = new ChaosConfigSpec(Amount: null, Types: null, Scenario: null) { Mode = true };
-        Assert.False(TryBuildWithValues(spec, out _, formats: new List<LoadFileFormat> { LoadFileFormat.Csv }));
+        Assert.True(TryBuildWithValues(spec, out var config, formats: new List<LoadFileFormat> { LoadFileFormat.Csv }));
+        Assert.Null(config.ChaosTypes);
+    }
+
+    [Fact]
+    public void TryBuild_ChaosModeWithCsvFormat_ReturnsTrue_WhenCsvChaosTypesSpecified()
+    {
+        var spec = new ChaosConfigSpec(Amount: null, Types: "csv-quote-escape", Scenario: null) { Mode = true };
+        Assert.True(TryBuildWithValues(spec, out _, formats: new List<LoadFileFormat> { LoadFileFormat.Csv }));
+    }
+
+    [Fact]
+    public void TryBuild_ChaosModeWithConcordanceFormat_ReturnsTrue_WhenConcordanceTypesSpecified()
+    {
+        var spec = new ChaosConfigSpec(Amount: null, Types: "concordance-delimiter", Scenario: null) { Mode = true };
+        Assert.True(TryBuildWithValues(spec, out _, formats: new List<LoadFileFormat> { LoadFileFormat.Concordance }));
+    }
+
+    [Fact]
+    public void TryBuild_ChaosModeWithEdrmXmlFormat_ReturnsTrue_WhenXmlTypesSpecified()
+    {
+        var spec = new ChaosConfigSpec(Amount: null, Types: "xml-unclosed-tag", Scenario: null) { Mode = true };
+        Assert.True(TryBuildWithValues(spec, out _, formats: new List<LoadFileFormat> { LoadFileFormat.EdrmXml }));
     }
 
     [Fact]

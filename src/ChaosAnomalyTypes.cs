@@ -24,12 +24,44 @@ internal static class ChaosAnomalyTypes
     };
 
     /// <summary>
+    /// RFC 4180-specific CSV anomalies: quote-escaping divergence, embedded newlines, and BOM placement.
+    /// These are deliberately different from the DAT arms — CSV uses comma+double-quote, not ASCII 20/254.
+    /// </summary>
+    public static readonly IReadOnlyList<string> Csv = new[]
+    {
+        "csv-quote-escape", "csv-embedded-newline", "csv-bom",
+    };
+
+    /// <summary>
+    /// Concordance DAT anomalies: targets the Concordance-specific delimiter set (ASCII 20/254)
+    /// rather than inheriting the generic DAT arms silently.
+    /// </summary>
+    public static readonly IReadOnlyList<string> Concordance = new[]
+    {
+        "concordance-delimiter", "concordance-quote-escape",
+    };
+
+    /// <summary>
+    /// EDRM-XML structural anomalies injected within the <c>XmlLoadFileWriter</c> carve-out:
+    /// unclosed tags, bad entity references, and encoding-declaration lies.
+    /// These are applied inside <c>XmlLoadFileWriter.WriteAsync</c> and do not flow through
+    /// the composer → serializer → emitter seam (architecture carve-out, ADR-0006/0007).
+    /// </summary>
+    public static readonly IReadOnlyList<string> EdrmXml = new[]
+    {
+        "xml-unclosed-tag", "xml-bad-entity", "xml-encoding-lie",
+    };
+
+    /// <summary>
     /// Returns the valid anomaly types for the given format.
     /// </summary>
     public static IReadOnlyList<string> ForFormat(LoadFileFormat format) =>
         format switch
         {
             LoadFileFormat.Opt => Opt,
+            LoadFileFormat.Csv => Csv,
+            LoadFileFormat.Concordance => Concordance,
+            LoadFileFormat.EdrmXml => EdrmXml,
             _ => Dat,
         };
 }

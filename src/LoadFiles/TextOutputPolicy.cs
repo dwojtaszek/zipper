@@ -36,7 +36,10 @@ internal sealed class TextOutputPolicy
     {
         if (format == LoadFileFormat.Csv || format == LoadFileFormat.Concordance)
         {
-            return Environment.NewLine;
+            // Standard-mode CSV/Concordance keep their historical platform-newline output.
+            // Loadfile-Only (newly enabled for these formats) follows the configured EOL so
+            // post-generation Line Ending validation matches the requested setting.
+            return mode == WriterMode.Standard ? Environment.NewLine : LoadFileEmitter.GetEolString(request.Delimiters?.EndOfLine!);
         }
 
         // EOL quirk preserved: standard (in-archive) generation used the platform newline,

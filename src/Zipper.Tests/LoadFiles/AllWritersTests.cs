@@ -155,4 +155,21 @@ public class AllWritersTests : TempDirectoryTestBase
             Assert.Equal("3", fields3[pageCountColIdx]);
         }
     }
+
+    [Fact]
+    public async Task XmlWriter_WithChaosEngine_InjectsXmlAnomalyInsideCarveOut()
+    {
+        var request = this.CreateTestRequest();
+        var fileData = this.CreateTestFileData();
+        var engine = new ChaosEngine(3, "1", "xml-unclosed-tag", LoadFileFormat.EdrmXml, "|", "\"", "\r\n", seed: 42);
+        var writer = new XmlLoadFileWriter();
+        using var stream = new MemoryStream();
+
+        await writer.WriteAsync(stream, request, fileData, engine);
+
+        var content = System.Text.Encoding.UTF8.GetString(stream.ToArray());
+        Assert.NotEmpty(engine.Anomalies);
+        Assert.All(engine.Anomalies, anomaly => Assert.Equal("xml-unclosed-tag", anomaly.ErrorType));
+        Assert.Throws<System.Xml.XmlException>(() => { _ = System.Xml.Linq.XDocument.Parse(content); });
+    }
 }

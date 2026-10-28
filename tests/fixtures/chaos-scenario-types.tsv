@@ -6,3 +6,6 @@ field-overflow	eol,columns	dat
 full-chaos		dat
 transfer-encoding-failures	mixed-delimiters,encoding,quotes	dat
 realistic-import-failures	path-pointer,field-length,date-format,null-byte,trailing-empties	dat
+csv-escaping-failures	csv-quote-escape,csv-embedded-newline,csv-bom	csv
+concordance-import-failures	concordance-delimiter,concordance-quote-escape	concordance
+edrm-xml-structural-failures	xml-unclosed-tag,xml-bad-entity,xml-encoding-lie	xml

@@ -654,12 +654,12 @@ This section clarifies behavior when multiple arguments interact:
 ### FR-018: Standalone Load File Generation
 
 - **REQ-087**: A new optional command-line argument `--loadfile-only` shall be introduced.
-- **REQ-088**: When `--loadfile-only` is specified, the application shall generate Load Files (DAT or OPT) directly to disk without creating Archives or Native Files. If a format other than `dat` or `opt` is requested, the application must explicitly reject it with a validation error.
+- **REQ-088**: When `--loadfile-only` is specified, the application shall generate Load Files directly to disk without creating Archives or Native Files. The supported Load File formats are `dat`, `opt`, `csv`, `concordance`, and `edrm-xml` (alias `xml`). If an unknown format is requested, the application must explicitly reject it with a validation error.
 - **REQ-089**: When `--loadfile-only` or `--production-set` is specified, the `--type` argument becomes optional and defaults to `pdf` for schema purposes.
 - **REQ-090**: The `--loadfile-only` mode shall generate a companion `_properties.json` audit file containing format details, encoding, delimiter configuration, and chaos anomaly manifest, including a `totalRecords` count of data records (excluding the header row).
 - **REQ-091**: The `--loadfile-only` flag shall conflict with `--target-zip-size` and `--include-load-file`. The application must reject these combinations with a clear error message.
 - **REQ-092**: A new optional argument `--eol <CRLF|LF|CR>` shall control the line ending format. Defaults to `CRLF`. Standard mode uses the platform newline irrespective of this argument.
-- **REQ-123**: A new optional argument `--loadfile-format <dat|opt>` shall be introduced as an alias for `--load-file-format` specifically for use in loadfile-only mode. Defaults to `dat`.
+- **REQ-123**: A new optional argument `--loadfile-format <dat|opt|csv|concordance|edrm-xml>` shall be introduced as an alias for `--load-file-format` specifically for use in loadfile-only mode. `xml` is accepted as an alias for `edrm-xml`. Defaults to `dat`.
 - **REQ-093**: New strict-prefix delimiter arguments shall be introduced (supported in all modes (standard, loadfile-only, production-set)):
   - `--col-delim <ascii:N|char:C>`: Column delimiter
   - `--quote-delim <ascii:N|char:C|none>`: Quote delimiter (supports `none` to omit quotes)
@@ -676,9 +676,9 @@ This section clarifies behavior when multiple arguments interact:
 
 ### FR-019: Deliberate Anomaly Injection
 
-- **REQ-094**: A new optional command-line argument `--chaos-mode` shall be introduced. Requires `--loadfile-only`. Only supported for `dat` and `opt` Load File formats.
+- **REQ-094**: A new optional command-line argument `--chaos-mode` shall be introduced. Requires `--loadfile-only`. Supported for the `dat`, `opt`, `csv`, `concordance`, and `edrm-xml` Load File formats, each with its own anomaly catalog.
 - **REQ-095**: A new optional argument `--chaos-amount <N|N%>` shall specify the number or percentage of records to corrupt. Requires `--chaos-mode`. Defaults to 1%.
-- **REQ-096**: A new optional argument `--chaos-types <type1,type2,...>` shall filter specific anomaly types. Requires `--chaos-mode`. When not specified, the original DAT types and all existing OPT types except `opt-encoding` are enabled; the new DAT record-level types are opt-in to preserve existing output. `full-chaos` enables every type.
+- **REQ-096**: A new optional argument `--chaos-types <type1,type2,...>` shall filter specific anomaly types. Requires `--chaos-mode`. When not specified, the original DAT types, all existing OPT types except `opt-encoding`, and every type in the selected CSV, Concordance, or EDRM-XML catalog are enabled; the new DAT record-level types are opt-in to preserve existing output. `full-chaos` enables every type for the selected format.
 - **REQ-097**: The following DAT chaos anomaly types shall be supported:
   - `mixed-delimiters`: Replace one column delimiter with an alternative character
   - `quotes`: Omit a closing quote delimiter to create an unclosed field
@@ -697,6 +697,17 @@ This section clarifies behavior when multiple arguments interact:
   - `opt-path`: Corrupt the image path in column 3 with an invalid traversal path
   - `opt-batesnumber`: Remove the Bates Number from column 1
   - `opt-encoding`: Inject a UTF-8 BOM between OPT records; ANSI/Windows-1252 readers render it as mojibake. This type is opt-in to preserve existing OPT chaos output, and `full-chaos` enables it.
+- **REQ-227**: The following CSV chaos anomaly types shall be supported, using RFC 4180 conventions (comma column delimiter, doubled-quote escaping) rather than the DAT delimiter set:
+  - `csv-quote-escape`: Break the doubled-quote escape in a quoted field, leaving an unbalanced quote
+  - `csv-embedded-newline`: Inject a raw newline inside a quoted field
+  - `csv-bom`: Insert a UTF-8 BOM in the middle of the file
+- **REQ-228**: The following Concordance chaos anomaly types shall be supported, using the Concordance delimiter conventions (including ASCII 20/254) rather than inheriting the generic DAT arms silently:
+  - `concordance-delimiter`: Replace a configured column or quote delimiter with a character Concordance readers do not expect
+  - `concordance-quote-escape`: Break a quote-wrapped field's escaping
+- **REQ-229**: The following EDRM-XML chaos anomaly types shall be supported inside the documented `XmlLoadFileWriter` carve-out, without routing XML through the composer → serializer → emitter seam:
+  - `xml-unclosed-tag`: Omit a closing element tag
+  - `xml-bad-entity`: Insert an undefined entity reference
+  - `xml-encoding-lie`: Declare an encoding in the XML declaration that does not match the emitted bytes
 - **REQ-099**: All injected anomalies shall be tracked and documented in the `_properties.json` audit file, including line number, record ID, affected column, error type, and description. The `totalRecords` count in the audit file must reflect only the data records, not including the header.
 - **REQ-100**: The Chaos Engine shall use the `--seed` argument (when provided) for deterministic, reproducible anomaly injection.
 
@@ -743,6 +754,9 @@ This section clarifies behavior when multiple arguments interact:
 | `full-chaos` | All anomaly types at high density | all types enabled | 10% | Any |
 | `transfer-encoding-failures` | Cross-platform transfer errors | `mixed-delimiters`, `encoding`, `quotes` | 4% | DAT |
 | `realistic-import-failures` | Documented DAT ingest failures | `path-pointer`, `field-length`, `date-format`, `null-byte`, `trailing-empties` | 5% | DAT |
+| `csv-escaping-failures` | RFC 4180 CSV escaping failures | `csv-quote-escape`, `csv-embedded-newline`, `csv-bom` | 5% | CSV |
+| `concordance-import-failures` | Concordance delimiter and quote-wrapper corruption | `concordance-delimiter`, `concordance-quote-escape` | 5% | Concordance |
+| `edrm-xml-structural-failures` | EDRM-XML structural failures | `xml-unclosed-tag`, `xml-bad-entity`, `xml-encoding-lie` | 5% | EDRM-XML |
 
 ---
 

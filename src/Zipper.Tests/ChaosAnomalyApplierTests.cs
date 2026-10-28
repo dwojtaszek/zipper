@@ -644,3 +644,433 @@ public class OptAnomalyApplierTests
         Assert.Single(anomalies);
     }
 }
+
+public class CsvAnomalyApplierTests
+{
+    [Fact]
+    public void Apply_CsvQuoteEscape_WhenFieldHasDoubledQuote_ProducesUnbalancedQuote_AndRecordsAnomaly()
+    {
+        // RFC 4180: "" (doubled) is the valid CSV escape. Chaos breaks it to a single " mid-field
+        var applier = new CsvAnomalyApplier(new Random(42));
+        var anomalies = new List<ChaosAnomaly>();
+        // A valid CSV line where a field contains a doubled-quote escape: "say ""hi""",value
+        const string line = "\"say \"\"hi\"\"\",value";
+
+        string result = applier.Apply(1, line, "DOC001", "csv-quote-escape", anomalies);
+
+        Assert.NotEqual(line, result);
+        Assert.Single(anomalies);
+        Assert.Equal("csv-quote-escape", anomalies[0].ErrorType);
+        Assert.Contains("doubled-quote escape (\"\")", anomalies[0].Description, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Apply_CsvQuoteEscape_WhenNoDoubledQuotePresent_InjectsBrokenQuotedField_AndRecordsAnomaly()
+    {
+        var applier = new CsvAnomalyApplier(new Random(42));
+        var anomalies = new List<ChaosAnomaly>();
+        const string line = "simple,line,no,quotes";
+
+        string result = applier.Apply(1, line, "DOC001", "csv-quote-escape", anomalies);
+
+        Assert.NotEqual(line, result);
+        Assert.Contains("\"", result, StringComparison.Ordinal);
+        var anomaly = Assert.Single(anomalies);
+        Assert.Equal("csv-quote-escape", anomaly.ErrorType);
+        Assert.StartsWith("Field ", anomaly.Column, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Apply_CsvEmbeddedNewline_InjectsRawNewlineInsideQuotedField_AndRecordsAnomaly()
+    {
+        var applier = new CsvAnomalyApplier(new Random(42));
+        var anomalies = new List<ChaosAnomaly>();
+        const string line = "\"field one\",\"field two\",value";
+
+        string result = applier.Apply(1, line, "DOC001", "csv-embedded-newline", anomalies);
+
+        Assert.NotEqual(line, result);
+        Assert.True(result.Contains('\n') || result.Contains('\r'));
+        Assert.Single(anomalies);
+        Assert.Equal("csv-embedded-newline", anomalies[0].ErrorType);
+    }
+
+    [Fact]
+    public void Apply_CsvEmbeddedNewline_WithCommaBeforeClosingQuote_OnlyMutatesQuotedField()
+    {
+        const string line = "\"a,\",x,\"b\"";
+        (string Line, string Column)[] validMutations =
+        [
+            ("\"a\r\n,\",x,\"b\"", "Field 1"),
+            ("\"a,\",x,\"\r\nb\"", "Field 3"),
+        ];
+
+        for (int seed = 0; seed < 20; seed++)
+        {
+            var applier = new CsvAnomalyApplier(new Random(seed));
+            var anomalies = new List<ChaosAnomaly>();
+
+            string result = applier.Apply(1, line, "DOC001", "csv-embedded-newline", anomalies);
+
+            var expected = Assert.Single(validMutations, mutation => mutation.Line == result);
+            Assert.Equal(expected.Column, Assert.Single(anomalies).Column);
+        }
+    }
+
+    [Theory]
+    [InlineData("\"ab\"\"cd\"", "\"ab\"\"\r\ncd\"")]
+    [InlineData("\"a\"\"\"\"b\"", "\"a\"\"\r\n\"\"b\"")]
+    public void Apply_CsvEmbeddedNewline_WithEscapedQuotes_MovesPastEscapePair(string line, string expected)
+    {
+        var applier = new CsvAnomalyApplier(new Random(42));
+        var anomalies = new List<ChaosAnomaly>();
+
+        string result = applier.Apply(1, line, "DOC001", "csv-embedded-newline", anomalies);
+
+        Assert.Equal(expected, result);
+        Assert.Equal("Field 1", Assert.Single(anomalies).Column);
+    }
+
+    [Fact]
+    public void Apply_CsvEmbeddedNewline_WhenNoQuotedField_QuotesFieldAndInjectsNewline_AndRecordsAnomaly()
+    {
+        var applier = new CsvAnomalyApplier(new Random(42));
+        var anomalies = new List<ChaosAnomaly>();
+        const string line = "no,quoted,fields";
+
+        string result = applier.Apply(1, line, "DOC001", "csv-embedded-newline", anomalies);
+
+        Assert.NotEqual(line, result);
+        Assert.True(result.Contains('\n') || result.Contains('\r'));
+        var anomaly = Assert.Single(anomalies);
+        Assert.Equal("csv-embedded-newline", anomaly.ErrorType);
+    }
+
+    [Theory]
+    [InlineData("csv-quote-escape")]
+    [InlineData("csv-embedded-newline")]
+    public void Apply_WithOnlyOneNonEmptyField_AlwaysMutatesThatField(string chaosType)
+    {
+        const string line = ",value,";
+
+        for (int seed = 0; seed < 20; seed++)
+        {
+            var applier = new CsvAnomalyApplier(new Random(seed));
+            var anomalies = new List<ChaosAnomaly>();
+
+            string result = applier.Apply(1, line, "DOC001", chaosType, anomalies);
+
+            Assert.NotEqual(line, result);
+            Assert.Equal(chaosType, Assert.Single(anomalies).ErrorType);
+        }
+    }
+
+    [Fact]
+    public void Apply_CsvBom_DoesNotChangeLine_RecordsAnomalyInGetEncodingAnomaly()
+    {
+        var applier = new CsvAnomalyApplier(new Random(42));
+        var anomalies = new List<ChaosAnomaly>();
+        const string line = "col1,col2,col3";
+
+        string result = applier.Apply(1, line, "DOC001", "csv-bom", anomalies);
+
+        Assert.Equal(line, result);    // line unchanged by Apply
+        Assert.Empty(anomalies);       // anomaly recorded via GetEncodingAnomaly
+
+        var bytes = applier.GetEncodingAnomaly(1, 2, System.Text.Encoding.UTF8, anomalies);
+        Assert.NotNull(bytes);
+        Assert.Single(anomalies);
+        Assert.Equal("csv-bom", anomalies[0].ErrorType);
+        // Second call for same line returns null (one-shot)
+        Assert.Null(applier.GetEncodingAnomaly(1, 2, System.Text.Encoding.UTF8, anomalies));
+    }
+
+    [Fact]
+    public void Apply_UnknownType_ReturnLineUnchanged()
+    {
+        var applier = new CsvAnomalyApplier(new Random(42));
+        var anomalies = new List<ChaosAnomaly>();
+        const string line = "a,b,c";
+
+        string result = applier.Apply(1, line, "DOC001", "no-such-type", anomalies);
+
+        Assert.Equal(line, result);
+        Assert.Empty(anomalies);
+    }
+}
+
+public class ConcordanceAnomalyApplierTests
+{
+    [Fact]
+    public void Apply_ConcordanceDelimiter_ReplacesOneFieldDelimiter_AndRecordsAnomaly()
+    {
+        // Concordance default column delimiter is ASCII 20 (0x14)
+        var applier = new ConcordanceAnomalyApplier(new Random(42), '\u0014', '\u00fe');
+        var anomalies = new List<ChaosAnomaly>();
+        // A valid Concordance line with ASCII 20 as field delimiters
+        const string line = "\u00feValue1\u00fe\u0014\u00feValue2\u00fe\u0014\u00feValue3\u00fe";
+
+        string result = applier.Apply(1, line, "DOC001", "concordance-delimiter", anomalies);
+
+        Assert.NotEqual(line, result);
+        Assert.Single(anomalies);
+        Assert.Equal("concordance-delimiter", anomalies[0].ErrorType);
+    }
+
+    [Fact]
+    public void Apply_ConcordanceDelimiter_IgnoresQuotedDelimiters_AndReportsBoundaryColumn()
+    {
+        var applier = new ConcordanceAnomalyApplier(new Random(42), ',', '"');
+        var anomalies = new List<ChaosAnomaly>();
+        const string line = "\"a,b\",\"c\"";
+
+        string result = applier.Apply(1, line, "DOC001", "concordance-delimiter", anomalies);
+
+        Assert.Equal("\"a,b\"\t\"c\"", result);
+        Assert.Equal("Delimiter 1", Assert.Single(anomalies).Column);
+    }
+
+    [Fact]
+    public void Apply_ConcordanceAnomalies_WithDoubledQuotes_UsesOnlyFieldBoundaries()
+    {
+        const string line = "\"a,\"\"b,c\"\"\",\"d\"";
+        var delimiterAnomalies = new List<ChaosAnomaly>();
+        var delimiterApplier = new ConcordanceAnomalyApplier(new Random(42), ',', '"');
+
+        string corruptedLine = delimiterApplier.Apply(1, line, "DOC001", "concordance-delimiter", delimiterAnomalies);
+
+        Assert.Equal("\"a,\"\"b,c\"\"\"\t\"d\"", corruptedLine);
+        Assert.Equal("Delimiter 1", Assert.Single(delimiterAnomalies).Column);
+
+        var quoteAnomalies = new List<ChaosAnomaly>();
+        var quoteApplier = new ConcordanceAnomalyApplier(new Random(42), ',', '"');
+
+        string escapedLine = quoteApplier.Apply(1, line, "DOC001", "concordance-quote-escape", quoteAnomalies);
+
+        Assert.Equal("\"a,\"\"b,c\"\"\",\"d", escapedLine);
+        Assert.Equal("Column 2", Assert.Single(quoteAnomalies).Column);
+    }
+
+    [Fact]
+    public void Apply_ConcordanceDelimiter_WhenNoDelimiterInLine_ReturnsUnchanged_AndDoesNotRecordAnomaly()
+    {
+        var applier = new ConcordanceAnomalyApplier(new Random(42), '\u0014', '\u00fe');
+        var anomalies = new List<ChaosAnomaly>();
+        const string line = "NoDelimiterHere";
+
+        string result = applier.Apply(1, line, "DOC001", "concordance-delimiter", anomalies);
+
+        Assert.Equal(line, result);
+        Assert.Empty(anomalies);
+    }
+
+    [Fact]
+    public void Apply_ConcordanceQuoteEscape_DropsOneQuoteDelimiter_AndRecordsAnomaly()
+    {
+        // Concordance quote delimiter is ASCII 254 (þ). Chaos drops one to break quoting.
+        var applier = new ConcordanceAnomalyApplier(new Random(42), '\u0014', '\u00fe');
+        var anomalies = new List<ChaosAnomaly>();
+        const string line = "\u00feValue1\u00fe\u0014\u00feValue2\u00fe";
+
+        string result = applier.Apply(1, line, "DOC001", "concordance-quote-escape", anomalies);
+
+        Assert.NotEqual(line, result);
+        Assert.Single(anomalies);
+        Assert.Equal("concordance-quote-escape", anomalies[0].ErrorType);
+    }
+
+    [Fact]
+    public void Apply_ConcordanceQuoteEscape_CountsOnlyFieldDelimiters_AndReportsCorrectColumn()
+    {
+        var applier = new ConcordanceAnomalyApplier(new Random(42), ',', '"');
+        var anomalies = new List<ChaosAnomaly>();
+        const string line = "\"a,b\",\"c\"";
+
+        string result = applier.Apply(1, line, "DOC001", "concordance-quote-escape", anomalies);
+
+        Assert.Equal("\"a,b\",\"c", result);
+        Assert.Equal("Column 2", Assert.Single(anomalies).Column);
+    }
+
+    [Fact]
+    public void Apply_ConcordanceQuoteEscape_WhenNoQuoteDelimiter_ReturnsUnchanged_AndDoesNotRecordAnomaly()
+    {
+        var applier = new ConcordanceAnomalyApplier(new Random(42), '\u0014', '\u00fe');
+        var anomalies = new List<ChaosAnomaly>();
+        const string line = "NoQuoteDelimiterHere";
+
+        string result = applier.Apply(1, line, "DOC001", "concordance-quote-escape", anomalies);
+
+        Assert.Equal(line, result);
+        Assert.Empty(anomalies);
+    }
+
+    [Fact]
+    public void Apply_UnknownType_ReturnsLineUnchanged()
+    {
+        var applier = new ConcordanceAnomalyApplier(new Random(42), '\u0014', '\u00fe');
+        var anomalies = new List<ChaosAnomaly>();
+        const string line = "\u00feVal\u00fe\u0014\u00feOther\u00fe";
+
+        string result = applier.Apply(1, line, "DOC001", "no-such-type", anomalies);
+
+        Assert.Equal(line, result);
+        Assert.Empty(anomalies);
+    }
+
+    [Fact]
+    public void GetEncodingAnomaly_AlwaysReturnsNull()
+    {
+        var applier = new ConcordanceAnomalyApplier(new Random(42), '\u0014', '\u00fe');
+        var anomalies = new List<ChaosAnomaly>();
+
+        var result = applier.GetEncodingAnomaly(1, 2, System.Text.Encoding.UTF8, anomalies);
+
+        Assert.Null(result);
+        Assert.Empty(anomalies);
+    }
+}
+
+public class XmlChaosAnomalyApplierTests
+{
+    private const string DocumentXml = "<Document DocID=\"DOC00000001\"><Files/><Tags><Tag TagName=\"Author\" TagValue=\"Jane Doe\"/></Tags></Document>";
+
+    [Fact]
+    public void Apply_LinePath_AlwaysReturnsLineUnchanged()
+    {
+        var applier = new XmlChaosAnomalyApplier();
+        var anomalies = new List<ChaosAnomaly>();
+        const string line = "<Document />";
+
+        string result = applier.Apply(1, line, "DOC1", "xml-unclosed-tag", anomalies);
+
+        Assert.Equal(line, result);
+        Assert.Empty(anomalies);
+    }
+
+    [Fact]
+    public void GetEncodingAnomaly_AlwaysReturnsNull()
+    {
+        var applier = new XmlChaosAnomalyApplier();
+        var anomalies = new List<ChaosAnomaly>();
+
+        Assert.Null(applier.GetEncodingAnomaly(1, 2, System.Text.Encoding.UTF8, anomalies));
+        Assert.Empty(anomalies);
+    }
+
+    [Fact]
+    public void TryApplyToDocument_UnclosedTag_RemovesClosingDocumentTag()
+    {
+        var applier = new XmlChaosAnomalyApplier();
+
+        bool changed = applier.TryApplyToDocument(DocumentXml, "xml-unclosed-tag", out string result, out string column, out string description);
+
+        Assert.True(changed);
+        Assert.DoesNotContain("</Document>", result, StringComparison.Ordinal);
+        Assert.Equal("Document", column);
+        Assert.Contains("unclosed", description, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryApplyToDocument_BadEntity_InsertsUndefinedEntityReference()
+    {
+        var applier = new XmlChaosAnomalyApplier();
+
+        bool changed = applier.TryApplyToDocument(DocumentXml, "xml-bad-entity", out string result, out string column, out string description);
+
+        Assert.True(changed);
+        Assert.Contains("&chaos;", result, StringComparison.Ordinal);
+        Assert.Equal("Document", column);
+        Assert.Contains("entity", description, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TryApplyToDocument_EncodingLie_IsNotADocumentAnomaly()
+    {
+        var applier = new XmlChaosAnomalyApplier();
+
+        bool changed = applier.TryApplyToDocument(DocumentXml, "xml-encoding-lie", out string result, out _, out _);
+
+        Assert.False(changed);
+        Assert.Equal(DocumentXml, result);
+    }
+
+    [Fact]
+    public void TryApplyEncodingLie_WithUtf8Declaration_ChangesOnlyDeclaration()
+    {
+        const string xml = "<?xml version=\"1.0\" encoding=\"utf-8\"?><Root><Text>encoding=\"utf-8\"</Text></Root>";
+        const string expected = "<?xml version=\"1.0\" encoding=\"utf-16\"?><Root><Text>encoding=\"utf-8\"</Text></Root>";
+
+        bool changed = XmlChaosAnomalyApplier.TryApplyEncodingLie(xml, out string result);
+
+        Assert.True(changed);
+        Assert.Equal(expected, result);
+    }
+
+    [Fact]
+    public void TryApplyEncodingLie_WithoutDeclarationContainingUtf8Text_ReturnsUnchanged()
+    {
+        const string xml = "<Root><Text>encoding=\"utf-8\"</Text></Root>";
+
+        bool changed = XmlChaosAnomalyApplier.TryApplyEncodingLie(xml, out string result);
+
+        Assert.False(changed);
+        Assert.Equal(xml, result);
+    }
+
+    [Fact]
+    public void TryApplyEncodingLie_WithBomPrefixedDeclaration_ChangesOnlyDeclaration()
+    {
+        const string xml = "\uFEFF<?xml version=\"1.0\" encoding=\"utf-8\"?><Root><Text>encoding=\"utf-8\"</Text></Root>";
+        const string expected = "\uFEFF<?xml version=\"1.0\" encoding=\"utf-16\"?><Root><Text>encoding=\"utf-8\"</Text></Root>";
+
+        bool changed = XmlChaosAnomalyApplier.TryApplyEncodingLie(xml, out string result);
+
+        Assert.True(changed);
+        Assert.Equal(expected, result);
+    }
+
+    [Fact]
+    public void TryApplyEncodingLie_WithDeclarationWithoutUtf8Encoding_ReturnsUnchanged()
+    {
+        const string xml = "<?xml version=\"1.0\"?><Root><Text>encoding=\"utf-8\"</Text></Root>";
+
+        bool changed = XmlChaosAnomalyApplier.TryApplyEncodingLie(xml, out string result);
+
+        Assert.False(changed);
+        Assert.Equal(xml, result);
+    }
+
+    [Fact]
+    public void TryApplyEncodingLie_WithUtf16Declaration_ReturnsUnchanged()
+    {
+        const string xml = "<?xml version=\"1.0\" encoding=\"utf-16\"?><Root><Text>encoding=\"utf-8\"</Text></Root>";
+
+        bool changed = XmlChaosAnomalyApplier.TryApplyEncodingLie(xml, out string result);
+
+        Assert.False(changed);
+        Assert.Equal(xml, result);
+    }
+
+    [Fact]
+    public void TryApplyEncodingLie_WithXmlStylesheetProcessingInstruction_ReturnsUnchanged()
+    {
+        const string xml = "<?xml-stylesheet encoding=\"utf-8\"?><Root/>";
+
+        bool changed = XmlChaosAnomalyApplier.TryApplyEncodingLie(xml, out string result);
+
+        Assert.False(changed);
+        Assert.Equal(xml, result);
+    }
+
+    [Fact]
+    public void TryApplyEncodingLie_WithUnterminatedDeclaration_ReturnsUnchanged()
+    {
+        const string xml = "<?xml version=\"1.0\" encoding=\"utf-8\"";
+
+        bool changed = XmlChaosAnomalyApplier.TryApplyEncodingLie(xml, out string result);
+
+        Assert.False(changed);
+        Assert.Equal(xml, result);
+    }
+}

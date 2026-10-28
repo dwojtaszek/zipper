@@ -118,13 +118,22 @@ public class TextOutputPolicyTests
     }
 
     [Fact]
-    public void Concordance_LoadfileOnly_PlatformNewLine()
+    public void Concordance_LoadfileOnly_ConfiguredNewLine()
     {
         var req = Req(LoadFileFormat.Concordance, eol: "LF");
         var policy = new TextOutputPolicy(req, LoadFileFormat.Concordance, WriterMode.LoadfileOnly, hasChaos: false);
 
-        // Concordance should always use Environment.NewLine even outside Standard mode
-        Assert.Equal(Environment.NewLine, policy.EndOfLine);
+        // Loadfile-Only honours --eol so Line Ending validation matches the request.
+        Assert.Equal("\n", policy.EndOfLine);
+    }
+
+    [Fact]
+    public void Csv_LoadfileOnly_ConfiguredNewLine()
+    {
+        var req = Req(LoadFileFormat.Csv, eol: "CR");
+        var policy = new TextOutputPolicy(req, LoadFileFormat.Csv, WriterMode.LoadfileOnly, hasChaos: false);
+
+        Assert.Equal("\r", policy.EndOfLine);
     }
 
     [Fact]

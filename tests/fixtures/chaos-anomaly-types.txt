@@ -18,3 +18,17 @@ opt-pagecount
 opt-path
 opt-batesnumber
 opt-encoding
+# CSV chaos anomaly types (LoadFileFormat.Csv — requires --loadfile-format csv)
+# Source: ChaosAnomalyTypes.cs Csv
+csv-quote-escape
+csv-embedded-newline
+csv-bom
+# Concordance chaos anomaly types (LoadFileFormat.Concordance — requires --loadfile-format concordance)
+# Source: ChaosAnomalyTypes.cs Concordance
+concordance-delimiter
+concordance-quote-escape
+# EDRM-XML chaos anomaly types (LoadFileFormat.EdrmXml — requires --loadfile-format edrm-xml)
+# Source: ChaosAnomalyTypes.cs EdrmXml
+xml-unclosed-tag
+xml-bad-entity
+xml-encoding-lie

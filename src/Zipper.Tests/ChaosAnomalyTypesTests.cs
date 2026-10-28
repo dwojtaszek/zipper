@@ -41,6 +41,38 @@ public class ChaosAnomalyTypesTests
     }
 
     [Fact]
+    public void Csv_ContainsExpectedFormatSpecificTypes()
+    {
+        Assert.Contains("csv-quote-escape", ChaosAnomalyTypes.Csv);
+        Assert.Contains("csv-bom", ChaosAnomalyTypes.Csv);
+        Assert.Contains("csv-embedded-newline", ChaosAnomalyTypes.Csv);
+        // Must not silently inherit DAT arms
+        Assert.DoesNotContain("mixed-delimiters", ChaosAnomalyTypes.Csv);
+        Assert.DoesNotContain("quotes", ChaosAnomalyTypes.Csv);
+    }
+
+    [Fact]
+    public void Concordance_ContainsExpectedFormatSpecificTypes()
+    {
+        Assert.Contains("concordance-delimiter", ChaosAnomalyTypes.Concordance);
+        Assert.Contains("concordance-quote-escape", ChaosAnomalyTypes.Concordance);
+        // Must not silently inherit DAT arms
+        Assert.DoesNotContain("mixed-delimiters", ChaosAnomalyTypes.Concordance);
+        Assert.DoesNotContain("quotes", ChaosAnomalyTypes.Concordance);
+    }
+
+    [Fact]
+    public void EdrmXml_ContainsExpectedFormatSpecificTypes()
+    {
+        Assert.Contains("xml-unclosed-tag", ChaosAnomalyTypes.EdrmXml);
+        Assert.Contains("xml-bad-entity", ChaosAnomalyTypes.EdrmXml);
+        Assert.Contains("xml-encoding-lie", ChaosAnomalyTypes.EdrmXml);
+        // Must not inherit DAT arms
+        Assert.DoesNotContain("mixed-delimiters", ChaosAnomalyTypes.EdrmXml);
+        Assert.DoesNotContain("eol", ChaosAnomalyTypes.EdrmXml);
+    }
+
+    [Fact]
     public void ForFormat_Dat_ReturnsDatTypes()
     {
         var types = ChaosAnomalyTypes.ForFormat(LoadFileFormat.Dat);
@@ -52,5 +84,26 @@ public class ChaosAnomalyTypesTests
     {
         var types = ChaosAnomalyTypes.ForFormat(LoadFileFormat.Opt);
         Assert.Equal(ChaosAnomalyTypes.Opt, types);
+    }
+
+    [Fact]
+    public void ForFormat_Csv_ReturnsCsvTypes()
+    {
+        var types = ChaosAnomalyTypes.ForFormat(LoadFileFormat.Csv);
+        Assert.Equal(ChaosAnomalyTypes.Csv, types);
+    }
+
+    [Fact]
+    public void ForFormat_Concordance_ReturnsConcordanceTypes()
+    {
+        var types = ChaosAnomalyTypes.ForFormat(LoadFileFormat.Concordance);
+        Assert.Equal(ChaosAnomalyTypes.Concordance, types);
+    }
+
+    [Fact]
+    public void ForFormat_EdrmXml_ReturnsEdrmXmlTypes()
+    {
+        var types = ChaosAnomalyTypes.ForFormat(LoadFileFormat.EdrmXml);
+        Assert.Equal(ChaosAnomalyTypes.EdrmXml, types);
     }
 }

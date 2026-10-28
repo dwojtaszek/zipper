@@ -50,7 +50,7 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine();
         Console.Error.WriteLine("Loadfile-Only Options:");
         Console.Error.WriteLine("  --loadfile-only          Skip ZIP/native generation, stream directly to load file");
-        Console.Error.WriteLine("  --loadfile-format <f>    Load file schema: dat, opt (default: dat)");
+        Console.Error.WriteLine("  --loadfile-format <f>    Load file schema: dat, opt, csv, edrm-xml, xml, concordance (default: dat)");
         Console.Error.WriteLine("  --eol <CRLF|LF|CR>      End-of-line format (default: CRLF)");
         Console.Error.WriteLine("  --col-delim <value>      Column delimiter (ascii:<N> or char:<c>)");
         Console.Error.WriteLine("  --quote-delim <value>    Quote delimiter (ascii:<N>, char:<c>, or none)");
@@ -63,7 +63,10 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine("  --chaos-amount <value>   Anomaly count: percentage (1%) or exact (500)");
         Console.Error.WriteLine("  --chaos-types <list>     DAT: mixed-delimiters,quotes,columns,eol,encoding,path-pointer,field-length,date-format,null-byte,trailing-empties");
         Console.Error.WriteLine("                           OPT: opt-boundary,opt-columns,opt-pagecount,opt-path,opt-batesnumber,opt-encoding");
-        Console.Error.WriteLine("                           DAT record anomalies are opt-in; full-chaos enables all DAT types");
+        Console.Error.WriteLine("                           CSV: csv-quote-escape,csv-embedded-newline,csv-bom");
+        Console.Error.WriteLine("                           Concordance: concordance-delimiter,concordance-quote-escape");
+        Console.Error.WriteLine("                           EDRM-XML: xml-unclosed-tag,xml-bad-entity,xml-encoding-lie");
+        Console.Error.WriteLine("                           DAT record anomalies are opt-in; full-chaos enables all types for the selected format");
         Console.Error.WriteLine("                           OPT opt-encoding is opt-in; full-chaos enables it");
         Console.Error.WriteLine("  --chaos-scenario <name>  Use a predefined chaos scenario (conflicts with --chaos-types)");
         Console.Error.WriteLine("  --chaos-list             List available chaos scenarios and exit");

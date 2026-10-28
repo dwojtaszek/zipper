@@ -70,7 +70,12 @@ internal static class LoadFileAuditWriter
             };
         }
 
-        long totalLines = format == LoadFileFormat.Opt ? totalRecords : totalRecords + 1;
+        long totalLines = format switch
+        {
+            LoadFileFormat.Opt => totalRecords,
+            LoadFileFormat.EdrmXml => Math.Max(1, totalRecords),
+            _ => totalRecords + 1,
+        };
         return (totalRecords, totalLines);
     }
 

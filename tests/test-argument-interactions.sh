@@ -297,18 +297,18 @@ assert_dat_not_contains "--with-collection-metadata in Production Set silently i
 assert_dat_not_contains "--with-collection-metadata in loadfile-only (no profile) silently ignored" "Data Source" \
     --loadfile-only --count 5 --with-collection-metadata
 
-# --- Negative E2E tests for --loadfile-only formats ---
+# --- Loadfile-Only format acceptance: CSV/Concordance/EDRM-XML are supported (REQ-088) ---
 
-assert_rejected "--loadfile-only + --load-file-format csv" \
+assert_accepted "--loadfile-only + --load-file-format csv" \
     --loadfile-only --count 5 --load-file-format csv
 
-assert_rejected "--loadfile-only + --load-file-format xml" \
+assert_accepted "--loadfile-only + --load-file-format xml" \
     --loadfile-only --count 5 --load-file-format xml
 
-assert_rejected "--loadfile-only + --load-file-format edrm-xml" \
+assert_accepted "--loadfile-only + --load-file-format edrm-xml" \
     --loadfile-only --count 5 --load-file-format edrm-xml
 
-assert_rejected "--loadfile-only + --load-file-format concordance" \
+assert_accepted "--loadfile-only + --load-file-format concordance" \
     --loadfile-only --count 5 --load-file-format concordance
 
 # --- Summary ---
