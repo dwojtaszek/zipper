@@ -235,8 +235,8 @@ if errorlevel 1 ( echo [ ERROR ] CSV chaos mode should be supported & goto :clea
 set "props_file="
 for %%F in ("%TEST_OUTPUT_DIR%\accept_6\*_properties.json") do set "props_file=%%F"
 if not defined props_file ( echo [ ERROR ] No _properties.json file found for CSV chaos test & goto :cleanup )
-powershell -NoProfile -Command "$j = Get-Content -Raw '%props_file%' | ConvertFrom-Json; if ($j.chaosMode.totalAnomalies -le 0 -or -not ($j.chaosMode.injectedAnomalies | Where-Object { $_.errorType -like 'csv-*' })) { exit 1 }"
-if errorlevel 1 ( echo [ ERROR ] CSV Chaos Engine did not record a format-specific anomaly & goto :cleanup )
+powershell -NoProfile -Command "$j = Get-Content -Raw '%props_file%' | ConvertFrom-Json; $types = @($j.chaosMode.injectedAnomalies | ForEach-Object { $_.errorType } | Sort-Object -Unique); if ($j.chaosMode.totalAnomalies -le 0 -or $types.Count -ne 1 -or $types[0] -ne 'csv-quote-escape') { exit 1 }"
+if errorlevel 1 ( echo [ ERROR ] CSV Chaos Engine did not record only the requested csv-quote-escape anomaly & goto :cleanup )
 
 %BINARY% --loadfile-only --count 10 --output-path "%TEST_OUTPUT_DIR%\reject_7" --chaos-mode --chaos-amount "abc" 2>nul
 if not errorlevel 1 ( echo [ ERROR ] Should have rejected invalid --chaos-amount abc & goto :cleanup )

@@ -227,9 +227,13 @@ print_info "Rejected --col-delim without ascii:/char: prefix"
 "${BINARY[@]}" --loadfile-only --loadfile-format csv --count 10 --output-path "$TEST_OUTPUT_DIR/accept_6" --chaos-mode --chaos-types csv-quote-escape --chaos-amount "100%" --seed 42
 props_file=$(find "$TEST_OUTPUT_DIR/accept_6" -name "*_properties.json" -print -quit)
 [[ -z "$props_file" ]] && print_error "No _properties.json file found for CSV chaos test"
-grep -Eq '"errorType": "csv-(quote-escape|embedded-newline|bom)"' "$props_file" \
-    || print_error "CSV Chaos Engine did not record a format-specific anomaly"
-print_info "Accepted CSV chaos mode and recorded a format-specific anomaly"
+grep -Eq '"errorType": "csv-quote-escape"' "$props_file" \
+    || print_error "CSV Chaos Engine did not record the requested csv-quote-escape anomaly"
+if grep -oE '"errorType": "[^"]+"' "$props_file" \
+    | grep -Fvx '"errorType": "csv-quote-escape"' >/dev/null; then
+    print_error "CSV Chaos Engine recorded an anomaly type not requested by --chaos-types"
+fi
+print_info "Accepted CSV chaos mode and recorded the requested anomaly"
 
 # --chaos-amount with invalid format should fail
 if "${BINARY[@]}" --loadfile-only --count 10 --output-path "$TEST_OUTPUT_DIR/reject_7" --chaos-mode --chaos-amount "abc" 2>/dev/null; then
