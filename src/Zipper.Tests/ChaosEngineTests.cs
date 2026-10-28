@@ -785,30 +785,35 @@ public class ChaosEngineTests
             chaosAmount: "10",
             chaosTypes: string.Empty,
             format: LoadFileFormat.Dat,
-            columnDelimiter: "\u0014",
-            quoteDelimiter: "\u00fe",
+            columnDelimiter: "|",
+            quoteDelimiter: "\"",
             eol: "\r\n",
-            seed: 42);
+            seed: 42,
+            dateColumnNames: ["Date Created"]);
 
-        string line = "\u00feValue1\u00fe\u0014\u00feValue2\u00fe";
+        var record = new LoadFileRecord
+        {
+            Columns = ["Control Number", "File Path", "Date Created", "Author"],
+            Values = ["DOC00000001", "NATIVES\\001\\DOC00000001.pdf", "2024-01-15", "Jane Doe"],
+            RecordId = "DOC00000001",
+        };
+        var serializer = new DatSerializer('|', '"', "~");
+        string line = serializer.RenderRecord(record);
 
         int interceptedCount = 0;
         for (int i = 1; i <= 100; i++)
         {
             if (engine.ShouldIntercept(i))
             {
-                engine.Intercept(i, line, $"DOC{i:D8}");
+                engine.Intercept(i, line, record.RecordId, record, serializer);
+                _ = engine.GetEncodingAnomaly(i, i + 1, Encoding.UTF8);
                 interceptedCount++;
             }
         }
 
         Assert.Equal(10, interceptedCount);
-        Assert.True(engine.Anomalies.Count > 0);
-
-        var types = engine.Anomalies.Select(a => a.ErrorType).Distinct(StringComparer.Ordinal).ToList();
-        Assert.True(
-            types.Count >= 2,
-            $"Expected at least 2 distinct anomaly types with all types enabled, got {types.Count}: {string.Join(", ", types)}");
+        var actualTypes = engine.Anomalies.Select(anomaly => anomaly.ErrorType).ToHashSet(StringComparer.Ordinal);
+        Assert.True(new HashSet<string>(ChaosAnomalyTypes.Dat, StringComparer.Ordinal).SetEquals(actualTypes));
     }
 
     [Fact]

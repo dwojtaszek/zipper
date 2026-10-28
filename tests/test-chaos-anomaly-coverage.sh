@@ -119,8 +119,8 @@ while IFS= read -r TYPE; do
         print_error "Type mismatch for $TYPE: got '$TYPES_PRESENT'"
     fi
     if [[ "$TYPE" == "path-pointer" ]] \
-        && ! jq -e '.chaosMode.injectedAnomalies[] | select(.errorType == "path-pointer" and .column == "File Path")' "$PROPS" >/dev/null; then
-        print_error "path-pointer audit does not name the File Path column"
+        && ! jq -e '.chaosMode.injectedAnomalies[] | select(.errorType == "path-pointer" and .column == "File Path" and (.description | startswith("PathReconciliation:")))' "$PROPS" >/dev/null; then
+        print_error "path-pointer audit does not name the File Path column and PathReconciliation mismatch"
     fi
 
     # Unique line numbers (duplicates indicate a bug)

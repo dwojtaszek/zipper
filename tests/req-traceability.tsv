@@ -212,7 +212,12 @@ REQ-096	unit	ChaosEngineTests.ChaosTypes_Filtering_OnlyUsesSpecifiedTypes	--chao
 REQ-097	unit	ChaosAnomalyTypesTests.Dat_ContainsExpectedTypes	DAT chaos anomaly types
 REQ-097	unit	ChaosAndComparisonPropertyTests.DatAnomalyApplier_Apply_ShouldMutateLineAndRecordAnomalyMetadata	Property: DatAnomalyApplier mutates DAT line and records anomaly metadata
 REQ-097	unit	ChaosEngineBuilderTests.Build_DateFormat_UsesProfileTypesWithoutNameHeuristics	date-format recognizes all supported date Column generator types
+REQ-097	unit	ChaosEngineBuilderTests.Build_DateFormat_UsesProfileDateColumnByIndex_WhenNamesNormalizeTheSame	date-format targets the profile date Column even when normalized names collide
+REQ-097	unit	ChaosEngineBuilderTests.Build_DateFormat_UsesLoadfileOnlyDefaultDateColumn_WhenProfileIsAbsent	date-format recognizes Loadfile-Only default date Columns
 REQ-097	unit	DatAnomalyApplierTests.Apply_PathPointer_ReplacesPathWithMissingPath_AndPathReconciliationFindsIt	path-pointer alters the File Path and PathReconciliationValidator rejects it against the original path
+REQ-097	unit	DatAnomalyApplierTests.Apply_PathPointer_WhenRecordColumnsChange_RecomputesFilePathIndex	path-pointer recomputes its File Path index when record Columns change
+REQ-097	unit	DatAnomalyApplierTests.Apply_PathPointer_WhenMissingPathCandidatesCollide_EmptiesPathAfterBoundedAttempts	path-pointer empties the File Path when bounded missing-path candidates collide
+REQ-097	unit	DatAnomalyApplierTests.Apply_PathPointer_EmptyOriginalPath_ReplacesAndAuditsPath	path-pointer replaces and audits an empty File Path
 REQ-097	unit	DatAnomalyApplierTests.Apply_PathPointer_WithoutPathColumn_ReturnsUnchangedLine_AndDoesNotRecordAnomaly	path-pointer is a no-op when a record has no path Column
 REQ-097	unit	DatAnomalyApplierTests.Apply_FieldLength_ExceedsCommonLimit_AndRecordsColumn	field-length exceeds the common field limit and audits the Column
 REQ-097	unit	DatAnomalyApplierTests.Apply_DateFormat_UsesMalformedDate_AndRecordsColumn	date-format uses a malformed date and audits the Column

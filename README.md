@@ -63,6 +63,7 @@ Generate a DAT Load File with deterministic path, field-length, date, control-by
 zipper --loadfile-only --count 100000 --output-path ./import-failures \
     --chaos-mode --chaos-scenario realistic-import-failures --seed 42
 ```
+Each `path-pointer` Anomaly is checked against its original File Path by `PathReconciliationValidator` and recorded in the Audit File as a `PathReconciliation` mismatch. If colliding Source Record paths prevent a safe missing-path candidate, the Anomaly uses an empty File Path instead.
 
 #### 7. Publish Archive Test Fixture pairs
 Publish the frozen smoke suite (five cases: three valid controls plus a CRC lie and a missing EOCD) as flat `<fixtureId>.zip` / `<fixtureId>.json` pairs for extractor testing — see [Archive Test Suites](docs/archive-test-suites.md):

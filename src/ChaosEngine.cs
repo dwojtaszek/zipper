@@ -35,7 +35,7 @@ internal class ChaosEngine
     /// </summary>
     /// <param name="totalLines">Total number of lines (including header).</param>
     /// <param name="chaosAmount">Amount string: percentage (e.g., "1%") or exact count (e.g., "500").</param>
-    /// <param name="chaosTypes">Comma-separated type filter, or null for all.</param>
+    /// <param name="chaosTypes">Comma-separated type filter, null for defaults, or empty string for all types.</param>
     /// <param name="format">Load file format (Dat or Opt).</param>
     /// <param name="columnDelimiter">Configured column delimiter.</param>
     /// <param name="quoteDelimiter">Configured quote delimiter.</param>
@@ -43,6 +43,7 @@ internal class ChaosEngine
     /// <param name="seed">Optional random seed for reproducibility.</param>
     /// <param name="dateColumnNames">Optional names of date columns that the <c>date-format</c> anomaly may target.</param>
     /// <param name="sourceFilePaths">Optional Source Record paths used to avoid path-pointer collisions.</param>
+    /// <param name="dateColumnIndexes">Optional date-column indexes resolved from a Column Profile.</param>
     public ChaosEngine(
         long totalLines,
         string? chaosAmount,
@@ -53,7 +54,8 @@ internal class ChaosEngine
         string eol,
         int? seed = null,
         IReadOnlyCollection<string>? dateColumnNames = null,
-        IReadOnlySet<string>? sourceFilePaths = null)
+        IReadOnlySet<string>? sourceFilePaths = null,
+        IReadOnlySet<int>? dateColumnIndexes = null)
     {
         this.format = format;
         this.totalLines = totalLines;
@@ -62,26 +64,7 @@ internal class ChaosEngine
         Random random = seed.HasValue ? new Random(seed.Value) : new Random();
 #pragma warning restore S2245
 
-        // Determine enabled types
-        var validTypes = format == LoadFileFormat.Opt ? OptChaosTypes : DatChaosTypes;
-        if (!string.IsNullOrEmpty(chaosTypes))
-        {
-            this.enabledTypes = new HashSet<string>(
-                chaosTypes.Split(',').Select(t => t.Trim().ToLowerInvariant()),
-                StringComparer.OrdinalIgnoreCase);
-            this.enabledTypes.IntersectWith(validTypes);
-        }
-        else if (chaosTypes is null)
-        {
-            var defaultTypes = format == LoadFileFormat.Opt ? OptDefaultChaosTypes : DatDefaultChaosTypes;
-            this.enabledTypes = new HashSet<string>(defaultTypes, StringComparer.OrdinalIgnoreCase);
-        }
-        else
-        {
-            // Preserve the existing empty-string behavior: an explicit empty DAT filter
-            // enables every DAT anomaly, including the opt-in record-level types.
-            this.enabledTypes = new HashSet<string>(validTypes, StringComparer.OrdinalIgnoreCase);
-        }
+        this.enabledTypes = ResolveEnabledTypes(format, chaosTypes);
 
         this.onlyOptEncoding = format == LoadFileFormat.Opt
             && this.enabledTypes.Count == 1
@@ -91,11 +74,7 @@ internal class ChaosEngine
             && this.enabledTypes.Any(DatRecordOnlyChaosTypes.Contains);
         this.noDatRecords = this.hasDatRecordOnlyTypes && totalLines == 1;
         ChaosSampler.ValidateTotalLines(totalLines);
-        long targetableLines = this.onlyOptEncoding && totalLines > 1 ? totalLines - 1 : totalLines;
-        if (this.hasDatRecordOnlyTypes)
-        {
-            targetableLines = Math.Max(1, totalLines - 1);
-        }
+        long targetableLines = GetTargetableLines(totalLines, this.onlyOptEncoding, this.hasDatRecordOnlyTypes);
         this.sampler = new ChaosSampler(targetableLines, chaosAmount, random);
 
         // If quote-delim is "none", disable the quotes chaos type
@@ -105,9 +84,73 @@ internal class ChaosEngine
         }
 
         // Initialize Applier
-        this.applier = format == LoadFileFormat.Opt
-            ? new OptAnomalyApplier(random)
-            : new DatAnomalyApplier(random, columnDelimiter, quoteDelimiter, string.IsNullOrEmpty(eol) ? "\r\n" : eol, dateColumnNames, sourceFilePaths);
+        this.applier = CreateApplier(
+            format,
+            random,
+            columnDelimiter,
+            quoteDelimiter,
+            eol,
+            dateColumnNames,
+            sourceFilePaths,
+            dateColumnIndexes);
+    }
+
+    private static HashSet<string> ResolveEnabledTypes(LoadFileFormat format, string? chaosTypes)
+    {
+        var validTypes = format == LoadFileFormat.Opt ? OptChaosTypes : DatChaosTypes;
+        if (!string.IsNullOrEmpty(chaosTypes))
+        {
+            var resolvedTypes = new HashSet<string>(
+                chaosTypes.Split(',').Select(type => type.Trim().ToLowerInvariant()),
+                StringComparer.OrdinalIgnoreCase);
+            resolvedTypes.IntersectWith(validTypes);
+            return resolvedTypes;
+        }
+
+        // Preserve the existing empty-string behavior: an explicit empty DAT filter
+        // enables every DAT anomaly, including the opt-in record-level types.
+        if (chaosTypes is null)
+        {
+            var defaultTypes = format == LoadFileFormat.Opt ? OptDefaultChaosTypes : DatDefaultChaosTypes;
+            return new HashSet<string>(defaultTypes, StringComparer.OrdinalIgnoreCase);
+        }
+
+        return new HashSet<string>(validTypes, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static long GetTargetableLines(long totalLines, bool onlyOptEncoding, bool hasDatRecordOnlyTypes)
+    {
+        if (hasDatRecordOnlyTypes)
+        {
+            return Math.Max(1, totalLines - 1);
+        }
+
+        return onlyOptEncoding && totalLines > 1 ? totalLines - 1 : totalLines;
+    }
+
+    private static IAnomalyApplier CreateApplier(
+        LoadFileFormat format,
+        Random random,
+        string columnDelimiter,
+        string quoteDelimiter,
+        string eol,
+        IReadOnlyCollection<string>? dateColumnNames,
+        IReadOnlySet<string>? sourceFilePaths,
+        IReadOnlySet<int>? dateColumnIndexes)
+    {
+        if (format == LoadFileFormat.Opt)
+        {
+            return new OptAnomalyApplier(random);
+        }
+
+        return new DatAnomalyApplier(
+            random,
+            columnDelimiter,
+            quoteDelimiter,
+            string.IsNullOrEmpty(eol) ? "\r\n" : eol,
+            dateColumnNames,
+            sourceFilePaths,
+            dateColumnIndexes);
     }
 
     /// <summary>

@@ -85,6 +85,14 @@ internal static class ChaosScenarios
         return ScenariosArray.FirstOrDefault(s => s.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
     }
 
+    internal static IReadOnlyList<string> ResolveTypes(ChaosScenarioDefinition scenario, LoadFileFormat format)
+    {
+        ArgumentNullException.ThrowIfNull(scenario);
+        return string.IsNullOrEmpty(scenario.ChaosTypes)
+            ? ChaosAnomalyTypes.ForFormat(format)
+            : scenario.ChaosTypes.Split(',');
+    }
+
     /// <summary>
     /// Prints the list of available scenarios to stdout.
     /// </summary>

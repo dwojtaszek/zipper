@@ -685,7 +685,7 @@ This section clarifies behavior when multiple arguments interact:
   - `columns`: Add or remove a column delimiter to break expected column count
   - `eol`: Inject a raw unescaped newline within a data field
   - `encoding`: Insert invalid byte sequences between lines for the configured encoding
-  - `path-pointer`: Replace a File Path value with a plausible path that does not exist
+  - `path-pointer`: Replace a File Path value with a plausible path that does not resolve; validate and audit the mismatch with `PathReconciliationValidator`, using an empty path if bounded collision retries cannot find a non-resolving candidate
   - `field-length`: Replace a field value with a value longer than common platform limits
   - `date-format`: Replace a date value with a documented malformed value
   - `null-byte`: Insert a NULL byte and unsupported control character into a field

@@ -7,27 +7,32 @@ namespace Zipper.SourceInput;
 /// </summary>
 internal static class SourceFileTypeMap
 {
-    internal static readonly string[] SupportedExtensions =
-    [
-        ".pdf", ".jpg", ".jpeg", ".tif", ".tiff", ".eml", ".docx", ".xlsx",
-    ];
+    private static readonly IReadOnlyDictionary<string, string> FileTypesByExtension =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [".pdf"] = "pdf",
+            [".jpg"] = "jpg",
+            [".jpeg"] = "jpg",
+            [".tif"] = "tiff",
+            [".tiff"] = "tiff",
+            [".eml"] = "eml",
+            [".docx"] = "docx",
+            [".xlsx"] = "xlsx",
+        };
+
+    internal static readonly string[] SupportedExtensions = FileTypesByExtension.Keys.ToArray();
 
     internal static readonly string SupportedExtensionsDisplay = string.Join(", ", SupportedExtensions);
 
     internal static bool TryFromExtension(string extensionLower, out string fileType)
     {
-        var mapped = extensionLower switch
+        if (FileTypesByExtension.TryGetValue(extensionLower, out var mapped))
         {
-            ".pdf" => "pdf",
-            ".jpg" or ".jpeg" => "jpg",
-            ".tif" or ".tiff" => "tiff",
-            ".eml" => "eml",
-            ".docx" => "docx",
-            ".xlsx" => "xlsx",
-            _ => (string?)null,
-        };
+            fileType = mapped;
+            return true;
+        }
 
-        fileType = mapped ?? string.Empty;
-        return mapped is not null;
+        fileType = string.Empty;
+        return false;
     }
 }

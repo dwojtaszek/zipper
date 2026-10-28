@@ -193,6 +193,117 @@ public class DatAnomalyApplierTests
     }
 
     [Fact]
+    public void Apply_PathPointer_WhenRecordColumnsChange_RecomputesFilePathIndex()
+    {
+        var applier = new DatAnomalyApplier(new Random(42), "|", "\"", "\r\n");
+        var firstRecord = new LoadFileRecord
+        {
+            Columns = ["File Path", "Author"],
+            Values = ["NATIVES\\001\\DOC00000001.pdf", "Jane Doe"],
+            RecordId = "DOC00000001",
+        };
+        var firstAnomalies = new List<ChaosAnomaly>();
+        _ = applier.Apply(
+            2,
+            Serializer.RenderRecord(firstRecord),
+            firstRecord.RecordId,
+            "path-pointer",
+            firstAnomalies,
+            firstRecord,
+            Serializer);
+
+        var secondRecord = new LoadFileRecord
+        {
+            Columns = ["Author", "File Path"],
+            Values = ["Jane Doe", "NATIVES\\001\\DOC00000002.pdf"],
+            RecordId = "DOC00000002",
+        };
+        var secondAnomalies = new List<ChaosAnomaly>();
+        string result = applier.Apply(
+            3,
+            Serializer.RenderRecord(secondRecord),
+            secondRecord.RecordId,
+            "path-pointer",
+            secondAnomalies,
+            secondRecord,
+            Serializer);
+
+        var fields = DatLineParser.Parse(result, '|', '"');
+        Assert.Equal("Jane Doe", fields[0]);
+        Assert.EndsWith("_MISSING.pdf", fields[1], StringComparison.Ordinal);
+        Assert.Equal("File Path", Assert.Single(secondAnomalies).Column);
+    }
+
+    [Fact]
+    public void Apply_PathPointer_WhenMissingPathCandidatesCollide_EmptiesPathAfterBoundedAttempts()
+    {
+        var sourcePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "folder/doc.pdf",
+            "folder/doc_MISSING.pdf",
+        };
+        for (int collisionIndex = 1; collisionIndex <= 64; collisionIndex++)
+        {
+            sourcePaths.Add($"folder/doc_MISSING_{collisionIndex}.pdf");
+        }
+
+        var record = new LoadFileRecord
+        {
+            Columns = ["File Path"],
+            Values = ["folder/doc.pdf"],
+            RecordId = "DOC00000001",
+        };
+        var anomalies = new List<ChaosAnomaly>();
+        var applier = new DatAnomalyApplier(
+            new Random(42),
+            "|",
+            "\"",
+            "\r\n",
+            sourceFilePaths: sourcePaths);
+
+        string result = applier.Apply(
+            2,
+            Serializer.RenderRecord(record),
+            record.RecordId,
+            "path-pointer",
+            anomalies,
+            record,
+            Serializer);
+
+        Assert.Equal(string.Empty, Assert.Single(DatLineParser.Parse(result, '|', '"')));
+        var anomaly = Assert.Single(anomalies);
+        Assert.Equal("File Path", anomaly.Column);
+        Assert.Contains("PathReconciliation:", anomaly.Description, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Apply_PathPointer_EmptyOriginalPath_ReplacesAndAuditsPath()
+    {
+        var record = new LoadFileRecord
+        {
+            Columns = ["File Path"],
+            Values = [string.Empty],
+            RecordId = "DOC00000001",
+        };
+        var anomalies = new List<ChaosAnomaly>();
+        var applier = new DatAnomalyApplier(new Random(42), "|", "\"", "\r\n");
+
+        string result = applier.Apply(
+            2,
+            Serializer.RenderRecord(record),
+            record.RecordId,
+            "path-pointer",
+            anomalies,
+            record,
+            Serializer);
+
+        Assert.Equal("NATIVES\\__MISSING__\\DOCUMENT.pdf", Assert.Single(DatLineParser.Parse(result, '|', '"')));
+        var anomaly = Assert.Single(anomalies);
+        Assert.Equal("File Path", anomaly.Column);
+        Assert.Contains("PathReconciliation:", anomaly.Description, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Apply_PathPointer_WithoutPathColumn_ReturnsUnchangedLine_AndDoesNotRecordAnomaly()
     {
         var record = new LoadFileRecord

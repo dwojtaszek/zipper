@@ -308,6 +308,10 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
             JsonElement pathPointer = Assert.Single(anomalies, anomaly => anomaly.GetProperty("errorType").GetString() == "path-pointer");
 
             Assert.Equal(expectedTypes, actualTypes);
+            Assert.Contains(
+                "PathReconciliation:",
+                pathPointer.GetProperty("description").GetString(),
+                StringComparison.Ordinal);
             Assert.All(anomalies, anomaly =>
             {
                 Assert.False(string.IsNullOrWhiteSpace(anomaly.GetProperty("column").GetString()));

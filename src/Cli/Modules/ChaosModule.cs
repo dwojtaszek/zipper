@@ -33,9 +33,7 @@ public sealed class ChaosModule : CliModule
                 return false;
             }
 
-            chaosTypes = string.IsNullOrEmpty(scenario.ChaosTypes)
-                ? string.Join(",", ChaosAnomalyTypes.ForFormat(LoadFileFormat.Dat))
-                : scenario.ChaosTypes;
+            chaosTypes = string.Join(",", ChaosScenarios.ResolveTypes(scenario, LoadFileFormat.Dat));
         }
         else if (chaosTypes is null)
         {

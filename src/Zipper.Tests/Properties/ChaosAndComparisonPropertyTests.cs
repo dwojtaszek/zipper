@@ -255,7 +255,28 @@ public sealed class ChaosAndComparisonPropertyTests
         Assert.Equal(
             $"folder/doc_MISSING_{collisionDepth.ToString(CultureInfo.InvariantCulture)}.pdf",
             mutatedPath);
-        Assert.Equal("path-pointer", Assert.Single(anomalies).ErrorType);
+
+        var reorderedRecord = new LoadFileRecord
+        {
+            Columns = ["Author", "File Path"],
+            Values = ["Jane Doe", originalPath],
+            RecordId = $"DOC{seedInput.RecordOrdinal:D4}_REORDERED",
+        };
+        string reorderedLine = serializer.RenderRecord(reorderedRecord);
+        string reorderedResult = applier.Apply(
+            3,
+            reorderedLine,
+            reorderedRecord.RecordId,
+            "path-pointer",
+            anomalies,
+            reorderedRecord,
+            serializer);
+        var reorderedValues = DatLineParser.Parse(reorderedResult, '|', '"');
+
+        Assert.Equal("Jane Doe", reorderedValues[0]);
+        Assert.Equal(mutatedPath, reorderedValues[1].Replace('\\', '/'));
+        Assert.Equal(2, anomalies.Count);
+        Assert.All(anomalies, anomaly => Assert.Equal("path-pointer", anomaly.ErrorType));
     }
 
     [Property]

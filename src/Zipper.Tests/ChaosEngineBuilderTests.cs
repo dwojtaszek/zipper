@@ -156,6 +156,70 @@ public class ChaosEngineBuilderTests
     }
 
     [Fact]
+    public void Build_DateFormat_UsesProfileDateColumnByIndex_WhenNamesNormalizeTheSame()
+    {
+        var profile = new ColumnProfile
+        {
+            Name = "punctuation-distinct-columns",
+            Columns =
+            [
+                new ColumnDefinition { Name = "Control Number", Type = "identifier" },
+                new ColumnDefinition { Name = "Review-Stamp", Type = "text" },
+                new ColumnDefinition { Name = "Review Stamp", Type = "date" },
+            ],
+        };
+        ColumnProfileLoader.Validate(profile);
+
+        var request = new FileGenerationRequest { LoadfileOnly = true };
+        request.Metadata = request.Metadata with { Seed = 42, ColumnProfile = profile };
+        request.Chaos = request.Chaos with { ChaosMode = true, ChaosAmount = "1", ChaosTypes = "date-format" };
+        var record = new LoadFileRecord
+        {
+            Columns = ["Control Number", "Review-Stamp", "Review Stamp"],
+            Values = ["DOC00000001", "review value", "2024-01-15"],
+            RecordId = "DOC00000001",
+        };
+        var serializer = new DatSerializer('|', '"', "~");
+        string line = serializer.RenderRecord(record);
+        var engine = ChaosEngineBuilder.Build(request, 2, LoadFileFormat.Dat);
+        Assert.NotNull(engine);
+        Assert.True(engine.ShouldIntercept(2));
+
+        string result = engine.Intercept(2, line, record.RecordId, record, serializer);
+
+        var fields = DatLineParser.Parse(result, '|', '"');
+        Assert.Equal("review value", fields[1]);
+        Assert.Contains(fields[2], new[] { "00/00/0000", "2018-01-15 a.m.", "2018-044-09" });
+        Assert.Equal("Review Stamp", Assert.Single(engine.Anomalies).Column);
+    }
+
+    [Fact]
+    public void Build_DateFormat_UsesLoadfileOnlyDefaultDateColumn_WhenProfileIsAbsent()
+    {
+        var request = new FileGenerationRequest { LoadfileOnly = true };
+        request.Metadata = request.Metadata with { Seed = 42 };
+        request.Chaos = request.Chaos with { ChaosMode = true, ChaosAmount = "1", ChaosTypes = "date-format" };
+        var record = new LoadFileRecord
+        {
+            Columns = ["Date Sent", "Author"],
+            Values = ["2024-01-15", "Jane Doe"],
+            RecordId = "DOC00000001",
+        };
+        var serializer = new DatSerializer('|', '"', "~");
+        string line = serializer.RenderRecord(record);
+        var engine = ChaosEngineBuilder.Build(request, 2, LoadFileFormat.Dat);
+        Assert.NotNull(engine);
+        Assert.True(engine.ShouldIntercept(2));
+
+        string result = engine.Intercept(2, line, record.RecordId, record, serializer);
+
+        var fields = DatLineParser.Parse(result, '|', '"');
+        Assert.Contains(fields[0], new[] { "00/00/0000", "2018-01-15 a.m.", "2018-044-09" });
+        Assert.Equal("Jane Doe", fields[1]);
+        Assert.Equal("Date Sent", Assert.Single(engine.Anomalies).Column);
+    }
+
+    [Fact]
     public void Build_PathPointer_AvoidsExistingSourcePaths()
     {
         var sourceRecords = new[]
