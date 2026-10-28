@@ -64,11 +64,20 @@ internal class LoadFileOnlyMode : IGenerationMode
         {
             var formats = request.LoadFile.Formats.Count > 0 ? request.LoadFile.Formats : new[] { LoadFileFormat.Dat };
             var loadFiles = new Dictionary<string, string>();
-            string basePath = result.LoadFilePath[..^GetLoadFileExtension(formats[0]).Length];
-            foreach (var format in formats)
+            string firstExtension = GetLoadFileExtension(formats[0]);
+            string? basePath = result.LoadFilePath.EndsWith(firstExtension, StringComparison.OrdinalIgnoreCase)
+                ? result.LoadFilePath[..^firstExtension.Length]
+                : null;
+            for (int i = 0; i < formats.Count; i++)
             {
+                if (i > 0 && basePath is null)
+                {
+                    continue;
+                }
+
+                var format = formats[i];
                 var name = GetLoadFileName(format);
-                var filePath = format == formats[0] ? result.LoadFilePath : basePath + GetLoadFileExtension(format);
+                var filePath = i == 0 ? result.LoadFilePath : basePath + GetLoadFileExtension(format);
                 if (File.Exists(filePath))
                     loadFiles[name] = filePath;
             }

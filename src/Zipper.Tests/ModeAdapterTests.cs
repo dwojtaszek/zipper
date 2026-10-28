@@ -79,6 +79,33 @@ public class StandardModeTests
 [Collection("ConsoleTests")]
 public class LoadFileOnlyModeTests
 {
+    [Fact]
+    public async Task RunAsync_SingleConcordanceFormat_WhenPathLacksExtension_DoesNotThrow()
+    {
+        var mode = new LoadFileOnlyMode((_, _) => Task.FromResult(new LoadFileOnlyResult
+        {
+            LoadFilePath = "x",
+            PropertiesFilePath = "loadfile_properties.json",
+            TotalRecords = 1,
+        }));
+        var request = new FileGenerationRequest
+        {
+            LoadFile = new Config.LoadFileConfig
+            {
+                Formats = [LoadFileFormat.Concordance],
+                Encoding = "UTF-8",
+            },
+            Output = new Config.OutputConfig
+            {
+                FileCount = 1,
+                OutputPath = Path.GetTempPath(),
+            },
+            Delimiters = new Config.DelimiterConfig { EndOfLine = "CRLF" },
+        };
+
+        await mode.RunAsync(request);
+    }
+
     [Theory]
     [InlineData(LoadFileFormat.Csv, "COLUMN_A,COLUMN_B\r\nvalue\r\n")]
     [InlineData(LoadFileFormat.Concordance, "\u00feCOLUMN_A\u00fe\u0014\u00feCOLUMN_B\u00fe\r\n\u00fevalue\u00fe\r\n")]
