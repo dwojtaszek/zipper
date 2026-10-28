@@ -21,9 +21,10 @@ internal sealed class ConcordanceComposingWriter : ILoadFileWriter
     {
         var composer = new ConcordanceComposer(request);
         var serializer = new ConcordanceSerializer(request);
-        var policy = new TextOutputPolicy(request, LoadFileFormat.Concordance, WriterMode.Standard, hasChaos: false);
+        var mode = request.LoadfileOnly ? WriterMode.LoadfileOnly : WriterMode.Standard;
+        var policy = new TextOutputPolicy(request, LoadFileFormat.Concordance, mode, hasChaos: chaosEngine is not null);
 
         await LoadFileEmitter.EmitAsync(
-            stream, serializer, composer.HeaderColumns, composer.Compose(processedFiles), policy.Encoding, policy.EndOfLine, chaosEngine: null, cancellationToken).ConfigureAwait(false);
+            stream, serializer, composer.HeaderColumns, composer.Compose(processedFiles), policy.Encoding, policy.EndOfLine, chaosEngine, cancellationToken).ConfigureAwait(false);
     }
 }

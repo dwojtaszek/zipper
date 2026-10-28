@@ -175,11 +175,9 @@ internal class ChaosEngine
 
         if (format == LoadFileFormat.EdrmXml)
         {
-            // EDRM-XML is a carve-out: XmlLoadFileWriter handles its own anomaly injection.
-            // The applier returned here is only used by ChaosEngine.Intercept, which is never
-            // called for EdrmXml (XmlLoadFileWriter does not invoke LoadFileEmitter).
-            // Return a no-op applier to satisfy the IAnomalyApplier contract.
-            return new XmlChaosAnomalyApplier(random);
+            // EDRM-XML is the documented carve-out: XmlLoadFileWriter applies XML anomalies
+            // itself via ApplyXmlChaos because the output is a document tree, not lines.
+            return new XmlChaosAnomalyApplier();
         }
 
         return new DatAnomalyApplier(
@@ -262,6 +260,106 @@ internal class ChaosEngine
         }
 
         return this.applier.Apply(lineNumber, line, recordId, chosenType, this.anomalies, record, serializer);
+    }
+
+    /// <summary>
+    /// Applies EDRM-XML structural anomalies to a fully rendered XML document inside the
+    /// <see cref="LoadFiles.XmlLoadFileWriter"/> carve-out. Interception is sampled per
+    /// <c>&lt;Document&gt;</c> element, mirroring the line sampling used by delimited formats.
+    /// </summary>
+    /// <param name="xml">The rendered XML document.</param>
+    /// <returns>The XML document with any sampled anomalies applied.</returns>
+    public string ApplyXmlChaos(string xml)
+    {
+        if (this.enabledTypes.Count == 0 || this.applier is not XmlChaosAnomalyApplier xmlApplier)
+        {
+            return xml;
+        }
+
+        var typeList = this.enabledTypes.OrderBy(type => type, StringComparer.Ordinal).ToArray();
+        var builder = new StringBuilder(xml.Length + 64);
+        long documentIndex = 0;
+        int searchFrom = 0;
+        bool encodingLieApplied = false;
+
+        while (true)
+        {
+            int start = xml.IndexOf("<Document ", searchFrom, StringComparison.Ordinal);
+            if (start < 0)
+            {
+                break;
+            }
+
+            int end = xml.IndexOf("</Document>", start, StringComparison.Ordinal);
+            if (end < 0)
+            {
+                break;
+            }
+
+            documentIndex++;
+            builder.Append(xml, searchFrom, start - searchFrom);
+
+            int documentEnd = end + "</Document>".Length;
+            string documentXml = xml.Substring(start, documentEnd - start);
+
+            if (this.ShouldIntercept(documentIndex))
+            {
+                string chosenType = typeList[this.anomalyTypeIndex % typeList.Length];
+                this.anomalyTypeIndex++;
+
+                if (chosenType == "xml-encoding-lie")
+                {
+                    encodingLieApplied = true;
+                    this.anomalies.Add(new ChaosAnomaly
+                    {
+                        LineNumber = documentIndex.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        RecordID = GetXmlRecordId(documentXml),
+                        Column = "XML declaration",
+                        ErrorType = chosenType,
+                        Description = "Changed the XML declaration to claim UTF-16 while the emitted bytes remain UTF-8.",
+                    });
+                }
+                else if (xmlApplier.TryApplyToDocument(documentXml, chosenType, out string mutated, out string column, out string description))
+                {
+                    documentXml = mutated;
+                    this.anomalies.Add(new ChaosAnomaly
+                    {
+                        LineNumber = documentIndex.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        RecordID = GetXmlRecordId(documentXml),
+                        Column = column,
+                        ErrorType = chosenType,
+                        Description = description,
+                    });
+                }
+            }
+
+            builder.Append(documentXml);
+            searchFrom = documentEnd;
+        }
+
+        builder.Append(xml, searchFrom, xml.Length - searchFrom);
+        string result = builder.ToString();
+
+        if (encodingLieApplied && XmlChaosAnomalyApplier.TryApplyEncodingLie(result, out string rewritten))
+        {
+            result = rewritten;
+        }
+
+        return result;
+    }
+
+    private static string GetXmlRecordId(string documentXml)
+    {
+        const string marker = "DocID=\"";
+        int markerIndex = documentXml.IndexOf(marker, StringComparison.Ordinal);
+        if (markerIndex < 0)
+        {
+            return "N/A";
+        }
+
+        int start = markerIndex + marker.Length;
+        int end = documentXml.IndexOf('"', start);
+        return end < 0 ? "N/A" : documentXml[start..end];
     }
 
     /// <summary>

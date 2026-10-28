@@ -222,11 +222,11 @@ public class ChaosModuleTests
     }
 
     [Fact]
-    public void TryBuild_ChaosModeWithCsvFormat_ReturnsFalse()
+    public void TryBuild_ChaosModeWithCsvFormat_UsesCsvDefaults()
     {
-        // With no types specified, CSV format still rejects --chaos-mode (requires explicit csv types).
         var spec = new ChaosConfigSpec(Amount: null, Types: null, Scenario: null) { Mode = true };
-        Assert.False(TryBuildWithValues(spec, out _, formats: new List<LoadFileFormat> { LoadFileFormat.Csv }));
+        Assert.True(TryBuildWithValues(spec, out var config, formats: new List<LoadFileFormat> { LoadFileFormat.Csv }));
+        Assert.Null(config.ChaosTypes);
     }
 
     [Fact]

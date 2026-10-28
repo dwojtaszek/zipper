@@ -4,37 +4,21 @@ using Zipper.LoadFiles;
 namespace Zipper;
 
 /// <summary>
-/// No-op applier for the EDRM-XML carve-out.
+/// Applies structural EDRM-XML chaos anomalies to a rendered XML document.
 /// <para>
 /// <see cref="XmlLoadFileWriter"/> is the documented EDRM-XML carve-out from the
 /// composer → serializer → emitter seam (ADR-0006, ADR-0007 and docs/architecture.md).
-/// It builds a hierarchical XML document tree and writes it via <see cref="System.Xml.XmlWriter"/>,
-/// bypassing <see cref="LoadFileEmitter"/> entirely. XML anomalies are therefore injected
-/// inside <see cref="XmlLoadFileWriter.WriteAsync"/> rather than through this applier.
-/// </para>
-/// <para>
-/// This class satisfies the <see cref="IAnomalyApplier"/> contract required by
-/// <see cref="ChaosEngine"/>, but its <see cref="Apply"/> and <see cref="GetEncodingAnomaly"/>
-/// methods always return the original line / null — they are never called in practice because
-/// <see cref="ChaosEngine.Intercept"/> is not invoked by <see cref="XmlLoadFileWriter"/>.
+/// It builds a hierarchical XML document tree, so the line-oriented <see cref="Apply"/>
+/// contract is a no-op; XML anomalies are applied by <see cref="XmlLoadFileWriter"/> to the
+/// rendered document string inside the carve-out boundary.
 /// </para>
 /// </summary>
 internal sealed class XmlChaosAnomalyApplier : IAnomalyApplier
 {
-    // random retained for future use should any XML line-interception path be added
-    // under the carve-out boundary.
-#pragma warning disable IDE0052
-    private readonly Random random;
-#pragma warning restore IDE0052
-
-    public XmlChaosAnomalyApplier(Random random)
-    {
-        this.random = random;
-    }
+    private const string ClosingDocumentTag = "</Document>";
 
     /// <inheritdoc/>
-    /// <remarks>Always returns <paramref name="line"/> unchanged. XML anomaly injection is
-    /// handled inside <see cref="XmlLoadFileWriter.WriteAsync"/> within the carve-out.</remarks>
+    /// <remarks>Always returns <paramref name="line"/> unchanged; XML is not a delimited line format.</remarks>
     public string Apply(
         long lineNumber,
         string line,
@@ -46,7 +30,77 @@ internal sealed class XmlChaosAnomalyApplier : IAnomalyApplier
         => line;
 
     /// <inheritdoc/>
-    /// <remarks>Always returns <c>null</c>; XML output is not a line-delimited byte stream.</remarks>
+    /// <remarks>Always returns <c>null</c>; XML anomaly injection happens per document.</remarks>
     public byte[]? GetEncodingAnomaly(long lineNumber, long nextLineNumber, Encoding encoding, List<ChaosAnomaly> anomalies)
         => null;
+
+    /// <summary>
+    /// Applies a document-scoped anomaly. Returns <c>false</c> when the type does not apply to
+    /// this document and the output is unchanged.
+    /// </summary>
+    public bool TryApplyToDocument(string documentXml, string chaosType, out string result, out string column, out string description)
+    {
+        switch (chaosType)
+        {
+            case "xml-unclosed-tag":
+                int closingTag = documentXml.LastIndexOf(ClosingDocumentTag, StringComparison.Ordinal);
+                if (closingTag < 0)
+                {
+                    result = documentXml;
+                    column = "N/A";
+                    description = string.Empty;
+                    return false;
+                }
+
+                result = documentXml.Remove(closingTag, ClosingDocumentTag.Length);
+                column = "Document";
+                description = "Removed the closing </Document> tag, leaving the EDRM-XML document element unclosed.";
+                return true;
+
+            case "xml-bad-entity":
+                int insertionPoint = documentXml.IndexOf("<Tags>", StringComparison.Ordinal);
+                if (insertionPoint < 0)
+                {
+                    insertionPoint = documentXml.LastIndexOf(ClosingDocumentTag, StringComparison.Ordinal);
+                }
+
+                if (insertionPoint < 0)
+                {
+                    result = documentXml;
+                    column = "N/A";
+                    description = string.Empty;
+                    return false;
+                }
+
+                result = documentXml.Insert(insertionPoint, "&chaos;");
+                column = "Document";
+                description = "Injected an undefined XML entity reference (&chaos;) that conforming parsers reject.";
+                return true;
+
+            default:
+                result = documentXml;
+                column = "N/A";
+                description = string.Empty;
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Rewrites the XML declaration so it claims an encoding that differs from the emitted bytes.
+    /// Returns <c>false</c> when no declaration encoding is present.
+    /// </summary>
+    public static bool TryApplyEncodingLie(string xml, out string result)
+    {
+        const string utf8Declaration = "encoding=\"utf-8\"";
+        const string utf16Declaration = "encoding=\"utf-16\"";
+
+        if (!xml.Contains(utf8Declaration, StringComparison.Ordinal))
+        {
+            result = xml;
+            return false;
+        }
+
+        result = xml.Replace(utf8Declaration, utf16Declaration, StringComparison.Ordinal);
+        return true;
+    }
 }

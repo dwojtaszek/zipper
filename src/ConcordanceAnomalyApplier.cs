@@ -104,13 +104,13 @@ internal sealed class ConcordanceAnomalyApplier : IAnomalyApplier
     }
 
     /// <summary>
-    /// Drops one Concordance quote delimiter (ASCII 254), leaving a field with an
+    /// Drops one Concordance quote delimiter, leaving a field with an
     /// unbalanced wrapper — the Concordance-specific analogue of the DAT <c>quotes</c> anomaly.
     /// </summary>
-    private static string ApplyConcordanceQuoteEscape(string line, out string column, out string description)
+    private string ApplyConcordanceQuoteEscape(string line, out string column, out string description)
     {
         // Find the last quote delimiter to drop (mirrors DatAnomalyApplier.ApplyDroppedQuote strategy)
-        int lastQuotePos = line.LastIndexOf('\u00fe');
+        int lastQuotePos = line.LastIndexOf(this.quoteDelim);
         if (lastQuotePos < 0)
         {
             column = "N/A";
@@ -122,14 +122,14 @@ internal sealed class ConcordanceAnomalyApplier : IAnomalyApplier
         int delimCount = 0;
         for (int i = 0; i < lastQuotePos; i++)
         {
-            if (line[i] == '\u0014')
+            if (line[i] == this.fieldDelim)
             {
                 delimCount++;
             }
         }
 
         column = $"Column {delimCount + 1}";
-        description = $"Dropped the closing Concordance quote delimiter (ascii:254) on column {delimCount + 1}, breaking Concordance field parsing.";
+        description = $"Dropped the closing Concordance quote delimiter (ascii:{(int)this.quoteDelim}) on column {delimCount + 1}, breaking Concordance field parsing.";
 
         return string.Concat(line.AsSpan(0, lastQuotePos), line.AsSpan(lastQuotePos + 1));
     }

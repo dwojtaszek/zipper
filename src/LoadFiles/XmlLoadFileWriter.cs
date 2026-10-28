@@ -23,6 +23,35 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
         ChaosEngine? chaosEngine = null,
         CancellationToken cancellationToken = default)
     {
+        if (chaosEngine is not null)
+        {
+            // EDRM-XML is a document tree, so structural anomalies are applied to the rendered
+            // document string inside this carve-out writer instead of the line-based emitter.
+            var buffered = new MemoryStream();
+            try
+            {
+                await WriteDocumentAsync(buffered, request, processedFiles, cancellationToken).ConfigureAwait(false);
+                string xml = Encoding.UTF8.GetString(buffered.GetBuffer(), 0, checked((int)buffered.Length));
+                string chaosXml = chaosEngine.ApplyXmlChaos(xml);
+                await stream.WriteAsync(Encoding.UTF8.GetBytes(chaosXml), cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                await buffered.DisposeAsync().ConfigureAwait(false);
+            }
+
+            return;
+        }
+
+        await WriteDocumentAsync(stream, request, processedFiles, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task WriteDocumentAsync(
+        Stream stream,
+        FileGenerationRequest request,
+        System.Collections.Generic.IReadOnlyList<FileData> processedFiles,
+        CancellationToken cancellationToken)
+    {
         var settings = new XmlWriterSettings
         {
             Async = true,

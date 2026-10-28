@@ -60,6 +60,24 @@ internal static class ChaosScenarios
             ChaosTypes: "path-pointer,field-length,date-format,null-byte,trailing-empties",
             DefaultAmount: "5%",
             RequiredFormat: LoadFileFormat.Dat),
+        new(
+            Name: "csv-escaping-failures",
+            Description: "RFC 4180 CSV escaping failures: broken doubled-quote escapes, embedded newlines, and mid-file BOM bytes",
+            ChaosTypes: "csv-quote-escape,csv-embedded-newline,csv-bom",
+            DefaultAmount: "5%",
+            RequiredFormat: LoadFileFormat.Csv),
+        new(
+            Name: "concordance-import-failures",
+            Description: "Concordance delimiter and quote-wrapper corruption using its ASCII 20/254 conventions",
+            ChaosTypes: "concordance-delimiter,concordance-quote-escape",
+            DefaultAmount: "5%",
+            RequiredFormat: LoadFileFormat.Concordance),
+        new(
+            Name: "edrm-xml-structural-failures",
+            Description: "EDRM-XML structural failures: unclosed document tags, undefined entities, and encoding-declaration lies",
+            ChaosTypes: "xml-unclosed-tag,xml-bad-entity,xml-encoding-lie",
+            DefaultAmount: "5%",
+            RequiredFormat: LoadFileFormat.EdrmXml),
     };
 
     private static readonly IReadOnlyList<string> CachedScenarioNames =

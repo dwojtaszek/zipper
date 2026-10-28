@@ -70,6 +70,7 @@ internal class LoadFileOnlyMode : IGenerationMode
                 {
                     LoadFileFormat.Opt => "opt",
                     LoadFileFormat.Csv => "csv",
+                    LoadFileFormat.EdrmXml => "xml",
                     LoadFileFormat.Concordance => "concordance",
                     _ => "dat",
                 };

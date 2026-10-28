@@ -1126,4 +1126,84 @@ public class ChaosEngineTests
             legacyEngine.Anomalies.Select(anomaly => (anomaly.LineNumber, anomaly.ErrorType, anomaly.Column, anomaly.Description)),
             engine.Anomalies.Select(anomaly => (anomaly.LineNumber, anomaly.ErrorType, anomaly.Column, anomaly.Description)));
     }
+
+    [Fact]
+    public void Intercept_CsvDefaults_OnlyProducesCsvAnomalies()
+    {
+        var engine = new ChaosEngine(5, "5", null, LoadFileFormat.Csv, ",", "\"", "\r\n", 42);
+        const string line = "\"say \"\"hi\"\"\",value";
+
+        for (int i = 1; i <= 5; i++)
+        {
+            if (engine.ShouldIntercept(i))
+            {
+                _ = engine.Intercept(i, line, $"DOC{i:D8}");
+            }
+        }
+
+        Assert.NotEmpty(engine.Anomalies);
+        Assert.All(engine.Anomalies, anomaly => Assert.Contains(anomaly.ErrorType, ChaosAnomalyTypes.Csv));
+    }
+
+    [Fact]
+    public void Intercept_ConcordanceDefaults_OnlyProducesConcordanceAnomalies()
+    {
+        var engine = new ChaosEngine(5, "5", null, LoadFileFormat.Concordance, "\u0014", "\u00fe", "\r\n", 42);
+        const string line = "\u00feValue\u00fe\u0014\u00feOther\u00fe";
+
+        for (int i = 1; i <= 5; i++)
+        {
+            if (engine.ShouldIntercept(i))
+            {
+                _ = engine.Intercept(i, line, $"DOC{i:D8}");
+            }
+        }
+
+        Assert.NotEmpty(engine.Anomalies);
+        Assert.All(engine.Anomalies, anomaly => Assert.Contains(anomaly.ErrorType, ChaosAnomalyTypes.Concordance));
+    }
+
+    [Fact]
+    public void ApplyXmlChaos_WithUnclosedTag_ProducesMalformedXml_AndAuditsAnomaly()
+    {
+        var engine = new ChaosEngine(3, "1", "xml-unclosed-tag", LoadFileFormat.EdrmXml, "|", "\"", "\r\n", 42);
+        const string xml = "<Root><Batch><Document DocID=\"DOC1\"><Tags/></Document><Document DocID=\"DOC2\"><Tags/></Document></Batch></Root>";
+
+        string result = engine.ApplyXmlChaos(xml);
+
+        Assert.NotEqual(xml, result);
+        var anomaly = Assert.Single(engine.Anomalies);
+        Assert.Equal("xml-unclosed-tag", anomaly.ErrorType);
+        Assert.Contains(anomaly.RecordID, new[] { "DOC1", "DOC2" });
+        Assert.Throws<System.Xml.XmlException>(() => System.Xml.Linq.XDocument.Parse(result));
+    }
+
+    [Fact]
+    public void ApplyXmlChaos_WithBadEntity_ProducesMalformedXml_AndAuditsAnomaly()
+    {
+        var engine = new ChaosEngine(3, "1", "xml-bad-entity", LoadFileFormat.EdrmXml, "|", "\"", "\r\n", 42);
+        const string xml = "<Root><Batch><Document DocID=\"DOC1\"><Tags/></Document><Document DocID=\"DOC2\"><Tags/></Document></Batch></Root>";
+
+        string result = engine.ApplyXmlChaos(xml);
+
+        Assert.Contains("&chaos;", result, StringComparison.Ordinal);
+        var anomaly = Assert.Single(engine.Anomalies);
+        Assert.Equal("xml-bad-entity", anomaly.ErrorType);
+        Assert.Throws<System.Xml.XmlException>(() => System.Xml.Linq.XDocument.Parse(result));
+    }
+
+    [Fact]
+    public void ApplyXmlChaos_WithEncodingLie_ChangesDeclaration_AndAuditsAnomaly()
+    {
+        var engine = new ChaosEngine(3, "1", "xml-encoding-lie", LoadFileFormat.EdrmXml, "|", "\"", "\r\n", 42);
+        const string xml = "<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?><Root><Batch><Document DocID=\"DOC1\"><Tags/></Document></Batch></Root>";
+
+        string result = engine.ApplyXmlChaos(xml);
+
+        Assert.Contains("encoding=\"utf-16\"", result, StringComparison.Ordinal);
+        Assert.DoesNotContain("encoding=\"utf-8\"", result, StringComparison.Ordinal);
+        var anomaly = Assert.Single(engine.Anomalies);
+        Assert.Equal("xml-encoding-lie", anomaly.ErrorType);
+        Assert.Equal("XML declaration", anomaly.Column);
+    }
 }

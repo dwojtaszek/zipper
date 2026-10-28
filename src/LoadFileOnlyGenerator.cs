@@ -109,7 +109,14 @@ internal static class LoadFileOnlyGenerator
             cancellationToken.ThrowIfCancellationRequested();
 
             var formatRequest = EnsureStableOptPageCounts(request, format);
-            var extension = format == LoadFileFormat.Opt ? ".opt" : ".dat";
+            var extension = format switch
+            {
+                LoadFileFormat.Opt => ".opt",
+                LoadFileFormat.Csv => ".csv",
+                LoadFileFormat.EdrmXml => ".xml",
+                LoadFileFormat.Concordance => ".concordance.dat",
+                _ => ".dat",
+            };
             var loadFilePath = Path.Combine(request.Output.OutputPath, $"{baseFileName}{extension}");
 
             // Source-Driven Generation: rows become FileData shells (no Native File bytes)
@@ -118,14 +125,14 @@ internal static class LoadFileOnlyGenerator
             var sourceDriven = formatRequest.SourceRecords is not null;
             IReadOnlyList<FileData> records = sourceDriven
                 ? BuildSourceShells(formatRequest)
-                : Array.Empty<FileData>();
+                : format is LoadFileFormat.Csv or LoadFileFormat.Concordance or LoadFileFormat.EdrmXml
+                    ? BuildSyntheticShells(formatRequest)
+                    : Array.Empty<FileData>();
             var writerMode = sourceDriven ? WriterMode.Standard : WriterMode.LoadfileOnly;
 
             ChaosEngine? chaosEngine = LoadFileAuditWriter.BuildChaosEngine(formatRequest, records, format);
 
-            ILoadFileWriter writer = createWriter(
-                format == LoadFileFormat.Opt ? LoadFileFormat.Opt : LoadFileFormat.Dat,
-                writerMode);
+            ILoadFileWriter writer = createWriter(format, writerMode);
 
             var fileStream = new FileStream(loadFilePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
             createdFiles.Add(loadFilePath);
@@ -175,6 +182,52 @@ internal static class LoadFileOnlyGenerator
         {
             index++;
             var workItem = row.ToWorkItem(index);
+            var pageCount = request.Tiff.PageRange.HasValue
+                ? TiffMultiPageGenerator.GetPageCount(request.Tiff.PageRange, request.Metadata.Seed, index)
+                : random.Next(1, 11);
+
+            shells.Add(new FileData
+            {
+                WorkItem = workItem,
+                DataLength = random.Next(1024, 10_485_760),
+                PageCount = pageCount,
+                Hashes = request.Hash.Mode == Config.HashMode.Simulated ? GenerateSimulatedHashes(request, workItem) : null,
+            });
+        }
+
+        return shells;
+    }
+
+    /// <summary>
+    /// Builds in-memory <see cref="FileData"/> shells for Loadfile-Only mode when the format's
+    /// composer needs records (CSV, Concordance, EDRM-XML) but no Source Records were supplied.
+    /// Mirrors the Standard work-item naming and folder distribution without generating bytes.
+    /// </summary>
+    private static IReadOnlyList<FileData> BuildSyntheticShells(FileGenerationRequest request)
+    {
+        var output = request.Output;
+        var random = request.Metadata.Seed.HasValue
+#pragma warning disable S2245
+            ? new Random(request.Metadata.Seed.Value + 1)
+            : new Random();
+#pragma warning restore S2245
+
+        var shells = new List<FileData>((int)Math.Min(output.FileCount, int.MaxValue));
+        for (long index = 1; index <= output.FileCount; index++)
+        {
+            var fileType = output.ResolveFileType(index);
+            var folderNumber = Distributions.GetFolderNumber(index, output.FileCount, output.Folders, request.LoadFile.Distribution);
+            var folderName = $"folder_{folderNumber:D3}";
+            var fileName = $"{index:D8}.{fileType}";
+            var workItem = new FileWorkItem
+            {
+                Index = index,
+                FolderNumber = folderNumber,
+                FolderName = folderName,
+                FileName = fileName,
+                FilePathInZip = $"{folderName}/{fileName}",
+                FileType = fileType,
+            };
             var pageCount = request.Tiff.PageRange.HasValue
                 ? TiffMultiPageGenerator.GetPageCount(request.Tiff.PageRange, request.Metadata.Seed, index)
                 : random.Next(1, 11);

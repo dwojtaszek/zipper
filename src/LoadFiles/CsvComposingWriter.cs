@@ -20,9 +20,10 @@ internal sealed class CsvComposingWriter : ILoadFileWriter
     {
         var composer = new CsvComposer(request);
         var serializer = new CsvSerializer();
-        var policy = new TextOutputPolicy(request, LoadFileFormat.Csv, WriterMode.Standard, hasChaos: false);
+        var mode = request.LoadfileOnly ? WriterMode.LoadfileOnly : WriterMode.Standard;
+        var policy = new TextOutputPolicy(request, LoadFileFormat.Csv, mode, hasChaos: chaosEngine is not null);
 
         await LoadFileEmitter.EmitAsync(
-            stream, serializer, composer.HeaderColumns, composer.Compose(processedFiles), policy.Encoding, policy.EndOfLine, chaosEngine: null, cancellationToken).ConfigureAwait(false);
+            stream, serializer, composer.HeaderColumns, composer.Compose(processedFiles), policy.Encoding, policy.EndOfLine, chaosEngine, cancellationToken).ConfigureAwait(false);
     }
 }

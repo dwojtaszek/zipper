@@ -64,27 +64,31 @@ public class LoadFileModuleTests
     }
 
     [Fact]
-    public void TryBuild_LoadfileOnly_WithCsvFormat_ReturnsFalse()
+    public void TryBuild_LoadfileOnly_WithCsvFormat_ReturnsTrue()
     {
-        Assert.False(TryBuild(0, null, false, null, null, false, new[] { "--loadfile-only", "--load-file-format", "csv" }, out _));
+        Assert.True(TryBuild(0, null, false, null, null, false, new[] { "--loadfile-only", "--load-file-format", "csv" }, out var config));
+        Assert.Equal(new[] { LoadFileFormat.Csv }, config.Formats);
     }
 
     [Fact]
-    public void TryBuild_LoadfileOnly_WithEdrmXmlFormat_ReturnsFalse()
+    public void TryBuild_LoadfileOnly_WithEdrmXmlFormat_ReturnsTrue()
     {
-        Assert.False(TryBuild(0, null, false, null, null, false, new[] { "--loadfile-only", "--load-file-format", "edrm-xml" }, out _));
+        Assert.True(TryBuild(0, null, false, null, null, false, new[] { "--loadfile-only", "--load-file-format", "edrm-xml" }, out var config));
+        Assert.Equal(new[] { LoadFileFormat.EdrmXml }, config.Formats);
     }
 
     [Fact]
-    public void TryBuild_LoadfileOnly_WithCsvFormatsPlural_ReturnsFalse()
+    public void TryBuild_LoadfileOnly_WithCsvFormatsPlural_ReturnsTrue()
     {
-        Assert.False(TryBuild(0, null, false, null, null, false, new[] { "--loadfile-only", "--load-file-formats", "csv" }, out _));
+        Assert.True(TryBuild(0, null, false, null, null, false, new[] { "--loadfile-only", "--load-file-formats", "csv" }, out var config));
+        Assert.Equal(new[] { LoadFileFormat.Csv }, config.Formats);
     }
 
     [Fact]
-    public void TryBuild_LoadfileOnly_WithCsvAndXmlFormatsPlural_ReturnsFalse()
+    public void TryBuild_LoadfileOnly_WithCsvAndXmlFormatsPlural_ReturnsTrue()
     {
-        Assert.False(TryBuild(0, null, false, null, null, false, new[] { "--loadfile-only", "--load-file-formats", "csv,xml" }, out _));
+        Assert.True(TryBuild(0, null, false, null, null, false, new[] { "--loadfile-only", "--load-file-formats", "csv,xml" }, out var config));
+        Assert.Equal(new[] { LoadFileFormat.Csv, LoadFileFormat.EdrmXml }, config.Formats);
     }
 
     [Fact]
@@ -107,9 +111,10 @@ public class LoadFileModuleTests
     }
 
     [Fact]
-    public void TryBuild_LoadfileOnly_WithLegacyCsvFormat_ReturnsFalse()
+    public void TryBuild_LoadfileOnly_WithLegacyCsvFormat_ReturnsTrue()
     {
-        Assert.False(TryBuild(0, null, false, null, null, false, new[] { "--loadfile-only", "--loadfile-format", "csv" }, out _));
+        Assert.True(TryBuild(0, null, false, null, null, false, new[] { "--loadfile-only", "--loadfile-format", "csv" }, out var config));
+        Assert.Equal(new[] { LoadFileFormat.Csv }, config.Formats);
     }
 
     [Fact]
