@@ -3435,6 +3435,13 @@ def _babysit_with_fallback(
             print(f"[babysit] {os.path.basename(wt_path)} is being driven by another run; "
                   f"skipping this pass and leaving the worktree untouched.")
             return
+        # Two separate facts, because they mean different things. `launched` says a
+        # mission was actually started; `real_outcome` says one got past the quota
+        # check and therefore produced a verdict about this branch. A candidate that
+        # fails on quota was launched but proves nothing about the branch, so only
+        # `real_outcome` may spend the backoff ladder.
+        launched = False
+        real_outcome = False
         for agent_name, model_name in AGENT_CANDIDATES:
             plugin = AGENT_PLUGINS.get(agent_name)
             if plugin is None:
@@ -3445,6 +3452,7 @@ def _babysit_with_fallback(
             if pr_number and not _authorized_pr(pr_number, str(issue_number), authorized["head"]["sha"]):
                 return
             print(f"[babysit] Trying {agent_name}/{model_name}...")
+            launched = True
             code, out, err = run_mission_logged(
                 plugin, agent_name, model_name, prompt, wt_path,
                 is_continue=True, phase="babysit-repair")
@@ -3454,6 +3462,9 @@ def _babysit_with_fallback(
                 print(f"[babysit] {agent_name}/{model_name} exhausted quota. Trying next candidate...")
                 continue
 
+            # Past the quota check the mission produced a verdict about this branch,
+            # whether it completed the work or failed for a reason the agent owns.
+            real_outcome = True
             after = _babysit_snapshot(wt_path, branch, pr_number)
             if code != 0 and pr_number and after[2].strip() != before[2].strip():
                 _record_coderabbit_gate_failure(pr_number, branch, "Repair mission interrupted before completion", False)
@@ -3480,6 +3491,17 @@ def _babysit_with_fallback(
                   + (" (exit=0)" if code == 0 else ""))
 
             before = after
+
+    if not real_outcome:
+        # Nothing here is evidence about the branch, so it must not spend the branch's
+        # backoff ladder -- which reaches a 6h cap -- and the "all agents failed" email
+        # would name agents that never produced a verdict. A provider outage must not
+        # park a branch that is in fact healthy.
+        reason = ("every launched candidate was quota-exhausted" if launched
+                  else "no candidate was available (all parked)")
+        print(f"[babysit] No mission produced a verdict this cycle: {reason}; "
+              f"leaving the branch backoff untouched.")
+        return
 
     _record_worktree_failure(branch)
     if _should_send_rate_limited(f"[Runner] Babysit Failed: Issue #{issue_number}"):
@@ -3892,8 +3914,43 @@ def _silently_closed_issues(since: datetime, until: datetime) -> _ClosedIssueSwe
     return _ClosedIssueSweep(flagged, len(issues) < _SILENT_CLOSE_READ_LIMIT)
 
 
+def _silent_close_audit_lock_path() -> str:
+    return os.path.join(STATE_DIR, "close-audit.lock")
+
+
 def audit_silently_closed_issues() -> int:
+    """Run the silent-close sweep single-flight across runner modes.
+
+    Intake and babysit take separate locks, so a BABYSIT_ONLY firing can overlap a
+    regular run and both reach this pass. The sweep is a read-modify-write of one
+    shared state file behind a non-atomic rate limiter: two concurrent runs would
+    send the same digest twice and could drop a reported number to a last-writer-wins
+    save, which would re-report that issue forever after. The lock is non-blocking
+    and held only for the sweep, because skipping one cycle costs nothing -- the
+    window stays open and the next sweep re-reads the same closes.
+    """
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        lock_file = open(_silent_close_audit_lock_path(), "a")
+    except OSError as e:
+        print(f"[close-audit] Could not open the audit lock ({e}); running unsynchronized.")
+        return _audit_silently_closed_issues_locked()
+    try:
+        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except (IOError, OSError):
+        lock_file.close()
+        print("[close-audit] Skipped: another runner mode is auditing.")
+        return 0
+    try:
+        return _audit_silently_closed_issues_locked()
+    finally:
+        _release_lock(lock_file)
+
+
+def _audit_silently_closed_issues_locked() -> int:
     """Email when an issue was closed as completed with no evidence of the work.
+
+    Callers must hold the single-flight lock via ``audit_silently_closed_issues``.
 
     Issue #1363 -- a weekly CLI QA review that recorded a genuinely failing gate --
     was closed COMPLETED with zero comments and no merged PR behind it, so the
@@ -6324,8 +6381,15 @@ def main():
 
     # Independent of worktrees, and deliberately outside the babysit lock: a
     # skipped babysit pass must not also skip the only check that notices an
-    # issue closed with no evidence behind it.
-    audit_silently_closed_issues()
+    # issue closed with no evidence behind it. Wrapped because it is advisory: it
+    # runs before issue intake, so an uncaught error here would abort the whole
+    # runner every cycle, and a missed warning is a smaller failure than a stopped
+    # pipeline. The loader already rejects every unusable state shape, so this is
+    # the backstop for what it cannot anticipate, not the primary guard.
+    try:
+        audit_silently_closed_issues()
+    except Exception as e:
+        print(f"[close-audit] Audit raised {type(e).__name__}: {e}; continuing.")
 
     # Recalculate after babysit — merged/closed PRs may have been cleaned up
     active_count = _active_worktree_count()

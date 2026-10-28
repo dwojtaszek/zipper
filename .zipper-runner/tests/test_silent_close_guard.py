@@ -581,6 +581,84 @@ class WarnOnlyConstructionTests(unittest.TestCase):
             self.tree = original
 
 
+class SingleFlightTests(_GuardCase):
+    """Intake and babysit hold separate locks, so the sweep must guard itself."""
+
+    def _hold(self):
+        """Take the audit lock the way a concurrent runner mode would."""
+        import fcntl
+        os.makedirs(self.runner.STATE_DIR, exist_ok=True)
+        handle = open(self.runner._silent_close_audit_lock_path(), "a")
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return handle
+
+    def test_aConcurrentModeHoldingTheLock_shouldSkipTheSweepWithoutReading(self):
+        handle = self._hold()
+        try:
+            self._issue_list([_issue(1363, datetime.now(timezone.utc).isoformat())])
+            self.assertEqual(self.runner.audit_silently_closed_issues(), 0)
+        finally:
+            handle.close()
+        self.assertEqual(self.run_cmd.calls, [],
+                         "a skipped sweep must not even read the issue list")
+        self.assertEqual(self.emails.messages, [])
+        self.assertIsNone(self._state())
+
+    def test_afterTheConcurrentModeReleases_shouldSweepNormally(self):
+        self._hold().close()
+        self._issue_list([_issue(1363, datetime.now(timezone.utc).isoformat())])
+        self.runner.audit_silently_closed_issues()
+        self.assertEqual(len(self.emails.messages), 1)
+
+    def test_theLockShouldBeReleasedAfterASweep(self):
+        self._issue_list([])
+        self.runner.audit_silently_closed_issues()
+        # A second sweep in the same process must be able to take it again.
+        self._issue_list([])
+        self.assertEqual(self.runner.audit_silently_closed_issues(), 0)
+        self.assertEqual(len(self.run_cmd.calls), 2)
+
+    def test_theLockShouldBeReleasedWhenTheSweepRaises(self):
+        def boom(*args, **kwargs):
+            raise RuntimeError("read blew up")
+        self.runner._silently_closed_issues = boom
+        with self.assertRaises(RuntimeError):
+            self.runner.audit_silently_closed_issues()
+        self._issue_list([])
+        self.runner._silently_closed_issues = lambda since, until: self.runner._ClosedIssueSweep(
+            flagged=[], complete=True)
+        self.assertEqual(self.runner.audit_silently_closed_issues(), 0)
+
+    def test_theLockShouldBeHeldForTheWholeSweep(self):
+        """A concurrent mode must stay blocked for as long as the sweep runs, not
+        merely for the instant the guard is checked -- releasing early reopens the
+        read-modify-write race the lock exists to close."""
+        import fcntl
+        observed = {}
+
+        def probe(since, until):
+            handle = open(self.runner._silent_close_audit_lock_path(), "a")
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                observed["taken"] = True
+            except (IOError, OSError):
+                observed["taken"] = False
+            finally:
+                handle.close()
+            return self.runner._ClosedIssueSweep(flagged=[], complete=True)
+
+        self.runner._silently_closed_issues = probe
+        self.runner.audit_silently_closed_issues()
+        self.assertFalse(observed["taken"],
+                         "the audit lock must still be held while the sweep runs")
+
+    def test_theLockPath_shouldLiveInTheStateDir(self):
+        path = self.runner._silent_close_audit_lock_path()
+        self.assertEqual(os.path.dirname(path), self.runner.STATE_DIR)
+        self.assertNotEqual(path, self.runner._silent_close_audit_path(),
+                            "the lock must not be the state file itself")
+
+
 class CallSiteTests(unittest.TestCase):
     """The sweep runs once per process, outside the babysit lock."""
 
@@ -601,19 +679,44 @@ class CallSiteTests(unittest.TestCase):
         calls = [n for n in ast.walk(self._main()) if self._is_audit_call(n)]
         self.assertEqual(len(calls), 1)
 
-    def test_main_shouldCallTheAuditOutsideEveryNestedBlock(self):
-        top_level = [stmt for stmt in self._main().body
-                     if isinstance(stmt, ast.Expr) and self._is_audit_call(stmt.value)]
-        self.assertEqual(len(top_level), 1)
+    def _audit_guard(self):
+        """The single top-level `try` whose body calls the audit."""
+        return [stmt for stmt in self._main().body
+                if isinstance(stmt, ast.Try) and any(
+                    self._is_audit_call(n) for n in ast.walk(stmt))]
+
+    def test_main_shouldCallTheAuditFromATopLevelTryNotANestedBlock(self):
+        self.assertEqual(len(self._audit_guard()), 1,
+                         "the audit must run at top level, not inside the intake branch")
+
+    def test_main_shouldGuardTheAuditSoItCannotAbortTheRunner(self):
+        """The audit runs before issue intake, so an uncaught error here would stop
+        the whole pipeline every cycle; a missed warning is the smaller failure."""
+        guard = self._audit_guard()[0]
+        self.assertTrue(guard.handlers, "the guard must actually catch something")
+        self.assertEqual(len(guard.finalbody), 0)
 
     def test_main_shouldCallTheAuditAfterTheBabysitPass(self):
         body = self._main().body
         audit = next(i for i, stmt in enumerate(body)
-                     if isinstance(stmt, ast.Expr) and self._is_audit_call(stmt.value))
+                     if isinstance(stmt, ast.Try) and any(
+                         self._is_audit_call(n) for n in ast.walk(stmt)))
         babysit = next(i for i, stmt in enumerate(body)
                        if any(isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
                               and n.func.id == "babysit_active_worktrees" for n in ast.walk(stmt)))
         self.assertGreater(audit, babysit)
+
+    def test_main_shouldCallTheAuditBeforeIntakePicksAnIssue(self):
+        """The audit must not be able to delay or depend on a mission dispatch."""
+        body = self._main().body
+        audit = next(i for i, stmt in enumerate(body)
+                     if isinstance(stmt, ast.Try) and any(
+                         self._is_audit_call(n) for n in ast.walk(stmt)))
+        select = next((i for i, stmt in enumerate(body)
+                       if any(isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                              and n.func.id == "select_next_issue" for n in ast.walk(stmt))), None)
+        if select is not None:
+            self.assertLess(audit, select)
 
 
 if __name__ == "__main__":
