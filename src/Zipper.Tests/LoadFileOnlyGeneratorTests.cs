@@ -196,6 +196,28 @@ public class LoadFileOnlyGeneratorTests : IDisposable
             chaosMode.GetProperty("injectedAnomalies")[0].GetProperty("errorType").GetString());
     }
 
+    [Fact]
+    public async Task GenerateAsync_EdrmXmlWithTwoChaosTargets_AppliesAnomalyToEachDocument()
+    {
+        var request = this.CreateRequest(LoadFileFormat.EdrmXml, count: 2);
+        request.Metadata = request.Metadata with { Seed = 42 };
+        request.Chaos = request.Chaos with
+        {
+            ChaosMode = true,
+            ChaosAmount = "2",
+            ChaosTypes = "xml-bad-entity",
+        };
+
+        var result = await LoadFileOnlyGenerator.GenerateAsync(request);
+        using var properties = JsonDocument.Parse(await File.ReadAllTextAsync(result.PropertiesFilePath));
+        string content = await File.ReadAllTextAsync(result.LoadFilePath);
+        var chaosMode = properties.RootElement.GetProperty("chaosMode");
+
+        Assert.Equal(2, chaosMode.GetProperty("totalAnomalies").GetInt32());
+        Assert.Equal(2, chaosMode.GetProperty("injectedAnomalies").GetArrayLength());
+        Assert.Equal(2, content.Split("&chaos;", StringSplitOptions.None).Length - 1);
+    }
+
     [Theory]
     [InlineData(LoadFileFormat.Csv)]
     [InlineData(LoadFileFormat.Concordance)]

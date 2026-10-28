@@ -1166,7 +1166,7 @@ public class ChaosEngineTests
     [Fact]
     public void ApplyXmlChaos_WithUnclosedTag_ProducesMalformedXml_AndAuditsAnomaly()
     {
-        var engine = new ChaosEngine(3, "1", "xml-unclosed-tag", LoadFileFormat.EdrmXml, "|", "\"", "\r\n", 42);
+        var engine = new ChaosEngine(2, "1", "xml-unclosed-tag", LoadFileFormat.EdrmXml, "|", "\"", "\r\n", 42);
         const string xml = "<Root><Batch><Document DocID=\"DOC1\"><Tags/></Document><Document DocID=\"DOC2\"><Tags/></Document></Batch></Root>";
 
         string result = engine.ApplyXmlChaos(xml);
@@ -1181,7 +1181,7 @@ public class ChaosEngineTests
     [Fact]
     public void ApplyXmlChaos_WithBadEntity_ProducesMalformedXml_AndAuditsAnomaly()
     {
-        var engine = new ChaosEngine(3, "1", "xml-bad-entity", LoadFileFormat.EdrmXml, "|", "\"", "\r\n", 42);
+        var engine = new ChaosEngine(2, "1", "xml-bad-entity", LoadFileFormat.EdrmXml, "|", "\"", "\r\n", 42);
         const string xml = "<Root><Batch><Document DocID=\"DOC1\"><Tags/></Document><Document DocID=\"DOC2\"><Tags/></Document></Batch></Root>";
 
         string result = engine.ApplyXmlChaos(xml);
@@ -1193,9 +1193,22 @@ public class ChaosEngineTests
     }
 
     [Fact]
+    public void ApplyXmlChaos_WithExactCount_InjectsAnomalyIntoEachTargetedDocument()
+    {
+        var engine = new ChaosEngine(2, "2", "xml-bad-entity", LoadFileFormat.EdrmXml, "|", "\"", "\r\n", 42);
+        const string xml = "<Root><Batch><Document DocID=\"DOC1\"><Tags/></Document><Document DocID=\"DOC2\"><Tags/></Document></Batch></Root>";
+
+        string result = engine.ApplyXmlChaos(xml);
+
+        Assert.Equal(2, engine.Anomalies.Count);
+        Assert.Equal(new[] { "DOC1", "DOC2" }, engine.Anomalies.Select(anomaly => anomaly.RecordID));
+        Assert.Equal(2, result.Split("&chaos;", StringSplitOptions.None).Length - 1);
+    }
+
+    [Fact]
     public void ApplyXmlChaos_WithEncodingLie_ChangesDeclaration_AndAuditsAnomaly()
     {
-        var engine = new ChaosEngine(3, "1", "xml-encoding-lie", LoadFileFormat.EdrmXml, "|", "\"", "\r\n", 42);
+        var engine = new ChaosEngine(1, "1", "xml-encoding-lie", LoadFileFormat.EdrmXml, "|", "\"", "\r\n", 42);
         const string xml = "<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?><Root><Batch><Document DocID=\"DOC1\"><Tags/></Document></Batch></Root>";
 
         string result = engine.ApplyXmlChaos(xml);

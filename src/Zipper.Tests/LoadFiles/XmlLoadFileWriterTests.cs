@@ -372,7 +372,7 @@ public class XmlLoadFileWriterTests : TempDirectoryTestBase
     {
         var request = this.CreateTestRequest();
         var fileData = this.CreateTestFileData();
-        var chaosEngine = new ChaosEngine(1, "1", "xml-bad-entity", LoadFileFormat.EdrmXml, "|", "\"", "\r\n", 42);
+        var chaosEngine = new ChaosEngine(3, "1", "xml-bad-entity", LoadFileFormat.EdrmXml, "|", "\"", "\r\n", 42);
         var writer = new XmlLoadFileWriter();
         using var stream = new ThrowingStream(new IOException("simulated disk failure"));
 

@@ -161,7 +161,7 @@ public class AllWritersTests : TempDirectoryTestBase
     {
         var request = this.CreateTestRequest();
         var fileData = this.CreateTestFileData();
-        var engine = new ChaosEngine(4, "1", "xml-unclosed-tag", LoadFileFormat.EdrmXml, "|", "\"", "\r\n", seed: 42);
+        var engine = new ChaosEngine(3, "1", "xml-unclosed-tag", LoadFileFormat.EdrmXml, "|", "\"", "\r\n", seed: 42);
         var writer = new XmlLoadFileWriter();
         using var stream = new MemoryStream();
 
