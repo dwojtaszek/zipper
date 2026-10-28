@@ -5,7 +5,7 @@ REM E2E tests for --loadfile-only and Chaos Engine features.
 REM Builds the binary ONCE and reuses it.
 REM
 REM Covers: DAT loadfile-only, OPT loadfile-only, custom delimiters, EOL,
-REM         chaos mode, properties JSON, dependency rejection.
+REM         chaos mode, properties JSON, dependency validation.
 
 REM --- Configuration ---
 
@@ -230,13 +230,18 @@ if not errorlevel 1 ( echo [ ERROR ] Should have rejected --loadfile-only with -
 %BINARY% --loadfile-only --count 10 --output-path "%TEST_OUTPUT_DIR%\reject_5" --col-delim "20" 2>nul
 if not errorlevel 1 ( echo [ ERROR ] Should have rejected --col-delim without prefix & goto :cleanup )
 
-%BINARY% --loadfile-only --loadfile-format csv --count 10 --output-path "%TEST_OUTPUT_DIR%\reject_6" --chaos-mode 2>nul
-if not errorlevel 1 ( echo [ ERROR ] Should have rejected --chaos-mode with --loadfile-format csv & goto :cleanup )
+%BINARY% --loadfile-only --loadfile-format csv --count 10 --output-path "%TEST_OUTPUT_DIR%\accept_6" --chaos-mode --seed 42
+if errorlevel 1 ( echo [ ERROR ] CSV chaos mode should be supported & goto :cleanup )
+set "props_file="
+for %%F in ("%TEST_OUTPUT_DIR%\accept_6\*_properties.json") do set "props_file=%%F"
+if not defined props_file ( echo [ ERROR ] No _properties.json file found for CSV chaos test & goto :cleanup )
+powershell -NoProfile -Command "$j = Get-Content -Raw '%props_file%' | ConvertFrom-Json; if ($j.chaosMode.totalAnomalies -le 0 -or -not ($j.chaosMode.injectedAnomalies | Where-Object { $_.errorType -like 'csv-*' })) { exit 1 }"
+if errorlevel 1 ( echo [ ERROR ] CSV Chaos Engine did not record a format-specific anomaly & goto :cleanup )
 
 %BINARY% --loadfile-only --count 10 --output-path "%TEST_OUTPUT_DIR%\reject_7" --chaos-mode --chaos-amount "abc" 2>nul
 if not errorlevel 1 ( echo [ ERROR ] Should have rejected invalid --chaos-amount abc & goto :cleanup )
 
-echo [ SUCCESS ] Test 6: Dependency rejection — PASSED
+echo [ SUCCESS ] Test 6: Dependency validation — PASSED
 set /a TESTS_PASSED+=1
 
 REM ================================================================

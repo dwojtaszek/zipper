@@ -4,7 +4,7 @@
 # Builds the binary ONCE and reuses it.
 #
 # Covers: DAT loadfile-only, OPT loadfile-only, custom delimiters, EOL,
-#         chaos mode, properties JSON, dependency rejection.
+#         chaos mode, properties JSON, dependency validation.
 
 set -euo pipefail
 
@@ -199,7 +199,7 @@ PASSED=$((PASSED + 1))
 print_success "Test 5: Chaos type filter — PASSED"
 
 # ================================================================
-# Test 6: Rejection tests (dependency validation)
+# Test 6: Dependency validation
 # ================================================================
 TOTAL=$((TOTAL + 1))
 
@@ -223,11 +223,13 @@ if "${BINARY[@]}" --loadfile-only --count 10 --output-path "$TEST_OUTPUT_DIR/rej
 fi
 print_info "Rejected --col-delim without ascii:/char: prefix"
 
-# --chaos-mode with --loadfile-format csv should fail
-if "${BINARY[@]}" --loadfile-only --loadfile-format csv --count 10 --output-path "$TEST_OUTPUT_DIR/reject_6" --chaos-mode 2>/dev/null; then
-    print_error "Should have rejected --chaos-mode with --loadfile-format csv"
-fi
-print_info "Rejected --chaos-mode with --loadfile-format csv"
+# CSV Chaos Engine is supported and should record a CSV-specific anomaly.
+"${BINARY[@]}" --loadfile-only --loadfile-format csv --count 10 --output-path "$TEST_OUTPUT_DIR/accept_6" --chaos-mode --seed 42
+props_file=$(find "$TEST_OUTPUT_DIR/accept_6" -name "*_properties.json" -print -quit)
+[[ -z "$props_file" ]] && print_error "No _properties.json file found for CSV chaos test"
+grep -Eq '"errorType": "csv-(quote-escape|embedded-newline|bom)"' "$props_file" \
+    || print_error "CSV Chaos Engine did not record a format-specific anomaly"
+print_info "Accepted CSV chaos mode and recorded a format-specific anomaly"
 
 # --chaos-amount with invalid format should fail
 if "${BINARY[@]}" --loadfile-only --count 10 --output-path "$TEST_OUTPUT_DIR/reject_7" --chaos-mode --chaos-amount "abc" 2>/dev/null; then
@@ -237,7 +239,7 @@ print_info "Rejected invalid --chaos-amount abc"
 
 
 PASSED=$((PASSED + 1))
-print_success "Test 6: Dependency rejection — PASSED"
+print_success "Test 6: Dependency validation — PASSED"
 
 # ================================================================
 # Test 7: Deterministic output with --seed
