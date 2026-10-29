@@ -361,3 +361,11 @@
 - **telemetry**: host=droid mode=branch specialists=6 bundle=~13K across follow-up review waves
 - **lessons**: Quoted-delimited anomaly tests should cover embedded delimiters and consecutive doubled-quote pairs.
 - **suppressions**: none
+
+### 2026-10-29 droid:branch:issue-1304-platform-skips
+
+- **findings**: 1 INFO (added negative-path test for skipped reader report with applicable expectations); 1 adversarial ACTION rejected because the full E2E run produced the .NET skip report. No correctness, maintainability, or performance findings.
+- **outcome**: Fixed the matrix platform-skip report bug, reran focused Python/.NET checks and the isolated 119-case Archive Test E2E. The final 45-test matrix run, .NET format check, and fast-pass review of the added test passed. CodeRabbit still pending.
+- **telemetry**: host=droid mode=branch specialists=6 bundle=39358c
+- **lessons**: Keep the .NET report status tied directly to whether any expectation applies; the full E2E report is the proof for report-emission paths.
+- **suppressions**: none
