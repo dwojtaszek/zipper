@@ -377,3 +377,11 @@
 - **telemetry**: host=droid mode=branch specialists=6 bundle=14335
 - **lessons**: Test adapter-only Reader Adapter Profile actions across every supported action, including host-inapplicable expectations and probe errors.
 - **suppressions**: none
+
+### 2026-10-29 droid:branch:issue-1304-coderabbit-fixes
+
+- **findings**: Autoreview found 1 INFO (testing, confidence 8) — new empty-Archive deadline guard lacked a direct regression. CodeRabbit cycle 1 reported a missing .NET Adapter Check comparison, but source inspection confirmed the comparison already exists; added a negative regression test. Cycle 2 found ambiguous Python adapter availability wording, clarified that Python `zipfile` is required.
+- **outcome**: Fixed the deadline-test gap and clarified README/REQ-212. Full Python matrix suite (62 tests), focused .NET report test, DocsDriftTests (13), format check, and mutation smoke passed.
+- **telemetry**: host=droid mode=branch specialists=6+1fast bundle=10695c
+- **lessons**: none
+- **suppressions**: none
