@@ -455,7 +455,15 @@ def _unzip_read_entries(command, archive, case, deadline, supported_methods):
         (entry for entry in case.get("entries", []) if entry.get("kind") == "file"),
         key=lambda entry: entry["ordinal"])
     if not entries:
-        return "read-entry-content-matches", None
+        timeout = _remaining_time(deadline)
+        if timeout is None:
+            raise ReaderExecutionError("Info-ZIP fixture deadline exceeded reading entries")
+        outcome = _unzip_list(command, archive, case, timeout)
+        return (
+            "read-entry-content-matches" if outcome == "list-succeeds"
+            else "read-entry-fails",
+            None,
+        )
     if any(not _safe_member_name(entry.get("readableName")) for entry in entries):
         return None, "unsafe member names are not selected"
     names = [entry["readableName"] for entry in entries]

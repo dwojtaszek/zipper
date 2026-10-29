@@ -294,6 +294,36 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
         var extract = Assert.Single(outcomes, outcome => outcome.Operation == "extract");
         Assert.False(extract.Applicable);
         Assert.Equal("extract-succeeds", extract.NormalizedOutcome);
+
+        var reportDirectory = Path.Combine(TempDir, "dotnet-report");
+        Directory.CreateDirectory(reportDirectory);
+        var reportPath = Path.Combine(
+            reportDirectory, "dotnet-reference-" + platformScopedCase.FixtureId + ".json");
+        File.WriteAllText(reportPath, "stale report");
+        var oldReportDirectory = Environment.GetEnvironmentVariable("ZIPPER_ATC_DOTNET_REPORT_DIR");
+        try
+        {
+            Environment.SetEnvironmentVariable("ZIPPER_ATC_DOTNET_REPORT_DIR", reportDirectory);
+            WriteReaderProfileReport(
+                platformScopedCase,
+                outcomes,
+                ArchiveTestJson.SerializeToUtf8Bytes(platformScopedCase),
+                artifact.ArchiveBytes);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("ZIPPER_ATC_DOTNET_REPORT_DIR", oldReportDirectory);
+        }
+
+        using var report = JsonDocument.Parse(File.ReadAllBytes(reportPath));
+        var extractOperation = Assert.Single(
+            report.RootElement.GetProperty("operations").EnumerateArray(),
+            operation => operation.GetProperty("operation").GetString() == "extract");
+        Assert.Equal("not-run", extractOperation.GetProperty("normalizedOutcome").GetString());
+        Assert.Equal(
+            "extract-succeeds",
+            report.RootElement.GetProperty("adapterCheckOutcomes")
+                .GetProperty("extract").GetString());
     }
 
     [Fact]
@@ -582,7 +612,7 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
             .Select(outcome => new
             {
                 operation = outcome.Operation,
-                normalizedOutcome = outcome.NormalizedOutcome,
+                normalizedOutcome = outcome.Applicable ? outcome.NormalizedOutcome : "not-run",
                 status = !outcome.Applicable ? "not-run" : outcome.Allowed ? "pass" : "fail",
             })
             .ToList();
@@ -625,7 +655,7 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
         var reportPath = Path.Combine(
             reportDirectory, "dotnet-reference-" + testCase.FixtureId + ".json");
         using var reportStream = new FileStream(
-            reportPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            reportPath, FileMode.Create, FileAccess.Write, FileShare.None);
         using var writer = new StreamWriter(reportStream);
         writer.Write(JsonSerializer.Serialize(report));
         writer.Write('\n');

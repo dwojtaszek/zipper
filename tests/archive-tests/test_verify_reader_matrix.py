@@ -166,6 +166,15 @@ class ReaderMatrixTests(unittest.TestCase):
         return result.returncode == 0 and bool(state) and not state.startswith("Z")
 
     @staticmethod
+    def isolated_fake_unzip_environment(**overrides):
+        environment = {
+            key: value for key, value in os.environ.items()
+            if not key.startswith("FAKE_UNZIP_")
+        }
+        environment.update(overrides)
+        return patch.dict(os.environ, environment, clear=True)
+
+    @staticmethod
     def write_fake_unzip(directory):
         script = Path(directory) / "fake_unzip.py"
         script.write_text(
@@ -209,6 +218,9 @@ if args[0] == "-Z1":
             or os.environ.get("FAKE_UNZIP_REMOVE_ARCHIVE") == "1"
             or not os.path.isfile(args[1])):
         no_archive()
+    if os.environ.get("FAKE_UNZIP_LIST_LOG"):
+        with open(os.environ["FAKE_UNZIP_LIST_LOG"], "a", encoding="utf-8") as log:
+            log.write("list\\n")
     with zipfile.ZipFile(args[1]) as archive:
         for info in archive.infolist():
             print(info.filename)
@@ -348,6 +360,19 @@ else:
         self.assertEqual([1], process.stdout.requested_sizes)
         self.assertTrue(over_budget)
 
+    def test_isolatedFakeUnzipEnvironment_PreservesSystemVariablesAndClearsOverrides(self):
+        with patch.dict(os.environ, {
+            "PATH": "fake-path",
+            "SYSTEMROOT": "fake-system-root",
+            "FAKE_UNZIP_STALE": "1",
+        }, clear=True):
+            with self.isolated_fake_unzip_environment(FAKE_UNZIP_CURRENT="1"):
+                self.assertEqual("fake-path", os.environ["PATH"])
+                if os.name == "nt":
+                    self.assertEqual("fake-system-root", os.environ["SYSTEMROOT"])
+                self.assertNotIn("FAKE_UNZIP_STALE", os.environ)
+                self.assertEqual("1", os.environ["FAKE_UNZIP_CURRENT"])
+
     def test_unzipReadEntries_ManySmallMembers_UsesOneProcessAndChecksEachHash(self):
         with tempfile.TemporaryDirectory() as temp:
             archive_path = Path(temp) / "many-small.zip"
@@ -381,6 +406,66 @@ else:
 
         self.assertEqual(("read-entry-content-matches", None), outcome)
         self.assertEqual(["read"], read_calls)
+
+    def test_unzipReadEntries_EmptyArchive_StillProbesReader(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive_path = Path(temp) / "empty.zip"
+            with zipfile.ZipFile(archive_path, "w"):
+                pass
+            log_path = Path(temp) / "list-calls.txt"
+            case = {
+                "caseKey": "valid-empty",
+                "entries": [],
+                "limits": {"entryCount": 0, "expandedBytesBudget": 0},
+            }
+            command = self.write_fake_unzip(temp)
+
+            with patch.dict(os.environ, {"FAKE_UNZIP_LIST_LOG": str(log_path)}):
+                outcome = MATRIX["_unzip_read_entries"](
+                    command, archive_path, case, time.monotonic() + 5, {0, 8})
+                read_calls = (
+                    log_path.read_text(encoding="utf-8").splitlines()
+                    if log_path.exists() else [])
+
+        self.assertEqual(("read-entry-content-matches", None), outcome)
+        self.assertEqual(["list"], read_calls)
+
+    def test_unzipReadEntries_EmptyArchiveRejected_ReportsReadFailure(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive_path = Path(temp) / "empty.zip"
+            with zipfile.ZipFile(archive_path, "w"):
+                pass
+            case = {
+                "caseKey": "malformed-empty",
+                "entries": [],
+                "limits": {"entryCount": 0, "expandedBytesBudget": 0},
+            }
+            command = self.write_fake_unzip(temp)
+
+            with patch.dict(os.environ, {"FAKE_UNZIP_NO_ARCHIVE": "1"}):
+                outcome = MATRIX["_unzip_read_entries"](
+                    command, archive_path, case, time.monotonic() + 5, {0, 8})
+
+        self.assertEqual(("read-entry-fails", None), outcome)
+
+    def test_unzipReadEntries_EmptyArchiveExpiredDeadline_ReportsExecutionError(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive_path = Path(temp) / "empty.zip"
+            with zipfile.ZipFile(archive_path, "w"):
+                pass
+            command = self.write_fake_unzip(temp)
+            case = {
+                "caseKey": "valid-empty",
+                "entries": [],
+                "limits": {"entryCount": 0, "expandedBytesBudget": 0},
+            }
+
+            with self.assertRaisesRegex(
+                MATRIX["ReaderExecutionError"],
+                "Info-ZIP fixture deadline exceeded reading entries",
+            ):
+                MATRIX["_unzip_read_entries"](
+                    command, archive_path, case, time.monotonic() - 1, {0, 8})
 
     def test_validateAdapterChecks_RejectsUndeclaredProfileOutcomes(self):
         case = {
@@ -1384,7 +1469,7 @@ else:
                     {"infozip-unzip": self.write_fake_unzip(temp), "7zip": None},
                     dotnet_report=self.make_dotnet_report(case))
 
-            with patch.dict(os.environ, {"FAKE_UNZIP_READ_NO_ARCHIVE": "1"}, clear=True):
+            with self.isolated_fake_unzip_environment(FAKE_UNZIP_READ_NO_ARCHIVE="1"):
                 missing_archive_report, missing_archive_exit = MATRIX["verify_directory"](
                     Path(temp), python_report,
                     {"infozip-unzip": self.write_fake_unzip(temp), "7zip": None},
@@ -1599,7 +1684,7 @@ else:
         with tempfile.TemporaryDirectory() as temp:
             case, python_report = self.make_fixture(temp)
             self.persist_case(temp, case, python_report)
-            with patch.dict(os.environ, {"FAKE_UNZIP_REMOVE_ARCHIVE": "1"}, clear=True):
+            with self.isolated_fake_unzip_environment(FAKE_UNZIP_REMOVE_ARCHIVE="1"):
                 report, exit_code = MATRIX["verify_directory"](
                     Path(temp), python_report,
                     {"infozip-unzip": self.write_fake_unzip(temp), "7zip": None},
