@@ -366,10 +366,18 @@ def _validate_report_identity(reader_fixture, case, sidecar_sha256, archive_sha2
         raise ValueError(f"{reader} report Archive hash does not match current input")
 
 
-def _run_reader(command, arguments, timeout, start_error="reader command failed"):
+def _run_reader(
+        command, arguments, timeout, start_error="reader command failed",
+        output_limit=None):
     try:
-        return run_reader_command(_reader_command(command, *arguments), timeout)
+        reader_command = _reader_command(command, *arguments)
+        if output_limit is None:
+            return run_reader_command(reader_command, timeout)
+        return run_reader_command(
+            reader_command, timeout, max_output_bytes=output_limit)
     except (OSError, subprocess.TimeoutExpired) as error:
+        if isinstance(error, OSError) and "output budget" in str(error):
+            raise ReaderExecutionError(str(error)) from error
         raise ReaderExecutionError(f"{start_error}: {error}") from error
 
 
@@ -443,7 +451,9 @@ def _unzip_read_entries(command, archive, case, deadline, supported_methods):
     if case.get("caseKey", "").startswith("encoding-"):
         return None, "legacy filename decoding is reader-specific"
 
-    entries = [entry for entry in case.get("entries", []) if entry.get("kind") == "file"]
+    entries = sorted(
+        (entry for entry in case.get("entries", []) if entry.get("kind") == "file"),
+        key=lambda entry: entry["ordinal"])
     if not entries:
         return "read-entry-content-matches", None
     if any(not _safe_member_name(entry.get("readableName")) for entry in entries):
@@ -456,16 +466,65 @@ def _unzip_read_entries(command, archive, case, deadline, supported_methods):
     if not isinstance(budget, int) or budget < 0:
         raise ReaderExecutionError("invalid expandedBytesBudget")
     budget = min(budget, MAX_READ_BYTES)
-    bytes_read = 0
-
+    total_expected_size = 0
     for entry in entries:
         expected_size = entry.get("contentSize")
         expected_hash = entry.get("contentSha256")
-        if not isinstance(expected_size, int) or expected_size < 0 or not expected_hash:
+        if (isinstance(expected_size, bool) or not isinstance(expected_size, int)
+                or expected_size < 0 or not expected_hash):
             return None, "member content expectation is incomplete"
-        if expected_size > budget - bytes_read:
+        if expected_size > budget - total_expected_size:
             return None, "declared member sizes exceed the reader byte budget"
+        total_expected_size += expected_size
 
+    if any(
+        entry.get("centralDirectoryMethod", entry.get("localHeaderMethod"))
+        not in supported_methods
+        for entry in entries
+    ):
+        return _unzip_read_entries_individually(
+            command, archive, entries, budget, deadline, supported_methods)
+
+    timeout = _remaining_time(deadline)
+    if timeout is None:
+        raise ReaderExecutionError("Info-ZIP fixture deadline exceeded reading entries")
+    try:
+        result = _run_reader(
+            command, ["-p", str(archive)], timeout,
+            start_error="could not start Info-ZIP unzip",
+            output_limit=budget + 1)
+    except ReaderExecutionError as error:
+        if "output budget" in str(error):
+            return "read-entry-returns-unverified-bytes", None
+        raise
+    if result.returncode < 0:
+        raise ReaderExecutionError(
+            f"Info-ZIP unzip was terminated by signal {-result.returncode} reading entries")
+    _raise_infozip_execution_error(result.returncode, "reading", archive)
+    if result.returncode in (9, 11):
+        return "read-entry-fails", None
+    if result.returncode not in (0, 1):
+        return "read-entry-fails", None
+    if len(result.stdout) > budget:
+        return "read-entry-returns-unverified-bytes", None
+
+    offset = 0
+    for entry in entries:
+        expected_size = entry["contentSize"]
+        member_bytes = result.stdout[offset:offset + expected_size]
+        if (len(member_bytes) != expected_size
+                or hashlib.sha256(member_bytes).hexdigest() != entry["contentSha256"]):
+            return "read-entry-returns-unverified-bytes", None
+        offset += expected_size
+    if offset != len(result.stdout):
+        return "read-entry-returns-unverified-bytes", None
+
+    return "read-entry-content-matches", None
+
+
+def _unzip_read_entries_individually(command, archive, entries, budget, deadline, supported_methods):
+    bytes_read = 0
+    for entry in entries:
         timeout = _remaining_time(deadline)
         if timeout is None:
             raise ReaderExecutionError(
@@ -487,7 +546,7 @@ def _unzip_read_entries(command, archive, case, deadline, supported_methods):
             if method not in supported_methods:
                 return "unsupported-method-rejected", None
             return "read-entry-fails", None
-        if size != expected_size or digest != expected_hash:
+        if size != entry["contentSize"] or digest != entry["contentSha256"]:
             return "read-entry-returns-unverified-bytes", None
 
     return "read-entry-content-matches", None
@@ -519,6 +578,11 @@ def _reported_reader(case, reader_fixture, reader_name):
         if name in operations_by_name:
             raise ValueError(f"{reader_name} report contains duplicate operation {name!r}")
         operations_by_name[name] = operation
+    adapter_check_outcomes = reader_fixture.get("adapterCheckOutcomes", {})
+    if (not isinstance(adapter_check_outcomes, dict)
+            or any(not isinstance(action, str) or not isinstance(outcome, str)
+                   for action, outcome in adapter_check_outcomes.items())):
+        raise ValueError(f"{reader_name} report contains invalid Adapter Check outcomes")
     operations = {}
     for name in OPERATIONS:
         observed = operations_by_name.get(name)
@@ -539,6 +603,7 @@ def _reported_reader(case, reader_fixture, reader_name):
     result = {
         "status": status,
         "version": reader_fixture.get("adapterVersion"),
+        "adapterCheckOutcomes": adapter_check_outcomes,
         "operations": operations,
     }
     if status == "skipped":
@@ -753,7 +818,20 @@ def _adapter_check_results(case, readers, seven_zip_fixtures):
             "expectedOutcome": expected,
         }
         reader = readers[adapter]
-        if reader["status"] == "skipped":
+        if (reader["status"] == "skipped"
+                and adapter in ("dotnet-reference", "python-zipfile")):
+            observed = reader["adapterCheckOutcomes"].get(action)
+            if observed is None:
+                result.update(
+                    status="not-run",
+                    reason=reader.get("reason", "no operation expectations apply on this host"))
+            else:
+                result["observedOutcome"] = observed
+                result["status"] = "pass" if observed == expected else "fail"
+                if result["status"] == "fail":
+                    result["reason"] = (
+                        f"observed outcome {observed!r} does not match {expected!r}")
+        elif reader["status"] == "skipped":
             result.update(status="skipped", reason=reader.get("reason", "reader unavailable"))
         elif adapter == "7zip":
             fixture = seven_zip_fixtures.get(case["fixtureId"])

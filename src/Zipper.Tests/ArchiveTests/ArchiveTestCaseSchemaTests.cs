@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Xunit;
+using Zipper.ArchiveTests;
 
 namespace Zipper.Tests;
 
@@ -355,6 +356,50 @@ public class ArchiveTestCaseSchemaTests
             item.GetProperty("else").GetProperty("not").GetProperty("required")
                 .EnumerateArray().Select(value => value.GetString()));
         Assert.Contains("ArchiveTestCatalog", item.GetProperty("description").GetString());
+    }
+
+    [Fact]
+    public void Load_SchemaFile_AdapterCheckBranchesMatchReaderAdapterProfiles()
+    {
+        using var schema = LoadJson("archive-test-case.schema.json");
+        var branches = schema.RootElement.GetProperty("properties")
+            .GetProperty("adapterChecks").GetProperty("items").GetProperty("oneOf");
+        var schemaProfiles = new Dictionary<string, Dictionary<string, string[]>>(StringComparer.Ordinal);
+        foreach (var branch in branches.EnumerateArray())
+        {
+            var properties = branch.GetProperty("properties");
+            var adapter = properties.GetProperty("adapter").GetProperty("const").GetString()!;
+            var action = properties.GetProperty("action").GetProperty("const").GetString()!;
+            var outcomes = properties.GetProperty("expectedOutcome");
+            string[] values = outcomes.TryGetProperty("enum", out var enumeration)
+                ? enumeration.EnumerateArray().Select(value => value.GetString()!).ToArray()
+                : [outcomes.GetProperty("const").GetString()!];
+
+            if (!schemaProfiles.TryGetValue(adapter, out var actions))
+            {
+                actions = new Dictionary<string, string[]>(StringComparer.Ordinal);
+                schemaProfiles.Add(adapter, actions);
+            }
+
+            actions.Add(action, values);
+        }
+
+        Assert.Equal(
+            ArchiveTestCatalog.ReaderAdapterProfiles.Keys.Order(StringComparer.Ordinal),
+            schemaProfiles.Keys.Order(StringComparer.Ordinal));
+        foreach (var (adapter, profile) in ArchiveTestCatalog.ReaderAdapterProfiles)
+        {
+            var schemaActions = schemaProfiles[adapter];
+            Assert.Equal(
+                profile.AdapterCheckOutcomes.Keys.Order(StringComparer.Ordinal),
+                schemaActions.Keys.Order(StringComparer.Ordinal));
+            foreach (var (action, outcomes) in profile.AdapterCheckOutcomes)
+            {
+                Assert.Equal(
+                    outcomes.Order(StringComparer.Ordinal),
+                    schemaActions[action].Order(StringComparer.Ordinal));
+            }
+        }
     }
 
     [Fact]

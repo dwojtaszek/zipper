@@ -21,6 +21,7 @@ from pathlib import Path
 
 SCRIPT = Path(__file__).with_name("verify-reader-matrix.py")
 MATRIX = runpy.run_path(str(SCRIPT))
+FIXTURE_VERIFIER = runpy.run_path(str(SCRIPT.with_name("verify-fixtures.py")))
 
 
 class ReaderMatrixTests(unittest.TestCase):
@@ -235,8 +236,15 @@ elif args[0] == "-p":
     if os.environ.get("FAKE_UNZIP_NO_MATCH") == "1":
         print("caution: filename not matched", file=sys.stderr)
         raise SystemExit(11)
+    if os.environ.get("FAKE_UNZIP_READ_LOG"):
+        with open(os.environ["FAKE_UNZIP_READ_LOG"], "a", encoding="utf-8") as log:
+            log.write("read\\n")
     with zipfile.ZipFile(args[1]) as archive:
-        sys.stdout.buffer.write(archive.read(args[2]))
+        names = args[2:]
+        infos = archive.infolist()
+        for info in infos:
+            if not info.is_dir() and (not names or info.filename in names):
+                sys.stdout.buffer.write(archive.read(info))
     raise SystemExit(1 if os.environ.get("FAKE_UNZIP_READ_WARNING") == "1" else 0)
 else:
     raise SystemExit(2)
@@ -269,6 +277,29 @@ else:
             "extract-entries": ("success",),
             "presence": ("present",),
         }, dict(profiles["7zip"].adapter_check_outcomes))
+
+    def test_registry_MatchesFixtureSchemaAndStandaloneVerifier(self):
+        schema_path = Path(__file__).parents[1] / "fixtures" / "archive-test-case.schema.json"
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        schema_profiles = {}
+        for branch in schema["properties"]["adapterChecks"]["items"]["oneOf"]:
+            properties = branch["properties"]
+            adapter = properties["adapter"]["const"]
+            action = properties["action"]["const"]
+            outcome = properties["expectedOutcome"]
+            outcomes = outcome.get("enum", [outcome.get("const")])
+            schema_profiles.setdefault(adapter, {})[action] = set(outcomes)
+
+        matrix_profiles = {
+            adapter: {
+                action: set(outcomes)
+                for action, outcomes in profile.adapter_check_outcomes
+            }
+            for adapter, profile in MATRIX["READER_ADAPTER_PROFILES"].items()
+        }
+        verifier_profiles = FIXTURE_VERIFIER["ADAPTER_CHECK_OUTCOMES"]
+        self.assertEqual(schema_profiles, matrix_profiles)
+        self.assertEqual(schema_profiles, verifier_profiles)
 
     def test_runUnzipMember_ZeroByteLimit_ReadsOnlyOverflowSentinel(self):
         class Stdout:
@@ -316,6 +347,40 @@ else:
         self.assertEqual(1, size)
         self.assertEqual([1], process.stdout.requested_sizes)
         self.assertTrue(over_budget)
+
+    def test_unzipReadEntries_ManySmallMembers_UsesOneProcessAndChecksEachHash(self):
+        with tempfile.TemporaryDirectory() as temp:
+            archive_path = Path(temp) / "many-small.zip"
+            entries = []
+            with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_STORED) as archive:
+                for index in range(1000):
+                    name = f"small-{index:04d}.txt"
+                    content = bytes([index % 256]) * (index % 7)
+                    archive.writestr(name, content)
+                    entries.append({
+                        "kind": "file",
+                        "ordinal": index,
+                        "readableName": name,
+                        "contentSize": len(content),
+                        "contentSha256": hashlib.sha256(content).hexdigest(),
+                        "localHeaderMethod": 0,
+                        "centralDirectoryMethod": 0,
+                    })
+            log_path = Path(temp) / "read-calls.txt"
+            case = {
+                "caseKey": "many-small-entries",
+                "entries": list(reversed(entries)),
+                "limits": {"expandedBytesBudget": sum(entry["contentSize"] for entry in entries)},
+            }
+            command = self.write_fake_unzip(temp)
+
+            with patch.dict(os.environ, {"FAKE_UNZIP_READ_LOG": str(log_path)}):
+                outcome = MATRIX["_unzip_read_entries"](
+                    command, archive_path, case, time.monotonic() + 5, {0, 8})
+                read_calls = log_path.read_text(encoding="utf-8").splitlines()
+
+        self.assertEqual(("read-entry-content-matches", None), outcome)
+        self.assertEqual(["read"], read_calls)
 
     def test_validateAdapterChecks_RejectsUndeclaredProfileOutcomes(self):
         case = {
@@ -524,6 +589,52 @@ else:
         self.assertEqual(4, report["summary"]["readerAdapterProfileSkips"])
         self.assertEqual(0, report["summary"]["failedReaderAdapterProfiles"])
         self.assertIn("SKIP fixture valid-stored", stdout.getvalue())
+
+    def test_verifyDirectory_PlatformScopedAdapterChecks_RunIndependently(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case, python_report = self.make_fixture(temp)
+            for expectation in case["expectations"]:
+                expectation["platform"] = "adls-gen2"
+            case["adapterChecks"] = [
+                {"adapter": "python-zipfile", "action": "list",
+                 "expectedOutcome": "list-succeeds"},
+                {"adapter": "dotnet-reference", "action": "read-entry",
+                 "expectedOutcome": "read-entry-content-matches"},
+            ]
+            self.persist_case(temp, case, python_report)
+
+            not_run_operations = [
+                {"operation": operation, "normalizedOutcome": "not-run",
+                 "status": "not-run", "reason": "no applicable expectation"}
+                for operation in MATRIX["OPERATIONS"]
+            ]
+            python_fixture = python_report["fixtures"][0]
+            python_fixture.update(
+                status="skipped",
+                skipReason="no operation expectations apply on this host",
+                operations=not_run_operations,
+                adapterCheckOutcomes={"list": "list-succeeds"})
+            dotnet_report = self.make_dotnet_report(case)
+            dotnet_report["fixtures"][0].update(
+                status="skipped",
+                skipReason="no operation expectations apply on this host",
+                operations=not_run_operations,
+                adapterCheckOutcomes={"read-entry": "read-entry-content-matches"})
+
+            report, exit_code = MATRIX["verify_directory"](
+                Path(temp), python_report,
+                {"infozip-unzip": None, "7zip": None},
+                dotnet_report=dotnet_report)
+
+        fixture = report["fixtures"][0]
+        self.assertEqual(0, exit_code)
+        self.assertEqual("skipped", fixture["status"])
+        self.assertEqual(
+            ["pass", "pass"],
+            [check["status"] for check in fixture["adapterChecks"]])
+        self.assertEqual(
+            ["list-succeeds", "read-entry-content-matches"],
+            [check["observedOutcome"] for check in fixture["adapterChecks"]])
 
     def test_verifyDirectory_WrongPythonReportProfile_Fails(self):
         with tempfile.TemporaryDirectory() as temp:

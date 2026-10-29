@@ -161,6 +161,111 @@ class SevenZipAdapterTests(unittest.TestCase):
                     [sys.executable, "-c", "import sys; sys.stdout.buffer.write(b'x' * 65536)"],
                     timeout=5)
 
+    def test_run_reader_command_JoinsOutputThreadsWithinOneAbsoluteDeadline(self):
+        class Clock:
+            now = 0.0
+
+            def monotonic(self):
+                return self.now
+
+            def advance(self, duration):
+                self.now += duration
+
+        clock = Clock()
+        threads = []
+
+        class Thread:
+            def __init__(self, *_args, **_kwargs):
+                self.join_timeouts = []
+                self.alive = True
+                threads.append(self)
+
+            def start(self):
+                pass
+
+            def join(self, timeout=None):
+                self.join_timeouts.append(timeout)
+                if timeout is None:
+                    self.alive = False
+                    return
+                duration = min(0.6, timeout)
+                clock.advance(duration)
+                if timeout >= 0.6:
+                    self.alive = False
+
+            def is_alive(self):
+                return self.alive
+
+        class Stream:
+            def read(self, _size):
+                return b""
+
+            def close(self):
+                pass
+
+        threading_stub = type("Threading", (), {
+            "Event": READER_PROCESS["threading"].Event,
+            "Lock": READER_PROCESS["threading"].Lock,
+            "Thread": Thread,
+        })()
+
+        class Process:
+            pid = 12345
+            returncode = 0
+            stdout = Stream()
+            stderr = Stream()
+
+            def wait(self, timeout=None):
+                return 0
+
+        process = Process()
+        globals_ = READER_PROCESS["run_reader_command"].__globals__
+        with patch.dict(globals_, {
+            "start_reader_process": lambda *_args, **_kwargs: process,
+            "terminate_reader_process": lambda _process: None,
+            "threading": threading_stub,
+            "time": clock,
+        }):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                READER_PROCESS["run_reader_command"](["fake-reader"], timeout=1)
+
+        self.assertEqual(2, len(threads))
+        self.assertLess(threads[1].join_timeouts[0], threads[0].join_timeouts[0])
+
+    def test_verify_test_actionProjectsFailedIntegrityCheckInReport(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            stem = "atc-" + "c" * 64
+            (directory / f"{stem}.zip").write_bytes(b"malformed archive")
+            (directory / f"{stem}.json").write_text(json.dumps({
+                "fixtureId": stem,
+                "caseKey": "malformed-test-report",
+                "entries": [],
+                "limits": {"expandedBytesBudget": 0, "deadlineSeconds": 1},
+                "adapterChecks": [
+                    {"adapter": "7zip", "action": "test", "expectedOutcome": "failure"},
+                ],
+            }), encoding="utf-8")
+            report_path = directory / "7zip-report.json"
+
+            def accepted_archive(*_args, **_kwargs):
+                raise ValueError("7-Zip accepted malformed Archive")
+
+            with patch.dict(
+                VERIFIER["verify"].__globals__,
+                {"check_archive_rejection": accepted_archive},
+            ):
+                with self.assertRaisesRegex(ValueError, "accepted malformed Archive"):
+                    VERIFIER["verify"](directory, "unused-7zip", report_path)
+
+            fixture = json.loads(report_path.read_text(encoding="utf-8"))["fixtures"][0]
+            self.assertEqual("fail", fixture["checks"][0]["status"])
+            self.assertIn("accepted malformed Archive", fixture["checks"][0]["failure"])
+            self.assertEqual(
+                [{"operation": "integrity-check",
+                  "normalizedOutcome": "integrity-passes", "status": "fail"}],
+                fixture["operations"])
+
     def test_check_entry_accepts_warning_when_expected_content_matches(self):
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp)

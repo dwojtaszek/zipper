@@ -1092,6 +1092,11 @@ class FixtureVerifier:
             budget = min(raw_budget if isinstance(raw_budget, int) and raw_budget >= 0 else MAX_EXPANDED_BYTES_BUDGET,
                          MAX_EXPANDED_BYTES_BUDGET)
             expectations = self.applicable_expectations(case, zip_bytes)
+            adapter_check_actions = {
+                check["action"] for check in case.get("adapterChecks", [])
+                if check["adapter"] == "python-zipfile"
+            }
+            adapter_check_outcomes = {}
             ops = []
 
             runners = {
@@ -1100,23 +1105,33 @@ class FixtureVerifier:
                 "integrity-check": lambda: self.op_integrity_check(zip_bytes, case, budget),
             }
             for operation, run in runners.items():
-                if operation not in expectations:
+                if operation not in expectations and operation not in adapter_check_actions:
                     # A profile that lacks an operation records that fact rather
                     # than claiming success (REQ-212: not-run is not a pass).
                     ops.append(self._not_run(operation, "no expectation record"))
                     continue
                 observed, details, stage = run()
-                self._record_operation(ops, operation, observed, details, stage,
-                                       expectations[operation], case,
-                                       result["structureChecks"])
+                if operation in expectations:
+                    self._record_operation(ops, operation, observed, details, stage,
+                                           expectations[operation], case,
+                                           result["structureChecks"])
+                else:
+                    ops.append(self._not_run(operation, "no expectation record"))
+                if operation in adapter_check_actions:
+                    adapter_check_outcomes[operation] = observed
                 self._check_deadline(deadline)
 
             if classification == "valid":
-                if "extract" in expectations:
+                if "extract" in expectations or "extract" in adapter_check_actions:
                     observed, details, stage = self.op_extract(zip_bytes, case, budget)
-                    self._record_operation(ops, "extract", observed, details, stage,
-                                           expectations["extract"], case,
-                                           result["structureChecks"])
+                    if "extract" in expectations:
+                        self._record_operation(ops, "extract", observed, details, stage,
+                                               expectations["extract"], case,
+                                               result["structureChecks"])
+                    else:
+                        ops.append(self._not_run("extract", "no expectation record"))
+                    if "extract" in adapter_check_actions:
+                        adapter_check_outcomes["extract"] = observed
                 else:
                     ops.append(self._not_run("extract", "no expectation record"))
             else:
@@ -1136,6 +1151,8 @@ class FixtureVerifier:
             self._check_deadline(deadline)
 
             result["operations"] = ops
+            if adapter_check_outcomes:
+                result["adapterCheckOutcomes"] = adapter_check_outcomes
             result["bytesRead"] = self.bytes_read
             result["subprocessCount"] = self.subprocess_count
             if not expectations:

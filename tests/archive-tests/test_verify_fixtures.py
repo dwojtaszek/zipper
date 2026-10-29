@@ -1808,6 +1808,25 @@ class PositiveControlTests(TempDirTest):
         self.assertEqual("integrity-passes", operations["integrity-check"]["normalizedOutcome"])
         self.assertEqual("extract-succeeds", operations["extract"]["normalizedOutcome"])
 
+    def test_platformScopedPythonAdapterCheck_RunsWithoutApplicableExpectations(self):
+        case, zip_bytes = self.publish_valid()
+        for expectation in case["expectations"]:
+            expectation["platform"] = "adls-gen2"
+        case["adapterChecks"] = [
+            {"adapter": "python-zipfile", "action": "list",
+             "expectedOutcome": "list-succeeds"},
+        ]
+        write_pair(self.dir, case, zip_bytes)
+
+        report, exit_code = verify(self.dir)
+
+        fixture = report["fixtures"][0]
+        operations = {operation["operation"]: operation for operation in fixture["operations"]}
+        self.assertEqual(0, exit_code)
+        self.assertEqual("skipped", fixture["status"])
+        self.assertEqual("not-run", operations["list"]["status"])
+        self.assertEqual({"list": "list-succeeds"}, fixture["adapterCheckOutcomes"])
+
     def test_resource_counts_are_bounded_by_the_report(self):
         case, _ = self.publish_valid()
 

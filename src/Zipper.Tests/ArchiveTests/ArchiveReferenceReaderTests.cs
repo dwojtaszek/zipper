@@ -272,6 +272,31 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void ReadOperations_PlatformInapplicableExtractAdapterCheck_StillRuns()
+    {
+        var definition = ArchiveTestCatalog.GetCase("valid-stored");
+        var artifact = ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None);
+        var testCase = ArchiveTestSuiteGenerator.BuildExpectationFile(artifact, definition, 42);
+        var platformScopedCase = testCase with
+        {
+            Expectations = [.. testCase.Expectations.Select(
+                expectation => expectation with { Platform = "adls-gen2" })],
+            AdapterChecks =
+            [
+                new ArchiveTestAdapterCheck(
+                    "dotnet-reference", "extract", "extract-succeeds"),
+            ],
+        };
+
+        var outcomes = ExecuteReaderOperations(
+            platformScopedCase, artifact.ArchiveBytes, Path.Combine(TempDir, "adapter-extract"));
+
+        var extract = Assert.Single(outcomes, outcome => outcome.Operation == "extract");
+        Assert.False(extract.Applicable);
+        Assert.Equal("extract-succeeds", extract.NormalizedOutcome);
+    }
+
+    [Fact]
     public void ReadOperations_CrcBothMismatch_PinsRuntimeCrcValidationBehavior()
     {
         var definition = ArchiveTestCatalog.GetCase("crc-both-mismatch");
@@ -469,6 +494,10 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
             .Select(e => e.Operation)
             .Distinct()
             .ToHashSet(StringComparer.Ordinal);
+        var adapterCheckActions = (testCase.AdapterChecks ?? [])
+            .Where(check => check.Adapter == "dotnet-reference")
+            .Select(check => check.Action)
+            .ToHashSet(StringComparer.Ordinal);
 
         foreach (var operation in new[] { "list", "read-entry", "integrity-check" })
         {
@@ -483,14 +512,16 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
                 Applicable: allowed is not null, Allowed: allowed is true));
         }
 
-        var extractExpected = testCase.Classification == "valid" && expectedOperations.Contains("extract");
-        if (extractExpected)
+        var extractRequired = testCase.Classification == "valid"
+            && (expectedOperations.Contains("extract") || adapterCheckActions.Contains("extract"));
+        if (extractRequired)
         {
             // Required positive control: real extraction into a fresh owned directory.
             Directory.CreateDirectory(extractDir);
             var extract = NormalizeExtract(archiveBytes, testCase, extractDir);
+            var allowed = OutcomeAllowed(extract, "extract", testCase);
             outcomes.Add(new ReaderOutcome("extract", extract,
-                Applicable: true, Allowed: OutcomeAllowed(extract, "extract", testCase) is true));
+                Applicable: allowed is not null, Allowed: allowed is true));
         }
 
         // Every expected-and-applicable operation must be allowed for this reader.
@@ -566,6 +597,14 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
             });
         }
 
+        var adapterCheckOutcomes = (testCase.AdapterChecks ?? [])
+            .Where(check => check.Adapter == "dotnet-reference")
+            .Select(check => check.Action)
+            .Distinct(StringComparer.Ordinal)
+            .ToDictionary(
+                action => action,
+                action => outcomes.Single(outcome => outcome.Operation == action).NormalizedOutcome,
+                StringComparer.Ordinal);
         var skipped = !testCase.Expectations.Any(expectation =>
             expectation.Platform is null || ApplicablePlatforms.Contains(expectation.Platform));
         var report = new
@@ -580,6 +619,7 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
             skipReason = skipped
                 ? "no operation expectations apply on this host"
                 : null,
+            adapterCheckOutcomes,
             operations,
         };
         var reportPath = Path.Combine(

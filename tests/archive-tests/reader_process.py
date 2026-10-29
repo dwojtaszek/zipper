@@ -132,9 +132,12 @@ def terminate_reader_process(process):
         process.kill()
 
 
-def run_reader_command(command, timeout):
+def run_reader_command(command, timeout, max_output_bytes=None):
     process = start_reader_process(
         command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    output_limit = (
+        MAX_READER_OUTPUT_BYTES if max_output_bytes is None
+        else min(max_output_bytes, MAX_READER_OUTPUT_BYTES))
     stdout = bytearray()
     stderr = bytearray()
     output_size = 0
@@ -149,7 +152,7 @@ def run_reader_command(command, timeout):
                 with output_lock:
                     if output_limit_reached.is_set():
                         return
-                    if output_size + len(chunk) > MAX_READER_OUTPUT_BYTES:
+                    if output_size + len(chunk) > output_limit:
                         output_limit_reached.set()
                         terminate = True
                     else:
@@ -168,12 +171,11 @@ def run_reader_command(command, timeout):
     for reader in readers:
         reader.start()
 
-    started = time.monotonic()
+    deadline = time.monotonic() + timeout
     try:
         process.wait(timeout=timeout)
-        remaining = max(0, timeout - (time.monotonic() - started))
         for reader in readers:
-            reader.join(timeout=remaining)
+            reader.join(timeout=max(0, deadline - time.monotonic()))
         if any(reader.is_alive() for reader in readers):
             raise subprocess.TimeoutExpired(command, timeout)
     except subprocess.TimeoutExpired:
@@ -184,7 +186,7 @@ def run_reader_command(command, timeout):
         raise
     if output_limit_reached.is_set():
         raise OSError(
-            f"reader command exceeded the {MAX_READER_OUTPUT_BYTES}-byte output budget")
+            f"reader command exceeded the {output_limit}-byte output budget")
     stdout_bytes = bytes(stdout)
     stderr_bytes = bytes(stderr)
     if stderr_bytes.startswith(_READER_START_FAILURE.encode("utf-8")):
