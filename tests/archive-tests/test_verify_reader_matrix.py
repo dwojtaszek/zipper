@@ -76,6 +76,7 @@ class ReaderMatrixTests(unittest.TestCase):
 
         python_report = {
             "adapter": "python-zipfile",
+            "directoryProblems": [],
             "fixtures": [{
                 "fixtureId": fixture_id,
                 "caseKey": case["caseKey"],
@@ -534,6 +535,42 @@ else:
                     Path(temp), python_report,
                     {"infozip-unzip": None, "7zip": None},
                     dotnet_report=self.make_dotnet_report(case))
+
+    def test_verifyDirectory_PythonReportWithDirectoryProblems_Fails(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case, python_report = self.make_fixture(temp)
+            python_report["directoryProblems"] = ["Archive has no Expectation File"]
+
+            report, exit_code = MATRIX["verify_directory"](
+                Path(temp), python_report,
+                {"infozip-unzip": None, "7zip": None},
+                dotnet_report=self.make_dotnet_report(case))
+
+        self.assertEqual(1, exit_code)
+        self.assertIn(
+            "Python verifier reported directory problem: Archive has no Expectation File",
+            report["failures"])
+        self.assertEqual("fail", report["profiles"]["python-zipfile"]["status"])
+        self.assertEqual(1, report["summary"]["failedReaderAdapterProfiles"])
+
+    def test_verifyDirectory_PythonReportMissingDirectoryProblems_IsRejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case, python_report = self.make_fixture(temp)
+            del python_report["directoryProblems"]
+
+            with self.assertRaisesRegex(ValueError, "directoryProblems"):
+                MATRIX["verify_directory"](
+                    Path(temp), python_report,
+                    {"infozip-unzip": None, "7zip": None},
+                    dotnet_report=self.make_dotnet_report(case))
+
+    def test_readBoundedJson_ExceedingRemainingBudget_IsRejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            report_path = Path(temp) / "report.json"
+            report_path.write_bytes(b"{} ")
+
+            with self.assertRaisesRegex(ValueError, "report inputs exceed"):
+                MATRIX["_read_bounded_json"](report_path, 2)
 
     def test_verifyDirectory_PythonReportWithWrongCaseKey_IsRejected(self):
         with tempfile.TemporaryDirectory() as temp:

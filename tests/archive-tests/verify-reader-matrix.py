@@ -89,6 +89,7 @@ INFOZIP_LIST_LINE_BREAKS = "\r\n\v\f\x1c\x1d\x1e\x85\u2028\u2029"
 INFOZIP_ARCHIVE_ERROR_CODES = (0, 1, 2, 3, 9, 11, 12, 51, 81, 82)
 MAX_ARCHIVE_PHYSICAL_BYTES = 16 * 1024 * 1024
 MAX_EXPECTATION_FILE_BYTES = 1024 * 1024
+MAX_MATRIX_REPORT_BYTES = 64 * 1024 * 1024
 
 
 def _host_platforms():
@@ -101,6 +102,15 @@ def _host_platforms():
         value.strip() for value in os.environ.get("ZIPPER_ATC_PLATFORMS", "").split(",")
         if value.strip())
     return platforms
+
+
+def _read_bounded_json(path, remaining_bytes):
+    with Path(path).open("rb") as source:
+        content = source.read(remaining_bytes + 1)
+    if len(content) > remaining_bytes:
+        raise ValueError(
+            f"reader report inputs exceed the {MAX_MATRIX_REPORT_BYTES}-byte budget")
+    return json.loads(content.decode("utf-8")), len(content)
 
 
 class ReaderExecutionError(ValueError):
@@ -766,6 +776,11 @@ def verify_directory(
         raise ValueError(".NET reference harness report is required")
     if python_report.get("adapter") != "python-zipfile":
         raise ValueError("Python verifier report has an unknown Reader Adapter Profile")
+    directory_problems = python_report.get("directoryProblems")
+    if not isinstance(directory_problems, list) or any(
+            not isinstance(problem, str) or not problem.strip()
+            for problem in directory_problems):
+        raise ValueError("Python verifier report has missing or invalid directoryProblems")
 
     executables = executables or {}
     sidecars = sorted(fixture_dir.glob("atc-*.json"))
@@ -832,7 +847,10 @@ def verify_directory(
         "fixtures": [],
         "summary": {},
     }
-    failures = []
+    failures = [
+        f"Python verifier reported directory problem: {problem}"
+        for problem in directory_problems
+    ]
     infozip_methods = {0, 8}
     infozip_probe_error = None
 
@@ -1044,6 +1062,8 @@ def verify_directory(
         else:
             profile["status"] = "pass"
             profile.pop("reason", None)
+    if directory_problems:
+        profiles["python-zipfile"]["status"] = "fail"
     profiles["dotnet-reference"]["version"] = dotnet_report.get("adapterVersion")
     if infozip is not None:
         profiles["infozip-unzip"]["status"] = (
@@ -1125,15 +1145,22 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     try:
-        python_report = json.loads(Path(args.python_report).read_text(encoding="utf-8"))
-        seven_zip_report = (
-            json.loads(Path(args.seven_zip_report).read_text(encoding="utf-8"))
-            if args.seven_zip_report else None)
-        dotnet_fixtures = [
-            json.loads(path.read_text(encoding="utf-8"))
-            for path in sorted(
-                Path(args.dotnet_report_dir).glob("dotnet-reference-*.json"))
-        ]
+        remaining_report_bytes = MAX_MATRIX_REPORT_BYTES
+        python_report, consumed = _read_bounded_json(
+            args.python_report, remaining_report_bytes)
+        remaining_report_bytes -= consumed
+        seven_zip_report = None
+        if args.seven_zip_report:
+            seven_zip_report, consumed = _read_bounded_json(
+                args.seven_zip_report, remaining_report_bytes)
+            remaining_report_bytes -= consumed
+        dotnet_report_paths = sorted(
+            Path(args.dotnet_report_dir).glob("dotnet-reference-*.json"))
+        dotnet_fixtures = []
+        for path in dotnet_report_paths:
+            fixture, consumed = _read_bounded_json(path, remaining_report_bytes)
+            remaining_report_bytes -= consumed
+            dotnet_fixtures.append(fixture)
         if not dotnet_fixtures:
             raise ValueError(
                 f".NET reference report directory is empty: {args.dotnet_report_dir}")
