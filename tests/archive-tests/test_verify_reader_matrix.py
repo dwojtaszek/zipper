@@ -614,6 +614,20 @@ else:
                     {"infozip-unzip": None, "7zip": None},
                     dotnet_report=dotnet_report)
 
+    def test_verifyDirectory_ReaderReportWithWrongArchiveHash_IsRejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case, python_report = self.make_fixture(temp)
+            python_report["fixtures"][0]["archiveSha256"] = "0" * 64
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "Python verifier report Archive hash does not match current input",
+            ):
+                MATRIX["verify_directory"](
+                    Path(temp), python_report,
+                    {"infozip-unzip": None, "7zip": None},
+                    dotnet_report=self.make_dotnet_report(case))
+
     def test_verifyDirectory_StaleSevenZipReportIsRejected(self):
         with tempfile.TemporaryDirectory() as temp:
             case, python_report = self.make_fixture(temp)
