@@ -385,3 +385,11 @@
 - **telemetry**: host=droid mode=branch specialists=6+1fast bundle=10695c
 - **lessons**: none
 - **suppressions**: none
+
+### 2026-10-29 droid:branch:issue-1304-gate-clarification
+
+- **findings**: 0 ACTION, 0 INFO across 5 reviewers (correctness, adversarial, testing, maintainability, security).
+- **outcome**: Clean review. Focused matrix (63), 7-Zip (13), and fixture-verifier (167) suites plus mutation smoke passed.
+- **telemetry**: host=droid mode=branch specialists=5 bundle=27325c
+- **lessons**: none
+- **suppressions**: none

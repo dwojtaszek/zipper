@@ -1221,6 +1221,58 @@ else:
         self.assertEqual("fail", report["profiles"]["7zip"]["status"])
         self.assertEqual("fail", report["fixtures"][0]["status"])
 
+    def test_verifyDirectory_SevenZipTimeoutReport_FailsMatrix(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case, python_report = self.make_fixture(temp)
+            case["adapterChecks"] = [
+                {"adapter": "7zip", "action": "presence", "expectedOutcome": "present"},
+                {"adapter": "7zip", "action": "presence", "expectedOutcome": "present"},
+            ]
+            self.persist_case(temp, case, python_report)
+            timeout_reason = "7-Zip fixture check deadline exceeded for valid-stored"
+            seven_zip_report = {
+                "adapter": "7zip",
+                "adapterVersion": "7-Zip test",
+                "fixtures": [{
+                    "fixtureId": case["fixtureId"],
+                    "caseKey": case["caseKey"],
+                    "expectationFileSha256": hashlib.sha256(
+                        json.dumps(case).encode("utf-8")).hexdigest(),
+                    "archiveSha256": case["archive"]["sha256"],
+                    "status": "fail",
+                    "checks": [
+                        {
+                            "action": "presence",
+                            "expectedOutcome": "present",
+                            "observedOutcome": "present",
+                            "status": "pass",
+                        },
+                        {
+                            "action": "presence",
+                            "expectedOutcome": "present",
+                            "observedOutcome": None,
+                            "status": "fail",
+                            "failure": timeout_reason,
+                        },
+                    ],
+                    "operations": [],
+                }],
+            }
+
+            report, exit_code = MATRIX["verify_directory"](
+                Path(temp), python_report,
+                {"infozip-unzip": None, "7zip": None},
+                dotnet_report=self.make_dotnet_report(case),
+                seven_zip_report=seven_zip_report)
+
+        self.assertEqual(1, exit_code)
+        self.assertEqual("fail", report["profiles"]["7zip"]["status"])
+        self.assertEqual(1, report["summary"]["failedReaderAdapterProfiles"])
+        self.assertEqual("pass", report["fixtures"][0]["adapterChecks"][0]["status"])
+        timeout_check = report["fixtures"][0]["adapterChecks"][1]
+        self.assertEqual("fail", timeout_check["status"])
+        self.assertEqual(timeout_reason, timeout_check["reason"])
+
     def test_verifyDirectory_PassingSevenZipAdapterCheck_PassesProfile(self):
         with tempfile.TemporaryDirectory() as temp:
             case, python_report = self.make_fixture(temp)

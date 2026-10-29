@@ -560,10 +560,10 @@ REQ-212	unit	ArchiveReferenceReaderTests.ReadOperations_UndeclaredTrailingData_P
 REQ-212	unit	ArchiveTestSuiteGeneratorTests.BuildExpectationFile_ExtraFieldTruncated_DeclaresReaderVarianceAndInvariants	Expectation File allows reader variance and requires proof of a central extra-field overrun past EOF
 REQ-212	unit	ArchiveReferenceReaderTests.ReadOperations_ExtraFieldTruncated_PinsDotNetReaderOutcomes	.NET reference reader rejects the overlong central extra-field length during listing, reading, and integrity-check
 REQ-212	unit	ArchiveTestSuiteContractTests.ReaderAdapterProfiles_RegistersBuiltInAndOptionalAdaptersWithScopedOutcomes	Reader Adapter Profile registry lists required Python/.NET and optional Info-ZIP/7-Zip adapters with per-adapter check outcomes
-REQ-212	e2e	test-archive-test-suites.sh	Archive Test E2E runs the per-fixture multi-reader matrix, binds reader reports to current inputs, reports agreement/splits, and documents absent optional readers as skips
-REQ-212	e2e	test-archive-test-suites.bat	Windows Archive Test E2E runs the per-fixture multi-reader matrix and documents absent optional readers as skips
-REQ-212	e2e	archive-tests/test_verify_reader_matrix.py	Reader matrix contract tests cover profile registration, report-to-input identity binding, non-gating Info-ZIP execution errors, real operations, timeouts, line separators, and agreement semantics
-REQ-212	e2e	archive-tests/test_verify_7zip_adapter.py	7-Zip Adapter Check verifies declared member presence for empty extractions and reports per-fixture identity
+REQ-212	e2e	test-archive-test-suites.sh	Archive Test E2E requires per-fixture .NET/Python results, runs available optional readers, gates declared 7-Zip Adapter Checks (including timeouts), and reports agreement/splits
+REQ-212	e2e	test-archive-test-suites.bat	Windows Archive Test E2E requires per-fixture .NET/Python results, runs available optional readers, gates declared 7-Zip Adapter Checks (including timeouts), and reports agreement/splits
+REQ-212	e2e	archive-tests/test_verify_reader_matrix.py	Reader matrix tests cover input binding, Info-ZIP Adapter Check mismatch gates, non-gating execution errors, and failed 7-Zip timeout reports
+REQ-212	e2e	archive-tests/test_verify_7zip_adapter.py	7-Zip Adapter Checks enforce one fixture deadline; a timeout is recorded as a failed check and gates matrix success
 REQ-212	e2e	archive-tests/test_verify_fixtures.py	Independent Python verifier covers hostile sidecar tampering, extraction-check classification, and the declared central extra-field overrun
 REQ-212	unit	ArchiveTestCaseSemanticsTests.Validate_NonValidFixtureCannotDeclareReferenceExtractAdapterCheck	Rejects .NET and Python reference-reader extraction Adapter Checks for malformed and policy-sensitive fixtures
 REQ-212	e2e	archive-tests/test_verify_fixtures.py	Schema and semantic verifier reject .NET and Python extraction Adapter Checks for non-valid fixtures
@@ -591,6 +591,12 @@ REQ-218	unit	ArchiveFixtureMutationTests.Apply_UndeclaredTrailingData_ControlWit
 REQ-218	unit	ArchiveFixtureMutationTests.Apply_UndeclaredTrailingData_NonzeroCommentLength_ThrowsInvalidOperationException	Rejects controls whose EOCD declares a nonzero comment length
 REQ-218	unit	ArchiveFixtureMutationTests.Apply_VersionLocalCentralMismatch_PinsLocalTwoPointZeroAndCentralFourPointFive	Version-needed disagreement keeps the local 2.0 word and rewrites the central word to Zip64 4.5 in place without moving payload or offsets
 REQ-218	unit	ArchiveFixturePropertyTests.ArchiveFixtureMutator_ApplyMutation_ShouldModifyOnlyTargetedStructureAndPreserveUnmutatedRegions	Property: ArchiveFixtureMutator modifies targeted structure bytes and preserves unmutated regions
+REQ-230	unit	ArchiveFixtureMutationTests.Build_CrcBothMismatchDeflate_FlipsOnlyBothHeaderCrcWords	CRC mismatch mutation flips both header CRC words without changing payload or sizes
+REQ-230	unit	ArchiveTestSuiteGeneratorTests.BuildExpectationFile_CrcBothMismatchDeflate_AllowsInflateTimeCrcRejection	Expectation File allows CRC-validating read-entry rejection and CRC-unchecked outcomes
+REQ-231	unit	ArchiveTestSuiteContractTests.ListSuite_Security_SiblingPrefixTraversalUsesHostileNameConstruction	Sibling-prefix traversal Case Key remains policy-sensitive and in the security suite
+REQ-231	unit	ArchiveFixtureBuilderTests.BuildControl_NameSiblingPrefixTraversal_PreservesBothRawNames	Exact hostile UTF-8 name bytes are written to both local and central headers
+REQ-231	unit	ArchiveReferenceReaderTests.ReadOperations_NameSiblingPrefixTraversal_PreservesNamesAndPayloads	Reference reader observes the declared names and content without extracting the hostile Archive
+REQ-231	e2e	archive-tests/test_verify_fixtures.py	Independent verifier confirms sidecar name bytes match both Archive headers
 REQ-220	unit	ArchiveTestCodecTests.WireCode_KnownPayloadCodec_MapsHeaderVersionAndName	Archive compression method wire code mappings (store, deflate, deflate64, bzip2)
 REQ-223	unit	HelpTextGeneratorTests.Show_MarksDeflate64Bzip2AsNotYetSupported	Help text documents unsupported compression methods (deflate64, bzip2)
 REQ-148	unit	ColumnCountValidatorTests.ColumnCountValidator_ValidatesDatColumns	Post-generation validation DAT load file column count verification
