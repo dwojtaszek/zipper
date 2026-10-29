@@ -9,6 +9,7 @@ Run from the .zipper-runner directory:
     python3 -m unittest discover -s tests
 """
 
+import contextlib
 import json
 import os
 import shutil
@@ -17,7 +18,9 @@ import sys
 import tempfile
 import time
 import unittest
+from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
+from io import StringIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -675,6 +678,119 @@ class WorktreeBackoffTests(unittest.TestCase):
         with open(runner._worktree_backoff_path(self.BRANCH)) as f:
             state = json.load(f)
         self.assertEqual(state["failures"], 1)
+
+    def test_babysitWithFallback_whenEveryCandidateIsParked_doesNotRecordFailure(self):
+        """A provider outage must not spend the branch's backoff ladder.
+
+        No mission is launched when every candidate is already parked, so nothing
+        about the branch is proven fruitless. Counting the cycle would escalate the
+        cooldown (8m -> ... -> 6h) against a branch that was never tried.
+        """
+        mock_plugin = MagicMock()
+        with (
+            patch.dict(runner.AGENT_PLUGINS, {"opencode": mock_plugin}, clear=True),
+            patch.object(runner, "AGENT_CANDIDATES", [("opencode", "opencode/big-pickle")]),
+            patch.object(runner, "is_model_exhausted", return_value=True),
+            patch.object(runner, "_babysit_snapshot", return_value=("", -1, "")),
+            patch.object(runner, "send_email") as mail,
+        ):
+            runner._babysit_with_fallback("prompt", "/tmp/wt", self.BRANCH, 903)
+        mock_plugin.run_mission.assert_not_called()
+        self.assertFalse(os.path.exists(runner._worktree_backoff_path(self.BRANCH)),
+                         "a cycle that launched no mission must not record a fruitless one")
+        mail.assert_not_called()
+
+    def test_babysitWithFallback_whenEveryCandidateFailsQuota_doesNotRecordFailure(self):
+        """Quota exhaustion is the provider's condition, not the branch's."""
+        mock_plugin = MagicMock()
+        mock_plugin.run_mission.return_value = (1, "", "Error: quota exceeded")
+        with (
+            patch.dict(runner.AGENT_PLUGINS, {"opencode": mock_plugin}, clear=True),
+            patch.object(runner, "AGENT_CANDIDATES", [("opencode", "opencode/big-pickle")]),
+            patch.object(runner, "_babysit_snapshot", return_value=("", -1, "")),
+            patch.object(runner, "mark_model_exhausted"),
+            patch.object(runner, "send_email") as mail,
+        ):
+            runner._babysit_with_fallback("prompt", "/tmp/wt", self.BRANCH, 903)
+        self.assertFalse(os.path.exists(runner._worktree_backoff_path(self.BRANCH)),
+                         "quota exhaustion must not record a fruitless mission")
+        mail.assert_not_called()
+
+    def test_babysitWithFallback_whenOneCandidateIsParkedAndAnotherFails_recordsFailure(self):
+        """The guard must key on a mission having run, not on a skip having happened."""
+        mock_plugin = MagicMock()
+        mock_plugin.run_mission.return_value = (1, "", "Error: unrelated failure")
+        with (
+            patch.dict(runner.AGENT_PLUGINS, {"opencode": mock_plugin}, clear=True),
+            patch.object(runner, "AGENT_CANDIDATES",
+                         [("opencode", "opencode/parked"), ("opencode", "opencode/live")]),
+            patch.object(runner, "is_model_exhausted",
+                         side_effect=lambda agent, model: model == "opencode/parked"),
+            patch.object(runner, "_babysit_snapshot", return_value=("", -1, "")),
+            patch.object(runner, "send_email"),
+            patch.object(runner, "_should_send_rate_limited", return_value=False),
+        ):
+            runner._babysit_with_fallback("prompt", "/tmp/wt", self.BRANCH, 903)
+        with open(runner._worktree_backoff_path(self.BRANCH)) as f:
+            state = json.load(f)
+        self.assertEqual(state["failures"], 1)
+
+    def test_babysitWithFallback_whenARealFailureFollowsAQuotaFailure_recordsFailure(self):
+        """One real verdict is enough, even after earlier candidates were capped."""
+        mock_plugin = MagicMock()
+        mock_plugin.run_mission.side_effect = [
+            (1, "", "Error: quota exceeded"),
+            (1, "", "Error: tests failed"),
+        ]
+        with (
+            patch.dict(runner.AGENT_PLUGINS, {"opencode": mock_plugin}, clear=True),
+            patch.object(runner, "AGENT_CANDIDATES",
+                         [("opencode", "opencode/capped"), ("opencode", "opencode/live")]),
+            patch.object(runner, "mark_model_exhausted"),
+            patch.object(runner, "_babysit_snapshot", return_value=("", -1, "")),
+            patch.object(runner, "send_email"),
+            patch.object(runner, "_should_send_rate_limited", return_value=False),
+        ):
+            runner._babysit_with_fallback("prompt", "/tmp/wt", self.BRANCH, 903)
+        with open(runner._worktree_backoff_path(self.BRANCH)) as f:
+            state = json.load(f)
+        self.assertEqual(state["failures"], 1)
+
+    def _skip_log(self, *, candidates, exhausted_side_effect=None, mission_result=None):
+        """Run one no-verdict cycle and return its stdout."""
+        mock_plugin = MagicMock()
+        if mission_result is not None:
+            mock_plugin.run_mission.return_value = mission_result
+        patches = [
+            patch.dict(runner.AGENT_PLUGINS, {"opencode": mock_plugin}, clear=True),
+            patch.object(runner, "AGENT_CANDIDATES", candidates),
+            patch.object(runner, "_babysit_snapshot", return_value=("", -1, "")),
+            patch.object(runner, "mark_model_exhausted"),
+            patch.object(runner, "send_email"),
+        ]
+        if exhausted_side_effect is not None:
+            patches.append(patch.object(runner, "is_model_exhausted", side_effect=exhausted_side_effect))
+        buffer = StringIO()
+        with contextlib.ExitStack() as stack:
+            for p in patches:
+                stack.enter_context(p)
+            with redirect_stdout(buffer):
+                runner._babysit_with_fallback("prompt", "/tmp/wt", self.BRANCH, 903)
+        return buffer.getvalue()
+
+    def test_noVerdictCycle_shouldSayNoCandidateWasAvailable(self):
+        """The two no-verdict shapes need different operator action, so they are
+        logged separately -- and the message must name the shape that happened."""
+        out = self._skip_log(candidates=[("opencode", "opencode/parked")],
+                             exhausted_side_effect=lambda agent, model: True)
+        self.assertIn("no candidate was available (all parked)", out)
+        self.assertNotIn("quota-exhausted", out)
+
+    def test_noVerdictCycle_shouldSayEveryLaunchedCandidateWasQuotaExhausted(self):
+        out = self._skip_log(candidates=[("opencode", "opencode/capped")],
+                             mission_result=(1, "", "Error: quota exceeded"))
+        self.assertIn("every launched candidate was quota-exhausted", out)
+        self.assertNotIn("all parked", out)
 
 
 class RefreshModelsGuardTests(unittest.TestCase):

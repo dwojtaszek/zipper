@@ -262,6 +262,11 @@ class RunnerCycleTests(unittest.TestCase):
                 "#!/usr/bin/env python3\nimport json, os, sys, subprocess\nfrom pathlib import Path\n"
                 "command=sys.argv[1:3]\n"
                 "if command == ['issue','list']:\n"
+                # The silent-close audit reads closed issues with --state closed; only
+                # an open-issue list means the intake path ran in babysit-only mode.
+                "    if 'closed' in sys.argv:\n"
+                "        print('[]')\n"
+                "        sys.exit(0)\n"
                 "    Path(os.environ['FORBIDDEN_COMMAND']).touch()\n"
                 "    raise AssertionError('new intake')\n"
                 "elif command == ['issue','view']: print(json.dumps({'title':'Smooth','body':'Finish work','comments':[]}))\n"
