@@ -148,31 +148,75 @@ class SevenZipAdapterTests(unittest.TestCase):
             archive = directory / f"{stem}.zip"
             with zipfile.ZipFile(archive, "w") as output:
                 output.writestr("a.txt", b"actual content")
+                output.writestr("b.txt", b"unselected content")
             sidecar = directory / f"{stem}.json"
+            report = directory / "7zip-report.json"
+            adapter_checks = [
+                {"adapter": "7zip", "action": "extract", "expectedOutcome": "success"},
+                {"adapter": "7zip", "action": "extract-entries",
+                 "expectedOutcome": "success", "entryNames": ["a.txt"]},
+                {"adapter": "7zip", "action": "presence", "expectedOutcome": "present"},
+            ]
             data = {
                 "caseKey": "control",
-                "entries": [{
-                    "kind": "file",
-                    "readableName": "a.txt",
-                    "contentSha256": hashlib.sha256(b"actual content").hexdigest(),
-                    "contentSize": len(b"actual content"),
-                }],
-                "limits": {"expandedBytesBudget": len(b"actual content")},
-                "adapterChecks": [
-                    {"adapter": "7zip", "action": "extract", "expectedOutcome": "success"},
-                    {"adapter": "7zip", "action": "presence", "expectedOutcome": "present"},
+                "entries": [
+                    {
+                        "kind": "file",
+                        "readableName": "a.txt",
+                        "contentSha256": hashlib.sha256(b"actual content").hexdigest(),
+                        "contentSize": len(b"actual content"),
+                    },
+                    {
+                        "kind": "file",
+                        "readableName": "b.txt",
+                        "contentSha256": hashlib.sha256(b"unselected content").hexdigest(),
+                        "contentSize": len(b"unselected content"),
+                    },
                 ],
+                "limits": {"expandedBytesBudget": len(b"actual content") + len(b"unselected content")},
+                "adapterChecks": adapter_checks,
             }
             sidecar.write_text(json.dumps(data))
 
             def run():
                 return subprocess.run(
-                    [sys.executable, str(SCRIPT), str(directory), seven],
+                    [sys.executable, str(SCRIPT), str(directory), seven,
+                     "--report", str(report)],
                     capture_output=True, text=True, check=False,
                 )
 
             res = run()
             self.assertEqual(0, res.returncode)
+            saved_report = json.loads(report.read_text(encoding="utf-8"))
+            self.assertEqual("7zip", saved_report["adapter"])
+            self.assertEqual(1, len(saved_report["fixtures"]))
+            self.assertEqual("pass", saved_report["fixtures"][0]["status"])
+            self.assertEqual(
+                {"extract", "extract-entries", "presence"},
+                {check["action"] for check in saved_report["fixtures"][0]["checks"]})
+            self.assertEqual(
+                {"extract"},
+                {operation["operation"]
+                 for operation in saved_report["fixtures"][0]["operations"]})
+            self.assertEqual("success", saved_report["fixtures"][0]["checks"][0]["observedOutcome"])
+            self.assertEqual("pass", saved_report["fixtures"][0]["checks"][0]["status"])
+            self.assertEqual(
+                "extract-succeeds",
+                saved_report["fixtures"][0]["operations"][0]["normalizedOutcome"])
+
+            data["adapterChecks"] = [{
+                "adapter": "7zip",
+                "action": "extract-entries",
+                "expectedOutcome": "success",
+                "entryNames": ["a.txt"],
+            }]
+            data["entries"][1]["contentSha256"] = "0" * 64
+            sidecar.write_text(json.dumps(data))
+            res = run()
+            self.assertEqual(0, res.returncode, res.stderr)
+            data["entries"][1]["contentSha256"] = hashlib.sha256(
+                b"unselected content").hexdigest()
+            data["adapterChecks"] = adapter_checks
 
             data["entries"][0]["contentSha256"] = "0" * 64
             sidecar.write_text(json.dumps(data))
@@ -187,7 +231,8 @@ class SevenZipAdapterTests(unittest.TestCase):
             self.assertEqual(1, res.returncode)
             self.assertIn("expanded bytes budget exceeded", res.stderr)
 
-            data["limits"]["expandedBytesBudget"] = len(b"actual content")
+            data["limits"]["expandedBytesBudget"] = (
+                len(b"actual content") + len(b"unselected content"))
             data["entries"][0]["readableName"] = "-y"
             sidecar.write_text(json.dumps(data))
             res = run()
@@ -208,10 +253,7 @@ class SevenZipAdapterTests(unittest.TestCase):
 
             # Ticket #1131: Real malformed Archive negative control alongside valid control
             data["entries"][0]["readableName"] = "a.txt"
-            data["adapterChecks"] = [
-                {"adapter": "7zip", "action": "extract", "expectedOutcome": "success"},
-                {"adapter": "7zip", "action": "presence", "expectedOutcome": "present"},
-            ]
+            data["adapterChecks"] = adapter_checks
             sidecar.write_text(json.dumps(data))
 
             stem_malformed = "atc-" + "b" * 64
@@ -230,7 +272,7 @@ class SevenZipAdapterTests(unittest.TestCase):
 
             res = run()
             self.assertEqual(0, res.returncode)
-            self.assertIn("7-Zip verified 3 declared adapter checks.", res.stdout)
+            self.assertIn("7-Zip verified 4 declared adapter checks.", res.stdout)
 
             # If real malformed check is given a valid archive, verifier fails closed
             with zipfile.ZipFile(archive_malformed, "w") as valid_output:
@@ -360,6 +402,33 @@ class SevenZipAdapterTests(unittest.TestCase):
             self.assertEqual(1, res.returncode)
             self.assertIn("without diagnostic content error", res.stderr)
             self.assertNotIn("verified", res.stdout)
+
+    def test_verify_IgnoresChecksForOtherReaderProfiles(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            stem = "atc-" + "a" * 64
+            (directory / f"{stem}.zip").write_bytes(b"not-read-by-presence-check")
+            (directory / f"{stem}.json").write_text(json.dumps({
+                "caseKey": "reader-profile-checks",
+                "adapterChecks": [
+                    {"adapter": "python-zipfile", "action": "list",
+                     "expectedOutcome": "list-succeeds"},
+                    {"adapter": "7zip", "action": "presence",
+                     "expectedOutcome": "present"},
+                ],
+            }), encoding="utf-8")
+            report_path = directory / "report.json"
+
+            checked = VERIFIER["verify"](
+                directory, "unused-seven-zip", report_path)
+
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(1, checked)
+        self.assertEqual(
+            [("presence", "present")],
+            [(check["action"], check["observedOutcome"])
+             for check in report["fixtures"][0]["checks"]])
 
 
 if __name__ == "__main__":

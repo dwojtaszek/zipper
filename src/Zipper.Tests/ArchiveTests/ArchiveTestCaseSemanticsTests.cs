@@ -302,6 +302,9 @@ public class ArchiveTestCaseSemanticsTests
 
     [Theory]
     [InlineData("other", "extract", "success", false, "unknown adapter")]
+    [InlineData("infozip-unzip", "extract", "extract-succeeds", false, "invalid expectedOutcome")]
+    [InlineData("infozip-unzip", "extract", "success", false, "invalid expectedOutcome")]
+    [InlineData("python-zipfile", "test", "failure", false, "invalid expectedOutcome")]
     [InlineData("7zip", "unknown", "success", false, "invalid expectedOutcome")]
     [InlineData("7zip", "extract", "failure", false, "invalid expectedOutcome")]
     [InlineData("7zip", "test", "success", false, "invalid expectedOutcome")]
@@ -320,6 +323,21 @@ public class ArchiveTestCaseSemanticsTests
         Assert.Contains(
             ArchiveTestCaseSemantics.Validate(testCase),
             error => error.Contains(expectedError, StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("dotnet-reference", "read-entry", "read-entry-content-matches")]
+    [InlineData("python-zipfile", "extract", "extract-succeeds")]
+    [InlineData("infozip-unzip", "integrity-check", "integrity-fails")]
+    public void Validate_DeclaredReaderAdapterCheck_IsAllowed(
+        string adapter, string action, string outcome)
+    {
+        var testCase = ArchiveTestJsonTests.ValidEmptyCase() with
+        {
+            AdapterChecks = [new ArchiveTestAdapterCheck(adapter, action, outcome)],
+        };
+
+        Assert.Empty(ArchiveTestCaseSemantics.Validate(testCase));
     }
 
     [Fact]

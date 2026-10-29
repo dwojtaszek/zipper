@@ -331,13 +331,30 @@ public class ArchiveTestCaseSchemaTests
         var item = checks.GetProperty("items");
         Assert.False(item.GetProperty("additionalProperties").GetBoolean());
         Assert.Equal(["adapter", "action", "expectedOutcome"], item.GetProperty("required").EnumerateArray().Select(value => value.GetString()));
-        Assert.Equal("7zip", item.GetProperty("properties").GetProperty("adapter").GetProperty("const").GetString());
-        Assert.Equal(["extract", "test", "extract-entries", "presence"],
-            item.GetProperty("properties").GetProperty("action").GetProperty("enum").EnumerateArray().Select(value => value.GetString()));
+        foreach (var property in new[] { "adapter", "action", "expectedOutcome" })
+        {
+            var definition = item.GetProperty("properties").GetProperty(property);
+            Assert.Equal("string", definition.GetProperty("type").GetString());
+            Assert.Equal(1, definition.GetProperty("minLength").GetInt32());
+        }
+
         var names = item.GetProperty("properties").GetProperty("entryNames");
         Assert.Equal(1, names.GetProperty("minItems").GetInt32());
         Assert.True(names.GetProperty("uniqueItems").GetBoolean());
-        Assert.Equal(4, item.GetProperty("oneOf").GetArrayLength());
+        Assert.Equal(15, item.GetProperty("oneOf").GetArrayLength());
+        Assert.Equal(
+            "extract-entries",
+            item.GetProperty("if").GetProperty("properties")
+                .GetProperty("action").GetProperty("const").GetString());
+        Assert.Contains(
+            "entryNames",
+            item.GetProperty("then").GetProperty("required")
+                .EnumerateArray().Select(value => value.GetString()));
+        Assert.Contains(
+            "entryNames",
+            item.GetProperty("else").GetProperty("not").GetProperty("required")
+                .EnumerateArray().Select(value => value.GetString()));
+        Assert.Contains("ArchiveTestCatalog", item.GetProperty("description").GetString());
     }
 
     [Fact]

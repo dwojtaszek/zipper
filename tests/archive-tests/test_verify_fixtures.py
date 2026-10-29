@@ -2271,6 +2271,43 @@ class SchemaLimitsTests(TempDirTest):
             json.dump(case, handle)
         return self.ajv.validate(path)
 
+    def test_schema_accepts_declared_reader_adapter_checks(self):
+        case, _ = self.publish_valid()
+        case["adapterChecks"] = [
+            {"adapter": "dotnet-reference", "action": "list",
+             "expectedOutcome": "list-succeeds"},
+            {"adapter": "python-zipfile", "action": "extract",
+             "expectedOutcome": "extract-succeeds"},
+            {"adapter": "infozip-unzip", "action": "integrity-check",
+             "expectedOutcome": "integrity-fails"},
+            {"adapter": "7zip", "action": "extract-entries",
+             "expectedOutcome": "success", "entryNames": ["a.txt"]},
+        ]
+
+        self.assertTrue(self._validate_case(case))
+
+    def test_schema_rejects_undeclared_reader_adapter_checks(self):
+        case, _ = self.publish_valid()
+        invalid_checks = [
+            {"adapter": "unknown-reader", "action": "list",
+             "expectedOutcome": "list-succeeds"},
+            {"adapter": "infozip-unzip", "action": "extract",
+             "expectedOutcome": "extract-succeeds"},
+            {"adapter": "dotnet-reference", "action": "list",
+             "expectedOutcome": "extract-succeeds"},
+            {"adapter": "7zip", "action": "extract-entries",
+             "expectedOutcome": "success"},
+            {"adapter": "7zip", "action": "extract",
+             "expectedOutcome": "success", "entryNames": ["a.txt"]},
+        ]
+
+        for check in invalid_checks:
+            with self.subTest(check=check):
+                case["adapterChecks"] = [check]
+                with self.assertRaises(vf.VerificationError) as ctx:
+                    self._validate_case(case)
+                self.assertEqual("schema", ctx.exception.check)
+
     def test_schema_rejects_physical_size_over_16mib(self):
         case, _ = self.publish_valid()
         case["archive"]["physicalSize"] = 16 * 1024 * 1024 + 1
@@ -2363,6 +2400,37 @@ class SchemaLimitsTests(TempDirTest):
         with self.assertRaises(vf.VerificationError) as ctx:
             vf.verify_compression_methods(case, zip_bytes)
         self.assertEqual("compression-methods", ctx.exception.check)
+
+
+class AdapterCheckValidationTests(TempDirTest):
+    def test_verifier_AcceptsDeclaredReaderAdapterProfileOutcomes(self):
+        case, _ = self.publish_valid()
+        case["adapterChecks"] = [
+            {"adapter": "dotnet-reference", "action": "list",
+             "expectedOutcome": "list-succeeds"},
+            {"adapter": "python-zipfile", "action": "read-entry",
+             "expectedOutcome": "read-entry-content-matches"},
+            {"adapter": "infozip-unzip", "action": "integrity-check",
+             "expectedOutcome": "integrity-passes"},
+            {"adapter": "7zip", "action": "extract",
+             "expectedOutcome": "success"},
+        ]
+
+        vf.validate_adapter_checks(case)
+
+    def test_verifier_RejectsUndeclaredAdapterCheckOutcome(self):
+        case, _ = self.publish_valid()
+        case["adapterChecks"] = [
+            {"adapter": "7zip", "action": "extract", "expectedOutcome": "failure"},
+        ]
+        sidecar = os.path.join(self.dir, case["fixtureId"] + ".json")
+        self.persist(sidecar, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        self.assertEqual("fail", report["fixtures"][0]["status"])
+        self.assertEqual("schema", report["fixtures"][0]["failure"]["check"])
 
 
 class InvariantEnforcementTests(TempDirTest):

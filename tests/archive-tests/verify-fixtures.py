@@ -77,6 +77,48 @@ ZIP64_EOCD_FIXED_SIZE = 56
 ZIP64_VERSION = 45
 
 OPERATIONS = ("list", "read-entry", "integrity-check", "extract")
+ADAPTER_CHECK_OUTCOMES = {
+    "dotnet-reference": {
+        "list": {"list-succeeds", "list-fails"},
+        "read-entry": {
+            "read-entry-content-matches", "read-entry-returns-unverified-bytes",
+            "read-entry-fails", "unsupported-method-rejected",
+        },
+        "integrity-check": {
+            "integrity-passes", "integrity-fails", "integrity-unchecked",
+            "crc-mismatch-unchecked", "crc-mismatch-rejected", "unsupported-method-rejected",
+        },
+        "extract": {"extract-succeeds", "extract-fails", "unsupported-method-rejected"},
+    },
+    "python-zipfile": {
+        "list": {"list-succeeds", "list-fails"},
+        "read-entry": {
+            "read-entry-content-matches", "read-entry-returns-unverified-bytes",
+            "read-entry-fails", "unsupported-method-rejected",
+        },
+        "integrity-check": {
+            "integrity-passes", "integrity-fails", "crc-mismatch-unchecked",
+            "crc-mismatch-rejected", "unsupported-method-rejected",
+        },
+        "extract": {"extract-succeeds", "extract-fails", "unsupported-method-rejected"},
+    },
+    "infozip-unzip": {
+        "list": {"list-succeeds", "list-fails"},
+        "read-entry": {
+            "read-entry-content-matches", "read-entry-returns-unverified-bytes",
+            "read-entry-fails", "unsupported-method-rejected",
+        },
+        "integrity-check": {
+            "integrity-passes", "integrity-fails", "unsupported-method-rejected",
+        },
+    },
+    "7zip": {
+        "extract": {"success"},
+        "test": {"failure"},
+        "extract-entries": {"success"},
+        "presence": {"present"},
+    },
+}
 FAILURE_TOKENS = {
     "list": "list-fails",
     "read-entry": "read-entry-fails",
@@ -173,6 +215,41 @@ class VerificationError(Exception):
 
 def sha256_hex(data):
     return hashlib.sha256(data).hexdigest()
+
+
+def validate_adapter_checks(case):
+    for check in case.get("adapterChecks", []):
+        adapter = check["adapter"]
+        action = check["action"]
+        expected_outcome = check["expectedOutcome"]
+        profile = ADAPTER_CHECK_OUTCOMES.get(adapter)
+        if profile is None or expected_outcome not in profile.get(action, set()):
+            raise VerificationError(
+                "adapter-checks",
+                "Adapter Check %s/%s/%s is not declared by a Reader Adapter Profile"
+                % (adapter, action, expected_outcome),
+                stage="expectation")
+
+        entry_names = check.get("entryNames")
+        if action == "extract-entries":
+            file_names = {
+                entry["readableName"]
+                for entry in case["entries"]
+                if entry["kind"] == "file"
+            }
+            if (not isinstance(entry_names, list) or not entry_names
+                    or len(entry_names) != len(set(entry_names))
+                    or any(name not in file_names for name in entry_names)):
+                raise VerificationError(
+                    "adapter-checks",
+                    "extract-entries Adapter Check requires distinct file entryNames",
+                    stage="expectation")
+        elif entry_names is not None:
+            raise VerificationError(
+                "adapter-checks",
+                "%s/%s Adapter Check must not declare entryNames"
+                % (adapter, action),
+                stage="expectation")
 
 
 def canonical_descriptor(generator_contract_version, case_key, case_revision,
@@ -420,6 +497,8 @@ class FixtureVerifier:
         self.subprocess_count += 1
         self.ajv.validate(self.json_path)
         checks.append({"check": "schema", "status": "pass"})
+        validate_adapter_checks(case)
+        checks.append({"check": "adapter-checks", "status": "pass"})
 
         # Independent Archive length and SHA-256 recompute.
         if case["archive"]["physicalSize"] != len(zip_bytes):

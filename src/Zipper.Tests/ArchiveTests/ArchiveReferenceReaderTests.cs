@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
+using System.Text.Json;
 using Xunit;
 using Zipper.ArchiveTests;
 
@@ -7,15 +8,15 @@ namespace Zipper.Tests;
 
 /// <summary>
 /// Ticket #845: the .NET reference reader's normalized operation results for every
-/// catalog case. The .NET ZipArchive is the second reader beside the Python adapter in
-/// tests/archive-tests/verify-fixtures.py: list / read-entry / integrity-check /
-/// extract outcomes are normalized (never exception wording) and checked against the
-/// Expectation File's allowed outcomes, mirroring the independent verifier. Valid
-/// controls are the required positive controls and are extracted into a fresh owned
-/// directory. Other malformed and policy-sensitive fixtures are not extracted here;
-/// trailing-data-undeclared is safe because it reuses the valid Stored control's paths.
-/// Platform-marked expectations do not apply on this host and are recorded as
-/// not-applicable, never as passing verifications (REQ-212).
+/// catalog case. This required reader runs beside Python zipfile in
+/// tests/archive-tests/verify-fixtures.py and the optional readers in
+/// verify-reader-matrix.py: list / read-entry / integrity-check / extract outcomes are
+/// normalized (never exception wording) and checked against the Expectation File's
+/// allowed outcomes. Valid controls are the required positive controls and are
+/// extracted into a fresh owned directory. Other malformed and policy-sensitive
+/// fixtures are not extracted here; trailing-data-undeclared is safe because it reuses
+/// the valid Stored control's paths. Platform-marked expectations do not apply on this
+/// host and are recorded as not-applicable, never as passing verifications (REQ-212).
 /// </summary>
 public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
 {
@@ -28,6 +29,8 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
 
     private const string RuntimeCrcBehaviorChangedMessage =
         "Runtime CRC behavior changed — bump Expectation Revisions for all CRC-declaring cases and update NormalizeIntegrityCheck per docs/archive-test-suites.md before updating this canary.";
+
+    private static readonly HashSet<string> ApplicablePlatforms = GetApplicablePlatforms();
 
     /// <summary>
     /// Catalog success vocabulary aliases of the reader's canonical success tokens
@@ -53,7 +56,8 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
     private static bool? OutcomeAllowed(string observed, string operation, ArchiveTestCase testCase)
     {
         var expectations = testCase.Expectations
-            .Where(e => e.Operation == operation && e.Platform is null)
+            .Where(e => e.Operation == operation
+                        && (e.Platform is null || ApplicablePlatforms.Contains(e.Platform)))
             .ToList();
         if (expectations.Count == 0)
         {
@@ -262,7 +266,8 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
         Assert.Equal(caseKey, testCase.CaseKey);
 
         var extractDir = Path.Combine(TempDir, caseKey + "-extract");
-        ExecuteReaderOperations(testCase, archiveBytes, extractDir);
+        var outcomes = ExecuteReaderOperations(testCase, archiveBytes, extractDir);
+        WriteReaderProfileReport(testCase, outcomes);
     }
 
     [Fact]
@@ -452,14 +457,14 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
             declaredOperations.Order(StringComparer.Ordinal));
     }
 
-    private void ExecuteReaderOperations(
+    private IReadOnlyList<ReaderOutcome> ExecuteReaderOperations(
         ArchiveTestCase testCase, byte[] archiveBytes, string extractDir)
     {
         AssertDeclaredOperations(testCase);
 
         var outcomes = new List<ReaderOutcome>();
         var expectedOperations = testCase.Expectations
-            .Where(e => e.Platform is null)
+            .Where(e => e.Platform is null || ApplicablePlatforms.Contains(e.Platform))
             .Select(e => e.Operation)
             .Distinct()
             .ToHashSet(StringComparer.Ordinal);
@@ -503,6 +508,76 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
             .ToHashSet(StringComparer.Ordinal);
         var ran = outcomes.Select(o => o.Operation).ToHashSet(StringComparer.Ordinal);
         Assert.Subset(ran, mustRun);
+        return outcomes;
+    }
+
+    private static HashSet<string> GetApplicablePlatforms()
+    {
+        var platforms = new HashSet<string>(StringComparer.Ordinal);
+        if (OperatingSystem.IsWindows())
+        {
+            platforms.Add("windows");
+        }
+
+        if (OperatingSystem.IsLinux())
+        {
+            platforms.Add("linux");
+        }
+
+        foreach (var platform in (Environment.GetEnvironmentVariable("ZIPPER_ATC_PLATFORMS") ?? string.Empty)
+                     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            platforms.Add(platform);
+        }
+
+        return platforms;
+    }
+
+    private static void WriteReaderProfileReport(
+        ArchiveTestCase testCase, IReadOnlyList<ReaderOutcome> outcomes)
+    {
+        var reportDirectory = Environment.GetEnvironmentVariable("ZIPPER_ATC_DOTNET_REPORT_DIR");
+        if (string.IsNullOrWhiteSpace(reportDirectory))
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(reportDirectory);
+        var operations = outcomes
+            .Select(outcome => new
+            {
+                operation = outcome.Operation,
+                normalizedOutcome = outcome.NormalizedOutcome,
+                status = !outcome.Applicable ? "not-run" : outcome.Allowed ? "pass" : "fail",
+            })
+            .ToList();
+        foreach (var operation in RequiredOperations.Except(
+                     operations.Select(result => result.operation), StringComparer.Ordinal))
+        {
+            operations.Add(new
+            {
+                operation,
+                normalizedOutcome = "not-run",
+                status = "not-run",
+            });
+        }
+
+        var report = new
+        {
+            fixtureId = testCase.FixtureId,
+            caseKey = testCase.CaseKey,
+            adapter = "dotnet-reference",
+            adapterVersion = Environment.Version.ToString(),
+            status = "pass",
+            operations,
+        };
+        var reportPath = Path.Combine(
+            reportDirectory, "dotnet-reference-" + testCase.FixtureId + ".json");
+        using var reportStream = new FileStream(
+            reportPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        using var writer = new StreamWriter(reportStream);
+        writer.Write(JsonSerializer.Serialize(report));
+        writer.Write('\n');
     }
 
     [Fact]

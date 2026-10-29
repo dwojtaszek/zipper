@@ -6,6 +6,7 @@ import json
 import subprocess
 import sys
 import threading
+import argparse
 from pathlib import Path
 
 
@@ -120,49 +121,115 @@ def check_archive_rejection(seven, archive, case_key):
         raise ValueError(f"7-Zip rejected {case_key} without diagnostic content error")
 
 
-def verify(fixtures, seven):
+def _write_report(report_path, report):
+    if report_path is not None:
+        Path(report_path).write_text(
+            json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def verify(fixtures, seven, report_path=None):
     checked = 0
+    report = {
+        "adapter": "7zip",
+        "adapterVersion": None,
+        "fixtures": [],
+    }
     for sidecar in sorted(fixtures.glob("atc-*.json")):
         data = json.loads(sidecar.read_text(encoding="utf-8"))
         archive = sidecar.with_suffix(".zip")
+        fixture_report = {
+            "fixtureId": data.get("fixtureId"),
+            "caseKey": data.get("caseKey"),
+            "status": "pass",
+            "checks": [],
+            "operations": [],
+        }
+        report["fixtures"].append(fixture_report)
         for directive in data.get("adapterChecks", []):
-            if directive["adapter"] != "7zip":
-                raise ValueError(f"unknown adapter for {data['caseKey']}")
-            if not archive.is_file():
-                raise ValueError(f"missing Archive for {data['caseKey']}")
-            action = directive["action"]
-            outcome = directive["expectedOutcome"]
-            if action == "presence" and outcome == "present":
-                checked += 1
+            if directive.get("adapter") != "7zip":
                 continue
-            if action == "test" and outcome == "failure":
-                check_archive_rejection(seven, archive, data["caseKey"])
-            elif action in ("extract", "extract-entries") and outcome == "success":
-                entries = [entry for entry in data["entries"] if entry["kind"] == "file"]
-                names = directive.get("entryNames")
-                if action == "extract-entries":
-                    entries = [entry for entry in entries if entry["readableName"] in names]
-                    if len(entries) != len(names) or len({e["readableName"] for e in entries}) != len(names):
-                        raise ValueError(f"missing or duplicate selected entries for {data['caseKey']}")
-                if not entries:
-                    raise ValueError(f"no entries selected for {data['caseKey']}")
-                budget = data["limits"]["expandedBytesBudget"]
-                if sum(entry["contentSize"] for entry in entries) > budget:
-                    raise ValueError(f"expanded bytes budget exceeded for {data['caseKey']}")
-                for entry in entries:
-                    check_entry(seven, archive, entry, budget)
-            else:
-                raise ValueError(f"unknown 7-Zip action/outcome for {data['caseKey']}: {action}/{outcome}")
-            checked += 1
+            action = directive.get("action")
+            outcome = directive.get("expectedOutcome")
+            check_report = {
+                "action": action,
+                "expectedOutcome": outcome,
+                "status": "fail",
+            }
+            fixture_report["checks"].append(check_report)
+            try:
+                if not archive.is_file():
+                    raise ValueError(f"missing Archive for {data['caseKey']}")
+                if action == "presence" and outcome == "present":
+                    check_report["observedOutcome"] = "present"
+                elif action == "test" and outcome == "failure":
+                    check_archive_rejection(seven, archive, data["caseKey"])
+                    check_report["observedOutcome"] = "failure"
+                    fixture_report["operations"].append({
+                        "operation": "integrity-check",
+                        "normalizedOutcome": "integrity-fails",
+                        "status": "pass",
+                    })
+                elif action in ("extract", "extract-entries") and outcome == "success":
+                    entries = [entry for entry in data["entries"] if entry["kind"] == "file"]
+                    names = directive.get("entryNames")
+                    if action == "extract-entries":
+                        entries = [entry for entry in entries if entry["readableName"] in names]
+                        if len(entries) != len(names) or len({e["readableName"] for e in entries}) != len(names):
+                            raise ValueError(f"missing or duplicate selected entries for {data['caseKey']}")
+                    if not entries:
+                        raise ValueError(f"no entries selected for {data['caseKey']}")
+                    budget = data["limits"]["expandedBytesBudget"]
+                    if sum(entry["contentSize"] for entry in entries) > budget:
+                        raise ValueError(f"expanded bytes budget exceeded for {data['caseKey']}")
+                    for entry in entries:
+                        check_entry(seven, archive, entry, budget)
+                    check_report["observedOutcome"] = "success"
+                    fixture_report["operations"].append({
+                        "operation": "extract",
+                        "normalizedOutcome": "extract-succeeds",
+                        "status": "pass",
+                    })
+                else:
+                    raise ValueError(f"unknown 7-Zip action/outcome for {data['caseKey']}: {action}/{outcome}")
+                check_report["status"] = "pass"
+                checked += 1
+            except (KeyError, OSError, ValueError, subprocess.TimeoutExpired) as error:
+                if action == "test":
+                    observed = "integrity-passes" if "accepted" in str(error) else None
+                    operation = "integrity-check"
+                elif action in ("extract", "extract-entries"):
+                    observed = "extract-fails"
+                    operation = "extract"
+                else:
+                    observed = None
+                    operation = None
+                if operation is not None:
+                    fixture_report["operations"].append({
+                        "operation": operation,
+                        "normalizedOutcome": observed,
+                        "status": "fail",
+                    })
+                fixture_report["status"] = "fail"
+                fixture_report["failure"] = str(error)
+                _write_report(report_path, report)
+                raise
     if checked == 0:
         raise ValueError("no 7-Zip adapter checks declared")
+    _write_report(report_path, report)
     return checked
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Run 7-Zip checks declared by Archive Test Fixture Expectation Files.")
+    parser.add_argument("fixture_dir")
+    parser.add_argument("seven_zip")
+    parser.add_argument("--report", default=None,
+                        help="optional JSON report path outside the fixture directory")
     try:
-        count = verify(Path(sys.argv[1]), sys.argv[2])
+        args = parser.parse_args()
+        count = verify(Path(args.fixture_dir), args.seven_zip, args.report)
         print(f"7-Zip verified {count} declared adapter checks.")
-    except (IndexError, KeyError, OSError, ValueError, subprocess.TimeoutExpired) as error:
+    except (KeyError, OSError, ValueError, subprocess.TimeoutExpired) as error:
         print(f"7-Zip adapter verification failed: {error}", file=sys.stderr)
         raise SystemExit(1) from error

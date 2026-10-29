@@ -524,7 +524,8 @@ if errorlevel 1 (
 )
 
 REM 13. Run the 7-Zip actions declared by each Expectation File. Malformed
-REM     Archives are tested with `t`, never extracted as a whole. Missing 7-Zip fails.
+REM     Archives are tested with `t`, never extracted as a whole. Optional
+REM     readers absent from PATH are reported as skips, not failures.
 set "SEVEN_ZIP="
 where 7zz >nul 2>&1
 if not errorlevel 1 set "SEVEN_ZIP=7zz"
@@ -532,8 +533,9 @@ if not defined SEVEN_ZIP (
     where 7z >nul 2>&1
     if not errorlevel 1 set "SEVEN_ZIP=7z"
 )
+set "SEVEN_ZIP_REPORT=%TEST_OUTPUT_DIR%\all-7zip-verification.json"
 if not defined SEVEN_ZIP (
-    call :fail "7-Zip (7zz/7z) must be installed for full-codec verification"
+    echo [ SKIP ] 7zip: neither 7zz nor 7z is installed
 ) else (
     call :pass "7-Zip full-codec adapter present"
     %PYCMD% tests\archive-tests\test_verify_7zip_adapter.py
@@ -542,12 +544,44 @@ if not defined SEVEN_ZIP (
     ) else (
         call :pass "7-Zip adapter self-test passed"
     )
-    %PYCMD% tests\archive-tests\verify-7zip-adapter.py "%ALL_OUT%" "!SEVEN_ZIP!"
+    %PYCMD% tests\archive-tests\verify-7zip-adapter.py "%ALL_OUT%" "!SEVEN_ZIP!" --report "%SEVEN_ZIP_REPORT%"
     if errorlevel 1 (
         call :fail "7-Zip must satisfy every declared adapter check"
     ) else (
         call :pass "7-Zip verified all declared adapter checks"
     )
+)
+
+REM 13.1. N-reader differential matrix: Python zipfile plus each available CLI
+REM       Reader Adapter Profile; per-fixture agreement (and accepted splits) is printed.
+%PYCMD% tests\archive-tests\test_verify_reader_matrix.py >nul 2>&1
+if errorlevel 1 (
+    call :fail "reader matrix contract tests must pass"
+) else (
+    call :pass "reader matrix contract tests passed"
+)
+set "DOTNET_REPORT_DIR=%CD%\results\archive-test-suites\dotnet-reference"
+mkdir "%DOTNET_REPORT_DIR%" >nul 2>&1
+set "ZIPPER_ATC_DOTNET_REPORT_DIR=%DOTNET_REPORT_DIR%"
+set "DOTNET_TEST_EXIT=0"
+dotnet test src\Zipper.Tests\Zipper.Tests.csproj --filter "FullyQualifiedName~ArchiveReferenceReaderTests.ReadOperations_AllCases_OutcomesMatchExpectationFile" --nologo >"%TEST_OUTPUT_DIR%\dotnet-reference-tests.log" 2>&1
+if errorlevel 1 set "DOTNET_TEST_EXIT=1"
+set "ZIPPER_ATC_DOTNET_REPORT_DIR="
+if "!DOTNET_TEST_EXIT!"=="1" (
+    type "%TEST_OUTPUT_DIR%\dotnet-reference-tests.log"
+    call :fail ".NET reference Reader Adapter Profile must produce per-fixture outcomes"
+) else (
+    call :pass ".NET reference Reader Adapter Profile produced per-fixture outcomes"
+)
+if exist "%SEVEN_ZIP_REPORT%" (
+    %PYCMD% tests\archive-tests\verify-reader-matrix.py "%ALL_OUT%" "%TEST_OUTPUT_DIR%\all-verification.json" --seven-zip-report "%SEVEN_ZIP_REPORT%" --dotnet-report-dir "%DOTNET_REPORT_DIR%" --report "%TEST_OUTPUT_DIR%\all-reader-agreement.json"
+) else (
+    %PYCMD% tests\archive-tests\verify-reader-matrix.py "%ALL_OUT%" "%TEST_OUTPUT_DIR%\all-verification.json" --dotnet-report-dir "%DOTNET_REPORT_DIR%" --report "%TEST_OUTPUT_DIR%\all-reader-agreement.json"
+)
+if errorlevel 1 (
+    call :fail "reader matrix must pass and report per-fixture agreement"
+) else (
+    call :pass "reader matrix passed and reported per-fixture agreement"
 )
 
 REM 14. Offline verification (ticket #932): with an empty npm cache and an
