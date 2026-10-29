@@ -401,3 +401,11 @@
 - **telemetry**: host=droid mode=branch specialists=1 bundle=3586c
 - **lessons**: none
 - **suppressions**: none
+
+### 2026-10-29 droid:branch:issue-1304-e2e-log-capture
+
+- **findings**: 0 ACTION, 0 INFO from one fast-pass correctness reviewer.
+- **outcome**: The shell syntax check and 64-test matrix suite passed with output captured to a log for failure diagnostics.
+- **telemetry**: host=droid mode=branch specialists=1 bundle=817c
+- **lessons**: none
+- **suppressions**: none

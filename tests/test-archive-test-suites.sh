@@ -458,9 +458,11 @@ fi
 
 # 13.1. N-reader differential matrix: Python zipfile plus each available CLI
 #       Reader Adapter Profile; per-fixture agreement (and accepted splits) is printed.
-if python3 tests/archive-tests/test_verify_reader_matrix.py >/dev/null 2>&1; then
+MATRIX_TEST_LOG="$TEST_OUTPUT_DIR/reader-matrix-contract-tests.log"
+if python3 tests/archive-tests/test_verify_reader_matrix.py >"$MATRIX_TEST_LOG" 2>&1; then
   check 0 "reader matrix contract tests passed"
 else
+  cat "$MATRIX_TEST_LOG" >&2
   check 1 "reader matrix contract tests must pass"
 fi
 mkdir -p "$TEST_OUTPUT_DIR/dotnet-reference"
