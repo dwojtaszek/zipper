@@ -6,6 +6,7 @@ import json
 import subprocess
 import sys
 import threading
+import time
 import argparse
 from pathlib import Path
 
@@ -14,12 +15,20 @@ from reader_process import run_reader_command, start_reader_process, terminate_r
 MAX_EXPANDED_BYTES_BUDGET = 32 * 1024 * 1024
 MAX_ARCHIVE_PHYSICAL_BYTES = 16 * 1024 * 1024
 MAX_EXPECTATION_FILE_BYTES = 1024 * 1024
+MAX_FIXTURE_CHECK_SECONDS = 10
 
 
-def list_archive_entries(seven, archive):
+def _remaining_fixture_time(deadline, case_key):
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise ValueError(f"7-Zip fixture check deadline exceeded for {case_key}")
+    return remaining
+
+
+def list_archive_entries(seven, archive, timeout=MAX_FIXTURE_CHECK_SECONDS):
     try:
         result = run_reader_command(
-            [seven, "l", "-slt", "-ba", "-sccUTF-8", str(archive)], timeout=30)
+            [seven, "l", "-slt", "-ba", "-sccUTF-8", str(archive)], timeout=timeout)
     except subprocess.TimeoutExpired as error:
         raise ValueError("7-Zip timed out listing Archive entries") from error
     if result.returncode not in (0, 1):
@@ -33,7 +42,10 @@ def list_archive_entries(seven, archive):
     return names
 
 
-def check_entry(seven, archive, entry, budget, archive_entries=None, expected_name_count=1):
+def check_entry(
+    seven, archive, entry, budget, archive_entries=None, expected_name_count=1,
+    timeout=MAX_FIXTURE_CHECK_SECONDS,
+):
     name = entry["readableName"]
     if (not name or name.startswith(("-", "@", "/", "\\")) or
             any(part in ("", ".", "..") for part in name.split("/")) or
@@ -63,7 +75,7 @@ def check_entry(seven, archive, entry, budget, archive_entries=None, expected_na
             timed_out.set()
             terminate_reader_process(process)
 
-        timer = threading.Timer(30, kill_after_timeout)
+        timer = threading.Timer(timeout, kill_after_timeout)
         timer.start()
         try:
             digest = hashlib.sha256()
@@ -74,7 +86,7 @@ def check_entry(seven, archive, entry, budget, archive_entries=None, expected_na
                     terminate_reader_process(process)
                 digest.update(chunk)
             try:
-                return_code = process.wait(timeout=30)
+                return_code = process.wait(timeout=timeout)
             except subprocess.TimeoutExpired as error:
                 raise ValueError(f"7-Zip timed out extracting {name!r}") from error
             if timed_out.is_set():
@@ -92,9 +104,9 @@ def check_entry(seven, archive, entry, budget, archive_entries=None, expected_na
                 process.communicate()
 
 
-def check_archive_rejection(seven, archive, case_key):
+def check_archive_rejection(seven, archive, case_key, timeout=MAX_FIXTURE_CHECK_SECONDS):
     try:
-        result = run_reader_command([seven, "t", str(archive)], timeout=30)
+        result = run_reader_command([seven, "t", str(archive)], timeout=timeout)
     except subprocess.TimeoutExpired as error:
         raise ValueError(f"7-Zip timed out testing {case_key}") from error
 
@@ -188,9 +200,18 @@ def verify(fixtures, seven, report_path=None):
             "operations": [],
         }
         report["fixtures"].append(fixture_report)
+        limits = data.get("limits", {})
+        if not isinstance(limits, dict):
+            raise ValueError(f"invalid fixture limits for {data.get('caseKey')}")
+        deadline_seconds = limits.get("deadlineSeconds", MAX_FIXTURE_CHECK_SECONDS)
+        if (isinstance(deadline_seconds, bool) or not isinstance(deadline_seconds, int)
+                or not 1 <= deadline_seconds <= MAX_FIXTURE_CHECK_SECONDS):
+            raise ValueError(f"invalid fixture deadline for {data.get('caseKey')}")
+        fixture_deadline = time.monotonic() + deadline_seconds
         for directive in data.get("adapterChecks", []):
             if directive.get("adapter") != "7zip":
                 continue
+            _remaining_fixture_time(fixture_deadline, data["caseKey"])
             action = directive.get("action")
             outcome = directive.get("expectedOutcome")
             check_report = {
@@ -205,7 +226,9 @@ def verify(fixtures, seven, report_path=None):
                 if action == "presence" and outcome == "present":
                     check_report["observedOutcome"] = "present"
                 elif action == "test" and outcome == "failure":
-                    check_archive_rejection(seven, archive, data["caseKey"])
+                    check_archive_rejection(
+                        seven, archive, data["caseKey"],
+                        _remaining_fixture_time(fixture_deadline, data["caseKey"]))
                     check_report["observedOutcome"] = "failure"
                     fixture_report["operations"].append({
                         "operation": "integrity-check",
@@ -238,10 +261,13 @@ def verify(fixtures, seven, report_path=None):
                     archive_entries = None
                     for entry in entries:
                         if entry["contentSize"] == 0 and archive_entries is None:
-                            archive_entries = list_archive_entries(seven, archive)
+                            archive_entries = list_archive_entries(
+                                seven, archive,
+                                _remaining_fixture_time(fixture_deadline, data["caseKey"]))
                         check_entry(
                             seven, archive, entry, budget, archive_entries,
-                            expected_name_counts[entry["readableName"]])
+                            expected_name_counts[entry["readableName"]],
+                            _remaining_fixture_time(fixture_deadline, data["caseKey"]))
                     check_report["observedOutcome"] = "success"
                     fixture_report["operations"].append({
                         "operation": "extract",
@@ -268,6 +294,7 @@ def verify(fixtures, seven, report_path=None):
                         "normalizedOutcome": observed,
                         "status": "fail",
                     })
+                check_report["failure"] = str(error)
                 fixture_report["status"] = "fail"
                 fixture_report["failure"] = str(error)
                 _write_report(report_path, report)

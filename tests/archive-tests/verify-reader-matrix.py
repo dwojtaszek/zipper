@@ -232,6 +232,21 @@ def _execution_error_operation_result(case, operation, error):
     return result
 
 
+def _execution_error_reader(case, version, error, operation_reason):
+    return {
+        "status": "observed",
+        "version": version,
+        "failure": str(error),
+        "operations": {
+            operation: (
+                _execution_error_operation_result(case, operation, error)
+                if operation != "extract" and _expectations_for(case, operation)
+                else _operation_result(case, operation, reason=operation_reason))
+            for operation in OPERATIONS
+        },
+    }
+
+
 def _safe_member_name(name):
     return (
         isinstance(name, str)
@@ -808,19 +823,29 @@ def verify_directory(
     }
     failures = []
     infozip_methods = {0, 8}
+    infozip_probe_error = None
 
     if infozip is not None:
         profiles["infozip-unzip"]["version"] = None
         try:
-            version = _run_reader(infozip, ["-v"], timeout=5)
+            version = _run_reader(
+                infozip, ["-v"], timeout=5,
+                start_error="could not start Info-ZIP unzip")
+            if version.returncode != 0:
+                raise ReaderExecutionError(
+                    f"Info-ZIP version probe exited with code {version.returncode}")
             output = (version.stdout + version.stderr).decode("utf-8", errors="replace")
-            profiles["infozip-unzip"]["version"] = output.splitlines()[0] if output else "unknown"
+            if not output.startswith("UnZip "):
+                raise ReaderExecutionError(
+                    "Info-ZIP version probe did not identify an Info-ZIP unzip executable")
+            profiles["infozip-unzip"]["version"] = output.splitlines()[0]
             if "USE_DEFLATE64" in output:
                 infozip_methods.add(9)
             if "USE_BZIP2" in output:
                 infozip_methods.add(12)
             profiles["infozip-unzip"]["supportedMethods"] = sorted(infozip_methods)
         except ReaderExecutionError as error:
+            infozip_probe_error = error
             profiles["infozip-unzip"]["version"] = f"unknown ({error})"
 
     if seven is not None and seven_zip_report is None:
@@ -857,24 +882,18 @@ def verify_directory(
             dotnet_fixture, case, sidecar_sha256, archive_sha256, "reference harness")
         readers["dotnet-reference"] = _reported_reader(
             case, dotnet_fixture, "reference harness")
-        if infozip is not None:
+        if infozip_probe_error is not None:
+            readers["infozip-unzip"] = _execution_error_reader(
+                case, profiles["infozip-unzip"].get("version"),
+                infozip_probe_error, "Info-ZIP version probe failed")
+        elif infozip is not None:
             try:
                 readers["infozip-unzip"] = _infozip_reader(
                     infozip, archive, case, infozip_methods)
             except (KeyError, TypeError, ReaderExecutionError) as error:
-                readers["infozip-unzip"] = {
-                    "status": "observed",
-                    "version": profiles["infozip-unzip"].get("version"),
-                    "failure": str(error),
-                    "operations": {
-                        operation: (
-                            _execution_error_operation_result(case, operation, error)
-                            if operation != "extract" and _expectations_for(case, operation)
-                            else _operation_result(
-                                case, operation, reason="reader execution failed"))
-                        for operation in OPERATIONS
-                    },
-                }
+                readers["infozip-unzip"] = _execution_error_reader(
+                    case, profiles["infozip-unzip"].get("version"),
+                    error, "reader execution failed")
         else:
             readers["infozip-unzip"] = {
                 "status": "skipped",

@@ -2,6 +2,7 @@
 """Contract tests for the optional Archive Test reader matrix."""
 
 import contextlib
+import csv
 import hashlib
 import io
 import json
@@ -147,6 +148,22 @@ class ReaderMatrixTests(unittest.TestCase):
         }
 
     @staticmethod
+    def process_is_running(process_id):
+        if os.name == "nt":
+            result = subprocess.run(
+                ["tasklist", "/FI", f"PID eq {process_id}", "/FO", "CSV", "/NH"],
+                capture_output=True, text=True, check=False)
+            return any(
+                len(row) > 1 and row[1] == str(process_id)
+                for row in csv.reader(result.stdout.splitlines()))
+
+        result = subprocess.run(
+            ["ps", "-p", str(process_id), "-o", "stat="],
+            capture_output=True, text=True, check=False)
+        state = result.stdout.strip()
+        return result.returncode == 0 and bool(state) and not state.startswith("Z")
+
+    @staticmethod
     def write_fake_unzip(directory):
         script = Path(directory) / "fake_unzip.py"
         script.write_text(
@@ -163,12 +180,22 @@ if args[0] in os.environ.get("FAKE_UNZIP_SIGNAL_ACTIONS", "").split(","):
 if args[0] in os.environ.get("FAKE_UNZIP_TIMEOUT_ACTIONS", "").split(","):
     time.sleep(5)
 if args[0] in os.environ.get("FAKE_UNZIP_FORK_ACTIONS", "").split(","):
-    child = subprocess.Popen(
-        [sys.executable, "-c", "import time; time.sleep(5)"],
-        stdout=sys.stdout, stderr=sys.stderr)
+    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(5)"],
+                             stdout=sys.stdout, stderr=sys.stderr)
     with open(os.environ["FAKE_UNZIP_CHILD_PID"], "w", encoding="utf-8") as pid_file:
         pid_file.write(str(child.pid))
+    if os.environ.get("FAKE_UNZIP_EXIT_PARENT_AFTER_FORK") == "1":
+        raise SystemExit(0)
     time.sleep(5)
+if args[0] == "-v":
+    if os.environ.get("FAKE_UNZIP_INVALID_VERSION") == "1":
+        print("not an Info-ZIP reader", file=sys.stderr)
+        raise SystemExit(2)
+    if os.environ.get("FAKE_UNZIP_BAD_VERSION_BANNER") == "1":
+        print("not an Info-ZIP reader")
+        raise SystemExit(0)
+    print("UnZip 6.00 fake Info-ZIP reader")
+    raise SystemExit(0)
 def no_archive():
     if (os.environ.get("FAKE_UNZIP_REMOVE_ARCHIVE") == "1"
             and os.path.isfile(args[1])):
@@ -368,6 +395,35 @@ else:
         self.assertEqual(1, stdout.getvalue().count("infozip-unzip"))
         self.assertEqual(1, stdout.getvalue().count("7zip"))
         self.assertIn("agreement valid-stored (", stdout.getvalue())
+
+    def test_verifyDirectory_InvalidInfoZipVersionProbe_DoesNotPassAdapterCheck(self):
+        scenarios = (
+            ("nonzero exit", {"FAKE_UNZIP_INVALID_VERSION": "1"},
+             "Info-ZIP version probe exited with code 2"),
+            ("unrecognized banner", {"FAKE_UNZIP_BAD_VERSION_BANNER": "1"},
+             "Info-ZIP version probe did not identify"),
+        )
+        for scenario, environment, reason in scenarios:
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as temp:
+                case, python_report = self.make_fixture(temp)
+                case["adapterChecks"] = [
+                    {"adapter": "infozip-unzip", "action": "list",
+                     "expectedOutcome": "list-succeeds"},
+                ]
+                self.persist_case(temp, case, python_report)
+                with patch.dict(os.environ, environment):
+                    report, exit_code = MATRIX["verify_directory"](
+                        Path(temp), python_report,
+                        {"infozip-unzip": self.write_fake_unzip(temp), "7zip": None},
+                        dotnet_report=self.make_dotnet_report(case))
+
+                check = report["fixtures"][0]["adapterChecks"][0]
+                self.assertEqual(0, exit_code)
+                self.assertEqual("execution-error", check["status"])
+                self.assertIn(reason, check["reason"])
+                self.assertEqual("observed", report["profiles"]["infozip-unzip"]["status"])
+                self.assertEqual(3, report["summary"]["readerExecutionErrors"])
+                self.assertEqual([], report["fixtures"][0]["agreement"]["splitOperations"])
 
     def test_verifyDirectory_DeclaredChecks_RunAgainstNamedReaderProfiles(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -1043,28 +1099,37 @@ else:
 
     def test_verifyDirectory_InfoZipTimeoutKillsForkedReader(self):
         for action, expected_operation in (("-Z1", "list"), ("-p", "read-entry")):
-            with self.subTest(action=action), tempfile.TemporaryDirectory() as temp:
-                case, python_report = self.make_fixture(temp)
-                case["limits"]["deadlineSeconds"] = 1
-                self.persist_case(temp, case, python_report)
-                child_pid_path = Path(temp) / "reader-child.pid"
-                start = time.monotonic()
-                with patch.dict(os.environ, {
-                    "FAKE_UNZIP_FORK_ACTIONS": action,
-                    "FAKE_UNZIP_CHILD_PID": str(child_pid_path),
-                }):
-                    report, exit_code = MATRIX["verify_directory"](
-                        Path(temp), python_report,
-                        {"infozip-unzip": self.write_fake_unzip(temp), "7zip": None},
-                        dotnet_report=self.make_dotnet_report(case))
+            for parent_exits in (False, True):
+                with self.subTest(action=action, parent_exits=parent_exits), tempfile.TemporaryDirectory() as temp:
+                    case, python_report = self.make_fixture(temp)
+                    case["limits"]["deadlineSeconds"] = 1
+                    self.persist_case(temp, case, python_report)
+                    child_pid_path = Path(temp) / "reader-child.pid"
+                    environment = {
+                        "FAKE_UNZIP_FORK_ACTIONS": action,
+                        "FAKE_UNZIP_CHILD_PID": str(child_pid_path),
+                    }
+                    if parent_exits:
+                        environment["FAKE_UNZIP_EXIT_PARENT_AFTER_FORK"] = "1"
+                    start = time.monotonic()
+                    with patch.dict(os.environ, environment):
+                        report, exit_code = MATRIX["verify_directory"](
+                            Path(temp), python_report,
+                            {"infozip-unzip": self.write_fake_unzip(temp), "7zip": None},
+                            dotnet_report=self.make_dotnet_report(case))
 
-                self.assertEqual(0, exit_code)
-                self.assertLess(time.monotonic() - start, 4)
-                self.assertTrue(child_pid_path.is_file())
-                observed = report["fixtures"][0]["readers"]["infozip-unzip"][
-                    "operations"][expected_operation]
-                self.assertEqual("execution-error", observed["status"])
-                self.assertEqual(1, report["summary"]["readerExecutionErrors"])
+                    self.assertEqual(0, exit_code)
+                    self.assertLess(time.monotonic() - start, 4)
+                    self.assertTrue(child_pid_path.is_file())
+                    child_pid = int(child_pid_path.read_text(encoding="utf-8"))
+                    deadline = time.monotonic() + 2
+                    while self.process_is_running(child_pid) and time.monotonic() < deadline:
+                        time.sleep(0.05)
+                    self.assertFalse(self.process_is_running(child_pid))
+                    observed = report["fixtures"][0]["readers"]["infozip-unzip"][
+                        "operations"][expected_operation]
+                    self.assertEqual("execution-error", observed["status"])
+                    self.assertEqual(1, report["summary"]["readerExecutionErrors"])
 
     def test_verifyDirectory_InfoZipMissingArchive_IsExecutionError(self):
         with tempfile.TemporaryDirectory() as temp:

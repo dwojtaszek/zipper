@@ -19,7 +19,28 @@ READER_PROCESS = runpy.run_path(str(SCRIPT.with_name("reader_process.py")))
 
 
 class SevenZipAdapterTests(unittest.TestCase):
-    def test_terminate_reader_process_windows_requests_tree_termination(self):
+    def test_verify_seven_zip_checks_share_one_fixture_deadline(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            stem = "atc-" + "d" * 64
+            (directory / f"{stem}.zip").write_bytes(b"fixture")
+            (directory / f"{stem}.json").write_text(json.dumps({
+                "fixtureId": stem,
+                "caseKey": "multi-check-deadline",
+                "adapterChecks": [
+                    {"adapter": "7zip", "action": "presence", "expectedOutcome": "present"},
+                    {"adapter": "7zip", "action": "presence", "expectedOutcome": "present"},
+                ],
+                "limits": {"deadlineSeconds": 1},
+            }), encoding="utf-8")
+            clock = type("Clock", (), {"monotonic": unittest.mock.Mock(
+                side_effect=(0.0, 0.1, 1.1))})()
+
+            with patch.dict(VERIFIER["verify"].__globals__, {"time": clock}):
+                with self.assertRaisesRegex(ValueError, "fixture check deadline exceeded"):
+                    VERIFIER["verify"](directory, "unused-7zip")
+
+    def test_terminate_reader_process_windows_kills_job_wrapper(self):
         class Process:
             pid = 12345
 
@@ -41,14 +62,29 @@ class SevenZipAdapterTests(unittest.TestCase):
             with patch.object(READER_PROCESS["subprocess"], "run") as taskkill:
                 READER_PROCESS["terminate_reader_process"](process)
 
-        taskkill.assert_called_once_with(
-            ["taskkill", "/T", "/F", "/PID", "12345"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=5,
-            check=False,
-        )
+        taskkill.assert_not_called()
         self.assertTrue(process.killed)
+
+    def test_terminate_reader_process_windows_does_not_kill_exited_wrapper(self):
+        class Process:
+            pid = 12345
+
+            def poll(self):
+                return 0
+
+            def kill(self):
+                raise AssertionError("an exited process must not be killed again")
+
+        process = Process()
+        windows = type("WindowsOS", (), {"name": "nt"})()
+        with patch.dict(
+            READER_PROCESS["terminate_reader_process"].__globals__,
+            {"os": windows},
+        ):
+            with patch.object(READER_PROCESS["subprocess"], "run") as taskkill:
+                READER_PROCESS["terminate_reader_process"](process)
+
+        taskkill.assert_not_called()
 
     def test_check_entry_rejects_watchdog_timeout_after_matching_output(self):
         expected = b"expected content"
@@ -105,6 +141,16 @@ class SevenZipAdapterTests(unittest.TestCase):
             with patch.object(VERIFIER["subprocess"], "Popen", return_value=process):
                 with self.assertRaisesRegex(ValueError, "7-Zip timed out extracting"):
                     VERIFIER["check_entry"]("fake-7zip", Path("archive.zip"), entry, len(expected))
+
+    def test_run_reader_command_output_exceeding_budget_is_rejected(self):
+        with patch.dict(
+            READER_PROCESS["run_reader_command"].__globals__,
+            {"MAX_READER_OUTPUT_BYTES": 1024},
+        ):
+            with self.assertRaisesRegex(OSError, "exceeded the 1024-byte output budget"):
+                READER_PROCESS["run_reader_command"](
+                    [sys.executable, "-c", "import sys; sys.stdout.buffer.write(b'x' * 65536)"],
+                    timeout=5)
 
     def test_check_entry_accepts_warning_when_expected_content_matches(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -401,6 +447,7 @@ class SevenZipAdapterTests(unittest.TestCase):
             archive = directory / f"{stem}.zip"
             archive.write_bytes(b"PK\x03\x04corrupted")
             sidecar = directory / f"{stem}.json"
+            report_path = directory / "7zip-report.json"
             data = {
                 "caseKey": "malformed-case",
                 "entries": [],
@@ -427,7 +474,8 @@ class SevenZipAdapterTests(unittest.TestCase):
 
             def run_adapter(adapter_path):
                 return subprocess.run(
-                    [sys.executable, str(SCRIPT), str(directory), adapter_path],
+                    [sys.executable, str(SCRIPT), str(directory), adapter_path,
+                     "--report", str(report_path)],
                     capture_output=True, text=True, check=False,
                 )
 
@@ -450,6 +498,10 @@ class SevenZipAdapterTests(unittest.TestCase):
             self.assertEqual(1, res.returncode)
             self.assertIn("command-line error", res.stderr)
             self.assertNotIn("verified", res.stdout)
+            self.assertIn(
+                "command-line error",
+                json.loads(report_path.read_text(encoding="utf-8"))[
+                    "fixtures"][0]["checks"][0]["failure"])
 
             # 4. Insufficient memory (exit 8)
             adapter = make_fake_adapter("sys.stderr.write('Not enough memory for operation\\n')\nsys.exit(8)")
