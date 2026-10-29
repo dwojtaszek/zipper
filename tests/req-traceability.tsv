@@ -594,6 +594,7 @@ REQ-218	unit	ArchiveFixturePropertyTests.ArchiveFixtureMutator_ApplyMutation_Sho
 REQ-230	unit	ArchiveFixtureMutationTests.Build_CrcBothMismatchDeflate_FlipsOnlyBothHeaderCrcWords	CRC mismatch mutation flips both header CRC words without changing payload or sizes
 REQ-230	unit	ArchiveTestSuiteGeneratorTests.BuildExpectationFile_CrcBothMismatchDeflate_AllowsInflateTimeCrcRejection	Expectation File allows CRC-validating read-entry rejection and CRC-unchecked outcomes
 REQ-231	unit	ArchiveTestSuiteContractTests.ListSuite_Security_SiblingPrefixTraversalUsesHostileNameConstruction	Sibling-prefix traversal Case Key remains policy-sensitive and in the security suite
+REQ-231	unit	ArchivePathPolicyCaseTests.Expectations_Extract_RequiresContainmentWithPermittedRejectionStage	Sibling-prefix Expectation File declares containment policies without executing ordinary extraction
 REQ-231	unit	ArchiveFixtureBuilderTests.BuildControl_NameSiblingPrefixTraversal_PreservesBothRawNames	Exact hostile UTF-8 name bytes are written to both local and central headers
 REQ-231	unit	ArchiveReferenceReaderTests.ReadOperations_NameSiblingPrefixTraversal_PreservesNamesAndPayloads	Reference reader observes the declared names and content without extracting the hostile Archive
 REQ-231	e2e	archive-tests/test_verify_fixtures.py	Independent verifier confirms sidecar name bytes match both Archive headers

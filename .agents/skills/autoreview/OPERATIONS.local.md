@@ -409,3 +409,11 @@
 - **telemetry**: host=droid mode=branch specialists=1 bundle=817c
 - **lessons**: none
 - **suppressions**: none
+
+### 2026-10-29 droid:branch:issue-1304-containment-wording
+
+- **findings**: 0 ACTION, 0 INFO from one fast-pass correctness reviewer.
+- **outcome**: Clarified that containment invariants are extraction-policy oracles, not evidence from ordinary verification; 11 containment policy tests passed.
+- **telemetry**: host=droid mode=branch specialists=1 bundle=7558c
+- **lessons**: none
+- **suppressions**: none
