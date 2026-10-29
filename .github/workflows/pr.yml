@@ -115,9 +115,9 @@ jobs:
 
   # Aggregate merge gate. Branch protection requires exactly this check.
   # It always runs (even on docs-only PRs where the other jobs are
-  # skipped), so the required check context is always posted; it fails
-  # if any needed job failed or was cancelled. Skipped jobs (docs-only
-  # fast path) do not fail the gate.
+  # skipped), so the required check context is always posted. It fails
+  # unless every needed job is proven to have passed or been deliberately
+  # skipped (docs-only fast path).
   ci-gate:
     needs: [docs-only, ci, goldens]
     if: always()
@@ -126,12 +126,82 @@ jobs:
     steps:
       - name: Evaluate required jobs
         shell: bash
+        env:
+          # `needs` as a whole, so a failure can name the job that did not pass.
+          # Passed through the environment rather than interpolated into the
+          # script: job outputs can contain quotes, and a `${{ }}` value spliced
+          # into a shell string would then be re-parsed as code.
+          REQUIRED_JOBS_JSON: ${{ toJSON(needs) }}
         run: |
           set -euo pipefail
-          results='${{ toJSON(needs.*.result) }}'
-          echo "Job results: $results"
-          if echo "$results" | grep -qE '"(failure|cancelled)"'; then
-            echo "::error::A required PR job failed or was cancelled — merge blocked."
-            exit 1
-          fi
-          echo "All required jobs passed or were skipped (docs-only)."
+          python3 - <<'EVALUATE'
+          import json
+          import os
+          import sys
+
+          # An allowlist, not a blocklist, and one entry per needed job.
+          #
+          # A blocklist of failure names cannot work here: GitHub reports results
+          # outside its documented success/failure/cancelled/skipped set. On PR
+          # #1377 the caller's reusable `ci` workflow was torn down mid-run and
+          # reported `abandoned`; the old gate's grep for "failure"/"cancelled"
+          # matched nothing, so the required check went green while the run's own
+          # conclusion was `failure` and its macOS leg never executed a step.
+          #
+          # `skipped` is allowed only where a skip is the documented outcome, and
+          # only when the docs-only fast path is what caused it. In that same
+          # #1377 run `goldens` was itself `skipped` -- not because the PR was
+          # docs-only, but because its `ci` dependency was abandoned -- so a bare
+          # "skipped is fine" would have accepted the sibling of the very result
+          # this gate exists to reject. `docs-only` has no `if:`, so a `skipped`
+          # there means the run never really executed.
+          ALLOWED = {
+              "docs-only": {"success"},
+              "ci": {"success", "skipped"},
+              "goldens": {"success", "skipped"},
+          }
+
+          try:
+              needs = json.loads(os.environ["REQUIRED_JOBS_JSON"])
+          except (KeyError, ValueError) as e:
+              print(f"::error::Could not read the required job results: {e} — merge blocked.")
+              sys.exit(1)
+
+          if not isinstance(needs, dict) or not needs:
+              print("::error::No required job results to evaluate — merge blocked.")
+              sys.exit(1)
+
+          # The payload is echoed on every path: it is what made #1377
+          # diagnosable, and it is the only record of what the gate actually saw.
+          print(f"Required job results: {json.dumps(needs, sort_keys=True)}")
+
+          def result_of(name):
+              value = needs.get(name)
+              return value.get("result") if isinstance(value, dict) else value
+
+          def outputs_of(name):
+              value = needs.get(name)
+              return value.get("outputs", {}) if isinstance(value, dict) else {}
+
+          only_docs = outputs_of("docs-only").get("only_docs")
+
+          failed = []
+          # A job absent from the payload yields a None result here and is
+          # rejected by the same allowlist check, so a missing result cannot pass
+          # by omission.
+          for name, allowed in ALLOWED.items():
+              result = result_of(name)
+              if result not in allowed:
+                  failed.append((name, result, "allowed here: " + "/".join(sorted(allowed))))
+              elif result == "skipped" and only_docs != "true":
+                  failed.append((name, result, "skipped without a docs-only fast path"))
+          for name in sorted(set(needs) - set(ALLOWED)):
+              failed.append((name, result_of(name), "not a job this gate knows how to judge"))
+
+          if failed:
+              for name, result, why in sorted(failed, key=lambda item: item[0]):
+                  print(f"::error::{name} did not pass (result: {result!r}; {why}) — merge blocked.")
+              sys.exit(1)
+
+          print("All required jobs passed, or were skipped on the docs-only fast path.")
+          EVALUATE
