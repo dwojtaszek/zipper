@@ -260,14 +260,15 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
 
         var jsonPath = Directory.GetFiles(destination, "*.json").Single();
         var zipPath = Path.ChangeExtension(jsonPath, ".zip");
-        var testCase = ArchiveTestJson.Parse(await File.ReadAllBytesAsync(jsonPath));
+        var expectationFileBytes = await File.ReadAllBytesAsync(jsonPath);
+        var testCase = ArchiveTestJson.Parse(expectationFileBytes);
         var archiveBytes = await File.ReadAllBytesAsync(zipPath);
 
         Assert.Equal(caseKey, testCase.CaseKey);
 
         var extractDir = Path.Combine(TempDir, caseKey + "-extract");
         var outcomes = ExecuteReaderOperations(testCase, archiveBytes, extractDir);
-        WriteReaderProfileReport(testCase, outcomes);
+        WriteReaderProfileReport(testCase, outcomes, expectationFileBytes, archiveBytes);
     }
 
     [Fact]
@@ -534,7 +535,10 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
     }
 
     private static void WriteReaderProfileReport(
-        ArchiveTestCase testCase, IReadOnlyList<ReaderOutcome> outcomes)
+        ArchiveTestCase testCase,
+        IReadOnlyList<ReaderOutcome> outcomes,
+        byte[] expectationFileBytes,
+        byte[] archiveBytes)
     {
         var reportDirectory = Environment.GetEnvironmentVariable("ZIPPER_ATC_DOTNET_REPORT_DIR");
         if (string.IsNullOrWhiteSpace(reportDirectory))
@@ -566,6 +570,8 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
         {
             fixtureId = testCase.FixtureId,
             caseKey = testCase.CaseKey,
+            expectationFileSha256 = Convert.ToHexStringLower(SHA256.HashData(expectationFileBytes)),
+            archiveSha256 = Convert.ToHexStringLower(SHA256.HashData(archiveBytes)),
             adapter = "dotnet-reference",
             adapterVersion = Environment.Version.ToString(),
             status = "pass",

@@ -340,6 +340,25 @@ public class ArchiveTestCaseSemanticsTests
         Assert.Empty(ArchiveTestCaseSemantics.Validate(testCase));
     }
 
+    [Theory]
+    [InlineData("malformed", "dotnet-reference")]
+    [InlineData("malformed", "python-zipfile")]
+    [InlineData("policy-sensitive", "dotnet-reference")]
+    [InlineData("policy-sensitive", "python-zipfile")]
+    public void Validate_NonValidFixtureCannotDeclareReferenceExtractAdapterCheck(
+        string classification, string adapter)
+    {
+        var testCase = ArchiveTestJsonTests.ValidEmptyCase() with
+        {
+            Classification = classification,
+            AdapterChecks = [new ArchiveTestAdapterCheck(adapter, "extract", "extract-succeeds")],
+        };
+
+        Assert.Contains(
+            ArchiveTestCaseSemantics.Validate(testCase),
+            error => error.Contains("extract Adapter Check requires a valid fixture", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void Validate_EmptyOrNullAdapterCheck_IsRejected()
     {

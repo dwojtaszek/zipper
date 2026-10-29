@@ -30,10 +30,21 @@ class ReaderMatrixTests(unittest.TestCase):
         with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_STORED) as output:
             output.writestr("a.txt", content)
 
+        archive_bytes = archive.read_bytes()
+        archive_sha256 = hashlib.sha256(archive_bytes).hexdigest()
         case = {
-            "fixtureId": fixture_id,
+            "generatorContractVersion": "1",
+            "generatorVersion": "test",
             "caseKey": "valid-stored",
+            "caseRevision": 1,
+            "expectationRevision": 1,
+            "seed": 42,
             "classification": "valid",
+            "archive": {
+                "fileName": fixture_id + ".zip",
+                "physicalSize": len(archive_bytes),
+                "sha256": archive_sha256,
+            },
             "entries": [{
                 "ordinal": 0,
                 "kind": "file",
@@ -53,6 +64,12 @@ class ReaderMatrixTests(unittest.TestCase):
                  "allowedOutcomes": ["extract-completes"]},
             ],
         }
+        case["fixtureId"] = MATRIX["_fixture_id_from_case"](case, archive_sha256)
+        fixture_id = case["fixtureId"]
+        case["archive"]["fileName"] = fixture_id + ".zip"
+        if fixture_id != "atc-" + "a" * 64:
+            archive.rename(Path(directory) / (fixture_id + ".zip"))
+            archive = Path(directory) / (fixture_id + ".zip")
         (Path(directory) / (fixture_id + ".json")).write_text(
             json.dumps(case), encoding="utf-8")
 
@@ -61,6 +78,9 @@ class ReaderMatrixTests(unittest.TestCase):
             "fixtures": [{
                 "fixtureId": fixture_id,
                 "caseKey": case["caseKey"],
+                "expectationFileSha256": hashlib.sha256(
+                    json.dumps(case).encode("utf-8")).hexdigest(),
+                "archiveSha256": archive_sha256,
                 "status": "pass",
                 "operations": [
                     {"operation": "list", "normalizedOutcome": "list-succeeds", "status": "pass"},
@@ -71,6 +91,35 @@ class ReaderMatrixTests(unittest.TestCase):
             }],
         }
         return case, python_report
+
+    def persist_case(self, directory, case, python_report=None):
+        directory = Path(directory)
+        archive_path = directory / (case["fixtureId"] + ".zip")
+        archive_bytes = archive_path.read_bytes()
+        archive_sha256 = hashlib.sha256(archive_bytes).hexdigest()
+        case.setdefault("archive", {})
+        case["archive"].update(
+            physicalSize=len(archive_bytes),
+            sha256=archive_sha256,
+        )
+        old_fixture_id = case["fixtureId"]
+        case["fixtureId"] = MATRIX["_fixture_id_from_case"](case, archive_sha256)
+        case["archive"]["fileName"] = case["fixtureId"] + ".zip"
+        if old_fixture_id != case["fixtureId"]:
+            archive_path.rename(directory / (case["fixtureId"] + ".zip"))
+            (directory / (old_fixture_id + ".json")).unlink(missing_ok=True)
+        sidecar_bytes = json.dumps(case).encode("utf-8")
+        (directory / (case["fixtureId"] + ".json")).write_bytes(sidecar_bytes)
+        if python_report is not None:
+            fixture = next(
+                fixture for fixture in python_report["fixtures"]
+                if fixture["fixtureId"] == old_fixture_id)
+            fixture.update(
+                fixtureId=case["fixtureId"],
+                caseKey=case["caseKey"],
+                expectationFileSha256=hashlib.sha256(sidecar_bytes).hexdigest(),
+                archiveSha256=archive_sha256,
+            )
 
     @staticmethod
     def make_dotnet_report(case):
@@ -86,6 +135,9 @@ class ReaderMatrixTests(unittest.TestCase):
             "fixtures": [{
                 "fixtureId": case["fixtureId"],
                 "caseKey": case["caseKey"],
+                "expectationFileSha256": hashlib.sha256(
+                    json.dumps(case).encode("utf-8")).hexdigest(),
+                "archiveSha256": case["archive"]["sha256"],
                 "status": "pass",
                 "operations": [
                     {"operation": operation, "normalizedOutcome": outcome, "status": "pass"}
@@ -240,6 +292,7 @@ else:
     def test_validateAdapterChecks_RejectsUndeclaredProfileOutcomes(self):
         case = {
             "caseKey": "valid-stored",
+            "classification": "valid",
             "entries": [{"kind": "file", "readableName": "a.txt"}],
             "adapterChecks": [
                 {"adapter": "7zip", "action": "extract-entries",
@@ -264,6 +317,25 @@ else:
         ]
         MATRIX["_validate_adapter_checks"](case)
 
+    def test_validateAdapterChecks_RejectsReferenceExtractForNonValidFixtures(self):
+        for classification in ("malformed", "policy-sensitive"):
+            for adapter in ("dotnet-reference", "python-zipfile"):
+                with self.subTest(classification=classification, adapter=adapter):
+                    case = {
+                        "caseKey": "fixture",
+                        "classification": classification,
+                        "entries": [{"kind": "file", "readableName": "a.txt"}],
+                        "adapterChecks": [
+                            {"adapter": adapter, "action": "extract",
+                             "expectedOutcome": "extract-succeeds"},
+                        ],
+                    }
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        "extract Adapter Check requires a valid fixture",
+                    ):
+                        MATRIX["_validate_adapter_checks"](case)
+
     def test_verifyDirectory_MissingInfoZip_RecordsDocumentedSkip(self):
         with tempfile.TemporaryDirectory() as temp:
             case, python_report = self.make_fixture(temp)
@@ -273,8 +345,7 @@ else:
                 {"adapter": "7zip", "action": "extract",
                  "expectedOutcome": "success"},
             ]
-            (Path(temp) / (case["fixtureId"] + ".json")).write_text(
-                json.dumps(case), encoding="utf-8")
+            self.persist_case(temp, case, python_report)
             stdout = io.StringIO()
             with contextlib.redirect_stdout(stdout):
                 report, exit_code = MATRIX["verify_directory"](
@@ -309,8 +380,7 @@ else:
                 {"adapter": "infozip-unzip", "action": "list",
                  "expectedOutcome": "list-succeeds"},
             ]
-            (Path(temp) / (case["fixtureId"] + ".json")).write_text(
-                json.dumps(case), encoding="utf-8")
+            self.persist_case(temp, case, python_report)
             report, exit_code = MATRIX["verify_directory"](
                 Path(temp), python_report,
                 {"infozip-unzip": self.write_fake_unzip(temp), "7zip": None},
@@ -333,8 +403,7 @@ else:
                 {"adapter": "infozip-unzip", "action": "integrity-check",
                  "expectedOutcome": "integrity-fails"},
             ]
-            (Path(temp) / (case["fixtureId"] + ".json")).write_text(
-                json.dumps(case), encoding="utf-8")
+            self.persist_case(temp, case, python_report)
             report, exit_code = MATRIX["verify_directory"](
                 Path(temp), python_report,
                 {"infozip-unzip": self.write_fake_unzip(temp), "7zip": None},
@@ -362,6 +431,94 @@ else:
             python_report["adapter"] = "dotnet-reference"
 
             with self.assertRaisesRegex(ValueError, "unknown Reader Adapter Profile"):
+                MATRIX["verify_directory"](
+                    Path(temp), python_report,
+                    {"infozip-unzip": None, "7zip": None},
+                    dotnet_report=self.make_dotnet_report(case))
+
+    def test_verifyDirectory_PythonReportWithWrongCaseKey_IsRejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case, python_report = self.make_fixture(temp)
+            python_report["fixtures"][0]["caseKey"] = "different-case"
+
+            with self.assertRaisesRegex(ValueError, "Python verifier report Case Key"):
+                MATRIX["verify_directory"](
+                    Path(temp), python_report,
+                    {"infozip-unzip": None, "7zip": None},
+                    dotnet_report=self.make_dotnet_report(case))
+
+    def test_verifyDirectory_StaleReaderReportsAreRejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case, python_report = self.make_fixture(temp)
+            case["expectations"][0]["allowedOutcomes"] = ["list-fails"]
+            (Path(temp) / (case["fixtureId"] + ".json")).write_text(
+                json.dumps(case), encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "Python verifier report Expectation File hash does not match",
+            ):
+                MATRIX["verify_directory"](
+                    Path(temp), python_report,
+                    {"infozip-unzip": None, "7zip": None},
+                    dotnet_report=self.make_dotnet_report(case))
+
+    def test_verifyDirectory_StaleDotNetReportIsRejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case, python_report = self.make_fixture(temp)
+            dotnet_report = self.make_dotnet_report(case)
+            dotnet_report["fixtures"][0]["expectationFileSha256"] = "0" * 64
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "reference harness report Expectation File hash does not match",
+            ):
+                MATRIX["verify_directory"](
+                    Path(temp), python_report,
+                    {"infozip-unzip": None, "7zip": None},
+                    dotnet_report=dotnet_report)
+
+    def test_verifyDirectory_StaleSevenZipReportIsRejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case, python_report = self.make_fixture(temp)
+            case["adapterChecks"] = [
+                {"adapter": "7zip", "action": "extract", "expectedOutcome": "success"},
+            ]
+            self.persist_case(temp, case, python_report)
+            seven_zip_report = {
+                "adapter": "7zip",
+                "fixtures": [{
+                    "fixtureId": case["fixtureId"],
+                    "caseKey": case["caseKey"],
+                    "expectationFileSha256": "0" * 64,
+                    "archiveSha256": case["archive"]["sha256"],
+                    "status": "pass",
+                    "checks": [],
+                    "operations": [],
+                }],
+            }
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "7-Zip report Expectation File hash does not match",
+            ):
+                MATRIX["verify_directory"](
+                    Path(temp), python_report,
+                    {"infozip-unzip": None, "7zip": None},
+                    dotnet_report=self.make_dotnet_report(case),
+                    seven_zip_report=seven_zip_report)
+
+    def test_verifyDirectory_ArchiveBytesMustMatchExpectationIdentity(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case, python_report = self.make_fixture(temp)
+            archive = Path(temp) / (case["fixtureId"] + ".zip")
+            archive_bytes = archive.read_bytes()
+            archive.write_bytes(archive_bytes[:-1] + bytes([archive_bytes[-1] ^ 1]))
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "Archive hash does not match Expectation File",
+            ):
                 MATRIX["verify_directory"](
                     Path(temp), python_report,
                     {"infozip-unzip": None, "7zip": None},
@@ -539,8 +696,7 @@ else:
             case["adapterChecks"] = [
                 {"adapter": "7zip", "action": "extract", "expectedOutcome": "success"},
             ]
-            (Path(temp) / (case["fixtureId"] + ".json")).write_text(
-                json.dumps(case), encoding="utf-8")
+            self.persist_case(temp, case, python_report)
 
             report, exit_code = MATRIX["verify_directory"](
                 Path(temp), python_report,
@@ -558,12 +714,15 @@ else:
             case["adapterChecks"] = [
                 {"adapter": "7zip", "action": "extract", "expectedOutcome": "success"},
             ]
-            (Path(temp) / (case["fixtureId"] + ".json")).write_text(
-                json.dumps(case), encoding="utf-8")
+            self.persist_case(temp, case, python_report)
             seven_zip_report = {
                 "adapter": "7zip",
                 "fixtures": [{
                     "fixtureId": case["fixtureId"],
+                    "caseKey": case["caseKey"],
+                    "expectationFileSha256": hashlib.sha256(
+                        json.dumps(case).encode("utf-8")).hexdigest(),
+                    "archiveSha256": case["archive"]["sha256"],
                     "status": "pass",
                     "checks": [{
                         "action": "extract",
@@ -595,8 +754,7 @@ else:
             case["adapterChecks"] = [
                 {"adapter": "7zip", "action": "extract", "expectedOutcome": "success"},
             ]
-            (Path(temp) / (case["fixtureId"] + ".json")).write_text(
-                json.dumps(case), encoding="utf-8")
+            self.persist_case(temp, case, python_report)
             for operations in (
                 [{
                     "operation": "extract",
@@ -609,6 +767,10 @@ else:
                     "adapter": "7zip",
                     "fixtures": [{
                         "fixtureId": case["fixtureId"],
+                        "caseKey": case["caseKey"],
+                        "expectationFileSha256": hashlib.sha256(
+                            json.dumps(case).encode("utf-8")).hexdigest(),
+                        "archiveSha256": case["archive"]["sha256"],
                         "status": "pass",
                         "checks": [{
                             "action": "extract",
@@ -699,8 +861,7 @@ else:
                 {"adapter": "infozip-unzip", "action": "list",
                  "expectedOutcome": "list-succeeds"},
             ]
-            (Path(temp) / (case["fixtureId"] + ".json")).write_text(
-                json.dumps(case), encoding="utf-8")
+            self.persist_case(temp, case, python_report)
             missing_unzip = str(Path(temp) / "missing-unzip")
             report, exit_code = MATRIX["verify_directory"](
                 Path(temp), python_report,
@@ -722,6 +883,34 @@ else:
             observed = report["fixtures"][0]["readers"]["infozip-unzip"]["operations"][operation]
             self.assertEqual("execution-error", observed["status"])
             self.assertEqual("not-run", observed["normalizedOutcome"])
+
+    def test_verifyDirectory_UnhandledInfoZipExecutionError_IsNonGating(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case, python_report = self.make_fixture(temp)
+            infozip = self.write_fake_unzip(temp)
+
+            def fail_reader(*_args):
+                raise MATRIX["ReaderExecutionError"]("unexpected Info-ZIP execution error")
+
+            with patch.dict(
+                MATRIX["verify_directory"].__globals__,
+                {"_infozip_reader": fail_reader},
+            ):
+                report, exit_code = MATRIX["verify_directory"](
+                    Path(temp), python_report,
+                    {"infozip-unzip": infozip, "7zip": None},
+                    dotnet_report=self.make_dotnet_report(case))
+
+        fixture = report["fixtures"][0]
+        reader = fixture["readers"]["infozip-unzip"]
+        self.assertEqual(0, exit_code)
+        self.assertEqual("observed", reader["status"])
+        self.assertEqual("observed", report["profiles"]["infozip-unzip"]["status"])
+        self.assertEqual(3, report["summary"]["readerExecutionErrors"])
+        self.assertEqual(0, report["summary"]["failedReaderAdapterProfiles"])
+        self.assertEqual([], fixture["agreement"]["splitOperations"])
+        for operation in ("list", "read-entry", "integrity-check"):
+            self.assertEqual("execution-error", reader["operations"][operation]["status"])
 
     def test_verifyDirectory_InfoZipIntegrityResourceError_IsNotComparedAsArchiveFailure(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -766,8 +955,7 @@ else:
             case, python_report = self.make_fixture(temp)
             case["entries"][0]["localHeaderMethod"] = 98
             case["entries"][0]["centralDirectoryMethod"] = 98
-            (Path(temp) / (case["fixtureId"] + ".json")).write_text(
-                json.dumps(case), encoding="utf-8")
+            self.persist_case(temp, case, python_report)
             with patch.dict(os.environ, {
                 "FAKE_UNZIP_NO_ARCHIVE": "1",
                 "FAKE_UNZIP_NO_MATCH": "1",
@@ -811,8 +999,7 @@ else:
         with tempfile.TemporaryDirectory() as temp:
             case, python_report = self.make_fixture(temp)
             case["limits"]["deadlineSeconds"] = 1
-            (Path(temp) / (case["fixtureId"] + ".json")).write_text(
-                json.dumps(case), encoding="utf-8")
+            self.persist_case(temp, case, python_report)
             with patch.dict(os.environ, {
                 "FAKE_UNZIP_TIMEOUT_ACTIONS": "-Z1,-p,-t",
             }):
@@ -836,8 +1023,7 @@ else:
         with tempfile.TemporaryDirectory() as temp:
             case, python_report = self.make_fixture(temp)
             case["limits"]["deadlineSeconds"] = 1
-            (Path(temp) / (case["fixtureId"] + ".json")).write_text(
-                json.dumps(case), encoding="utf-8")
+            self.persist_case(temp, case, python_report)
             with patch.dict(os.environ, {
                 "FAKE_UNZIP_TIMEOUT_ACTIONS": "-p",
             }):
@@ -860,8 +1046,7 @@ else:
             with self.subTest(action=action), tempfile.TemporaryDirectory() as temp:
                 case, python_report = self.make_fixture(temp)
                 case["limits"]["deadlineSeconds"] = 1
-                (Path(temp) / (case["fixtureId"] + ".json")).write_text(
-                    json.dumps(case), encoding="utf-8")
+                self.persist_case(temp, case, python_report)
                 child_pid_path = Path(temp) / "reader-child.pid"
                 start = time.monotonic()
                 with patch.dict(os.environ, {
@@ -884,8 +1069,7 @@ else:
     def test_verifyDirectory_InfoZipMissingArchive_IsExecutionError(self):
         with tempfile.TemporaryDirectory() as temp:
             case, python_report = self.make_fixture(temp)
-            (Path(temp) / (case["fixtureId"] + ".json")).write_text(
-                json.dumps(case), encoding="utf-8")
+            self.persist_case(temp, case, python_report)
             with patch.dict(os.environ, {"FAKE_UNZIP_REMOVE_ARCHIVE": "1"}, clear=True):
                 report, exit_code = MATRIX["verify_directory"](
                     Path(temp), python_report,
@@ -921,23 +1105,24 @@ else:
             self.assertEqual("execution-error", observed["status"])
 
     def test_infoZipReader_ListWithLineSeparatorMember_IsNotComparedAsSplit(self):
-        with tempfile.TemporaryDirectory() as temp:
-            case, python_report = self.make_fixture(temp)
-            command = self.write_fake_unzip(temp)
+        with tempfile.TemporaryDirectory() as parent:
             for line_separator in (
                 "\n", "\r", "\v", "\f", "\x1c", "\x1d", "\x1e",
                 "\x85", "\u2028", "\u2029",
             ):
-                with self.subTest(line_separator=repr(line_separator)):
+                with self.subTest(line_separator=repr(line_separator)), tempfile.TemporaryDirectory(
+                    dir=parent
+                ) as temp:
+                    case, python_report = self.make_fixture(temp)
+                    command = self.write_fake_unzip(temp)
                     name = f"a{line_separator}.txt"
                     case["entries"][0]["readableName"] = name
-                    (Path(temp) / (case["fixtureId"] + ".json")).write_text(
-                        json.dumps(case), encoding="utf-8")
                     with zipfile.ZipFile(
                         Path(temp) / (case["fixtureId"] + ".zip"), "w",
                         compression=zipfile.ZIP_STORED,
                     ) as output:
                         output.writestr(name, b"reader matrix payload")
+                    self.persist_case(temp, case, python_report)
 
                     report, exit_code = MATRIX["verify_directory"](
                         Path(temp), python_report,
@@ -987,8 +1172,7 @@ else:
         with tempfile.TemporaryDirectory() as temp:
             case, python_report = self.make_fixture(temp)
             case["expectations"][0]["allowedOutcomes"] = ["list-fails"]
-            (Path(temp) / (case["fixtureId"] + ".json")).write_text(
-                json.dumps(case), encoding="utf-8")
+            self.persist_case(temp, case, python_report)
             python_report["fixtures"][0]["operations"][0]["normalizedOutcome"] = "list-fails"
             dotnet_report = self.make_dotnet_report(case)
             dotnet_report["fixtures"][0]["operations"][0]["normalizedOutcome"] = "list-fails"

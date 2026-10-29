@@ -183,6 +183,7 @@ class SevenZipAdapterTests(unittest.TestCase):
             with zipfile.ZipFile(archive, "w") as output:
                 output.writestr("a.txt", b"actual content")
                 output.writestr("b.txt", b"unselected content")
+            original_archive_bytes = archive.read_bytes()
             sidecar = directory / f"{stem}.json"
             report = directory / "7zip-report.json"
             adapter_checks = [
@@ -226,6 +227,12 @@ class SevenZipAdapterTests(unittest.TestCase):
             self.assertEqual(1, len(saved_report["fixtures"]))
             self.assertEqual("pass", saved_report["fixtures"][0]["status"])
             self.assertEqual(
+                hashlib.sha256(sidecar.read_bytes()).hexdigest(),
+                saved_report["fixtures"][0]["expectationFileSha256"])
+            self.assertEqual(
+                hashlib.sha256(archive.read_bytes()).hexdigest(),
+                saved_report["fixtures"][0]["archiveSha256"])
+            self.assertEqual(
                 {"extract", "extract-entries", "presence"},
                 {check["action"] for check in saved_report["fixtures"][0]["checks"]})
             self.assertEqual(
@@ -238,6 +245,46 @@ class SevenZipAdapterTests(unittest.TestCase):
                 "extract-succeeds",
                 saved_report["fixtures"][0]["operations"][0]["normalizedOutcome"])
 
+            data["entries"] = [{
+                "kind": "file",
+                "readableName": "empty.txt",
+                "contentSha256": hashlib.sha256(b"").hexdigest(),
+                "contentSize": 0,
+            }]
+            data["limits"]["expandedBytesBudget"] = 0
+            data["adapterChecks"] = [
+                {"adapter": "7zip", "action": "extract", "expectedOutcome": "success"},
+            ]
+            with zipfile.ZipFile(archive, "w") as output:
+                output.writestr("empty.txt", b"")
+            sidecar.write_text(json.dumps(data))
+            res = run()
+            self.assertEqual(0, res.returncode, res.stderr)
+
+            data["entries"][0]["readableName"] = "missing.txt"
+            sidecar.write_text(json.dumps(data))
+            res = run()
+            self.assertEqual(1, res.returncode)
+            self.assertIn("missing.txt", res.stderr)
+            self.assertIn("not present as declared", res.stderr)
+
+            archive.write_bytes(original_archive_bytes)
+            data["entries"] = [
+                {
+                    "kind": "file",
+                    "readableName": "a.txt",
+                    "contentSha256": hashlib.sha256(b"actual content").hexdigest(),
+                    "contentSize": len(b"actual content"),
+                },
+                {
+                    "kind": "file",
+                    "readableName": "b.txt",
+                    "contentSha256": hashlib.sha256(b"unselected content").hexdigest(),
+                    "contentSize": len(b"unselected content"),
+                },
+            ]
+            data["limits"]["expandedBytesBudget"] = (
+                len(b"actual content") + len(b"unselected content"))
             data["adapterChecks"] = [{
                 "adapter": "7zip",
                 "action": "extract-entries",

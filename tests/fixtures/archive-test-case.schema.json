@@ -547,5 +547,36 @@
       }
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "classification": {
+            "enum": ["malformed", "policy-sensitive"]
+          }
+        },
+        "required": ["classification"]
+      },
+      "then": {
+        "properties": {
+          "adapterChecks": {
+            "items": {
+              "not": {
+                "properties": {
+                  "adapter": {
+                    "enum": ["dotnet-reference", "python-zipfile"]
+                  },
+                  "action": {
+                    "const": "extract"
+                  }
+                },
+                "required": ["adapter", "action"]
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
   "definitions": {}
 }

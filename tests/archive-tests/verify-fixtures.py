@@ -230,6 +230,14 @@ def validate_adapter_checks(case):
                 % (adapter, action, expected_outcome),
                 stage="expectation")
 
+        if (action == "extract"
+                and adapter in ("dotnet-reference", "python-zipfile")
+                and case.get("classification") != "valid"):
+            raise VerificationError(
+                "adapter-checks",
+                "extract Adapter Check requires a valid fixture for reference readers",
+                stage="expectation")
+
         entry_names = check.get("entryNames")
         if action == "extract-entries":
             file_names = {
@@ -1054,6 +1062,7 @@ class FixtureVerifier:
                 raise VerificationError(
                     "json-bytes-budget",
                     "Expectation File exceeds the 1 MiB budget")
+            result["expectationFileSha256"] = sha256_hex(raw_json)
 
             case = parse_json_strict(raw_json.decode("utf-8"))
             result["fixtureId"] = case.get("fixtureId")
@@ -1068,6 +1077,7 @@ class FixtureVerifier:
                 raise VerificationError(
                     "archive-size-sha",
                     "published Archive exceeds the 16 MiB physical budget")
+            result["archiveSha256"] = sha256_hex(zip_bytes)
 
             raw_deadline = case.get("limits", {}).get("deadlineSeconds", MAX_DEADLINE_SECONDS)
             deadline = min(raw_deadline if isinstance(raw_deadline, int) and raw_deadline > 0 else MAX_DEADLINE_SECONDS,

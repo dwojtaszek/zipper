@@ -372,6 +372,13 @@ internal static class ArchiveTestCaseSemantics
                     errors.Add($"adapter action '{action}' has invalid expectedOutcome '{expectedOutcome}'");
                 }
 
+                if (action == "extract"
+                    && testCase.Classification != "valid"
+                    && check.Adapter is "dotnet-reference" or "python-zipfile")
+                {
+                    errors.Add("extract Adapter Check requires a valid fixture for reference readers");
+                }
+
                 if (action == "extract-entries")
                 {
                     if (check.EntryNames is null || check.EntryNames.Count == 0

@@ -560,11 +560,13 @@ REQ-212	unit	ArchiveReferenceReaderTests.ReadOperations_UndeclaredTrailingData_P
 REQ-212	unit	ArchiveTestSuiteGeneratorTests.BuildExpectationFile_ExtraFieldTruncated_DeclaresReaderVarianceAndInvariants	Expectation File allows reader variance and requires proof of a central extra-field overrun past EOF
 REQ-212	unit	ArchiveReferenceReaderTests.ReadOperations_ExtraFieldTruncated_PinsDotNetReaderOutcomes	.NET reference reader rejects the overlong central extra-field length during listing, reading, and integrity-check
 REQ-212	unit	ArchiveTestSuiteContractTests.ReaderAdapterProfiles_RegistersBuiltInAndOptionalAdaptersWithScopedOutcomes	Reader Adapter Profile registry lists required Python/.NET and optional Info-ZIP/7-Zip adapters with per-adapter check outcomes
-REQ-212	e2e	test-archive-test-suites.sh	Archive Test E2E runs the per-fixture multi-reader matrix, reports allowed agreement/splits, and documents absent optional readers as skips
+REQ-212	e2e	test-archive-test-suites.sh	Archive Test E2E runs the per-fixture multi-reader matrix, binds reader reports to current inputs, reports agreement/splits, and documents absent optional readers as skips
 REQ-212	e2e	test-archive-test-suites.bat	Windows Archive Test E2E runs the per-fixture multi-reader matrix and documents absent optional readers as skips
-REQ-212	e2e	archive-tests/test_verify_reader_matrix.py	Reader matrix contract tests cover profile registration, real Info-ZIP operations, bounded execution failures/timeouts, signal exits, line separators, byte limits, duplicate reports, and agreement semantics
-REQ-212	e2e	archive-tests/test_verify_7zip_adapter.py	7-Zip Adapter Check report records per-fixture observations for the reader matrix
-REQ-212	e2e	archive-tests/test_verify_fixtures.py	Independent Python verifier covers hostile sidecar name tampering and the declared central extra-field overrun
+REQ-212	e2e	archive-tests/test_verify_reader_matrix.py	Reader matrix contract tests cover profile registration, report-to-input identity binding, non-gating Info-ZIP execution errors, real operations, timeouts, line separators, and agreement semantics
+REQ-212	e2e	archive-tests/test_verify_7zip_adapter.py	7-Zip Adapter Check verifies declared member presence for empty extractions and reports per-fixture identity
+REQ-212	e2e	archive-tests/test_verify_fixtures.py	Independent Python verifier covers hostile sidecar tampering, extraction-check classification, and the declared central extra-field overrun
+REQ-212	unit	ArchiveTestCaseSemanticsTests.Validate_NonValidFixtureCannotDeclareReferenceExtractAdapterCheck	Rejects .NET and Python reference-reader extraction Adapter Checks for malformed and policy-sensitive fixtures
+REQ-212	e2e	archive-tests/test_verify_fixtures.py	Schema and semantic verifier reject .NET and Python extraction Adapter Checks for non-valid fixtures
 REQ-217	e2e	archive-tests/test_verify_fixtures.py	JSON Schema accepts declared Reader Adapter Profile action/outcome pairs and rejects unknown profiles, unsupported pairs, and invalid entryNames usage
 REQ-213	unit	ArchiveResourceCaseTests.Build_EntriesOneOverCap_ThrowsDescriptively	Archive test fixture 1000-entry budget cap enforcement
 REQ-213	unit	ArchiveResourceCaseTests.Build_PhysicalBytesOneOver_ThrowsDescriptively	Archive test fixture 16 MiB physical size budget cap enforcement

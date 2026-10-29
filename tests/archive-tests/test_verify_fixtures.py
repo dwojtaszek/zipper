@@ -2260,6 +2260,21 @@ class DescriptorTests(unittest.TestCase):
                 "8739c76e681f900923b900c9df0ef75cf421d39cabb54650c4b9ad19b6a76d85"))
 
 
+class ReaderReportIdentityTests(TempDirTest):
+    def test_verifierReportsHashesForCurrentExpectationFileAndArchive(self):
+        case, zip_bytes = self.publish_valid()
+        report, exit_code = verify(self.dir)
+
+        fixture = report["fixtures"][0]
+        with open(os.path.join(self.dir, case["fixtureId"] + ".json"), "rb") as handle:
+            expectation_file_bytes = handle.read()
+        self.assertEqual(0, exit_code)
+        self.assertEqual(
+            hashlib.sha256(expectation_file_bytes).hexdigest(),
+            fixture["expectationFileSha256"])
+        self.assertEqual(hashlib.sha256(zip_bytes).hexdigest(), fixture["archiveSha256"])
+
+
 class SchemaLimitsTests(TempDirTest):
     def setUp(self):
         super().setUp()
@@ -2307,6 +2322,20 @@ class SchemaLimitsTests(TempDirTest):
                 with self.assertRaises(vf.VerificationError) as ctx:
                     self._validate_case(case)
                 self.assertEqual("schema", ctx.exception.check)
+
+    def test_schema_rejects_reference_extract_checks_for_non_valid_fixtures(self):
+        for classification in ("malformed", "policy-sensitive"):
+            for adapter in ("dotnet-reference", "python-zipfile"):
+                with self.subTest(classification=classification, adapter=adapter):
+                    case, _ = self.publish_valid()
+                    case["classification"] = classification
+                    case["adapterChecks"] = [
+                        {"adapter": adapter, "action": "extract",
+                         "expectedOutcome": "extract-succeeds"},
+                    ]
+                    with self.assertRaises(vf.VerificationError) as ctx:
+                        self._validate_case(case)
+                    self.assertEqual("schema", ctx.exception.check)
 
     def test_schema_rejects_physical_size_over_16mib(self):
         case, _ = self.publish_valid()
@@ -2431,6 +2460,23 @@ class AdapterCheckValidationTests(TempDirTest):
         self.assertEqual(1, exit_code)
         self.assertEqual("fail", report["fixtures"][0]["status"])
         self.assertEqual("schema", report["fixtures"][0]["failure"]["check"])
+
+    def test_verifier_RejectsReferenceExtractChecksForNonValidFixtures(self):
+        for classification in ("malformed", "policy-sensitive"):
+            for adapter in ("dotnet-reference", "python-zipfile"):
+                with self.subTest(classification=classification, adapter=adapter):
+                    case, _ = self.publish_valid()
+                    case["classification"] = classification
+                    case["adapterChecks"] = [
+                        {"adapter": adapter, "action": "extract",
+                         "expectedOutcome": "extract-succeeds"},
+                    ]
+
+                    with self.assertRaisesRegex(
+                        vf.VerificationError,
+                        "extract Adapter Check requires a valid fixture",
+                    ):
+                        vf.validate_adapter_checks(case)
 
 
 class InvariantEnforcementTests(TempDirTest):

@@ -12,9 +12,28 @@ from pathlib import Path
 from reader_process import run_reader_command, start_reader_process, terminate_reader_process
 
 MAX_EXPANDED_BYTES_BUDGET = 32 * 1024 * 1024
+MAX_ARCHIVE_PHYSICAL_BYTES = 16 * 1024 * 1024
+MAX_EXPECTATION_FILE_BYTES = 1024 * 1024
 
 
-def check_entry(seven, archive, entry, budget):
+def list_archive_entries(seven, archive):
+    try:
+        result = run_reader_command(
+            [seven, "l", "-slt", "-ba", "-sccUTF-8", str(archive)], timeout=30)
+    except subprocess.TimeoutExpired as error:
+        raise ValueError("7-Zip timed out listing Archive entries") from error
+    if result.returncode not in (0, 1):
+        raise ValueError("7-Zip failed to list Archive entries")
+
+    names = {}
+    for line in result.stdout.decode("utf-8", errors="replace").splitlines():
+        if line.startswith("Path = "):
+            name = line[len("Path = "):]
+            names[name] = names.get(name, 0) + 1
+    return names
+
+
+def check_entry(seven, archive, entry, budget, archive_entries=None, expected_name_count=1):
     name = entry["readableName"]
     if (not name or name.startswith(("-", "@", "/", "\\")) or
             any(part in ("", ".", "..") for part in name.split("/")) or
@@ -23,6 +42,14 @@ def check_entry(seven, archive, entry, budget):
     expected_size = entry["contentSize"]
     if not isinstance(expected_size, int) or expected_size < 0 or expected_size > budget:
         raise ValueError(f"invalid content size: {name!r}")
+    if expected_size == 0:
+        if any(char in name for char in "\r\n\v\f\x1c\x1d\x1e\x85\u2028\u2029"):
+            raise ValueError(
+                f"7-Zip cannot verify an empty entry with line separators in its name: {name!r}")
+        if archive_entries is None:
+            archive_entries = list_archive_entries(seven, archive)
+        if archive_entries.get(name) != expected_name_count:
+            raise ValueError(f"empty entry {name!r} is not present as declared in Archive listing")
 
     # ponytail: Stream selected members to stdout, not disk. Stop at the declared
     # size so a corrupt or hostile Archive cannot exhaust temporary storage.
@@ -138,11 +165,24 @@ def verify(fixtures, seven, report_path=None):
         "fixtures": [],
     }
     for sidecar in sorted(fixtures.glob("atc-*.json")):
-        data = json.loads(sidecar.read_text(encoding="utf-8"))
+        with sidecar.open("rb") as stream:
+            sidecar_bytes = stream.read(MAX_EXPECTATION_FILE_BYTES + 1)
+        if len(sidecar_bytes) > MAX_EXPECTATION_FILE_BYTES:
+            raise ValueError(f"Expectation File exceeds the 1 MiB budget: {sidecar}")
+        data = json.loads(sidecar_bytes.decode("utf-8"))
         archive = sidecar.with_suffix(".zip")
+        archive_sha256 = None
+        if archive.is_file():
+            with archive.open("rb") as stream:
+                archive_bytes = stream.read(MAX_ARCHIVE_PHYSICAL_BYTES + 1)
+            if len(archive_bytes) > MAX_ARCHIVE_PHYSICAL_BYTES:
+                raise ValueError(f"Archive exceeds the 16 MiB physical budget: {archive}")
+            archive_sha256 = hashlib.sha256(archive_bytes).hexdigest()
         fixture_report = {
             "fixtureId": data.get("fixtureId"),
             "caseKey": data.get("caseKey"),
+            "expectationFileSha256": hashlib.sha256(sidecar_bytes).hexdigest(),
+            "archiveSha256": archive_sha256,
             "status": "pass",
             "checks": [],
             "operations": [],
@@ -189,8 +229,19 @@ def verify(fixtures, seven, report_path=None):
                             f"expanded bytes budget exceeds hard limit for {data['caseKey']}")
                     if sum(entry["contentSize"] for entry in entries) > budget:
                         raise ValueError(f"expanded bytes budget exceeded for {data['caseKey']}")
+                    expected_name_counts = {
+                        entry["readableName"]: sum(
+                            candidate["readableName"] == entry["readableName"]
+                            for candidate in entries)
+                        for entry in entries
+                    }
+                    archive_entries = None
                     for entry in entries:
-                        check_entry(seven, archive, entry, budget)
+                        if entry["contentSize"] == 0 and archive_entries is None:
+                            archive_entries = list_archive_entries(seven, archive)
+                        check_entry(
+                            seven, archive, entry, budget, archive_entries,
+                            expected_name_counts[entry["readableName"]])
                     check_report["observedOutcome"] = "success"
                     fixture_report["operations"].append({
                         "operation": "extract",

@@ -87,6 +87,8 @@ FAILURE_OUTCOMES = {
 MAX_READ_BYTES = 32 * 1024 * 1024
 INFOZIP_LIST_LINE_BREAKS = "\r\n\v\f\x1c\x1d\x1e\x85\u2028\u2029"
 INFOZIP_ARCHIVE_ERROR_CODES = (0, 1, 2, 3, 9, 11, 12, 51, 81, 82)
+MAX_ARCHIVE_PHYSICAL_BYTES = 16 * 1024 * 1024
+MAX_EXPECTATION_FILE_BYTES = 1024 * 1024
 
 
 def _host_platforms():
@@ -246,6 +248,74 @@ def _safe_member_name(name):
 def _reader_command(command, *arguments):
     prefix = [command] if isinstance(command, str) else list(command)
     return [*prefix, *arguments]
+
+
+def _fixture_id_from_case(case, archive_sha256):
+    descriptor = "\n".join((
+        "zipper-archive-test",
+        "1",
+        str(case["generatorContractVersion"]),
+        case["caseKey"],
+        str(case["caseRevision"]),
+        str(case["expectationRevision"]),
+        str(case["seed"]),
+        archive_sha256,
+    )) + "\n"
+    return "atc-" + hashlib.sha256(descriptor.encode("utf-8")).hexdigest()
+
+
+def _read_fixture_input(sidecar):
+    try:
+        with sidecar.open("rb") as stream:
+            sidecar_bytes = stream.read(MAX_EXPECTATION_FILE_BYTES + 1)
+    except OSError as error:
+        raise ValueError(f"could not read Expectation File {sidecar}: {error}") from error
+    if len(sidecar_bytes) > MAX_EXPECTATION_FILE_BYTES:
+        raise ValueError(f"Expectation File exceeds the 1 MiB budget: {sidecar}")
+    try:
+        case = json.loads(sidecar_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError(f"could not read Expectation File {sidecar}: {error}") from error
+    if not isinstance(case, dict):
+        raise ValueError(f"Expectation File {sidecar} must contain a JSON object")
+
+    fixture_id = case.get("fixtureId")
+    if not isinstance(fixture_id, str) or sidecar.stem != fixture_id:
+        raise ValueError(f"Expectation File {sidecar} has a mismatched Fixture ID")
+    archive = sidecar.with_suffix(".zip")
+    if not archive.is_file():
+        raise ValueError(f"Archive is missing for {case.get('caseKey', fixture_id)}")
+    try:
+        with archive.open("rb") as stream:
+            archive_bytes = stream.read(MAX_ARCHIVE_PHYSICAL_BYTES + 1)
+    except OSError as error:
+        raise ValueError(f"could not read Archive {archive}: {error}") from error
+    if len(archive_bytes) > MAX_ARCHIVE_PHYSICAL_BYTES:
+        raise ValueError(f"Archive exceeds the 16 MiB physical budget: {archive}")
+
+    archive_sha256 = hashlib.sha256(archive_bytes).hexdigest()
+    archive_metadata = case.get("archive")
+    if not isinstance(archive_metadata, dict):
+        raise ValueError(f"Expectation File {sidecar} has no archive metadata")
+    if archive_metadata.get("physicalSize") != len(archive_bytes):
+        raise ValueError(f"Archive size does not match Expectation File {sidecar}")
+    if archive_metadata.get("sha256") != archive_sha256:
+        raise ValueError(f"Archive hash does not match Expectation File {sidecar}")
+    if archive_metadata.get("fileName") != fixture_id + ".zip":
+        raise ValueError(f"Archive filename does not match Fixture ID {fixture_id}")
+    if _fixture_id_from_case(case, archive_sha256) != fixture_id:
+        raise ValueError(f"Expectation File {sidecar} has a Fixture ID that does not match its contents")
+
+    return case, archive, hashlib.sha256(sidecar_bytes).hexdigest(), archive_sha256
+
+
+def _validate_report_identity(reader_fixture, case, sidecar_sha256, archive_sha256, reader):
+    if reader_fixture.get("caseKey") != case.get("caseKey"):
+        raise ValueError(f"{reader} report Case Key does not match Expectation File")
+    if reader_fixture.get("expectationFileSha256") != sidecar_sha256:
+        raise ValueError(f"{reader} report Expectation File hash does not match current input")
+    if reader_fixture.get("archiveSha256") != archive_sha256:
+        raise ValueError(f"{reader} report Archive hash does not match current input")
 
 
 def _run_reader(command, arguments, timeout, start_error="reader command failed"):
@@ -586,6 +656,11 @@ def _validate_adapter_checks(case):
         if expected not in allowed_outcomes.get(action, ()):
             raise ValueError(
                 f"invalid Adapter Check for {case.get('caseKey')}: {adapter}/{action}/{expected}")
+        if (action == "extract"
+                and adapter in ("dotnet-reference", "python-zipfile")
+                and case.get("classification") != "valid"):
+            raise ValueError(
+                "extract Adapter Check requires a valid fixture for reference readers")
         names = directive.get("entryNames")
         if action == "extract-entries":
             entries = {entry.get("readableName") for entry in case.get("entries", [])
@@ -756,14 +831,8 @@ def verify_directory(
     expected_ids = set()
     expected_seven_zip_checks = {}
     for sidecar in sidecars:
-        try:
-            case = json.loads(sidecar.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as error:
-            raise ValueError(f"could not read Expectation File {sidecar}: {error}") from error
-
-        fixture_id = case.get("fixtureId")
-        if not isinstance(fixture_id, str) or sidecar.stem != fixture_id:
-            raise ValueError(f"Expectation File {sidecar} has a mismatched Fixture ID")
+        case, archive, sidecar_sha256, archive_sha256 = _read_fixture_input(sidecar)
+        fixture_id = case["fixtureId"]
         _validate_adapter_checks(case)
         expected_ids.add(fixture_id)
         expected_seven_zip_checks[fixture_id] = [
@@ -771,13 +840,11 @@ def verify_directory(
             for check in case.get("adapterChecks", [])
             if check["adapter"] == "7zip"
         ]
-        archive = sidecar.with_suffix(".zip")
-        if not archive.is_file():
-            raise ValueError(f"Archive is missing for {case.get('caseKey', fixture_id)}")
-
         python_fixture = python_fixtures.get(fixture_id)
         if python_fixture is None:
             raise ValueError(f"Python verifier report is missing Fixture ID {fixture_id}")
+        _validate_report_identity(
+            python_fixture, case, sidecar_sha256, archive_sha256, "Python verifier")
         readers = {
             "python-zipfile": _reported_reader(
                 case, python_fixture, "Python verifier")
@@ -786,6 +853,8 @@ def verify_directory(
         if dotnet_fixture is None:
             raise ValueError(
                 f".NET reference report is missing Fixture ID {fixture_id}")
+        _validate_report_identity(
+            dotnet_fixture, case, sidecar_sha256, archive_sha256, "reference harness")
         readers["dotnet-reference"] = _reported_reader(
             case, dotnet_fixture, "reference harness")
         if infozip is not None:
@@ -794,12 +863,15 @@ def verify_directory(
                     infozip, archive, case, infozip_methods)
             except (KeyError, TypeError, ReaderExecutionError) as error:
                 readers["infozip-unzip"] = {
-                    "status": "fail",
+                    "status": "observed",
                     "version": profiles["infozip-unzip"].get("version"),
                     "failure": str(error),
                     "operations": {
-                        operation: _operation_result(
-                            case, operation, reason="reader execution failed")
+                        operation: (
+                            _execution_error_operation_result(case, operation, error)
+                            if operation != "extract" and _expectations_for(case, operation)
+                            else _operation_result(
+                                case, operation, reason="reader execution failed"))
                         for operation in OPERATIONS
                     },
                 }
@@ -816,6 +888,10 @@ def verify_directory(
             }
 
         if seven_zip_report is not None:
+            seven_zip_fixture = seven_zip_fixtures.get(fixture_id)
+            if seven_zip_fixture is not None:
+                _validate_report_identity(
+                    seven_zip_fixture, case, sidecar_sha256, archive_sha256, "7-Zip")
             readers["7zip"] = _seven_zip_reader(case, fixture_id, seven_zip_fixtures)
         else:
             readers["7zip"] = {
@@ -924,7 +1000,7 @@ def verify_directory(
                 fixture["readers"]["infozip-unzip"]["status"] == "fail"
                 for fixture in report["fixtures"]) else "observed")
         profiles["infozip-unzip"]["executionErrors"] = sum(
-            "failure" in operation
+            operation["status"] == "execution-error"
             for fixture in report["fixtures"]
             for operation in fixture["readers"]["infozip-unzip"]["operations"].values())
     if seven_zip_report is not None:
