@@ -211,7 +211,6 @@ def verify(fixtures, seven, report_path=None):
         for directive in data.get("adapterChecks", []):
             if directive.get("adapter") != "7zip":
                 continue
-            _remaining_fixture_time(fixture_deadline, data["caseKey"])
             action = directive.get("action")
             outcome = directive.get("expectedOutcome")
             check_report = {
@@ -221,6 +220,7 @@ def verify(fixtures, seven, report_path=None):
             }
             fixture_report["checks"].append(check_report)
             try:
+                _remaining_fixture_time(fixture_deadline, data["caseKey"])
                 if not archive.is_file():
                     raise ValueError(f"missing Archive for {data['caseKey']}")
                 if action == "presence" and outcome == "present":

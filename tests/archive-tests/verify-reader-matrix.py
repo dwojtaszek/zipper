@@ -157,13 +157,27 @@ def _allowed_outcomes_by_profile(case, operation):
     }
 
 
-def _select_expectation_profile(allowed_by_profile, outcome):
+def _select_expectation_profile(allowed_by_profile, outcome, operation):
     if "full-codec" in allowed_by_profile and "unsupported-reader" in allowed_by_profile:
-        unsupported_outcomes = {
-            _canonical_outcome(value)
-            for value in allowed_by_profile["unsupported-reader"]
-        }
-        return "unsupported-reader" if _canonical_outcome(outcome) in unsupported_outcomes else "full-codec"
+        if _outcome_is_allowed(
+            outcome, allowed_by_profile["unsupported-reader"], operation):
+            return "unsupported-reader"
+        if _outcome_is_allowed(
+            outcome, allowed_by_profile["full-codec"], operation):
+            return "full-codec"
+
+    for profile in ("strict-integrity-v1", "strict"):
+        allowed_outcomes = allowed_by_profile.get(profile)
+        if (allowed_outcomes is not None
+                and _outcome_is_allowed(outcome, allowed_outcomes, operation)):
+            return profile
+
+    for profile, allowed_outcomes in allowed_by_profile.items():
+        if _outcome_is_allowed(outcome, allowed_outcomes, operation):
+            return profile
+
+    if "full-codec" in allowed_by_profile and "unsupported-reader" in allowed_by_profile:
+        return "full-codec"
     if "strict-integrity-v1" in allowed_by_profile:
         return "strict-integrity-v1"
     if "strict" in allowed_by_profile:
@@ -191,7 +205,8 @@ def _operation_result(case, operation, outcome=None, reason=None):
             "reason": reason or "operation not run",
         }
 
-    expectation_profile = _select_expectation_profile(all_allowed_outcomes, outcome)
+    expectation_profile = _select_expectation_profile(
+        all_allowed_outcomes, outcome, operation)
     allowed = expectation_profile is not None and _outcome_is_allowed(
         outcome, all_allowed_outcomes[expectation_profile], operation)
     return {

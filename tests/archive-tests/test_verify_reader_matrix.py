@@ -715,6 +715,32 @@ else:
         self.assertEqual("pass", fixture["adapterChecks"][0]["status"])
         self.assertEqual("agree", fixture["agreement"]["operations"]["list"]["status"])
 
+    def test_verifyDirectory_DotNetOutcomeAllowedBySecondaryReaderProfile_Passes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case, python_report = self.make_fixture(temp)
+            case["expectations"].append({
+                "operation": "list",
+                "profile": "common",
+                "allowedOutcomes": ["list-fails"],
+                "invariants": [],
+            })
+            self.persist_case(temp, case, python_report)
+            dotnet_report = self.make_dotnet_report(case)
+            dotnet_report["fixtures"][0]["operations"][0][
+                "normalizedOutcome"] = "list-fails"
+
+            report, exit_code = MATRIX["verify_directory"](
+                Path(temp), python_report,
+                {"infozip-unzip": None, "7zip": None},
+                dotnet_report=dotnet_report)
+
+        fixture = report["fixtures"][0]
+        dotnet_list = fixture["readers"]["dotnet-reference"]["operations"]["list"]
+        self.assertEqual(0, exit_code)
+        self.assertEqual("pass", dotnet_list["status"])
+        self.assertEqual("common", dotnet_list["expectationProfile"])
+        self.assertEqual("split", fixture["agreement"]["operations"]["list"]["status"])
+
     def test_main_WritesPerFixtureAgreementReport(self):
         with tempfile.TemporaryDirectory() as temp:
             case, python_report = self.make_fixture(temp)

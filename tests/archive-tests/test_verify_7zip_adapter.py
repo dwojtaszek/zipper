@@ -33,12 +33,21 @@ class SevenZipAdapterTests(unittest.TestCase):
                 ],
                 "limits": {"deadlineSeconds": 1},
             }), encoding="utf-8")
+            report_path = directory / "report.json"
             clock = type("Clock", (), {"monotonic": unittest.mock.Mock(
                 side_effect=(0.0, 0.1, 1.1))})()
 
             with patch.dict(VERIFIER["verify"].__globals__, {"time": clock}):
                 with self.assertRaisesRegex(ValueError, "fixture check deadline exceeded"):
-                    VERIFIER["verify"](directory, "unused-7zip")
+                    VERIFIER["verify"](directory, "unused-7zip", report_path)
+
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            fixture = report["fixtures"][0]
+            self.assertEqual("fail", fixture["status"])
+            self.assertEqual(2, len(fixture["checks"]))
+            self.assertEqual("pass", fixture["checks"][0]["status"])
+            self.assertEqual("fail", fixture["checks"][1]["status"])
+            self.assertIn("fixture check deadline exceeded", fixture["checks"][1]["failure"])
 
     def test_terminate_reader_process_windows_kills_job_wrapper(self):
         class Process:
