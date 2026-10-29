@@ -9,6 +9,10 @@ import threading
 import argparse
 from pathlib import Path
 
+from reader_process import run_reader_command, start_reader_process, terminate_reader_process
+
+MAX_EXPANDED_BYTES_BUDGET = 32 * 1024 * 1024
+
 
 def check_entry(seven, archive, entry, budget):
     name = entry["readableName"]
@@ -22,16 +26,15 @@ def check_entry(seven, archive, entry, budget):
 
     # ponytail: Stream selected members to stdout, not disk. Stop at the declared
     # size so a corrupt or hostile Archive cannot exhaust temporary storage.
-    with subprocess.Popen(
+    with start_reader_process(
         [seven, "x", "-so", str(archive), name],
         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
     ) as process:
         timed_out = threading.Event()
 
         def kill_after_timeout():
-            if process.poll() is None:
-                timed_out.set()
-                process.kill()
+            timed_out.set()
+            terminate_reader_process(process)
 
         timer = threading.Timer(30, kill_after_timeout)
         timer.start()
@@ -41,7 +44,7 @@ def check_entry(seven, archive, entry, budget):
             while chunk := process.stdout.read(65536):
                 size += len(chunk)
                 if size > expected_size:
-                    raise ValueError(f"content size exceeded: {name!r}")
+                    terminate_reader_process(process)
                 digest.update(chunk)
             try:
                 return_code = process.wait(timeout=30)
@@ -58,13 +61,13 @@ def check_entry(seven, archive, entry, budget):
         finally:
             timer.cancel()
             if process.poll() is None:
-                process.kill()
+                terminate_reader_process(process)
                 process.communicate()
 
 
 def check_archive_rejection(seven, archive, case_key):
     try:
-        result = subprocess.run([seven, "t", str(archive)], capture_output=True, timeout=30)
+        result = run_reader_command([seven, "t", str(archive)], timeout=30)
     except subprocess.TimeoutExpired as error:
         raise ValueError(f"7-Zip timed out testing {case_key}") from error
 
@@ -179,6 +182,11 @@ def verify(fixtures, seven, report_path=None):
                     if not entries:
                         raise ValueError(f"no entries selected for {data['caseKey']}")
                     budget = data["limits"]["expandedBytesBudget"]
+                    if isinstance(budget, bool) or not isinstance(budget, int) or budget < 0:
+                        raise ValueError(f"invalid expanded bytes budget for {data['caseKey']}")
+                    if budget > MAX_EXPANDED_BYTES_BUDGET:
+                        raise ValueError(
+                            f"expanded bytes budget exceeds hard limit for {data['caseKey']}")
                     if sum(entry["contentSize"] for entry in entries) > budget:
                         raise ValueError(f"expanded bytes budget exceeded for {data['caseKey']}")
                     for entry in entries:

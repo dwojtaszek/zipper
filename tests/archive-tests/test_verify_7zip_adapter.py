@@ -15,9 +15,41 @@ from unittest.mock import patch
 
 SCRIPT = Path(__file__).with_name("verify-7zip-adapter.py")
 VERIFIER = runpy.run_path(str(SCRIPT))
+READER_PROCESS = runpy.run_path(str(SCRIPT.with_name("reader_process.py")))
 
 
 class SevenZipAdapterTests(unittest.TestCase):
+    def test_terminate_reader_process_windows_requests_tree_termination(self):
+        class Process:
+            pid = 12345
+
+            def __init__(self):
+                self.killed = False
+
+            def poll(self):
+                return None
+
+            def kill(self):
+                self.killed = True
+
+        process = Process()
+        windows = type("WindowsOS", (), {"name": "nt"})()
+        with patch.dict(
+            READER_PROCESS["terminate_reader_process"].__globals__,
+            {"os": windows},
+        ):
+            with patch.object(READER_PROCESS["subprocess"], "run") as taskkill:
+                READER_PROCESS["terminate_reader_process"](process)
+
+        taskkill.assert_called_once_with(
+            ["taskkill", "/T", "/F", "/PID", "12345"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+            check=False,
+        )
+        self.assertTrue(process.killed)
+
     def test_check_entry_rejects_watchdog_timeout_after_matching_output(self):
         expected = b"expected content"
 
@@ -122,16 +154,18 @@ class SevenZipAdapterTests(unittest.TestCase):
             archive.write_bytes(b"corrupted")
             (directory / "t").write_text("import time; time.sleep(10)\n", encoding="utf-8")
 
-            original_run = subprocess.run
+            original_run = VERIFIER["run_reader_command"]
 
-            def run_with_short_timeout(*args, **kwargs):
-                kwargs["timeout"] = 0.1
-                return original_run(*args, **kwargs)
+            def run_with_short_timeout(command, timeout):
+                return original_run(command, timeout=0.1)
 
             original_cwd = Path.cwd()
             try:
                 os.chdir(directory)
-                with patch.object(subprocess, "run", side_effect=run_with_short_timeout):
+                with patch.dict(
+                    VERIFIER["check_archive_rejection"].__globals__,
+                    {"run_reader_command": run_with_short_timeout},
+                ):
                     with self.assertRaisesRegex(ValueError, "7-Zip timed out testing timeout-case"):
                         VERIFIER["check_archive_rejection"](sys.executable, archive, "timeout-case")
             finally:
@@ -280,6 +314,36 @@ class SevenZipAdapterTests(unittest.TestCase):
             res = run()
             self.assertEqual(1, res.returncode)
             self.assertIn("expected rejection", res.stderr)
+
+    def test_verify_rejectsInvalidExpandedBytesBudgetBeforeExtracting(self):
+        invalid_budgets = (
+            (False, "invalid expanded bytes budget"),
+            (True, "invalid expanded bytes budget"),
+            (-1, "invalid expanded bytes budget"),
+            ("invalid", "invalid expanded bytes budget"),
+            (VERIFIER["MAX_EXPANDED_BYTES_BUDGET"] + 1, "expanded bytes budget exceeds hard limit"),
+        )
+        for budget, message in invalid_budgets:
+            with self.subTest(budget=budget), tempfile.TemporaryDirectory() as temp:
+                directory = Path(temp)
+                stem = "atc-" + "a" * 64
+                (directory / f"{stem}.zip").write_bytes(b"archive")
+                (directory / f"{stem}.json").write_text(json.dumps({
+                    "caseKey": "invalid-expansion-budget",
+                    "entries": [{
+                        "kind": "file",
+                        "readableName": "a.txt",
+                        "contentSize": 1,
+                        "contentSha256": "0" * 64,
+                    }],
+                    "limits": {"expandedBytesBudget": budget},
+                    "adapterChecks": [
+                        {"adapter": "7zip", "action": "extract", "expectedOutcome": "success"},
+                    ],
+                }), encoding="utf-8")
+
+                with self.assertRaisesRegex(ValueError, message):
+                    VERIFIER["verify"](directory, sys.executable)
 
     def test_verify_distinguishes_content_rejection_from_infrastructure_failures(self):
         # Ticket #1131: Fake adapter cases for exit0, genuine rejection, command-line

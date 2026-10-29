@@ -13,6 +13,8 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from reader_process import run_reader_command, start_reader_process, terminate_reader_process
+
 
 @dataclass(frozen=True)
 class ReaderAdapterProfile:
@@ -84,7 +86,7 @@ FAILURE_OUTCOMES = {
 }
 MAX_READ_BYTES = 32 * 1024 * 1024
 INFOZIP_LIST_LINE_BREAKS = "\r\n\v\f\x1c\x1d\x1e\x85\u2028\u2029"
-INFOZIP_ARCHIVE_ERROR_CODES = (0, 1, 2, 3, 12, 51, 81, 82)
+INFOZIP_ARCHIVE_ERROR_CODES = (0, 1, 2, 3, 9, 11, 12, 51, 81, 82)
 
 
 def _host_platforms():
@@ -103,7 +105,10 @@ class ReaderExecutionError(ValueError):
     """A reader could not be executed safely or within its budget."""
 
 
-def _raise_infozip_execution_error(return_code, operation):
+def _raise_infozip_execution_error(return_code, operation, archive):
+    if return_code == 9 and not archive.is_file():
+        raise ReaderExecutionError(
+            f"Archive disappeared during Info-ZIP {operation}")
     if return_code not in INFOZIP_ARCHIVE_ERROR_CODES:
         raise ReaderExecutionError(
             f"Info-ZIP unzip failed during {operation} (exit code {return_code})")
@@ -245,9 +250,7 @@ def _reader_command(command, *arguments):
 
 def _run_reader(command, arguments, timeout, start_error="reader command failed"):
     try:
-        return subprocess.run(
-            _reader_command(command, *arguments),
-            capture_output=True, timeout=timeout, check=False)
+        return run_reader_command(_reader_command(command, *arguments), timeout)
     except (OSError, subprocess.TimeoutExpired) as error:
         raise ReaderExecutionError(f"{start_error}: {error}") from error
 
@@ -259,7 +262,7 @@ def _remaining_time(deadline):
 
 def _run_unzip_member(command, archive, name, byte_limit, timeout):
     try:
-        process = subprocess.Popen(
+        process = start_reader_process(
             _reader_command(command, "-p", str(archive), name),
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
@@ -270,9 +273,8 @@ def _run_unzip_member(command, archive, name, byte_limit, timeout):
     timed_out = threading.Event()
 
     def kill_after_timeout():
-        if process.poll() is None:
-            timed_out.set()
-            process.kill()
+        timed_out.set()
+        terminate_reader_process(process)
 
     timer = threading.Timer(timeout, kill_after_timeout)
     timer.start()
@@ -284,7 +286,7 @@ def _run_unzip_member(command, archive, name, byte_limit, timeout):
             size += len(chunk)
             if size > byte_limit:
                 over_budget = True
-                process.kill()
+                terminate_reader_process(process)
                 break
             digest.update(chunk)
 
@@ -299,7 +301,7 @@ def _run_unzip_member(command, archive, name, byte_limit, timeout):
     finally:
         timer.cancel()
         if process.poll() is None:
-            process.kill()
+            terminate_reader_process(process)
             process.communicate()
         process.stdout.close()
 
@@ -310,7 +312,7 @@ def _unzip_list(command, archive, case, timeout):
     if result.returncode < 0:
         raise ReaderExecutionError(
             f"Info-ZIP unzip was terminated by signal {-result.returncode}")
-    _raise_infozip_execution_error(result.returncode, "listing")
+    _raise_infozip_execution_error(result.returncode, "listing", archive)
     # Info-ZIP returns 1 when it listed entries but encountered a recoverable
     # warning. Count agreement, not its diagnostic wording, is the outcome.
     names = result.stdout.decode("utf-8", errors="replace").splitlines()
@@ -359,7 +361,9 @@ def _unzip_read_entries(command, archive, case, deadline, supported_methods):
             raise ReaderExecutionError(
                 f"Info-ZIP unzip was terminated by signal {-return_code} "
                 f"reading {entry['readableName']!r}")
-        _raise_infozip_execution_error(return_code, "reading")
+        _raise_infozip_execution_error(return_code, "reading", archive)
+        if return_code in (9, 11):
+            return "read-entry-fails", None
         if return_code not in (0, 1):
             method = entry.get("centralDirectoryMethod", entry.get("localHeaderMethod"))
             if method not in supported_methods:
@@ -377,7 +381,7 @@ def _unzip_integrity(command, archive, case, timeout):
     if result.returncode < 0:
         raise ReaderExecutionError(
             f"Info-ZIP unzip was terminated by signal {-result.returncode}")
-    _raise_infozip_execution_error(result.returncode, "integrity check")
+    _raise_infozip_execution_error(result.returncode, "integrity check", archive)
     output = (result.stdout + result.stderr).decode("utf-8", errors="replace").lower()
     if result.returncode == 0:
         return "integrity-passes"
@@ -542,6 +546,7 @@ def _agreement(readers):
             name: reader["operations"][operation]["normalizedOutcome"]
             for name, reader in readers.items()
             if reader["operations"][operation]["status"] in ("observed", "pass", "fail")
+            and reader["operations"][operation]["normalizedOutcome"] != "not-run"
         }
         if len(outcomes) < 2:
             status = "single-reader"

@@ -8,8 +8,10 @@ import json
 import os
 import runpy
 import shutil
+import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 import zipfile
@@ -99,6 +101,7 @@ class ReaderMatrixTests(unittest.TestCase):
             """import os
 import signal
 import sys
+import subprocess
 import time
 import zipfile
 
@@ -107,12 +110,33 @@ if args[0] in os.environ.get("FAKE_UNZIP_SIGNAL_ACTIONS", "").split(","):
     os.kill(os.getpid(), signal.SIGTERM)
 if args[0] in os.environ.get("FAKE_UNZIP_TIMEOUT_ACTIONS", "").split(","):
     time.sleep(5)
+if args[0] in os.environ.get("FAKE_UNZIP_FORK_ACTIONS", "").split(","):
+    child = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(5)"],
+        stdout=sys.stdout, stderr=sys.stderr)
+    with open(os.environ["FAKE_UNZIP_CHILD_PID"], "w", encoding="utf-8") as pid_file:
+        pid_file.write(str(child.pid))
+    time.sleep(5)
+def no_archive():
+    if (os.environ.get("FAKE_UNZIP_REMOVE_ARCHIVE") == "1"
+            and os.path.isfile(args[1])):
+        os.unlink(args[1])
+    print("End-of-central-directory signature not found", file=sys.stderr)
+    raise SystemExit(9)
 if args[0] == "-Z1":
+    if (os.environ.get("FAKE_UNZIP_NO_ARCHIVE") == "1"
+            or os.environ.get("FAKE_UNZIP_REMOVE_ARCHIVE") == "1"
+            or not os.path.isfile(args[1])):
+        no_archive()
     with zipfile.ZipFile(args[1]) as archive:
         for info in archive.infolist():
             print(info.filename)
     raise SystemExit(1 if os.environ.get("FAKE_UNZIP_LIST_WARNING") == "1" else 0)
 elif args[0] == "-t":
+    if (os.environ.get("FAKE_UNZIP_NO_ARCHIVE") == "1"
+            or os.environ.get("FAKE_UNZIP_REMOVE_ARCHIVE") == "1"
+            or not os.path.isfile(args[1])):
+        no_archive()
     if os.environ.get("FAKE_UNZIP_INTEGRITY_RESOURCE_ERROR") == "1":
         print("unzip: error: not enough memory", file=sys.stderr)
         raise SystemExit(4)
@@ -125,6 +149,12 @@ elif args[0] == "-t":
     with zipfile.ZipFile(args[1]) as archive:
         raise SystemExit(1 if archive.testzip() else 0)
 elif args[0] == "-p":
+    if (os.environ.get("FAKE_UNZIP_READ_NO_ARCHIVE") == "1"
+            or not os.path.isfile(args[1])):
+        no_archive()
+    if os.environ.get("FAKE_UNZIP_NO_MATCH") == "1":
+        print("caution: filename not matched", file=sys.stderr)
+        raise SystemExit(11)
     with zipfile.ZipFile(args[1]) as archive:
         sys.stdout.buffer.write(archive.read(args[2]))
     raise SystemExit(1 if os.environ.get("FAKE_UNZIP_READ_WARNING") == "1" else 0)
@@ -240,6 +270,8 @@ else:
             case["adapterChecks"] = [
                 {"adapter": "infozip-unzip", "action": "list",
                  "expectedOutcome": "list-succeeds"},
+                {"adapter": "7zip", "action": "extract",
+                 "expectedOutcome": "success"},
             ]
             (Path(temp) / (case["fixtureId"] + ".json")).write_text(
                 json.dumps(case), encoding="utf-8")
@@ -254,8 +286,10 @@ else:
         self.assertEqual("pass", report["profiles"]["dotnet-reference"]["status"])
         self.assertEqual("skipped", report["profiles"]["infozip-unzip"]["status"])
         self.assertEqual("skipped", report["profiles"]["7zip"]["status"])
-        self.assertEqual("skipped", report["fixtures"][0]["adapterChecks"][0]["status"])
-        self.assertIn("unzip", report["fixtures"][0]["adapterChecks"][0]["reason"])
+        checks = report["fixtures"][0]["adapterChecks"]
+        self.assertEqual(["skipped", "skipped"], [check["status"] for check in checks])
+        self.assertIn("unzip", checks[0]["reason"])
+        self.assertIn("7-Zip", checks[1]["reason"])
         self.assertIn("unzip", report["profiles"]["infozip-unzip"]["reason"])
         self.assertIn("7-Zip", report["profiles"]["7zip"]["reason"])
         self.assertEqual(2, report["summary"]["readerAdapterProfileSkips"])
@@ -380,6 +414,7 @@ else:
 
         self.assertEqual(0, exit_code)
         self.assertEqual(1, saved_report["summary"]["fixtures"])
+        self.assertEqual(case["fixtureId"], saved_report["fixtures"][0]["fixtureId"])
         self.assertEqual(
             "agree",
             saved_report["fixtures"][0]["agreement"]["operations"]["list"]["status"])
@@ -470,6 +505,33 @@ else:
 
         self.assertEqual("fail", reader["status"])
         self.assertEqual("fail", reader["operations"]["list"]["status"])
+
+    def test_verifyDirectory_MissingOperation_IsExcludedFromAgreement(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case, python_report = self.make_fixture(temp)
+            dotnet_report = self.make_dotnet_report(case)
+            dotnet_report["fixtures"][0]["operations"] = [
+                operation for operation in dotnet_report["fixtures"][0]["operations"]
+                if operation["operation"] != "list"
+            ]
+
+            report, exit_code = MATRIX["verify_directory"](
+                Path(temp), python_report,
+                {"infozip-unzip": None, "7zip": None},
+                dotnet_report=dotnet_report)
+
+        fixture = report["fixtures"][0]
+        self.assertEqual(1, exit_code)
+        self.assertEqual("fail", fixture["readers"]["dotnet-reference"]["status"])
+        self.assertEqual(
+            "not-run",
+            fixture["readers"]["dotnet-reference"]["operations"]["list"]["normalizedOutcome"])
+        self.assertEqual(
+            "single-reader",
+            fixture["agreement"]["operations"]["list"]["status"])
+        self.assertEqual(
+            {"python-zipfile": "list-succeeds"},
+            fixture["agreement"]["operations"]["list"]["outcomes"])
 
     def test_verifyDirectory_MissingSevenZipAdapterCheck_MarksProfileFailed(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -699,6 +761,52 @@ else:
             "split",
             report["fixtures"][0]["agreement"]["operations"]["integrity-check"]["status"])
 
+    def test_verifyDirectory_InfoZipArchiveErrors_AreComparedAsReaderOutcomes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case, python_report = self.make_fixture(temp)
+            case["entries"][0]["localHeaderMethod"] = 98
+            case["entries"][0]["centralDirectoryMethod"] = 98
+            (Path(temp) / (case["fixtureId"] + ".json")).write_text(
+                json.dumps(case), encoding="utf-8")
+            with patch.dict(os.environ, {
+                "FAKE_UNZIP_NO_ARCHIVE": "1",
+                "FAKE_UNZIP_NO_MATCH": "1",
+            }):
+                report, exit_code = MATRIX["verify_directory"](
+                    Path(temp), python_report,
+                    {"infozip-unzip": self.write_fake_unzip(temp), "7zip": None},
+                    dotnet_report=self.make_dotnet_report(case))
+
+            with patch.dict(os.environ, {"FAKE_UNZIP_READ_NO_ARCHIVE": "1"}, clear=True):
+                missing_archive_report, missing_archive_exit = MATRIX["verify_directory"](
+                    Path(temp), python_report,
+                    {"infozip-unzip": self.write_fake_unzip(temp), "7zip": None},
+                    dotnet_report=self.make_dotnet_report(case))
+
+        infozip = report["fixtures"][0]["readers"]["infozip-unzip"]
+        self.assertEqual(0, exit_code)
+        self.assertEqual("observed", infozip["status"])
+        self.assertEqual(0, report["summary"]["readerExecutionErrors"])
+        for operation, outcome, expectation_status in (
+            ("list", "list-fails", "fail"),
+            ("read-entry", "read-entry-fails", "fail"),
+            ("integrity-check", "integrity-fails", "pass"),
+        ):
+            result = infozip["operations"][operation]
+            self.assertEqual("observed", result["status"])
+            self.assertEqual(outcome, result["normalizedOutcome"])
+            self.assertEqual(expectation_status, result["expectationStatus"])
+            self.assertEqual(
+                "split",
+                report["fixtures"][0]["agreement"]["operations"][operation]["status"])
+
+        read_entry = missing_archive_report["fixtures"][0]["readers"][
+            "infozip-unzip"]["operations"]["read-entry"]
+        self.assertEqual(0, missing_archive_exit)
+        self.assertEqual("observed", read_entry["status"])
+        self.assertEqual("read-entry-fails", read_entry["normalizedOutcome"])
+        self.assertEqual(0, missing_archive_report["summary"]["readerExecutionErrors"])
+
     def test_verifyDirectory_InfoZipFixtureDeadlineBoundsOperations(self):
         with tempfile.TemporaryDirectory() as temp:
             case, python_report = self.make_fixture(temp)
@@ -746,6 +854,49 @@ else:
         self.assertEqual("not-run", infozip["operations"]["integrity-check"]["status"])
         self.assertEqual(1, report["summary"]["readerExecutionErrors"])
         self.assertEqual([], report["fixtures"][0]["agreement"]["splitOperations"])
+
+    def test_verifyDirectory_InfoZipTimeoutKillsForkedReader(self):
+        for action, expected_operation in (("-Z1", "list"), ("-p", "read-entry")):
+            with self.subTest(action=action), tempfile.TemporaryDirectory() as temp:
+                case, python_report = self.make_fixture(temp)
+                case["limits"]["deadlineSeconds"] = 1
+                (Path(temp) / (case["fixtureId"] + ".json")).write_text(
+                    json.dumps(case), encoding="utf-8")
+                child_pid_path = Path(temp) / "reader-child.pid"
+                start = time.monotonic()
+                with patch.dict(os.environ, {
+                    "FAKE_UNZIP_FORK_ACTIONS": action,
+                    "FAKE_UNZIP_CHILD_PID": str(child_pid_path),
+                }):
+                    report, exit_code = MATRIX["verify_directory"](
+                        Path(temp), python_report,
+                        {"infozip-unzip": self.write_fake_unzip(temp), "7zip": None},
+                        dotnet_report=self.make_dotnet_report(case))
+
+                self.assertEqual(0, exit_code)
+                self.assertLess(time.monotonic() - start, 4)
+                self.assertTrue(child_pid_path.is_file())
+                observed = report["fixtures"][0]["readers"]["infozip-unzip"][
+                    "operations"][expected_operation]
+                self.assertEqual("execution-error", observed["status"])
+                self.assertEqual(1, report["summary"]["readerExecutionErrors"])
+
+    def test_verifyDirectory_InfoZipMissingArchive_IsExecutionError(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case, python_report = self.make_fixture(temp)
+            (Path(temp) / (case["fixtureId"] + ".json")).write_text(
+                json.dumps(case), encoding="utf-8")
+            with patch.dict(os.environ, {"FAKE_UNZIP_REMOVE_ARCHIVE": "1"}, clear=True):
+                report, exit_code = MATRIX["verify_directory"](
+                    Path(temp), python_report,
+                    {"infozip-unzip": self.write_fake_unzip(temp), "7zip": None},
+                    dotnet_report=self.make_dotnet_report(case))
+
+        infozip = report["fixtures"][0]["readers"]["infozip-unzip"]
+        self.assertEqual(0, exit_code)
+        self.assertEqual("observed", infozip["status"])
+        self.assertEqual("execution-error", infozip["operations"]["list"]["status"])
+        self.assertEqual(3, report["summary"]["readerExecutionErrors"])
 
     @unittest.skipIf(os.name == "nt", "POSIX signal return codes are required")
     def test_verifyDirectory_InfoZipSignalTermination_IsExecutionError(self):
