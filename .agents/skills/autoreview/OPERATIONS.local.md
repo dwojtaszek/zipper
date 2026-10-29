@@ -369,3 +369,11 @@
 - **telemetry**: host=droid mode=branch specialists=6 bundle=39358c
 - **lessons**: Keep the .NET report status tied directly to whether any expectation applies; the full E2E report is the proof for report-emission paths.
 - **suppressions**: none
+
+### 2026-10-29 droid:branch:issue-1304-reader-matrix-closeout
+
+- **findings**: Review cycle 1 found a Windows-specific test issue and an Info-ZIP Adapter Check path when no expectation applies; cycle 2 found missing adapter-only coverage for read-entry/integrity-check and an existing timeout-test runtime ceiling; final cycle found 1 INFO about `expectationStatus`.
+- **outcome**: Fixed the cross-platform test setup, made Info-ZIP actions run when declared by Adapter Check, normalized outcomes, classified deadline exhaustion as execution-error, and covered all three adapter-only actions plus probe failure. Deferred the runtime-ceiling note because its timing assertion is unchanged by this diff. Kept the report-status note non-gating: `expectationStatus` is the separate Reader Profile comparison, while the Adapter Check and fixture statuses retain their own contracts. Final 52-test matrix suite, mutation smoke, full 119-fixture E2E, and formatting passed.
+- **telemetry**: host=droid mode=branch specialists=6 bundle=14335
+- **lessons**: Test adapter-only Reader Adapter Profile actions across every supported action, including host-inapplicable expectations and probe errors.
+- **suppressions**: none

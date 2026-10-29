@@ -690,6 +690,31 @@ else:
             "read-entry-content-matches",
             fixture["readers"]["dotnet-reference"]["operations"]["read-entry"]["normalizedOutcome"])
 
+    def test_verifyDirectory_AdapterCheckCanonicalizesEquivalentOutcomeAlias(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case, python_report = self.make_fixture(temp)
+            case["adapterChecks"] = [
+                {"adapter": "dotnet-reference", "action": "list",
+                 "expectedOutcome": "list-succeeds"},
+            ]
+            self.persist_case(temp, case, python_report)
+            dotnet_report = self.make_dotnet_report(case)
+            dotnet_report["fixtures"][0]["operations"][0][
+                "normalizedOutcome"] = "listed-count-matches-entries"
+
+            report, exit_code = MATRIX["verify_directory"](
+                Path(temp), python_report,
+                {"infozip-unzip": None, "7zip": None},
+                dotnet_report=dotnet_report)
+
+        fixture = report["fixtures"][0]
+        self.assertEqual(0, exit_code)
+        self.assertEqual(
+            "list-succeeds",
+            fixture["readers"]["dotnet-reference"]["operations"]["list"]["normalizedOutcome"])
+        self.assertEqual("pass", fixture["adapterChecks"][0]["status"])
+        self.assertEqual("agree", fixture["agreement"]["operations"]["list"]["status"])
+
     def test_main_WritesPerFixtureAgreementReport(self):
         with tempfile.TemporaryDirectory() as temp:
             case, python_report = self.make_fixture(temp)
@@ -1218,6 +1243,14 @@ else:
         with tempfile.TemporaryDirectory() as temp:
             case, python_report = self.make_fixture(temp)
             case["limits"]["deadlineSeconds"] = 1
+            case["adapterChecks"] = [
+                {"adapter": "infozip-unzip", "action": "list",
+                 "expectedOutcome": "list-succeeds"},
+                {"adapter": "infozip-unzip", "action": "read-entry",
+                 "expectedOutcome": "read-entry-content-matches"},
+                {"adapter": "infozip-unzip", "action": "integrity-check",
+                 "expectedOutcome": "integrity-passes"},
+            ]
             self.persist_case(temp, case, python_report)
             with patch.dict(os.environ, {
                 "FAKE_UNZIP_TIMEOUT_ACTIONS": "-Z1,-p,-t",
@@ -1232,11 +1265,99 @@ else:
         self.assertEqual("observed", infozip["status"])
         self.assertIn("timed out", infozip["operations"]["list"]["failure"])
         self.assertEqual("execution-error", infozip["operations"]["list"]["status"])
-        self.assertEqual("not-run", infozip["operations"]["read-entry"]["status"])
-        self.assertEqual("not-run", infozip["operations"]["integrity-check"]["status"])
-        self.assertEqual(1, report["summary"]["readerExecutionErrors"])
+        for operation in ("read-entry", "integrity-check"):
+            self.assertEqual(
+                "execution-error", infozip["operations"][operation]["status"])
+            self.assertIn(
+                "deadline exhausted", infozip["operations"][operation]["failure"])
+        self.assertEqual(
+            ["execution-error"] * 3,
+            [check["status"] for check in report["fixtures"][0]["adapterChecks"]])
+        self.assertEqual(3, report["summary"]["readerExecutionErrors"])
         self.assertEqual(0, report["summary"]["failedReaderAdapterProfiles"])
         self.assertEqual([], report["fixtures"][0]["agreement"]["splitOperations"])
+
+    def test_verifyDirectory_InfoZipAdapterChecks_RunWithoutApplicableExpectations(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case, python_report = self.make_fixture(temp)
+            for expectation in case["expectations"]:
+                expectation["platform"] = "adls-gen2"
+            case["adapterChecks"] = [
+                {"adapter": "infozip-unzip", "action": "list",
+                 "expectedOutcome": "list-succeeds"},
+                {"adapter": "infozip-unzip", "action": "read-entry",
+                 "expectedOutcome": "read-entry-content-matches"},
+                {"adapter": "infozip-unzip", "action": "integrity-check",
+                 "expectedOutcome": "integrity-passes"},
+            ]
+            self.persist_case(temp, case, python_report)
+            python_fixture = python_report["fixtures"][0]
+            python_fixture["status"] = "skipped"
+            for operation in python_fixture["operations"]:
+                operation.update(normalizedOutcome="not-run", status="not-run")
+            dotnet_report = self.make_dotnet_report(case)
+            dotnet_fixture = dotnet_report["fixtures"][0]
+            dotnet_fixture["status"] = "skipped"
+            for operation in dotnet_fixture["operations"]:
+                operation.update(normalizedOutcome="not-run", status="not-run")
+
+            with patch.dict(os.environ, {"ZIPPER_ATC_PLATFORMS": ""}):
+                report, exit_code = MATRIX["verify_directory"](
+                    Path(temp), python_report,
+                    {"infozip-unzip": self.write_fake_unzip(temp), "7zip": None},
+                    dotnet_report=dotnet_report)
+
+        fixture = report["fixtures"][0]
+        self.assertEqual(0, exit_code)
+        for action, expected_outcome in (
+            ("list", "list-succeeds"),
+            ("read-entry", "read-entry-content-matches"),
+            ("integrity-check", "integrity-passes"),
+        ):
+            self.assertEqual(
+                expected_outcome,
+                fixture["readers"]["infozip-unzip"]["operations"][action]["normalizedOutcome"])
+        self.assertEqual(
+            ["pass"] * 3,
+            [check["status"] for check in fixture["adapterChecks"]])
+        self.assertEqual("skipped", fixture["status"])
+
+    def test_verifyDirectory_InfoZipAdapterCheckProbeError_WithoutApplicableExpectation_IsNonGating(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case, python_report = self.make_fixture(temp)
+            for expectation in case["expectations"]:
+                expectation["platform"] = "adls-gen2"
+            case["adapterChecks"] = [
+                {"adapter": "infozip-unzip", "action": "list",
+                 "expectedOutcome": "list-succeeds"},
+            ]
+            self.persist_case(temp, case, python_report)
+            python_fixture = python_report["fixtures"][0]
+            python_fixture["status"] = "skipped"
+            for operation in python_fixture["operations"]:
+                operation.update(normalizedOutcome="not-run", status="not-run")
+            dotnet_report = self.make_dotnet_report(case)
+            for operation in dotnet_report["fixtures"][0]["operations"]:
+                operation.update(normalizedOutcome="not-run", status="not-run")
+
+            with patch.dict(os.environ, {
+                "FAKE_UNZIP_INVALID_VERSION": "1",
+                "ZIPPER_ATC_PLATFORMS": "",
+            }):
+                report, exit_code = MATRIX["verify_directory"](
+                    Path(temp), python_report,
+                    {"infozip-unzip": self.write_fake_unzip(temp), "7zip": None},
+                    dotnet_report=dotnet_report)
+
+        fixture = report["fixtures"][0]
+        self.assertEqual(0, exit_code)
+        self.assertEqual("skipped", fixture["status"])
+        self.assertEqual(
+            "execution-error",
+            fixture["readers"]["infozip-unzip"]["operations"]["list"]["status"])
+        self.assertEqual("execution-error", fixture["adapterChecks"][0]["status"])
+        self.assertEqual(1, report["summary"]["readerExecutionErrors"])
+        self.assertEqual([], fixture["agreement"]["splitOperations"])
 
     def test_verifyDirectory_InfoZipMemberReadTimeout_IsExecutionError(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -1256,8 +1377,11 @@ else:
         self.assertEqual("list-succeeds", infozip["operations"]["list"]["normalizedOutcome"])
         self.assertIn("timed out", infozip["operations"]["read-entry"]["failure"])
         self.assertEqual("execution-error", infozip["operations"]["read-entry"]["status"])
-        self.assertEqual("not-run", infozip["operations"]["integrity-check"]["status"])
-        self.assertEqual(1, report["summary"]["readerExecutionErrors"])
+        self.assertEqual(
+            "execution-error", infozip["operations"]["integrity-check"]["status"])
+        self.assertIn(
+            "deadline exhausted", infozip["operations"]["integrity-check"]["failure"])
+        self.assertEqual(2, report["summary"]["readerExecutionErrors"])
         self.assertEqual([], report["fixtures"][0]["agreement"]["splitOperations"])
 
     def test_verifyDirectory_InfoZipTimeoutKillsForkedReader(self):
@@ -1292,7 +1416,9 @@ else:
                     observed = report["fixtures"][0]["readers"]["infozip-unzip"][
                         "operations"][expected_operation]
                     self.assertEqual("execution-error", observed["status"])
-                    self.assertEqual(1, report["summary"]["readerExecutionErrors"])
+                    expected_errors = 3 if action == "-Z1" else 2
+                    self.assertEqual(
+                        expected_errors, report["summary"]["readerExecutionErrors"])
 
     def test_verifyDirectory_InfoZipMissingArchive_IsExecutionError(self):
         with tempfile.TemporaryDirectory() as temp:

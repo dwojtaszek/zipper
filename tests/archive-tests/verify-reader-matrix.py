@@ -138,6 +138,14 @@ def _expectations_for(case, operation):
                  or expectation.get("platform") in platforms)]
 
 
+def _infozip_action_required(case, action):
+    return bool(_expectations_for(case, action)) or any(
+        check.get("adapter") == "infozip-unzip"
+        and check.get("action") == action
+        for check in case.get("adapterChecks", [])
+        if isinstance(check, dict))
+
+
 def _allowed_outcomes_by_profile(case, operation):
     by_profile = {}
     for expectation in _expectations_for(case, operation):
@@ -215,7 +223,7 @@ def _reader_operation_result(case, operation, observed, reader):
             result["failure"] = "applicable operation was not run"
         return result
 
-    outcome = observed.get("normalizedOutcome")
+    outcome = _canonical_outcome(observed.get("normalizedOutcome"))
     result = _operation_result(case, operation, outcome)
     if status != "pass" or outcome is None:
         result["status"] = "fail"
@@ -250,7 +258,7 @@ def _execution_error_reader(case, version, error, operation_reason):
         "operations": {
             operation: (
                 _execution_error_operation_result(case, operation, error)
-                if operation != "extract" and _expectations_for(case, operation)
+                if operation != "extract" and _infozip_action_required(case, operation)
                 else _operation_result(case, operation, reason=operation_reason))
             for operation in OPERATIONS
         },
@@ -528,7 +536,7 @@ def _infozip_reader(command, archive, case, supported_methods):
     timeout = max(1, min(case.get("limits", {}).get("deadlineSeconds", 10), 30))
     deadline = time.monotonic() + timeout
     operations = {}
-    if _expectations_for(case, "list"):
+    if _infozip_action_required(case, "list"):
         names = [entry.get("readableName") for entry in case.get("entries", [])]
         if any(
             isinstance(name, str)
@@ -541,8 +549,9 @@ def _infozip_reader(command, archive, case, supported_methods):
         else:
             operation_timeout = _remaining_time(deadline)
             if operation_timeout is None:
-                operations["list"] = _operation_result(
-                    case, "list", reason="Info-ZIP fixture deadline exhausted")
+                operations["list"] = _execution_error_operation_result(
+                    case, "list",
+                    ReaderExecutionError("Info-ZIP fixture deadline exhausted"))
             else:
                 try:
                     outcome = _unzip_list(command, archive, case, operation_timeout)
@@ -553,10 +562,11 @@ def _infozip_reader(command, archive, case, supported_methods):
     else:
         operations["list"] = _operation_result(case, "list", reason="no applicable expectation")
 
-    if _expectations_for(case, "read-entry"):
+    if _infozip_action_required(case, "read-entry"):
         if _remaining_time(deadline) is None:
-            operations["read-entry"] = _operation_result(
-                case, "read-entry", reason="Info-ZIP fixture deadline exhausted")
+            operations["read-entry"] = _execution_error_operation_result(
+                case, "read-entry",
+                ReaderExecutionError("Info-ZIP fixture deadline exhausted"))
         else:
             try:
                 read_outcome, read_reason = _unzip_read_entries(
@@ -570,11 +580,12 @@ def _infozip_reader(command, archive, case, supported_methods):
         operations["read-entry"] = _operation_result(
             case, "read-entry", reason="no applicable expectation")
 
-    if _expectations_for(case, "integrity-check"):
+    if _infozip_action_required(case, "integrity-check"):
         operation_timeout = _remaining_time(deadline)
         if operation_timeout is None:
-            operations["integrity-check"] = _operation_result(
-                case, "integrity-check", reason="Info-ZIP fixture deadline exhausted")
+            operations["integrity-check"] = _execution_error_operation_result(
+                case, "integrity-check",
+                ReaderExecutionError("Info-ZIP fixture deadline exhausted"))
         else:
             try:
                 outcome = _unzip_integrity(command, archive, case, operation_timeout)
