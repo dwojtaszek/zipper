@@ -1,7 +1,8 @@
 """Exercise authorization with real Git refs and subprocess CLI boundaries."""
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stdout
 from datetime import datetime, timezone
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -14,6 +15,52 @@ from unittest.mock import MagicMock, patch
 import gitenv  # noqa: F401
 
 BASE = Path(__file__).resolve().parents[1]
+
+
+class AuthorizationDiagnosticTests(unittest.TestCase):
+    """A refusal has to say which rule refused it.
+
+    `_authorized_pr` used to return None silently for all of them, so a failed
+    `gh` read, a head past the reviewed one, and a real provenance refusal looked
+    identical in the log -- which is why PR #1380 could not be diagnosed from its
+    own run log.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+        spec = importlib.util.spec_from_file_location("diagnostic_runner", BASE / "runner.py")
+        self.runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.runner)
+        self.runner.REPO_PATH = str(self.root)
+
+    def _authorize(self, body: str, exit_code: int = 0, expected_head=None):
+        gh = self.root / "gh"
+        gh.write_text(f"#!/bin/sh\ncat <<'EOF'\n{body}\nEOF\nexit {exit_code}\n")
+        gh.chmod(0o755)
+        out = io.StringIO()
+        with patch.dict(os.environ, {"PATH": str(self.root) + os.pathsep + os.environ["PATH"]}), \
+                redirect_stdout(out):
+            result = self.runner._authorized_pr(7, None, expected_head)
+        return result, out.getvalue()
+
+    def test_authorizedPr_unreadablePr_saysTheReadFailed(self):
+        result, log = self._authorize("", exit_code=1)
+        self.assertIsNone(result)
+        self.assertIn("Could not read PR #7", log,
+                      "a failed read must not be reported as a provenance verdict")
+
+    def test_authorizedPr_headPastTheReviewedOne_namesBothHeads(self):
+        pr = {"state": "open", "draft": False,
+              "user": {"login": "dwojtaszek", "type": "User", "id": 1},
+              "base": {"ref": "main", "repo": {"full_name": "dwojtaszek/zipper"}},
+              "head": {"ref": "fix/ISSUE-42-proof", "sha": "b" * 40,
+                       "repo": {"full_name": "dwojtaszek/zipper"}}}
+        result, log = self._authorize(json.dumps(pr), expected_head="a" * 40)
+        self.assertIsNone(result)
+        self.assertIn("head is bbbbbbbb", log)
+        self.assertIn("reviewed aaaaaaaa", log)
 
 
 class MergeAuthorizationTests(unittest.TestCase):
@@ -101,6 +148,14 @@ class MergeAuthorizationTests(unittest.TestCase):
 
     def test_merge_localReviewFailure_isStillAMergeBlocker(self):
         self._exercise("failed-review")
+
+    def test_scanners_orphanMergeRefusedBeforeAnySnapshot_doesNotRecreateAWorktree(self):
+        """A refusal no diff can clear must not become a babysitting slot."""
+        self._exercise("orphan-merge-refused", scanner="orphan")
+
+    def test_scanners_orphanCodeRabbitGateBlocked_stillHandsBackForBabysitting(self):
+        """The retry-only refusal path must not swallow the repairable ones."""
+        self._exercise("orphan-coderabbit-blocked", scanner="orphan")
 
     def _exercise(self, scenario, expected=False, scanner=None):
         with tempfile.TemporaryDirectory() as directory:
@@ -201,7 +256,14 @@ class MergeAuthorizationTests(unittest.TestCase):
                 "    if args[1].endswith('/reviews'):\n"
                 "        print(json.dumps([json.loads((root/'reviews.json').read_text())]))\n"
                 "    elif args[1].endswith('/commits'): print(json.dumps([json.loads((root/'commits.json').read_text())]))\n"
-                "    else: print((root/'pr.json').read_text())\n"
+                "    else:\n"
+                "        calls=root/'rest_calls'\n"
+                "        n=int(calls.read_text())+1 if calls.exists() else 1\n"
+                "        calls.write_text(str(n))\n"
+                "        fail_after=root/'rest_fail_after'\n"
+                "        if fail_after.exists() and n > int(fail_after.read_text()):\n"
+                "            sys.exit(1)\n"
+                "        print(json.dumps(json.loads((root/'pr.json').read_text())))\n"
                 "elif args[:2] == ['pr','view']:\n"
                 "    pr=json.loads((root/'pr.json').read_text())\n"
                 "    if args[args.index('--json')+1] == 'commits': print('fix: proof')\n"
@@ -236,6 +298,15 @@ class MergeAuthorizationTests(unittest.TestCase):
                 (root / "state" / "issue-42.json").write_text(json.dumps(state))
             if scenario == "failed-review":
                 (root / "state" / "pr-99-coderabbit-gate.json").write_text('{"error":"review failed"}')
+            if scenario == "orphan-merge-refused":
+                # The scanner authorizes the PR, then the merge's own re-read of it
+                # fails: a refusal no mission can clear, at a head a worktree could
+                # still be recreated for.
+                (root / "rest_fail_after").write_text("1")
+            if scenario == "orphan-coderabbit-blocked":
+                # A blocked local CodeRabbit gate is repairable, so it must still
+                # hand the PR back for babysitting.
+                (root / "state" / "pr-99-coderabbit-gate.json").write_text('{"error":"finding"}')
             for name in ("coderabbit", "msmtp"):
                 executable = root / name
                 executable.write_text("#!/bin/sh\necho '{\"type\":\"complete\",\"status\":\"review_completed\",\"findings\":0}'\n")
@@ -255,8 +326,12 @@ class MergeAuthorizationTests(unittest.TestCase):
                     {"active": runner.babysit_active_worktrees, "orphan": runner.babysit_orphaned_issue_prs,
                      "dependabot": runner.babysit_dependabot_prs}[scanner]()
                     # An adopted PR is authorized, so the gate is reached; the
-                    # unauthorized shapes must not reach it at all.
-                    if not expected and scenario != "automated-mentions-issue":
+                    # unauthorized shapes must not reach it at all. The two
+                    # orphan-merge scenarios are authorized too, and stop after the
+                    # merge decision.
+                    if not expected and scenario not in (
+                            "automated-mentions-issue", "orphan-merge-refused",
+                            "orphan-coderabbit-blocked"):
                         self.assertFalse((root / "review-called").exists())
                     if scenario == "automated-mentions-issue":
                         # Adoption keys on the label, not on the body text, so the
@@ -267,6 +342,19 @@ class MergeAuthorizationTests(unittest.TestCase):
                         # The label alone must not adopt a stranger's PR, and the
                         # runner must not mail the maintainer about it either.
                         self.assertEqual(emails, [])
+                    if scenario == "orphan-merge-refused":
+                        # Recreating a worktree for a PR nothing can repair spends
+                        # the runner's only slot on work nobody asked for, and a
+                        # failed recreation mails a recovery alert that misdescribes
+                        # the blocker. Retrying the next cycle is the whole action.
+                        self.assertFalse((root / "worktrees/issue-42").exists())
+                        self.assertFalse((root / "merged").exists())
+                        self.assertEqual(emails, [])
+                    if scenario == "orphan-coderabbit-blocked":
+                        # This one *is* a code problem, so it still goes back to a
+                        # worktree and a mission.
+                        self.assertTrue((root / "worktrees/issue-42").exists())
+                        self.assertFalse((root / "merged").exists())
                 elif scenario in ("recovery", "trusted-recovery"):
                     runner._recreate_worktree_for_pr("42", "fix/ISSUE-42-proof", 99, head)
                     worktree = root / "worktrees/issue-42"
@@ -300,8 +388,13 @@ class WorktreeReconciliationTests(unittest.TestCase):
                 "#!/usr/bin/env python3\nimport json, os, subprocess, sys\nfrom pathlib import Path\nroot = Path(__file__).resolve().parent\n"
                 "args = sys.argv[1:]\n"
                 "if args[:2] == ['api', 'graphql']:\n"
-                "    print(json.dumps([0]))\n"
+                "    if (root/'threads_read_fails').exists(): sys.exit(1)\n"
+                "    threads = root/'unresolved_threads'\n"
+                "    print(int(threads.read_text()) if threads.exists() else 0)\n"
                 "elif args[:2] == ['pr', 'merge']:\n"
+                "    refusal = root/'merge_refusal'\n"
+                "    if refusal.exists():\n"
+                "        print(refusal.read_text(), file=sys.stderr); sys.exit(1)\n"
                 "    sha = args[args.index('--match-head-commit')+1]\n"
                 "    subprocess.run(['git', '--git-dir', str(root/'origin'), 'update-ref', 'refs/heads/main', sha], check=True)\n"
                 "    (root / 'merged').write_text(args[2])\n"
@@ -311,10 +404,26 @@ class WorktreeReconciliationTests(unittest.TestCase):
                 "        reviews = root/'reviews.json'\n"
                 "        print(json.dumps([json.loads(reviews.read_text())] if reviews.exists() else []))\n"
                 "    elif args[1].endswith('/commits'): print(json.dumps([]))\n"
-                "    else: print((root/'pr.json').read_text())\n"
+                "    else:\n"
+                "        calls = root/'rest_calls'\n"
+                "        n = int(calls.read_text()) + 1 if calls.exists() else 1\n"
+                "        calls.write_text(str(n))\n"
+                "        fail_after = root/'rest_fail_after'\n"
+                "        if fail_after.exists() and n > int(fail_after.read_text()):\n"
+                "            print('HTTP 502: bad gateway', file=sys.stderr); sys.exit(1)\n"
+                "        pr = json.loads((root/'pr.json').read_text())\n"
+                "        moved_after = root/'rest_moved_after'\n"
+                "        if moved_after.exists() and n > int(moved_after.read_text()):\n"
+                "            pr['head']['sha'] = (root/'rest_moved_to').read_text().strip()\n"
+                "        print(json.dumps(pr))\n"
                 "elif args[:2] == ['pr','view']:\n"
                 "    pr=json.loads((root/'pr.json').read_text())\n"
-                "    if args[args.index('--json')+1] == 'commits': print('fix: proof')\n"
+                "    field = args[args.index('--json')+1]\n"
+                "    if field == 'commits': print('fix: proof')\n"
+                "    elif field == 'mergeable':\n"
+                "        if (root/'mergeable_read_fails').exists(): sys.exit(1)\n"
+                "        mergeable = root/'mergeable'\n"
+                "        print(json.dumps({'mergeable': mergeable.read_text().strip() if mergeable.exists() else 'MERGEABLE'}))\n"
                 "    else:\n"
                 "        rollup = {'__typename':'CheckRun','name':'ci-gate','status':'COMPLETED','conclusion':'SUCCESS'}\n"
                 "        override = root/'rollup.json'\n"
@@ -467,6 +576,154 @@ class WorktreeReconciliationTests(unittest.TestCase):
             self.assertTrue((root / "merged").exists())
             main_head = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "main"], text=True).strip()
             self.assertEqual(main_head, head)
+
+    def test_babysit_activeWorktree_headMovedBeforeTheMerge_retriesWithoutAMission(self):
+        """PR #1380: a refusal before any CI snapshot is not a code problem.
+
+        The runner answered it with a repair mission on a PR that needed no change,
+        so the mission burned quota, the next cycle repeated it, and the green PR
+        waited for a human merge. A head the reviews never covered must still be
+        refused -- but refused by retrying, not by dispatching an agent.
+        """
+        with self._setup_fixture() as (root, repo, runner, directory):
+            unchanged = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "main"], text=True).strip()
+            wt_path, head = self._create_tracked_pr_worktree(
+                root, repo, remote_files={"proof.txt": "proof"})
+            # The runner authorizes the PR, then the merge's own re-read disagrees
+            # about the head -- the shape the authorization pin used to refuse
+            # silently, and the caller used to answer with a mission.
+            (root / "rest_moved_after").write_text("1")
+            (root / "rest_moved_to").write_text("0" * 40)
+
+            with self._fixture_env(directory):
+                runner.babysit_active_worktrees()
+
+            self.assertFalse((root / "merged").exists(),
+                             "a head CI and the reviews never covered must not merge")
+            runner._babysit_with_fallback.assert_not_called()
+            self.assertEqual(
+                subprocess.check_output(["git", "-C", str(repo), "rev-parse", "main"], text=True).strip(),
+                unchanged)
+            self.assertTrue(os.path.isdir(wt_path), "the worktree must survive for the retry")
+
+            # The next cycle sees the current head again and merges it.
+            (root / "rest_moved_after").unlink()
+            (root / "rest_moved_to").unlink()
+            with self._fixture_env(directory):
+                runner.babysit_active_worktrees()
+
+            self.assertEqual(
+                subprocess.check_output(["git", "-C", str(repo), "rev-parse", "main"], text=True).strip(),
+                head,
+                "the retry must merge the green PR rather than abandon it")
+
+    def test_babysit_activeWorktree_unreadablePrAtMerge_retriesWithoutAMission(self):
+        """A failed `gh` read is neither a provenance verdict nor a code problem."""
+        with self._setup_fixture() as (root, repo, runner, directory):
+            unchanged = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "main"], text=True).strip()
+            wt_path, head = self._create_tracked_pr_worktree(
+                root, repo, remote_files={"proof.txt": "proof"})
+            (root / "rest_fail_after").write_text("1")
+
+            with self._fixture_env(directory):
+                runner.babysit_active_worktrees()
+
+            self.assertFalse((root / "merged").exists())
+            runner._babysit_with_fallback.assert_not_called()
+            self.assertEqual(
+                subprocess.check_output(["git", "-C", str(repo), "rev-parse", "main"], text=True).strip(),
+                unchanged)
+
+            (root / "rest_fail_after").unlink()
+            with self._fixture_env(directory):
+                runner.babysit_active_worktrees()
+
+            self.assertEqual(
+                subprocess.check_output(["git", "-C", str(repo), "rev-parse", "main"], text=True).strip(),
+                head,
+                "a read failure must cost one cycle, not the merge")
+
+    def _merge_refused_fixture(self, root, repo):
+        """A green, review-passed PR whose `gh pr merge` is refused anyway."""
+        wt_path, head = self._create_tracked_pr_worktree(root, repo, remote_files={"proof.txt": "proof"})
+        (root / "merge_refusal").write_text("X Pull request is not mergeable: branch protection rule failed.")
+        return wt_path, head
+
+    def test_babysit_activeWorktree_refusalWithNoBlocker_readBack_retriesWithoutAMission(self):
+        """A rollup proves a snapshot was read, not that a diff could fix the refusal.
+
+        `gh pr merge` can refuse on a transient API or network error after the fresh
+        PR/CI query succeeded. Trusting the rollup sent a mission that held the only
+        worktree slot for up to two hours on a PR needing no code change.
+        """
+        with self._setup_fixture() as (root, repo, runner, directory):
+            self._merge_refused_fixture(root, repo)
+
+            with self._fixture_env(directory):
+                runner.babysit_active_worktrees()
+
+            self.assertFalse((root / "merged").exists())
+            runner._babysit_with_fallback.assert_not_called()
+
+    def test_babysit_activeWorktree_refusalWithNoBlocker_readBack_thenMergesNextCycle(self):
+        """Retrying is what clears a transient refusal, so the PR must not be stranded."""
+        with self._setup_fixture() as (root, repo, runner, directory):
+            self._merge_refused_fixture(root, repo)
+
+            with self._fixture_env(directory):
+                runner.babysit_active_worktrees()
+            self.assertFalse((root / "merged").exists())
+
+            (root / "merge_refusal").unlink()
+            with self._fixture_env(directory):
+                runner.babysit_active_worktrees()
+
+            self.assertTrue((root / "merged").exists(),
+                            "the next cycle must merge the PR the refusal was retried for")
+
+    def test_babysit_activeWorktree_refusalWithConflict_readBack_stillDispatchesRepair(self):
+        """A blocker a diff genuinely clears must still reach a mission."""
+        with self._setup_fixture() as (root, repo, runner, directory):
+            self._merge_refused_fixture(root, repo)
+            (root / "mergeable").write_text("CONFLICTING")
+
+            with self._fixture_env(directory):
+                runner.babysit_active_worktrees()
+
+            self.assertFalse((root / "merged").exists())
+            runner._babysit_with_fallback.assert_called_once()
+            prompt = runner._babysit_with_fallback.call_args[0][0]
+            self.assertIn("conflicts with main", prompt,
+                          "the mission must be told which blocker it is clearing")
+
+    def test_babysit_activeWorktree_refusalWithUnresolvedThreads_readBack_stillDispatchesRepair(self):
+        """Unresolved threads are the other blocker a mission can clear."""
+        with self._setup_fixture() as (root, repo, runner, directory):
+            self._merge_refused_fixture(root, repo)
+            (root / "unresolved_threads").write_text("2")
+
+            with self._fixture_env(directory):
+                runner.babysit_active_worktrees()
+
+            self.assertFalse((root / "merged").exists())
+            runner._babysit_with_fallback.assert_called_once()
+            self.assertIn("2 unresolved review threads", runner._babysit_with_fallback.call_args[0][0])
+
+    def test_babysit_activeWorktree_blockerReadFails_retriesWithoutAMission(self):
+        """An unreadable blocker is not evidence of a blocker: retry, never guess.
+
+        A retry next cycle is cheap and self-heals; a two-hour mission is neither.
+        """
+        for control in ("mergeable_read_fails", "threads_read_fails"):
+            with self.subTest(control=control), self._setup_fixture() as (root, repo, runner, directory):
+                self._merge_refused_fixture(root, repo)
+                (root / control).write_text("1")
+
+                with self._fixture_env(directory):
+                    runner.babysit_active_worktrees()
+
+                self.assertFalse((root / "merged").exists())
+                runner._babysit_with_fallback.assert_not_called()
 
     def test_babysit_activeWorktree_divergedConflict_backsUpAndBlocksMerge(self):
         with self._setup_fixture() as (root, repo, runner, directory):
