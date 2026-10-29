@@ -62,6 +62,10 @@ internal sealed record ArchiveTestLimits(
     [property: JsonPropertyName("jsonBytesBudget")] long JsonBytesBudget,
     [property: JsonPropertyName("deadlineSeconds")] int DeadlineSeconds);
 
+internal sealed record ArchiveTestAdapterProfile(
+    bool Optional,
+    IReadOnlyDictionary<string, IReadOnlyList<string>> AdapterCheckOutcomes);
+
 internal sealed record ArchiveTestAdapterCheck(
     [property: JsonPropertyName("adapter")] string Adapter,
     [property: JsonPropertyName("action")] string Action,
@@ -354,18 +358,28 @@ internal static class ArchiveTestCaseSemantics
                     continue;
                 }
 
-                if (check.Adapter != "7zip")
+                if (!ArchiveTestCatalog.ReaderAdapterProfiles.TryGetValue(check.Adapter ?? string.Empty, out var adapterProfile))
                 {
                     errors.Add($"unknown adapter '{check.Adapter}'");
                 }
 
-                if ((check.Action, check.ExpectedOutcome) is not
-                    (("extract", "success") or ("test", "failure") or ("extract-entries", "success") or ("presence", "present")))
+                var action = check.Action ?? string.Empty;
+                var expectedOutcome = check.ExpectedOutcome ?? string.Empty;
+                if (adapterProfile is not null
+                    && (!adapterProfile.AdapterCheckOutcomes.TryGetValue(action, out var allowedOutcomes)
+                        || !allowedOutcomes.Contains(expectedOutcome, StringComparer.Ordinal)))
                 {
-                    errors.Add($"adapter action '{check.Action}' has invalid expectedOutcome '{check.ExpectedOutcome}'");
+                    errors.Add($"adapter action '{action}' has invalid expectedOutcome '{expectedOutcome}'");
                 }
 
-                if (check.Action == "extract-entries")
+                if (action == "extract"
+                    && testCase.Classification != "valid"
+                    && check.Adapter is "dotnet-reference" or "python-zipfile")
+                {
+                    errors.Add("extract Adapter Check requires a valid fixture for reference readers");
+                }
+
+                if (action == "extract-entries")
                 {
                     if (check.EntryNames is null || check.EntryNames.Count == 0
                         || check.EntryNames.Any(string.IsNullOrEmpty)
@@ -377,7 +391,7 @@ internal static class ArchiveTestCaseSemantics
                 }
                 else if (check.EntryNames is not null)
                 {
-                    errors.Add($"adapter action '{check.Action}' must not declare entryNames");
+                    errors.Add($"adapter action '{action}' must not declare entryNames");
                 }
             }
         }

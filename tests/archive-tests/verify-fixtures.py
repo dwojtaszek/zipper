@@ -18,12 +18,14 @@ shares no code with the C# generator:
 
 Report contract: one JSON report outside the fixture directory recording
 fixtureId, Case Key, adapter/runtime version, operation, normalized outcome,
-failure stage, asserted invariants, and pass/fail/not-run per fixture.
+failure stage, asserted invariants, and pass/fail/skipped per fixture with
+pass/fail/not-run per operation.
 
-Exit status: 0 only when every fixture passes; nonzero for required failures,
-malformed oracles, verification timeouts or resource exhaustion, or missing
-prerequisites. Unlike tests/goldens/lib/validate-properties-json.sh there is no
-silent-skip fallback: a missing prerequisite is a failure, never a pass.
+Exit status: 0 when every fixture passes or is skipped because no platform-scoped
+expectation applies; nonzero for required failures, malformed oracles,
+verification timeouts or resource exhaustion, or missing prerequisites. Unlike
+tests/goldens/lib/validate-properties-json.sh there is no silent-skip fallback:
+a missing prerequisite is a failure, never a pass.
 
 Domain terms follow UBIQUITOUS_LANGUAGE.md: Archive Test Fixture, Case Key,
 Seed, Expectation File, Fixture ID.
@@ -77,6 +79,48 @@ ZIP64_EOCD_FIXED_SIZE = 56
 ZIP64_VERSION = 45
 
 OPERATIONS = ("list", "read-entry", "integrity-check", "extract")
+ADAPTER_CHECK_OUTCOMES = {
+    "dotnet-reference": {
+        "list": {"list-succeeds", "list-fails"},
+        "read-entry": {
+            "read-entry-content-matches", "read-entry-returns-unverified-bytes",
+            "read-entry-fails", "unsupported-method-rejected",
+        },
+        "integrity-check": {
+            "integrity-passes", "integrity-fails", "integrity-unchecked",
+            "crc-mismatch-unchecked", "crc-mismatch-rejected", "unsupported-method-rejected",
+        },
+        "extract": {"extract-succeeds", "extract-fails", "unsupported-method-rejected"},
+    },
+    "python-zipfile": {
+        "list": {"list-succeeds", "list-fails"},
+        "read-entry": {
+            "read-entry-content-matches", "read-entry-returns-unverified-bytes",
+            "read-entry-fails", "unsupported-method-rejected",
+        },
+        "integrity-check": {
+            "integrity-passes", "integrity-fails", "crc-mismatch-unchecked",
+            "crc-mismatch-rejected", "unsupported-method-rejected",
+        },
+        "extract": {"extract-succeeds", "extract-fails", "unsupported-method-rejected"},
+    },
+    "infozip-unzip": {
+        "list": {"list-succeeds", "list-fails"},
+        "read-entry": {
+            "read-entry-content-matches", "read-entry-returns-unverified-bytes",
+            "read-entry-fails", "unsupported-method-rejected",
+        },
+        "integrity-check": {
+            "integrity-passes", "integrity-fails", "unsupported-method-rejected",
+        },
+    },
+    "7zip": {
+        "extract": {"success"},
+        "test": {"failure"},
+        "extract-entries": {"success"},
+        "presence": {"present"},
+    },
+}
 FAILURE_TOKENS = {
     "list": "list-fails",
     "read-entry": "read-entry-fails",
@@ -173,6 +217,49 @@ class VerificationError(Exception):
 
 def sha256_hex(data):
     return hashlib.sha256(data).hexdigest()
+
+
+def validate_adapter_checks(case):
+    for check in case.get("adapterChecks", []):
+        adapter = check["adapter"]
+        action = check["action"]
+        expected_outcome = check["expectedOutcome"]
+        profile = ADAPTER_CHECK_OUTCOMES.get(adapter)
+        if profile is None or expected_outcome not in profile.get(action, set()):
+            raise VerificationError(
+                "adapter-checks",
+                "Adapter Check %s/%s/%s is not declared by a Reader Adapter Profile"
+                % (adapter, action, expected_outcome),
+                stage="expectation")
+
+        if (action == "extract"
+                and adapter in ("dotnet-reference", "python-zipfile")
+                and case.get("classification") != "valid"):
+            raise VerificationError(
+                "adapter-checks",
+                "extract Adapter Check requires a valid fixture for reference readers",
+                stage="expectation")
+
+        entry_names = check.get("entryNames")
+        if action == "extract-entries":
+            file_names = {
+                entry["readableName"]
+                for entry in case["entries"]
+                if entry["kind"] == "file"
+            }
+            if (not isinstance(entry_names, list) or not entry_names
+                    or len(entry_names) != len(set(entry_names))
+                    or any(name not in file_names for name in entry_names)):
+                raise VerificationError(
+                    "adapter-checks",
+                    "extract-entries Adapter Check requires distinct file entryNames",
+                    stage="expectation")
+        elif entry_names is not None:
+            raise VerificationError(
+                "adapter-checks",
+                "%s/%s Adapter Check must not declare entryNames"
+                % (adapter, action),
+                stage="expectation")
 
 
 def canonical_descriptor(generator_contract_version, case_key, case_revision,
@@ -420,6 +507,8 @@ class FixtureVerifier:
         self.subprocess_count += 1
         self.ajv.validate(self.json_path)
         checks.append({"check": "schema", "status": "pass"})
+        validate_adapter_checks(case)
+        checks.append({"check": "adapter-checks", "status": "pass"})
 
         # Independent Archive length and SHA-256 recompute.
         if case["archive"]["physicalSize"] != len(zip_bytes):
@@ -975,6 +1064,7 @@ class FixtureVerifier:
                 raise VerificationError(
                     "json-bytes-budget",
                     "Expectation File exceeds the 1 MiB budget")
+            result["expectationFileSha256"] = sha256_hex(raw_json)
 
             case = parse_json_strict(raw_json.decode("utf-8"))
             result["fixtureId"] = case.get("fixtureId")
@@ -989,6 +1079,7 @@ class FixtureVerifier:
                 raise VerificationError(
                     "archive-size-sha",
                     "published Archive exceeds the 16 MiB physical budget")
+            result["archiveSha256"] = sha256_hex(zip_bytes)
 
             raw_deadline = case.get("limits", {}).get("deadlineSeconds", MAX_DEADLINE_SECONDS)
             deadline = min(raw_deadline if isinstance(raw_deadline, int) and raw_deadline > 0 else MAX_DEADLINE_SECONDS,
@@ -1001,6 +1092,11 @@ class FixtureVerifier:
             budget = min(raw_budget if isinstance(raw_budget, int) and raw_budget >= 0 else MAX_EXPANDED_BYTES_BUDGET,
                          MAX_EXPANDED_BYTES_BUDGET)
             expectations = self.applicable_expectations(case, zip_bytes)
+            adapter_check_actions = {
+                check["action"] for check in case.get("adapterChecks", [])
+                if check["adapter"] == "python-zipfile"
+            }
+            adapter_check_outcomes = {}
             ops = []
 
             runners = {
@@ -1009,23 +1105,33 @@ class FixtureVerifier:
                 "integrity-check": lambda: self.op_integrity_check(zip_bytes, case, budget),
             }
             for operation, run in runners.items():
-                if operation not in expectations:
+                if operation not in expectations and operation not in adapter_check_actions:
                     # A profile that lacks an operation records that fact rather
                     # than claiming success (REQ-212: not-run is not a pass).
                     ops.append(self._not_run(operation, "no expectation record"))
                     continue
                 observed, details, stage = run()
-                self._record_operation(ops, operation, observed, details, stage,
-                                       expectations[operation], case,
-                                       result["structureChecks"])
+                if operation in expectations:
+                    self._record_operation(ops, operation, observed, details, stage,
+                                           expectations[operation], case,
+                                           result["structureChecks"])
+                else:
+                    ops.append(self._not_run(operation, "no expectation record"))
+                if operation in adapter_check_actions:
+                    adapter_check_outcomes[operation] = observed
                 self._check_deadline(deadline)
 
             if classification == "valid":
-                if "extract" in expectations:
+                if "extract" in expectations or "extract" in adapter_check_actions:
                     observed, details, stage = self.op_extract(zip_bytes, case, budget)
-                    self._record_operation(ops, "extract", observed, details, stage,
-                                           expectations["extract"], case,
-                                           result["structureChecks"])
+                    if "extract" in expectations:
+                        self._record_operation(ops, "extract", observed, details, stage,
+                                               expectations["extract"], case,
+                                               result["structureChecks"])
+                    else:
+                        ops.append(self._not_run("extract", "no expectation record"))
+                    if "extract" in adapter_check_actions:
+                        adapter_check_outcomes["extract"] = observed
                 else:
                     ops.append(self._not_run("extract", "no expectation record"))
             else:
@@ -1045,9 +1151,23 @@ class FixtureVerifier:
             self._check_deadline(deadline)
 
             result["operations"] = ops
+            if adapter_check_outcomes:
+                result["adapterCheckOutcomes"] = adapter_check_outcomes
             result["bytesRead"] = self.bytes_read
             result["subprocessCount"] = self.subprocess_count
-            result["status"] = "fail" if any(op["status"] == "fail" for op in ops) else "pass"
+            if not expectations:
+                platforms = sorted({
+                    expectation["platform"]
+                    for expectation in case["expectations"]
+                    if expectation.get("platform") is not None
+                })
+                result["status"] = "skipped"
+                result["skipReason"] = (
+                    "no operation expectations apply on this host; fixture is scoped to "
+                    + ", ".join(platforms))
+            else:
+                result["status"] = (
+                    "fail" if any(op["status"] == "fail" for op in ops) else "pass")
         except VerificationError as exc:
             result["failure"] = {"check": exc.check, "stage": exc.stage, "message": str(exc)}
             result["bytesRead"] = self.bytes_read
@@ -2686,7 +2806,7 @@ def verify_directory(fixture_dir, schema_path, ajv_command, platforms):
         report["fixtures"].append(result)
         total_read += result.get("bytesRead", 0)
         total_subprocesses += result.get("subprocessCount", 0)
-        if result["status"] != "pass":
+        if result["status"] == "fail":
             failures.append("%s (%s): %s" % (
                 result.get("fixtureId") or os.path.basename(json_path),
                 result.get("caseKey") or "unknown",
@@ -2695,6 +2815,7 @@ def verify_directory(fixture_dir, schema_path, ajv_command, platforms):
     report["summary"] = {
         "fixtures": len(report["fixtures"]),
         "passed": sum(1 for f in report["fixtures"] if f["status"] == "pass"),
+        "skipped": sum(1 for f in report["fixtures"] if f["status"] == "skipped"),
         "failed": sum(1 for f in report["fixtures"] if f["status"] == "fail"),
         "notRunOperations": sum(1 for f in report["fixtures"]
                                 for op in f.get("operations", [])
@@ -2745,18 +2866,22 @@ def main(argv=None):
         handle.write("\n")
 
     for fixture in report["fixtures"]:
-        if fixture["status"] != "pass":
+        if fixture["status"] == "fail":
             print("FAIL %s (%s): %s" % (fixture.get("fixtureId"),
                                         fixture.get("caseKey"),
                                         fixture.get("failure") or "operation outcome "
                                         "outside the allowed set"), file=sys.stderr)
+        elif fixture["status"] == "skipped":
+            print("SKIP %s (%s): %s" % (fixture.get("fixtureId"),
+                                        fixture.get("caseKey"),
+                                        fixture.get("skipReason", "no expectations apply")))
     for problem in report["directoryProblems"]:
         print("FAIL directory: %s" % problem, file=sys.stderr)
     if exit_code == 0:
         summary = report.get("summary", {})
-        print("verified %d fixture pair(s): %d passed, %d failed; report: %s"
+        print("verified %d fixture pair(s): %d passed, %d skipped, %d failed; report: %s"
               % (summary.get("fixtures", 0), summary.get("passed", 0),
-                 summary.get("failed", 0), report_path))
+                 summary.get("skipped", 0), summary.get("failed", 0), report_path))
     return exit_code
 
 

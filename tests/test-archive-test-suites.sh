@@ -425,15 +425,17 @@ else
 fi
 
 # 13. Run the 7-Zip actions declared by each Expectation File. Malformed
-#     Archives are tested with `t`, never extracted as a whole. Missing 7-Zip fails.
+#     Archives are tested with `t`, never extracted as a whole. Missing optional
+#     readers are reported as skips, not failures.
 SEVEN_ZIP=""
 if command -v 7zz >/dev/null 2>&1; then
   SEVEN_ZIP="7zz"
 elif command -v 7z >/dev/null 2>&1; then
   SEVEN_ZIP="7z"
 fi
+SEVEN_ZIP_REPORT="$TEST_OUTPUT_DIR/all-7zip-verification.json"
 if [[ -z "$SEVEN_ZIP" ]]; then
-  check 1 "7-Zip (7zz/7z) must be installed for full-codec verification"
+  echo "[ SKIP ] 7zip: neither 7zz nor 7z is installed"
 else
   SEVEN_VERSION=$("$SEVEN_ZIP" 2>&1 | grep -m1 '7-Zip' || true)
   if [[ -z "$SEVEN_VERSION" ]]; then
@@ -446,11 +448,46 @@ else
   else
     check 1 "7-Zip adapter self-test must pass"
   fi
-  if python3 tests/archive-tests/verify-7zip-adapter.py "$ALL_OUT" "$SEVEN_ZIP"; then
+  if python3 tests/archive-tests/verify-7zip-adapter.py "$ALL_OUT" "$SEVEN_ZIP" \
+       --report "$SEVEN_ZIP_REPORT"; then
     check 0 "7-Zip verified all declared adapter checks"
   else
     check 1 "7-Zip must satisfy every declared adapter check"
   fi
+fi
+
+# 13.1. N-reader differential matrix: Python zipfile plus each available CLI
+#       Reader Adapter Profile; per-fixture agreement (and accepted splits) is printed.
+MATRIX_TEST_LOG="$TEST_OUTPUT_DIR/reader-matrix-contract-tests.log"
+if python3 tests/archive-tests/test_verify_reader_matrix.py >"$MATRIX_TEST_LOG" 2>&1; then
+  check 0 "reader matrix contract tests passed"
+else
+  cat "$MATRIX_TEST_LOG" >&2
+  check 1 "reader matrix contract tests must pass"
+fi
+mkdir -p "$TEST_OUTPUT_DIR/dotnet-reference"
+DOTNET_REPORT_DIR="$(cd "$TEST_OUTPUT_DIR/dotnet-reference" && pwd)"
+DOTNET_REPORT_LOG="$TEST_OUTPUT_DIR/dotnet-reference-tests.log"
+if ZIPPER_ATC_DOTNET_REPORT_DIR="$DOTNET_REPORT_DIR" \
+     dotnet test src/Zipper.Tests/Zipper.Tests.csproj \
+       --filter 'FullyQualifiedName~ArchiveReferenceReaderTests.ReadOperations_AllCases_OutcomesMatchExpectationFile' \
+       --nologo >"$DOTNET_REPORT_LOG" 2>&1; then
+  check 0 ".NET reference Reader Adapter Profile produced per-fixture outcomes"
+else
+  cat "$DOTNET_REPORT_LOG" >&2
+  check 1 ".NET reference Reader Adapter Profile must produce per-fixture outcomes"
+fi
+MATRIX_ARGS=()
+if [[ -f "$SEVEN_ZIP_REPORT" ]]; then
+  MATRIX_ARGS+=(--seven-zip-report "$SEVEN_ZIP_REPORT")
+fi
+MATRIX_ARGS+=(--dotnet-report-dir "$DOTNET_REPORT_DIR")
+if python3 tests/archive-tests/verify-reader-matrix.py "$ALL_OUT" \
+     "$TEST_OUTPUT_DIR/all-verification.json" \
+     --report "$TEST_OUTPUT_DIR/all-reader-agreement.json" "${MATRIX_ARGS[@]}"; then
+  check 0 "reader matrix passed and reported per-fixture agreement"
+else
+  check 1 "reader matrix must pass and report per-fixture agreement"
 fi
 
 # 14. Offline verification (ticket #932): with an empty npm cache and an

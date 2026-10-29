@@ -361,3 +361,59 @@
 - **telemetry**: host=droid mode=branch specialists=6 bundle=~13K across follow-up review waves
 - **lessons**: Quoted-delimited anomaly tests should cover embedded delimiters and consecutive doubled-quote pairs.
 - **suppressions**: none
+
+### 2026-10-29 droid:branch:issue-1304-platform-skips
+
+- **findings**: 1 INFO (added negative-path test for skipped reader report with applicable expectations); 1 adversarial ACTION rejected because the full E2E run produced the .NET skip report. No correctness, maintainability, or performance findings.
+- **outcome**: Fixed the matrix platform-skip report bug, reran focused Python/.NET checks and the isolated 119-case Archive Test E2E. The final 45-test matrix run, .NET format check, and fast-pass review of the added test passed. CodeRabbit still pending.
+- **telemetry**: host=droid mode=branch specialists=6 bundle=39358c
+- **lessons**: Keep the .NET report status tied directly to whether any expectation applies; the full E2E report is the proof for report-emission paths.
+- **suppressions**: none
+
+### 2026-10-29 droid:branch:issue-1304-reader-matrix-closeout
+
+- **findings**: Review cycle 1 found a Windows-specific test issue and an Info-ZIP Adapter Check path when no expectation applies; cycle 2 found missing adapter-only coverage for read-entry/integrity-check and an existing timeout-test runtime ceiling; final cycle found 1 INFO about `expectationStatus`.
+- **outcome**: Fixed the cross-platform test setup, made Info-ZIP actions run when declared by Adapter Check, normalized outcomes, classified deadline exhaustion as execution-error, and covered all three adapter-only actions plus probe failure. Deferred the runtime-ceiling note because its timing assertion is unchanged by this diff. Kept the report-status note non-gating: `expectationStatus` is the separate Reader Profile comparison, while the Adapter Check and fixture statuses retain their own contracts. Final 52-test matrix suite, mutation smoke, full 119-fixture E2E, and formatting passed.
+- **telemetry**: host=droid mode=branch specialists=6 bundle=14335
+- **lessons**: Test adapter-only Reader Adapter Profile actions across every supported action, including host-inapplicable expectations and probe errors.
+- **suppressions**: none
+
+### 2026-10-29 droid:branch:issue-1304-coderabbit-fixes
+
+- **findings**: Autoreview found 1 INFO (testing, confidence 8) — new empty-Archive deadline guard lacked a direct regression. CodeRabbit cycle 1 reported a missing .NET Adapter Check comparison, but source inspection confirmed the comparison already exists; added a negative regression test. Cycle 2 found ambiguous Python adapter availability wording, clarified that Python `zipfile` is required.
+- **outcome**: Fixed the deadline-test gap and clarified README/REQ-212. Full Python matrix suite (62 tests), focused .NET report test, DocsDriftTests (13), format check, and mutation smoke passed.
+- **telemetry**: host=droid mode=branch specialists=6+1fast bundle=10695c
+- **lessons**: none
+- **suppressions**: none
+
+### 2026-10-29 droid:branch:issue-1304-gate-clarification
+
+- **findings**: 0 ACTION, 0 INFO across 5 reviewers (correctness, adversarial, testing, maintainability, security).
+- **outcome**: Clean review. Focused matrix (63), 7-Zip (13), and fixture-verifier (167) suites plus mutation smoke passed.
+- **telemetry**: host=droid mode=branch specialists=5 bundle=27325c
+- **lessons**: none
+- **suppressions**: none
+
+### 2026-10-29 droid:branch:issue-1304-python-check-regression
+
+- **findings**: 0 ACTION, 0 INFO from one fast-pass correctness reviewer.
+- **outcome**: Added a direct regression for a mismatched Python Adapter Check; the complete matrix suite (64 tests) passed.
+- **telemetry**: host=droid mode=branch specialists=1 bundle=3586c
+- **lessons**: none
+- **suppressions**: none
+
+### 2026-10-29 droid:branch:issue-1304-e2e-log-capture
+
+- **findings**: 0 ACTION, 0 INFO from one fast-pass correctness reviewer.
+- **outcome**: The shell syntax check and 64-test matrix suite passed with output captured to a log for failure diagnostics.
+- **telemetry**: host=droid mode=branch specialists=1 bundle=817c
+- **lessons**: none
+- **suppressions**: none
+
+### 2026-10-29 droid:branch:issue-1304-containment-wording
+
+- **findings**: 0 ACTION, 0 INFO from one fast-pass correctness reviewer.
+- **outcome**: Clarified that containment invariants are extraction-policy oracles, not evidence from ordinary verification; 11 containment policy tests passed.
+- **telemetry**: host=droid mode=branch specialists=1 bundle=7558c
+- **lessons**: none
+- **suppressions**: none

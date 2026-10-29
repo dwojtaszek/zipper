@@ -20,6 +20,39 @@ public class ArchiveTestSuiteContractTests
         "valid-stored",
     ];
 
+    [Fact]
+    public void ReaderAdapterProfiles_RegistersBuiltInAndOptionalAdaptersWithScopedOutcomes()
+    {
+        Assert.Equal(
+            ["7zip", "dotnet-reference", "infozip-unzip", "python-zipfile"],
+            ArchiveTestCatalog.ReaderAdapterProfiles.Keys.Order(StringComparer.Ordinal));
+        Assert.False(ArchiveTestCatalog.ReaderAdapterProfiles["dotnet-reference"].Optional);
+        Assert.False(ArchiveTestCatalog.ReaderAdapterProfiles["python-zipfile"].Optional);
+        Assert.True(ArchiveTestCatalog.ReaderAdapterProfiles["infozip-unzip"].Optional);
+        Assert.True(ArchiveTestCatalog.ReaderAdapterProfiles["7zip"].Optional);
+        Assert.Equal(
+            ["extract", "integrity-check", "list", "read-entry"],
+            ArchiveTestCatalog.ReaderAdapterProfiles["dotnet-reference"].AdapterCheckOutcomes.Keys
+                .Order(StringComparer.Ordinal));
+        Assert.Equal(
+            ["extract", "integrity-check", "list", "read-entry"],
+            ArchiveTestCatalog.ReaderAdapterProfiles["python-zipfile"].AdapterCheckOutcomes.Keys
+                .Order(StringComparer.Ordinal));
+        Assert.Equal(
+            ["integrity-check", "list", "read-entry"],
+            ArchiveTestCatalog.ReaderAdapterProfiles["infozip-unzip"].AdapterCheckOutcomes.Keys
+                .Order(StringComparer.Ordinal));
+        Assert.Equal(
+            new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+            {
+                ["extract"] = ["success"],
+                ["test"] = ["failure"],
+                ["extract-entries"] = ["success"],
+                ["presence"] = ["present"],
+            },
+            ArchiveTestCatalog.ReaderAdapterProfiles["7zip"].AdapterCheckOutcomes);
+    }
+
     /// <summary>The twenty-one policy-sensitive path/collision/entry-type cases
     /// (tickets #842, #880, #882, #885, #875, #884, #888, and #878). Twin of
     /// ArchivePathPolicyCaseTests.PolicyCaseKeys —

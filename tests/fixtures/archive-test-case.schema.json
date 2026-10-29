@@ -341,9 +341,9 @@
         "required": ["adapter", "action", "expectedOutcome"],
         "additionalProperties": false,
         "properties": {
-          "adapter": { "const": "7zip" },
-          "action": { "enum": ["extract", "test", "extract-entries", "presence"] },
-          "expectedOutcome": { "enum": ["success", "failure", "present"] },
+          "adapter": { "type": "string", "minLength": 1 },
+          "action": { "type": "string", "minLength": 1 },
+          "expectedOutcome": { "type": "string", "minLength": 1 },
           "entryNames": {
             "type": "array",
             "minItems": 1,
@@ -352,11 +352,167 @@
           }
         },
         "oneOf": [
-          { "properties": { "action": { "const": "extract" }, "expectedOutcome": { "const": "success" } }, "not": { "required": ["entryNames"] } },
-          { "properties": { "action": { "const": "test" }, "expectedOutcome": { "const": "failure" } }, "not": { "required": ["entryNames"] } },
-          { "properties": { "action": { "const": "presence" }, "expectedOutcome": { "const": "present" } }, "not": { "required": ["entryNames"] } },
-          { "properties": { "action": { "const": "extract-entries" }, "expectedOutcome": { "const": "success" } }, "required": ["entryNames"] }
-        ]
+          {
+            "properties": {
+              "adapter": { "const": "dotnet-reference" },
+              "action": { "const": "list" },
+              "expectedOutcome": { "enum": ["list-succeeds", "list-fails"] }
+            }
+          },
+          {
+            "properties": {
+              "adapter": { "const": "dotnet-reference" },
+              "action": { "const": "read-entry" },
+              "expectedOutcome": {
+                "enum": [
+                  "read-entry-content-matches",
+                  "read-entry-returns-unverified-bytes",
+                  "read-entry-fails",
+                  "unsupported-method-rejected"
+                ]
+              }
+            }
+          },
+          {
+            "properties": {
+              "adapter": { "const": "dotnet-reference" },
+              "action": { "const": "integrity-check" },
+              "expectedOutcome": {
+                "enum": [
+                  "integrity-passes",
+                  "integrity-fails",
+                  "integrity-unchecked",
+                  "crc-mismatch-unchecked",
+                  "crc-mismatch-rejected",
+                  "unsupported-method-rejected"
+                ]
+              }
+            }
+          },
+          {
+            "properties": {
+              "adapter": { "const": "dotnet-reference" },
+              "action": { "const": "extract" },
+              "expectedOutcome": {
+                "enum": ["extract-succeeds", "extract-fails", "unsupported-method-rejected"]
+              }
+            }
+          },
+          {
+            "properties": {
+              "adapter": { "const": "python-zipfile" },
+              "action": { "const": "list" },
+              "expectedOutcome": { "enum": ["list-succeeds", "list-fails"] }
+            }
+          },
+          {
+            "properties": {
+              "adapter": { "const": "python-zipfile" },
+              "action": { "const": "read-entry" },
+              "expectedOutcome": {
+                "enum": [
+                  "read-entry-content-matches",
+                  "read-entry-returns-unverified-bytes",
+                  "read-entry-fails",
+                  "unsupported-method-rejected"
+                ]
+              }
+            }
+          },
+          {
+            "properties": {
+              "adapter": { "const": "python-zipfile" },
+              "action": { "const": "integrity-check" },
+              "expectedOutcome": {
+                "enum": [
+                  "integrity-passes",
+                  "integrity-fails",
+                  "crc-mismatch-unchecked",
+                  "crc-mismatch-rejected",
+                  "unsupported-method-rejected"
+                ]
+              }
+            }
+          },
+          {
+            "properties": {
+              "adapter": { "const": "python-zipfile" },
+              "action": { "const": "extract" },
+              "expectedOutcome": {
+                "enum": ["extract-succeeds", "extract-fails", "unsupported-method-rejected"]
+              }
+            }
+          },
+          {
+            "properties": {
+              "adapter": { "const": "infozip-unzip" },
+              "action": { "const": "list" },
+              "expectedOutcome": { "enum": ["list-succeeds", "list-fails"] }
+            }
+          },
+          {
+            "properties": {
+              "adapter": { "const": "infozip-unzip" },
+              "action": { "const": "read-entry" },
+              "expectedOutcome": {
+                "enum": [
+                  "read-entry-content-matches",
+                  "read-entry-returns-unverified-bytes",
+                  "read-entry-fails",
+                  "unsupported-method-rejected"
+                ]
+              }
+            }
+          },
+          {
+            "properties": {
+              "adapter": { "const": "infozip-unzip" },
+              "action": { "const": "integrity-check" },
+              "expectedOutcome": {
+                "enum": [
+                  "integrity-passes",
+                  "integrity-fails",
+                  "unsupported-method-rejected"
+                ]
+              }
+            }
+          },
+          {
+            "properties": {
+              "adapter": { "const": "7zip" },
+              "action": { "const": "extract" },
+              "expectedOutcome": { "const": "success" }
+            }
+          },
+          {
+            "properties": {
+              "adapter": { "const": "7zip" },
+              "action": { "const": "test" },
+              "expectedOutcome": { "const": "failure" }
+            }
+          },
+          {
+            "properties": {
+              "adapter": { "const": "7zip" },
+              "action": { "const": "extract-entries" },
+              "expectedOutcome": { "const": "success" }
+            }
+          },
+          {
+            "properties": {
+              "adapter": { "const": "7zip" },
+              "action": { "const": "presence" },
+              "expectedOutcome": { "const": "present" }
+            }
+          }
+        ],
+        "if": {
+          "properties": { "action": { "const": "extract-entries" } },
+          "required": ["action"]
+        },
+        "then": { "required": ["entryNames"] },
+        "else": { "not": { "required": ["entryNames"] } },
+        "description": "Adapter action and expectedOutcome must be declared for the named Reader Adapter Profile in ArchiveTestCatalog. entryNames is required only for 7-Zip extract-entries checks."
       }
     },
     "limits": {
@@ -391,5 +547,36 @@
       }
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "classification": {
+            "enum": ["malformed", "policy-sensitive"]
+          }
+        },
+        "required": ["classification"]
+      },
+      "then": {
+        "properties": {
+          "adapterChecks": {
+            "items": {
+              "not": {
+                "properties": {
+                  "adapter": {
+                    "enum": ["dotnet-reference", "python-zipfile"]
+                  },
+                  "action": {
+                    "const": "extract"
+                  }
+                },
+                "required": ["adapter", "action"]
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
   "definitions": {}
 }

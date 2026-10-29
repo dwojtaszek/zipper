@@ -212,6 +212,50 @@ internal static class ArchiveTestCatalog
 
     internal static readonly IReadOnlyList<string> ValidControlSuites = [SmokeSuite, CompatibilitySuite];
 
+    /// <summary>
+    /// Reader adapters exercised by the reference harness and differential E2E matrix.
+    /// Optional adapters are skipped with a reason when their executable is absent.
+    /// </summary>
+    internal static readonly IReadOnlyDictionary<string, ArchiveTestAdapterProfile> ReaderAdapterProfiles =
+        new Dictionary<string, ArchiveTestAdapterProfile>(StringComparer.Ordinal)
+        {
+            ["dotnet-reference"] = new(
+                Optional: false,
+                new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+                {
+                    ["list"] = ["list-succeeds", "list-fails"],
+                    ["read-entry"] = ["read-entry-content-matches", "read-entry-returns-unverified-bytes", "read-entry-fails", "unsupported-method-rejected"],
+                    ["integrity-check"] = ["integrity-passes", "integrity-fails", "integrity-unchecked", "crc-mismatch-unchecked", "crc-mismatch-rejected", "unsupported-method-rejected"],
+                    ["extract"] = ["extract-succeeds", "extract-fails", "unsupported-method-rejected"],
+                }),
+            ["python-zipfile"] = new(
+                Optional: false,
+                new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+                {
+                    ["list"] = ["list-succeeds", "list-fails"],
+                    ["read-entry"] = ["read-entry-content-matches", "read-entry-returns-unverified-bytes", "read-entry-fails", "unsupported-method-rejected"],
+                    ["integrity-check"] = ["integrity-passes", "integrity-fails", "crc-mismatch-unchecked", "crc-mismatch-rejected", "unsupported-method-rejected"],
+                    ["extract"] = ["extract-succeeds", "extract-fails", "unsupported-method-rejected"],
+                }),
+            ["infozip-unzip"] = new(
+                Optional: true,
+                new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+                {
+                    ["list"] = ["list-succeeds", "list-fails"],
+                    ["read-entry"] = ["read-entry-content-matches", "read-entry-returns-unverified-bytes", "read-entry-fails", "unsupported-method-rejected"],
+                    ["integrity-check"] = ["integrity-passes", "integrity-fails", "unsupported-method-rejected"],
+                }),
+            ["7zip"] = new(
+                Optional: true,
+                new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal)
+                {
+                    ["extract"] = ["success"],
+                    ["test"] = ["failure"],
+                    ["extract-entries"] = ["success"],
+                    ["presence"] = ["present"],
+                }),
+        };
+
     /// <summary>The two frozen reader-hostile smoke members (#834): malformed cases
     /// that ride the smoke suite in addition to their malformed-suite home.</summary>
     internal static readonly IReadOnlyList<string> SmokeMalformedSuites = [SmokeSuite, MalformedSuite];

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Xunit;
+using Zipper.ArchiveTests;
 
 namespace Zipper.Tests;
 
@@ -331,13 +332,74 @@ public class ArchiveTestCaseSchemaTests
         var item = checks.GetProperty("items");
         Assert.False(item.GetProperty("additionalProperties").GetBoolean());
         Assert.Equal(["adapter", "action", "expectedOutcome"], item.GetProperty("required").EnumerateArray().Select(value => value.GetString()));
-        Assert.Equal("7zip", item.GetProperty("properties").GetProperty("adapter").GetProperty("const").GetString());
-        Assert.Equal(["extract", "test", "extract-entries", "presence"],
-            item.GetProperty("properties").GetProperty("action").GetProperty("enum").EnumerateArray().Select(value => value.GetString()));
+        foreach (var property in new[] { "adapter", "action", "expectedOutcome" })
+        {
+            var definition = item.GetProperty("properties").GetProperty(property);
+            Assert.Equal("string", definition.GetProperty("type").GetString());
+            Assert.Equal(1, definition.GetProperty("minLength").GetInt32());
+        }
+
         var names = item.GetProperty("properties").GetProperty("entryNames");
         Assert.Equal(1, names.GetProperty("minItems").GetInt32());
         Assert.True(names.GetProperty("uniqueItems").GetBoolean());
-        Assert.Equal(4, item.GetProperty("oneOf").GetArrayLength());
+        Assert.Equal(15, item.GetProperty("oneOf").GetArrayLength());
+        Assert.Equal(
+            "extract-entries",
+            item.GetProperty("if").GetProperty("properties")
+                .GetProperty("action").GetProperty("const").GetString());
+        Assert.Contains(
+            "entryNames",
+            item.GetProperty("then").GetProperty("required")
+                .EnumerateArray().Select(value => value.GetString()));
+        Assert.Contains(
+            "entryNames",
+            item.GetProperty("else").GetProperty("not").GetProperty("required")
+                .EnumerateArray().Select(value => value.GetString()));
+        Assert.Contains("ArchiveTestCatalog", item.GetProperty("description").GetString());
+    }
+
+    [Fact]
+    public void Load_SchemaFile_AdapterCheckBranchesMatchReaderAdapterProfiles()
+    {
+        using var schema = LoadJson("archive-test-case.schema.json");
+        var branches = schema.RootElement.GetProperty("properties")
+            .GetProperty("adapterChecks").GetProperty("items").GetProperty("oneOf");
+        var schemaProfiles = new Dictionary<string, Dictionary<string, string[]>>(StringComparer.Ordinal);
+        foreach (var branch in branches.EnumerateArray())
+        {
+            var properties = branch.GetProperty("properties");
+            var adapter = properties.GetProperty("adapter").GetProperty("const").GetString()!;
+            var action = properties.GetProperty("action").GetProperty("const").GetString()!;
+            var outcomes = properties.GetProperty("expectedOutcome");
+            string[] values = outcomes.TryGetProperty("enum", out var enumeration)
+                ? enumeration.EnumerateArray().Select(value => value.GetString()!).ToArray()
+                : [outcomes.GetProperty("const").GetString()!];
+
+            if (!schemaProfiles.TryGetValue(adapter, out var actions))
+            {
+                actions = new Dictionary<string, string[]>(StringComparer.Ordinal);
+                schemaProfiles.Add(adapter, actions);
+            }
+
+            actions.Add(action, values);
+        }
+
+        Assert.Equal(
+            ArchiveTestCatalog.ReaderAdapterProfiles.Keys.Order(StringComparer.Ordinal),
+            schemaProfiles.Keys.Order(StringComparer.Ordinal));
+        foreach (var (adapter, profile) in ArchiveTestCatalog.ReaderAdapterProfiles)
+        {
+            var schemaActions = schemaProfiles[adapter];
+            Assert.Equal(
+                profile.AdapterCheckOutcomes.Keys.Order(StringComparer.Ordinal),
+                schemaActions.Keys.Order(StringComparer.Ordinal));
+            foreach (var (action, outcomes) in profile.AdapterCheckOutcomes)
+            {
+                Assert.Equal(
+                    outcomes.Order(StringComparer.Ordinal),
+                    schemaActions[action].Order(StringComparer.Ordinal));
+            }
+        }
     }
 
     [Fact]

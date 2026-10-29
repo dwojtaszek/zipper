@@ -1808,6 +1808,27 @@ class PositiveControlTests(TempDirTest):
         self.assertEqual("integrity-passes", operations["integrity-check"]["normalizedOutcome"])
         self.assertEqual("extract-succeeds", operations["extract"]["normalizedOutcome"])
 
+    def test_platformScopedPythonAdapterCheck_RunsWithoutApplicableExpectations(self):
+        case, zip_bytes = self.publish_valid()
+        case["expectations"] = [
+            {**expectation, "platform": "adls-gen2"}
+            for expectation in case["expectations"]
+        ]
+        case["adapterChecks"] = [
+            {"adapter": "python-zipfile", "action": "list",
+             "expectedOutcome": "list-succeeds"},
+        ]
+        write_pair(self.dir, case, zip_bytes)
+
+        report, exit_code = verify(self.dir)
+
+        fixture = report["fixtures"][0]
+        operations = {operation["operation"]: operation for operation in fixture["operations"]}
+        self.assertEqual(0, exit_code)
+        self.assertEqual("skipped", fixture["status"])
+        self.assertEqual("not-run", operations["list"]["status"])
+        self.assertEqual({"list": "list-succeeds"}, fixture["adapterCheckOutcomes"])
+
     def test_resource_counts_are_bounded_by_the_report(self):
         case, _ = self.publish_valid()
 
@@ -2260,6 +2281,21 @@ class DescriptorTests(unittest.TestCase):
                 "8739c76e681f900923b900c9df0ef75cf421d39cabb54650c4b9ad19b6a76d85"))
 
 
+class ReaderReportIdentityTests(TempDirTest):
+    def test_verifierReportsHashesForCurrentExpectationFileAndArchive(self):
+        case, zip_bytes = self.publish_valid()
+        report, exit_code = verify(self.dir)
+
+        fixture = report["fixtures"][0]
+        with open(os.path.join(self.dir, case["fixtureId"] + ".json"), "rb") as handle:
+            expectation_file_bytes = handle.read()
+        self.assertEqual(0, exit_code)
+        self.assertEqual(
+            hashlib.sha256(expectation_file_bytes).hexdigest(),
+            fixture["expectationFileSha256"])
+        self.assertEqual(hashlib.sha256(zip_bytes).hexdigest(), fixture["archiveSha256"])
+
+
 class SchemaLimitsTests(TempDirTest):
     def setUp(self):
         super().setUp()
@@ -2270,6 +2306,57 @@ class SchemaLimitsTests(TempDirTest):
         with open(path, "w", encoding="utf-8") as handle:
             json.dump(case, handle)
         return self.ajv.validate(path)
+
+    def test_schema_accepts_declared_reader_adapter_checks(self):
+        case, _ = self.publish_valid()
+        case["adapterChecks"] = [
+            {"adapter": "dotnet-reference", "action": "list",
+             "expectedOutcome": "list-succeeds"},
+            {"adapter": "python-zipfile", "action": "extract",
+             "expectedOutcome": "extract-succeeds"},
+            {"adapter": "infozip-unzip", "action": "integrity-check",
+             "expectedOutcome": "integrity-fails"},
+            {"adapter": "7zip", "action": "extract-entries",
+             "expectedOutcome": "success", "entryNames": ["a.txt"]},
+        ]
+
+        self.assertTrue(self._validate_case(case))
+
+    def test_schema_rejects_undeclared_reader_adapter_checks(self):
+        case, _ = self.publish_valid()
+        invalid_checks = [
+            {"adapter": "unknown-reader", "action": "list",
+             "expectedOutcome": "list-succeeds"},
+            {"adapter": "infozip-unzip", "action": "extract",
+             "expectedOutcome": "extract-succeeds"},
+            {"adapter": "dotnet-reference", "action": "list",
+             "expectedOutcome": "extract-succeeds"},
+            {"adapter": "7zip", "action": "extract-entries",
+             "expectedOutcome": "success"},
+            {"adapter": "7zip", "action": "extract",
+             "expectedOutcome": "success", "entryNames": ["a.txt"]},
+        ]
+
+        for check in invalid_checks:
+            with self.subTest(check=check):
+                case["adapterChecks"] = [check]
+                with self.assertRaises(vf.VerificationError) as ctx:
+                    self._validate_case(case)
+                self.assertEqual("schema", ctx.exception.check)
+
+    def test_schema_rejects_reference_extract_checks_for_non_valid_fixtures(self):
+        for classification in ("malformed", "policy-sensitive"):
+            for adapter in ("dotnet-reference", "python-zipfile"):
+                with self.subTest(classification=classification, adapter=adapter):
+                    case, _ = self.publish_valid()
+                    case["classification"] = classification
+                    case["adapterChecks"] = [
+                        {"adapter": adapter, "action": "extract",
+                         "expectedOutcome": "extract-succeeds"},
+                    ]
+                    with self.assertRaises(vf.VerificationError) as ctx:
+                        self._validate_case(case)
+                    self.assertEqual("schema", ctx.exception.check)
 
     def test_schema_rejects_physical_size_over_16mib(self):
         case, _ = self.publish_valid()
@@ -2363,6 +2450,54 @@ class SchemaLimitsTests(TempDirTest):
         with self.assertRaises(vf.VerificationError) as ctx:
             vf.verify_compression_methods(case, zip_bytes)
         self.assertEqual("compression-methods", ctx.exception.check)
+
+
+class AdapterCheckValidationTests(TempDirTest):
+    def test_verifier_AcceptsDeclaredReaderAdapterProfileOutcomes(self):
+        case, _ = self.publish_valid()
+        case["adapterChecks"] = [
+            {"adapter": "dotnet-reference", "action": "list",
+             "expectedOutcome": "list-succeeds"},
+            {"adapter": "python-zipfile", "action": "read-entry",
+             "expectedOutcome": "read-entry-content-matches"},
+            {"adapter": "infozip-unzip", "action": "integrity-check",
+             "expectedOutcome": "integrity-passes"},
+            {"adapter": "7zip", "action": "extract",
+             "expectedOutcome": "success"},
+        ]
+
+        vf.validate_adapter_checks(case)
+
+    def test_verifier_RejectsUndeclaredAdapterCheckOutcome(self):
+        case, _ = self.publish_valid()
+        case["adapterChecks"] = [
+            {"adapter": "7zip", "action": "extract", "expectedOutcome": "failure"},
+        ]
+        sidecar = os.path.join(self.dir, case["fixtureId"] + ".json")
+        self.persist(sidecar, case)
+
+        report, exit_code = verify(self.dir)
+
+        self.assertEqual(1, exit_code)
+        self.assertEqual("fail", report["fixtures"][0]["status"])
+        self.assertEqual("schema", report["fixtures"][0]["failure"]["check"])
+
+    def test_verifier_RejectsReferenceExtractChecksForNonValidFixtures(self):
+        for classification in ("malformed", "policy-sensitive"):
+            for adapter in ("dotnet-reference", "python-zipfile"):
+                with self.subTest(classification=classification, adapter=adapter):
+                    case, _ = self.publish_valid()
+                    case["classification"] = classification
+                    case["adapterChecks"] = [
+                        {"adapter": adapter, "action": "extract",
+                         "expectedOutcome": "extract-succeeds"},
+                    ]
+
+                    with self.assertRaisesRegex(
+                        vf.VerificationError,
+                        "extract Adapter Check requires a valid fixture",
+                    ):
+                        vf.validate_adapter_checks(case)
 
 
 class InvariantEnforcementTests(TempDirTest):
@@ -2644,6 +2779,25 @@ class InvariantEnforcementTests(TempDirTest):
         self.assertEqual("expectation", failure["check"])
         self.assertIn("no applicable expectation on this host", failure["message"])
         self.assertIn("could", failure["message"])
+
+    def test_platform_scoped_fixture_is_reported_as_skip(self):
+        case, _ = self.publish_valid()
+        case, path = self.rewrite_case(case)
+        for expectation in case["expectations"]:
+            expectation["platform"] = "adls-gen2"
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        fixture = report["fixtures"][0]
+        self.assertEqual(0, exit_code)
+        self.assertEqual("skipped", fixture["status"])
+        self.assertIn("adls-gen2", fixture["skipReason"])
+        self.assertTrue(all(operation["status"] == "not-run"
+                            for operation in fixture["operations"]))
+        self.assertEqual(0, report["summary"]["passed"])
+        self.assertEqual(1, report["summary"]["skipped"])
+        self.assertEqual(0, report["summary"]["failed"])
 
     def test_integrity_unsupported_method_rejection_with_empty_failure_stages_fails(self):
         case, _ = self.publish_unsupported_method()
