@@ -196,7 +196,8 @@ class _RunnerFixture:
             "    p = root / name\n"
             "    return json.loads(p.read_text()) if p.exists() else default\n"
             "if args[:2] == ['api', 'graphql']:\n"
-            "    print(json.dumps([0]))\n"
+            "    override = root / 'graphql.json'\n"
+            "    print(override.read_text() if override.exists() else json.dumps([0]))\n"
             "elif args[:2] == ['pr', 'merge']:\n"
             "    if (root / 'merge-fail').exists():\n"
             "        sys.exit(1)\n"
@@ -220,13 +221,15 @@ class _RunnerFixture:
             "    if ref.isdigit() and (root / 'fail-full-view').exists() and 'statusCheckRollup' in args[args.index('--json') + 1]:\n"
             "        sys.stderr.write('could not read pull request\\n')\n"
             "        sys.exit(1)\n"
+            "    mergeable_file = root / 'mergeable.txt'\n"
+            "    mergeable = mergeable_file.read_text().strip() if mergeable_file.exists() else 'MERGEABLE'\n"
             "    if args[args.index('--json') + 1] == 'commits':\n"
             "        print('feat: completed work')\n"
             "    else:\n"
             "        # Honor the requested fields: a caller that asks for the narrow\n"
             "        # verify shape must not be handed the rollup, or a test could not\n"
             "        # tell a full payload from a narrow one.\n"
-            "        full = {'number': 99, 'state': 'OPEN', 'mergeable': 'MERGEABLE',\n"
+            "        full = {'number': 99, 'state': 'OPEN', 'mergeable': mergeable,\n"
             "            'headRefName': (pr.get('head') or {}).get('ref'),\n"
             "            'headRefOid': (pr.get('head') or {}).get('sha'),\n"
             "            'updatedAt': pr.get('updatedAt', ''),\n"
@@ -1025,13 +1028,32 @@ class OrphanRecoveryEscalationTests(unittest.TestCase):
         self.assertEqual(self.fixture.emails.messages, [])
 
     def test_orphanScan_failedMergeUnrecreatable_escalates(self):
-        """A merge that keeps failing must escalate rather than loop silently."""
+        """A merge that keeps failing on a real blocker must escalate, not loop silently."""
         self._authorize_current_head(block_recreation=True)
         (self.root / "merge-fail").write_text("1")
+        # The refusal has to name something a diff could clear, read back from the
+        # PR: a conflict is the blocker a mission exists to rebase away.
+        (self.root / "mergeable.txt").write_text("CONFLICTING")
         self._scan(self._orphan_pr())
         self.assertFalse((self.root / "merged").exists())
         self.assertEqual(len(self.fixture.emails.messages), 1)
         self.assertIn("Cannot Be Babied", self.fixture.emails.subjects()[0])
+
+    def test_orphanScan_failedMergeWithNoBlocker_retriesWithoutRecreatingOrMailing(self):
+        """A refusal that names no blocker is not evidence of a code problem.
+
+        `gh pr merge` refuses on a transient API or network error exactly like it
+        refuses on branch protection, and by merge time CI is green and the thread
+        gate already passed. Recreating the worktree for that spends the runner's
+        only slot on a PR needing no change; retrying costs one cycle and heals.
+        """
+        self._authorize_current_head(block_recreation=True)
+        (self.root / "merge-fail").write_text("1")
+        self._scan(self._orphan_pr())
+        self.assertFalse((self.root / "merged").exists())
+        self.assertFalse((self.root / "worktrees" / "issue-42").exists(),
+                         "nothing may consume the runner slot for an unclassified refusal")
+        self.assertEqual(self.fixture.emails.messages, [])
 
     def test_orphanScan_recreatedWorktree_staysQuiet(self):
         """When a worktree is recreated the runner babysits it, so no escalation."""

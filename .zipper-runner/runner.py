@@ -2500,6 +2500,20 @@ def _authorized_pr(pr_number, issue_number=None, expected_head=None):
                 or (head.get("repo") or {}).get("full_name") != GITHUB_REPOSITORY
                 or not re.fullmatch(r"[0-9a-f]{40}", sha)
                 or not branch or (expected_head is not None and sha != expected_head)):
+            # Name the rule that refused. This used to be a silent `return None`,
+            # so a failed `gh` read, a head that moved past the reviewed one, and a
+            # genuine provenance refusal were indistinguishable -- and the caller
+            # could only guess which it had. On PR #1380 that guess was wrong and
+            # the log held no evidence either way.
+            if code != 0 or not pr:
+                print(f"[authorization] Could not read PR #{pr_number}; nothing is authorized until it can be read.")
+            elif expected_head is not None and sha and sha != expected_head:
+                print(f"[authorization] PR #{pr_number} head is {sha[:8]}, "
+                      f"not the reviewed {str(expected_head)[:8]}.")
+            else:
+                print(f"[authorization] PR #{pr_number} is not an open, non-draft PR into this "
+                      f"repository's main (state={pr.get('state')!r}, draft={pr.get('draft')!r}, "
+                      f"base={base.get('ref')!r}).")
             return None
         # REST's immutable account ID and Bot type, not a branch-name convention.
         if user.get("login") == "dependabot[bot]" and user.get("id") == 49699333 and user.get("type") == "Bot":
@@ -2814,6 +2828,10 @@ def _escalate_automated_pr(pr_number, branch, *, head: str, reason: str) -> None
     )
 
 
+CODERABBIT_GATE_BLOCKED = "Local CodeRabbit/publication gate remains blocked"
+REVIEWED_HEAD_MOVED = "the reviewed head moved before the merge"
+
+
 def _merge_authorized_pr(pr_number, issue_number, reviewed_head, delete_branch=False):
     """Attempt the merge. Returns (code, out, err, rollup).
 
@@ -2826,19 +2844,33 @@ def _merge_authorized_pr(pr_number, issue_number, reviewed_head, delete_branch=F
     (a moved head, a newly-failed check, a transient API error).
 
     `rollup` is None when no snapshot was fetched, and also when the head is no
-    longer `reviewed_head` -- a moved head must be re-evaluated, not re-armed.
+    longer `reviewed_head` -- a moved head must be re-evaluated, not re-armed. That
+    covers a head that moved between the snapshot and the merge itself, which is
+    the only thing `--match-head-commit` can refuse on: the snapshot is still the
+    one that was current seconds earlier, so the move is read back from the PR
+    rather than assumed absent.
+
+    Authorization is asked for without the reviewed head and the head is compared
+    separately, because authorization is bound to the PR rather than to a frozen
+    SHA. Passing the head as a pin made "the head moved" and "the provenance is
+    gone" one identical refusal, and PR #1380 -- green, recorded, maintainer-
+    authored, with a head that never moved -- was refused a merge the runner had
+    every right to make.
     """
     if _is_coderabbit_gate_failed(pr_number):
-        return 1, "", "Local CodeRabbit/publication gate remains blocked", None
-    if not _authorized_pr(pr_number, issue_number, reviewed_head):
-        return 1, "", "PR origin, provenance, or reviewed head is no longer authorized", None
+        return 1, "", CODERABBIT_GATE_BLOCKED, None
+    authorized = _authorized_pr(pr_number, issue_number)
+    if not authorized:
+        return 1, "", "PR provenance is not authorized for automated action right now", None
+    if (authorized.get("head") or {}).get("sha") != reviewed_head:
+        return 1, "", REVIEWED_HEAD_MOVED, None
     code, out, _ = run_cmd(
         ["gh", "pr", "view", str(pr_number), "--json", "headRefOid,statusCheckRollup"], cwd=REPO_PATH,
     )
     try:
         current = json.loads(out) if code == 0 else {}
         if current.get("headRefOid") != reviewed_head:
-            return 1, "", "the reviewed head moved before the merge", None
+            return 1, "", REVIEWED_HEAD_MOVED, None
         rollup = current.get("statusCheckRollup") or []
         if _ci_status_from_rollup(rollup)[0] != "SUCCESS":
             return 1, "", "CI is not successful on the authorized reviewed head", rollup
@@ -2848,7 +2880,69 @@ def _merge_authorized_pr(pr_number, issue_number, reviewed_head, delete_branch=F
     if delete_branch:
         command.append("--delete-branch")
     merge_code, merge_out, merge_err = run_cmd(command, cwd=REPO_PATH)
+    if merge_code != 0 and _merge_head_moved_since(pr_number, reviewed_head):
+        # `--match-head-commit` refusing is the head moving past the commit CI and
+        # the reviews covered. The snapshot is still the one that was current
+        # seconds earlier, so handing it back with the rollup would read as an
+        # ordinary branch-protection block and send an agent to fix a PR whose only
+        # signal is "re-evaluate the new head".
+        return 1, merge_out, REVIEWED_HEAD_MOVED, None
     return merge_code, merge_out, merge_err, rollup
+
+
+def _merge_head_moved_since(pr_number, reviewed_head) -> bool:
+    """True when the PR no longer points at the commit the merge was pinned to.
+
+    Asked after a refused merge instead of inferred from the refusal text: the
+    move is a fact about the PR, so one read settles it for every `gh` version and
+    for a moved head that raced the snapshot.
+    """
+    code, out, _ = run_cmd(["gh", "pr", "view", str(pr_number), "--json", "headRefOid"], cwd=REPO_PATH)
+    if code != 0:
+        return False
+    try:
+        return json.loads(out).get("headRefOid") != reviewed_head
+    except (ValueError, AttributeError):
+        return False
+
+
+def _merge_refusal_blocker(pr_number, merge_err: str, merge_rollup) -> str:
+    """Name the blocker a repair mission could clear, or "" when there is none.
+
+    Read back rather than inferred from the rollup or the refusal text. By merge
+    time CI is SUCCESS and this cycle's own thread gate found no unresolved thread,
+    so a rollup proves only that a snapshot was read -- not that the refusal names
+    something a diff could fix. `gh pr merge` can still refuse on a transient API
+    or network error, and the refusal string for that is indistinguishable from a
+    real branch-protection block. A mission dispatched for it holds the runner's
+    only worktree slot for up to two hours on a PR that needs no code change, which
+    is the same waste that kept PR #1380 open for a human to merge. The moved head
+    is read back for exactly this reason, so the blocker is too.
+
+    Empty is also the answer when a read fails, deliberately: a retry next cycle is
+    cheap and self-heals, while a mission is neither.
+
+    The rollup guard keeps the refusals that never reached `gh pr merge` -- the PR
+    could not be read, its provenance refused it, or its head moved past the one CI
+    and the reviews covered -- out of a read that would describe a PR they are not
+    about; the next cycle re-gates the current head.
+    """
+    if merge_err == CODERABBIT_GATE_BLOCKED:
+        return "the local CodeRabbit review gate is blocked"
+    if merge_rollup is None:
+        return ""
+    code, out, _ = run_cmd(["gh", "pr", "view", str(pr_number), "--json", "mergeable"], cwd=REPO_PATH)
+    if code == 0:
+        try:
+            if json.loads(out).get("mergeable") == "CONFLICTING":
+                return "the branch conflicts with main, so it needs a rebase"
+        except (ValueError, AttributeError):
+            pass
+    threads = _query_review_thread_count(pr_number)
+    if threads > 0:
+        noun = "thread" if threads == 1 else "threads"
+        return f"{threads} unresolved review {noun}, so they need resolving or replying to"
+    return ""
 
 
 def _rerun_count_path(pr_number: int) -> str:
@@ -4700,13 +4794,29 @@ def babysit_active_worktrees():
                                     pr_number, branch, reviewed_head, wt_path, merge_rollup,
                                     issue_number):
                                 continue
+                            blocked_by = _merge_refusal_blocker(pr_number, merge_err, merge_rollup)
+                            if not blocked_by:
+                                # Nothing here is a code problem: the PR could not be
+                                # read, its provenance refused it, its head moved past
+                                # the one CI and the reviews covered, or the refusal
+                                # was transient. The next cycle re-gates the current
+                                # head, so dispatch no mission -- on PR #1380 that
+                                # mission had nothing to change, died on quota, and
+                                # kept the green PR open until a human merged it.
+                                print(
+                                    f"Merge refused for PR #{pr_number} with no code-fixable blocker "
+                                    f"({merge_err}). Retrying next cycle without a mission.\n"
+                                    f"stdout:\n{merge_out}"
+                                )
+                                continue
                             print(
-                                f"Merge failed (blocked by branch protection / unresolved reviews / behind main). Triggering babysit.\n"
+                                f"Merge failed: {blocked_by}. Triggering babysit.\n"
                                 f"stdout:\n{merge_out}\n"
                                 f"stderr:\n{merge_err}"
                             )
                             prompt = (
-                                f"babysit. CI and robot reviews are passing, but the PR cannot be merged yet. "
+                                f"babysit. CI and robot reviews are passing, but the PR cannot be merged yet: "
+                                f"{blocked_by}.\n"
                                 f"The merge command failed with:\n{merge_err or merge_out}\n"
                                 f"Fix the blocker and push updates.\n\n"
                                 f"Branch is: '{branch}'. Do NOT checkout any other branch."
@@ -5021,8 +5131,14 @@ def babysit_orphaned_issue_prs():
                     )
                 else:
                     print(f"[orphan-pr] Auto-merge failed for PR #{pr_num}: {merge_err.strip()}")
-                    _hand_orphan_pr_back(pr_num, linked_issue, head_branch, reviewed_head,
-                                         "the merge was refused by branch protection")
+                    blocked_by = _merge_refusal_blocker(pr_num, merge_err, merge_rollup)
+                    if not blocked_by:
+                        # No code change clears a refusal that names no blocker, and
+                        # recreating a worktree for it would spend the runner's only
+                        # slot on work nobody asked for.
+                        print(f"[orphan-pr] PR #{pr_num} needs no repair; retrying it next cycle.")
+                        continue
+                    _hand_orphan_pr_back(pr_num, linked_issue, head_branch, reviewed_head, blocked_by)
             else:
                 print(f"[DRY RUN] Would auto-merge PR #{pr_num} ({head_branch})")
         elif ci_status == "FAILED":

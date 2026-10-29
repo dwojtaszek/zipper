@@ -423,16 +423,36 @@ class MergeRollupTests(unittest.TestCase):
 
     GREENTREE = [{"__typename": "StatusContext", "context": "CodeRabbit", "state": "SUCCESS"}]
 
-    def _merge(self, head_ref_oid, rollup):
+    def _merge(self, head_ref_oid, rollup, authorized_head="a" * 40):
         with patch.object(runner, "_is_coderabbit_gate_failed", return_value=False), \
-                patch.object(runner, "_authorized_pr", return_value={"number": 1}), \
+                patch.object(runner, "_authorized_pr",
+                             return_value={"number": 1, "head": {"sha": authorized_head}}) as authorized, \
                 patch.object(runner, "run_cmd", return_value=(
                         0, json.dumps({"headRefOid": head_ref_oid, "statusCheckRollup": rollup}), "")):
-            return runner._merge_authorized_pr(1, 2, "a" * 40)
+            result = runner._merge_authorized_pr(1, 2, "a" * 40)
+        return result, authorized
+
+    def test_mergeAuthorizedPr_authorizedPayloadHeadPastTheReviewedOne_shouldRefuseWithoutRollup(self):
+        """Authorization is bound to the PR, so the reviewed head is compared here."""
+        (code, _, err, rollup), _ = self._merge("a" * 40, self.GREENTREE, authorized_head="c" * 40)
+        self.assertNotEqual(code, 0)
+        self.assertEqual(err, runner.REVIEWED_HEAD_MOVED)
+        self.assertIsNone(rollup,
+                          "a head the reviews never covered must not be judged as if it had been")
+
+    def test_mergeAuthorizedPr_shouldAskForAuthorizationWithoutPinningTheReviewedHead(self):
+        """Pinning it made a moved head indistinguishable from a lost provenance.
+
+        PR #1380 was green, recorded and maintainer-authored, and its head never
+        moved; the pin turned that into a silent refusal the caller answered with a
+        repair mission.
+        """
+        _, authorized = self._merge("a" * 40, self.GREENTREE)
+        authorized.assert_called_once_with(1, 2)
 
     def test_movedHead_shouldYieldNoRollup(self):
         """A moved head must be re-evaluated, not re-armed."""
-        code, _, _, rollup = self._merge("b" * 40, self.GREENTREE)
+        (code, _, _, rollup), _ = self._merge("b" * 40, self.GREENTREE)
         self.assertNotEqual(code, 0)
         self.assertIsNone(rollup,
                           "the rollup describes a different commit, so it must not be "
@@ -440,7 +460,8 @@ class MergeRollupTests(unittest.TestCase):
 
     def test_unverifiableRollup_shouldYieldNoRollup(self):
         with patch.object(runner, "_is_coderabbit_gate_failed", return_value=False), \
-                patch.object(runner, "_authorized_pr", return_value={"number": 1}), \
+                patch.object(runner, "_authorized_pr",
+                             return_value={"number": 1, "head": {"sha": "a" * 40}}), \
                 patch.object(runner, "run_cmd", return_value=(0, "{not json", "")):
             code, _, _, rollup = runner._merge_authorized_pr(1, 2, "a" * 40)
         self.assertNotEqual(code, 0)
@@ -450,7 +471,7 @@ class MergeRollupTests(unittest.TestCase):
     def test_failedCheck_shouldYieldTheRollupItJudged(self):
         rollup = [{"__typename": "CheckRun", "name": "ci / test",
                    "status": "COMPLETED", "conclusion": "FAILURE"}] + self.GREENTREE
-        code, _, _, fresh = self._merge("a" * 40, rollup)
+        (code, _, _, fresh), _ = self._merge("a" * 40, rollup)
         self.assertNotEqual(code, 0)
         self.assertEqual(fresh, rollup, "the guard must see the snapshot CI was judged on")
 
@@ -462,6 +483,38 @@ class MergeRollupTests(unittest.TestCase):
         self.assertNotEqual(code, 0)
         self.assertIsNone(rollup)
         rc.assert_not_called()
+
+    def test_mergeRefusedAfterTheSnapshotTookAMovedHead_shouldYieldNoRollup(self):
+        """`--match-head-commit` refusing is the head moving, whatever the snapshot says.
+
+        The snapshot was taken seconds before the merge, so the refusal still
+        carries a current rollup. Reporting it as an ordinary branch-protection
+        block sends a mission to a PR whose only signal is "re-evaluate the new
+        head".
+        """
+        reads = {"snapshot": 0}
+
+        def fake_run_cmd(args, cwd=None, timeout=None, env=None):
+            if args[:3] == ["gh", "pr", "merge"]:
+                return 1, "", "X Pull request is not mergeable: the head branch was modified."
+            if args[:3] == ["gh", "pr", "view"] and "headRefOid" in args:
+                reads["snapshot"] += 1
+                return 0, json.dumps({"headRefOid": "b" * 40}), ""
+            if args[:3] == ["gh", "pr", "view"]:
+                return 0, json.dumps({"headRefOid": "a" * 40,
+                                      "statusCheckRollup": self.GREENTREE}), ""
+            raise AssertionError(args)
+
+        with patch.object(runner, "_is_coderabbit_gate_failed", return_value=False), \
+                patch.object(runner, "_authorized_pr",
+                             return_value={"number": 1, "head": {"sha": "a" * 40}}), \
+                patch.object(runner, "run_cmd", side_effect=fake_run_cmd):
+            code, _, err, rollup = runner._merge_authorized_pr(1, 2, "a" * 40)
+
+        self.assertNotEqual(code, 0)
+        self.assertEqual(err, runner.REVIEWED_HEAD_MOVED)
+        self.assertEqual(reads["snapshot"], 1, "the move must be read back from the PR")
+        self.assertIsNone(rollup, "the next cycle re-gates the new head; nothing to repair")
 
 
 class WipCheckpointHookTests(unittest.TestCase):
