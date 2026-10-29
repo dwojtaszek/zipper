@@ -566,6 +566,8 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
             });
         }
 
+        var skipped = !testCase.Expectations.Any(expectation =>
+            expectation.Platform is null || ApplicablePlatforms.Contains(expectation.Platform));
         var report = new
         {
             fixtureId = testCase.FixtureId,
@@ -574,7 +576,10 @@ public class ArchiveReferenceReaderTests : WorkingDirectoryTestBase
             archiveSha256 = Convert.ToHexStringLower(SHA256.HashData(archiveBytes)),
             adapter = "dotnet-reference",
             adapterVersion = Environment.Version.ToString(),
-            status = "pass",
+            status = skipped ? "skipped" : "pass",
+            skipReason = skipped
+                ? "no operation expectations apply on this host"
+                : null,
             operations,
         };
         var reportPath = Path.Combine(

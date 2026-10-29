@@ -481,6 +481,49 @@ else:
                     Path(temp), python_report,
                     {"infozip-unzip": None, "7zip": None})
 
+    def test_verifyDirectory_PlatformScopedFixture_IsDocumentedSkip(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case, python_report = self.make_fixture(temp)
+            for expectation in case["expectations"]:
+                expectation["platform"] = "adls-gen2"
+            self.persist_case(temp, case, python_report)
+
+            not_run_operations = [
+                {"operation": operation, "normalizedOutcome": "not-run",
+                 "status": "not-run", "reason": "no applicable expectation"}
+                for operation in MATRIX["OPERATIONS"]
+            ]
+            python_fixture = python_report["fixtures"][0]
+            python_fixture.update(
+                status="skipped",
+                skipReason="no operation expectations apply on this host",
+                operations=not_run_operations)
+            dotnet_report = self.make_dotnet_report(case)
+            dotnet_report["fixtures"][0].update(
+                status="skipped",
+                skipReason="no operation expectations apply on this host",
+                operations=not_run_operations)
+            stdout = io.StringIO()
+            with patch.dict(os.environ, {"ZIPPER_ATC_PLATFORMS": ""}):
+                with contextlib.redirect_stdout(stdout):
+                    report, exit_code = MATRIX["verify_directory"](
+                        Path(temp), python_report,
+                        {"infozip-unzip": None, "7zip": None},
+                        dotnet_report=dotnet_report)
+
+        fixture = report["fixtures"][0]
+        self.assertEqual(0, exit_code)
+        self.assertEqual("skipped", fixture["status"])
+        self.assertIn("adls-gen2", fixture["skipReason"])
+        self.assertEqual("skipped", fixture["readers"]["python-zipfile"]["status"])
+        self.assertEqual("skipped", fixture["readers"]["dotnet-reference"]["status"])
+        self.assertEqual("skipped", report["profiles"]["python-zipfile"]["status"])
+        self.assertEqual("skipped", report["profiles"]["dotnet-reference"]["status"])
+        self.assertEqual(1, report["summary"]["fixturesSkipped"])
+        self.assertEqual(4, report["summary"]["readerAdapterProfileSkips"])
+        self.assertEqual(0, report["summary"]["failedReaderAdapterProfiles"])
+        self.assertIn("SKIP fixture valid-stored", stdout.getvalue())
+
     def test_verifyDirectory_WrongPythonReportProfile_Fails(self):
         with tempfile.TemporaryDirectory() as temp:
             case, python_report = self.make_fixture(temp)
@@ -662,6 +705,18 @@ else:
             "fail",
             reader["operations"]["list"]["status"])
 
+    def test_pythonReader_SkippedWithApplicableExpectations_FailsProfile(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case, python_report = self.make_fixture(temp)
+            python_fixture = python_report["fixtures"][0]
+            python_fixture.update(
+                status="skipped",
+                skipReason="no operation expectations apply on this host")
+
+            reader = MATRIX["_reported_reader"](case, python_fixture, "Python verifier")
+
+        self.assertEqual("fail", reader["status"])
+
     def test_pythonReader_UnexpectedOutcome_IsRejected(self):
         with tempfile.TemporaryDirectory() as temp:
             case, python_report = self.make_fixture(temp)
@@ -804,6 +859,54 @@ else:
         self.assertEqual("fail", report["profiles"]["7zip"]["status"])
         self.assertEqual("fail", report["fixtures"][0]["status"])
 
+    def test_verifyDirectory_PassingSevenZipAdapterCheck_PassesProfile(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case, python_report = self.make_fixture(temp)
+            case["adapterChecks"] = [
+                {"adapter": "7zip", "action": "extract", "expectedOutcome": "success"},
+            ]
+            self.persist_case(temp, case, python_report)
+            seven_zip_report = {
+                "adapter": "7zip",
+                "adapterVersion": "7-Zip test",
+                "fixtures": [{
+                    "fixtureId": case["fixtureId"],
+                    "caseKey": case["caseKey"],
+                    "expectationFileSha256": hashlib.sha256(
+                        json.dumps(case).encode("utf-8")).hexdigest(),
+                    "archiveSha256": case["archive"]["sha256"],
+                    "status": "pass",
+                    "checks": [{
+                        "action": "extract",
+                        "expectedOutcome": "success",
+                        "observedOutcome": "success",
+                        "status": "pass",
+                    }],
+                    "operations": [{
+                        "operation": "extract",
+                        "normalizedOutcome": "extract-succeeds",
+                        "status": "pass",
+                    }],
+                }],
+            }
+
+            report, exit_code = MATRIX["verify_directory"](
+                Path(temp), python_report,
+                {"infozip-unzip": None, "7zip": None},
+                dotnet_report=self.make_dotnet_report(case),
+                seven_zip_report=seven_zip_report)
+
+        self.assertEqual(0, exit_code)
+        self.assertEqual("pass", report["profiles"]["7zip"]["status"])
+        self.assertEqual("pass", report["fixtures"][0]["status"])
+        self.assertEqual(
+            "pass",
+            report["fixtures"][0]["readers"]["7zip"]["status"])
+        self.assertEqual(
+            "pass",
+            report["fixtures"][0]["adapterChecks"][0]["status"])
+        self.assertEqual(0, report["summary"]["failedReaderAdapterProfiles"])
+
     def test_verifyDirectory_SevenZipOperationMismatch_FailsProfile(self):
         with tempfile.TemporaryDirectory() as temp:
             case, python_report = self.make_fixture(temp)
@@ -881,6 +984,15 @@ else:
         self.assertEqual(
             "fail",
             reader["operations"]["extract"]["expectationStatus"])
+
+    def test_main_DotNetReportDirectory_IsRequired(self):
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            with self.assertRaises(SystemExit) as error:
+                MATRIX["main"](["fixtures", "python-report.json"])
+
+        self.assertEqual(2, error.exception.code)
+        self.assertIn("--dotnet-report-dir", stderr.getvalue())
 
     def test_verifyDirectory_AllowedReaderSplit_IsReportedNotFailed(self):
         with tempfile.TemporaryDirectory() as temp:

@@ -18,12 +18,14 @@ shares no code with the C# generator:
 
 Report contract: one JSON report outside the fixture directory recording
 fixtureId, Case Key, adapter/runtime version, operation, normalized outcome,
-failure stage, asserted invariants, and pass/fail/not-run per fixture.
+failure stage, asserted invariants, and pass/fail/skipped per fixture with
+pass/fail/not-run per operation.
 
-Exit status: 0 only when every fixture passes; nonzero for required failures,
-malformed oracles, verification timeouts or resource exhaustion, or missing
-prerequisites. Unlike tests/goldens/lib/validate-properties-json.sh there is no
-silent-skip fallback: a missing prerequisite is a failure, never a pass.
+Exit status: 0 when every fixture passes or is skipped because no platform-scoped
+expectation applies; nonzero for required failures, malformed oracles,
+verification timeouts or resource exhaustion, or missing prerequisites. Unlike
+tests/goldens/lib/validate-properties-json.sh there is no silent-skip fallback:
+a missing prerequisite is a failure, never a pass.
 
 Domain terms follow UBIQUITOUS_LANGUAGE.md: Archive Test Fixture, Case Key,
 Seed, Expectation File, Fixture ID.
@@ -1136,7 +1138,19 @@ class FixtureVerifier:
             result["operations"] = ops
             result["bytesRead"] = self.bytes_read
             result["subprocessCount"] = self.subprocess_count
-            result["status"] = "fail" if any(op["status"] == "fail" for op in ops) else "pass"
+            if not expectations:
+                platforms = sorted({
+                    expectation["platform"]
+                    for expectation in case["expectations"]
+                    if expectation.get("platform") is not None
+                })
+                result["status"] = "skipped"
+                result["skipReason"] = (
+                    "no operation expectations apply on this host; fixture is scoped to "
+                    + ", ".join(platforms))
+            else:
+                result["status"] = (
+                    "fail" if any(op["status"] == "fail" for op in ops) else "pass")
         except VerificationError as exc:
             result["failure"] = {"check": exc.check, "stage": exc.stage, "message": str(exc)}
             result["bytesRead"] = self.bytes_read
@@ -2775,7 +2789,7 @@ def verify_directory(fixture_dir, schema_path, ajv_command, platforms):
         report["fixtures"].append(result)
         total_read += result.get("bytesRead", 0)
         total_subprocesses += result.get("subprocessCount", 0)
-        if result["status"] != "pass":
+        if result["status"] == "fail":
             failures.append("%s (%s): %s" % (
                 result.get("fixtureId") or os.path.basename(json_path),
                 result.get("caseKey") or "unknown",
@@ -2784,6 +2798,7 @@ def verify_directory(fixture_dir, schema_path, ajv_command, platforms):
     report["summary"] = {
         "fixtures": len(report["fixtures"]),
         "passed": sum(1 for f in report["fixtures"] if f["status"] == "pass"),
+        "skipped": sum(1 for f in report["fixtures"] if f["status"] == "skipped"),
         "failed": sum(1 for f in report["fixtures"] if f["status"] == "fail"),
         "notRunOperations": sum(1 for f in report["fixtures"]
                                 for op in f.get("operations", [])
@@ -2834,18 +2849,22 @@ def main(argv=None):
         handle.write("\n")
 
     for fixture in report["fixtures"]:
-        if fixture["status"] != "pass":
+        if fixture["status"] == "fail":
             print("FAIL %s (%s): %s" % (fixture.get("fixtureId"),
                                         fixture.get("caseKey"),
                                         fixture.get("failure") or "operation outcome "
                                         "outside the allowed set"), file=sys.stderr)
+        elif fixture["status"] == "skipped":
+            print("SKIP %s (%s): %s" % (fixture.get("fixtureId"),
+                                        fixture.get("caseKey"),
+                                        fixture.get("skipReason", "no expectations apply")))
     for problem in report["directoryProblems"]:
         print("FAIL directory: %s" % problem, file=sys.stderr)
     if exit_code == 0:
         summary = report.get("summary", {})
-        print("verified %d fixture pair(s): %d passed, %d failed; report: %s"
+        print("verified %d fixture pair(s): %d passed, %d skipped, %d failed; report: %s"
               % (summary.get("fixtures", 0), summary.get("passed", 0),
-                 summary.get("failed", 0), report_path))
+                 summary.get("skipped", 0), summary.get("failed", 0), report_path))
     return exit_code
 
 

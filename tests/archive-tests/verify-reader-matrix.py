@@ -492,13 +492,26 @@ def _reported_reader(case, reader_fixture, reader_name):
         operations[name] = _reader_operation_result(
             case, name, observed, reader_name)
 
-    status = "fail" if reader_fixture.get("status") != "pass" or any(
-        result["status"] == "fail" for result in operations.values()) else "pass"
-    return {
+    no_applicable_expectations = not any(
+        _expectations_for(case, operation) for operation in OPERATIONS)
+    report_status = reader_fixture.get("status")
+    if (report_status not in ("pass", "skipped")
+            or any(result["status"] == "fail" for result in operations.values())
+            or (report_status == "skipped" and not no_applicable_expectations)):
+        status = "fail"
+    elif no_applicable_expectations:
+        status = "skipped"
+    else:
+        status = "pass"
+    result = {
         "status": status,
         "version": reader_fixture.get("adapterVersion"),
         "operations": operations,
     }
+    if status == "skipped":
+        result["reason"] = reader_fixture.get(
+            "skipReason", "no operation expectations apply on this host")
+    return result
 
 
 def _infozip_reader(command, archive, case, supported_methods):
@@ -767,17 +780,15 @@ def verify_directory(
     if len(python_fixtures) != len(python_report.get("fixtures", [])):
         raise ValueError("Python verifier report contains a fixture without a Fixture ID")
 
-    dotnet_fixtures = {}
-    if dotnet_report is not None:
-        if dotnet_report.get("adapter") != "dotnet-reference":
-            raise ValueError(".NET reference report has an unknown Reader Adapter Profile")
-        dotnet_fixtures = {
-            fixture.get("fixtureId"): fixture
-            for fixture in dotnet_report.get("fixtures", [])
-            if fixture.get("fixtureId")
-        }
-        if len(dotnet_fixtures) != len(dotnet_report.get("fixtures", [])):
-            raise ValueError(".NET reference report contains a fixture without a Fixture ID")
+    if dotnet_report.get("adapter") != "dotnet-reference":
+        raise ValueError(".NET reference report has an unknown Reader Adapter Profile")
+    dotnet_fixtures = {
+        fixture.get("fixtureId"): fixture
+        for fixture in dotnet_report.get("fixtures", [])
+        if fixture.get("fixtureId")
+    }
+    if len(dotnet_fixtures) != len(dotnet_report.get("fixtures", [])):
+        raise ValueError(".NET reference report contains a fixture without a Fixture ID")
 
     seven_zip_fixtures = {}
     if seven_zip_report is not None:
@@ -939,18 +950,34 @@ def verify_directory(
                 readers[check["adapter"]]["status"] = "fail"
 
         agreement = _agreement(readers)
-        fixture_status = "fail" if any(
+        failed = any(
             reader["status"] == "fail" for reader in readers.values()) or any(
                 check["status"] not in ("pass", "skipped", "execution-error")
-                for check in adapter_checks) else "pass"
-        report["fixtures"].append({
+                for check in adapter_checks)
+        no_applicable_expectations = not any(
+            _expectations_for(case, operation) for operation in OPERATIONS)
+        fixture_status = (
+            "fail" if failed else
+            "skipped" if no_applicable_expectations else
+            "pass")
+        fixture_report = {
             "fixtureId": fixture_id,
             "caseKey": case.get("caseKey"),
             "status": fixture_status,
             "readers": readers,
             "adapterChecks": adapter_checks,
             "agreement": agreement,
-        })
+        }
+        if fixture_status == "skipped":
+            platforms = sorted({
+                expectation["platform"]
+                for expectation in case.get("expectations", [])
+                if expectation.get("platform") is not None
+            })
+            fixture_report["skipReason"] = (
+                "no operation expectations apply on this host; fixture is scoped to "
+                + ", ".join(platforms))
+        report["fixtures"].append(fixture_report)
 
     missing_python = expected_ids - set(python_fixtures)
     if missing_python:
@@ -960,14 +987,13 @@ def verify_directory(
     if unexpected_python:
         raise ValueError("Python verifier report contains unexpected Fixture ID(s): "
                          + ", ".join(sorted(unexpected_python)))
-    if dotnet_report is not None:
-        missing_dotnet = expected_ids - set(dotnet_fixtures)
-        if missing_dotnet:
-            raise ValueError(".NET reference report contains no results for fixture(s): "
-                             + ", ".join(sorted(missing_dotnet)))
-        unexpected_dotnet = set(dotnet_fixtures) - expected_ids
-        if unexpected_dotnet:
-            raise ValueError(".NET reference report contains unexpected Fixture ID(s)")
+    missing_dotnet = expected_ids - set(dotnet_fixtures)
+    if missing_dotnet:
+        raise ValueError(".NET reference report contains no results for fixture(s): "
+                         + ", ".join(sorted(missing_dotnet)))
+    unexpected_dotnet = set(dotnet_fixtures) - expected_ids
+    if unexpected_dotnet:
+        raise ValueError(".NET reference report contains unexpected Fixture ID(s)")
     if seven_zip_report is not None and set(seven_zip_fixtures) - expected_ids:
         raise ValueError("7-Zip report contains unexpected Fixture ID(s)")
     seven_zip_report_failures = {}
@@ -1004,15 +1030,21 @@ def verify_directory(
             fixture["readers"]["7zip"]["status"] = "fail"
             fixture["readers"]["7zip"]["failure"] = failure
 
-    profiles["python-zipfile"]["status"] = (
-        "fail" if any(fixture["readers"]["python-zipfile"]["status"] == "fail"
-                      for fixture in report["fixtures"]) else "pass")
-    if dotnet_report is not None:
-        profiles["dotnet-reference"]["status"] = (
-            "fail" if any(fixture["readers"]["dotnet-reference"]["status"] == "fail"
-                          for fixture in report["fixtures"]) else "pass")
-        profiles["dotnet-reference"]["version"] = dotnet_report.get("adapterVersion")
-        profiles["dotnet-reference"].pop("reason", None)
+    for profile_name in ("python-zipfile", "dotnet-reference"):
+        reader_statuses = [
+            fixture["readers"][profile_name]["status"]
+            for fixture in report["fixtures"]
+        ]
+        profile = profiles[profile_name]
+        if "fail" in reader_statuses:
+            profile["status"] = "fail"
+        elif all(status == "skipped" for status in reader_statuses):
+            profile["status"] = "skipped"
+            profile["reason"] = "no operation expectations apply on this host"
+        else:
+            profile["status"] = "pass"
+            profile.pop("reason", None)
+    profiles["dotnet-reference"]["version"] = dotnet_report.get("adapterVersion")
     if infozip is not None:
         profiles["infozip-unzip"]["status"] = (
             "fail" if any(
@@ -1033,6 +1065,8 @@ def verify_directory(
                  for fixture in report["fixtures"])
     report["summary"] = {
         "fixtures": len(report["fixtures"]),
+        "fixturesSkipped": sum(
+            fixture["status"] == "skipped" for fixture in report["fixtures"]),
         "fixturesWithReaderSplits": splits,
         "readerAdapterProfileSkips": sum(
             profile["status"] == "skipped" for profile in profiles.values()),
@@ -1055,6 +1089,9 @@ def verify_directory(
             print(f"Reader Adapter Profile {profile_name}: {profile['status']}{suffix}")
 
     for fixture in report["fixtures"]:
+        if fixture["status"] == "skipped":
+            print(f"SKIP fixture {fixture['caseKey']} ({fixture['fixtureId']}): "
+                  f"{fixture['skipReason']}")
         details = []
         for operation, result in fixture["agreement"]["operations"].items():
             if not result["outcomes"]:
@@ -1081,7 +1118,7 @@ def main(argv=None):
                         help="Info-ZIP executable (default: discover unzip on PATH)")
     parser.add_argument("--seven-zip-report", default=None,
                         help="optional structured report from verify-7zip-adapter.py")
-    parser.add_argument("--dotnet-report-dir", default=None,
+    parser.add_argument("--dotnet-report-dir", required=True,
                         help="directory of per-fixture reports from ArchiveReferenceReaderTests")
     parser.add_argument("--report", default=None,
                         help="JSON output path (default: sibling reader-agreement.json)")
@@ -1092,27 +1129,25 @@ def main(argv=None):
         seven_zip_report = (
             json.loads(Path(args.seven_zip_report).read_text(encoding="utf-8"))
             if args.seven_zip_report else None)
-        dotnet_report = None
-        if args.dotnet_report_dir:
-            dotnet_fixtures = [
-                json.loads(path.read_text(encoding="utf-8"))
-                for path in sorted(
-                    Path(args.dotnet_report_dir).glob("dotnet-reference-*.json"))
-            ]
-            if not dotnet_fixtures:
-                raise ValueError(
-                    f".NET reference report directory is empty: {args.dotnet_report_dir}")
-            if any(fixture.get("adapter") != "dotnet-reference"
-                   for fixture in dotnet_fixtures):
-                raise ValueError(".NET reference report contains an unknown Reader Adapter Profile")
-            versions = {fixture.get("adapterVersion") for fixture in dotnet_fixtures}
-            if len(versions) != 1:
-                raise ValueError(".NET reference reports disagree on runtime version")
-            dotnet_report = {
-                "adapter": "dotnet-reference",
-                "adapterVersion": next(iter(versions)),
-                "fixtures": dotnet_fixtures,
-            }
+        dotnet_fixtures = [
+            json.loads(path.read_text(encoding="utf-8"))
+            for path in sorted(
+                Path(args.dotnet_report_dir).glob("dotnet-reference-*.json"))
+        ]
+        if not dotnet_fixtures:
+            raise ValueError(
+                f".NET reference report directory is empty: {args.dotnet_report_dir}")
+        if any(fixture.get("adapter") != "dotnet-reference"
+               for fixture in dotnet_fixtures):
+            raise ValueError(".NET reference report contains an unknown Reader Adapter Profile")
+        versions = {fixture.get("adapterVersion") for fixture in dotnet_fixtures}
+        if len(versions) != 1:
+            raise ValueError(".NET reference reports disagree on runtime version")
+        dotnet_report = {
+            "adapter": "dotnet-reference",
+            "adapterVersion": next(iter(versions)),
+            "fixtures": dotnet_fixtures,
+        }
         executables = {
             "infozip-unzip": (
                 args.unzip if args.unzip is not None else shutil.which("unzip")),

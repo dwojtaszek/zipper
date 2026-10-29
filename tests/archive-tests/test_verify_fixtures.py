@@ -2759,6 +2759,25 @@ class InvariantEnforcementTests(TempDirTest):
         self.assertIn("no applicable expectation on this host", failure["message"])
         self.assertIn("could", failure["message"])
 
+    def test_platform_scoped_fixture_is_reported_as_skip(self):
+        case, _ = self.publish_valid()
+        case, path = self.rewrite_case(case)
+        for expectation in case["expectations"]:
+            expectation["platform"] = "adls-gen2"
+        self.persist(path, case)
+
+        report, exit_code = verify(self.dir)
+
+        fixture = report["fixtures"][0]
+        self.assertEqual(0, exit_code)
+        self.assertEqual("skipped", fixture["status"])
+        self.assertIn("adls-gen2", fixture["skipReason"])
+        self.assertTrue(all(operation["status"] == "not-run"
+                            for operation in fixture["operations"]))
+        self.assertEqual(0, report["summary"]["passed"])
+        self.assertEqual(1, report["summary"]["skipped"])
+        self.assertEqual(0, report["summary"]["failed"])
+
     def test_integrity_unsupported_method_rejection_with_empty_failure_stages_fails(self):
         case, _ = self.publish_unsupported_method()
         case, path = self.rewrite_case(case)
