@@ -818,20 +818,23 @@ def _adapter_check_results(case, readers, seven_zip_fixtures):
             "expectedOutcome": expected,
         }
         reader = readers[adapter]
-        if (reader["status"] == "skipped"
-                and adapter in ("dotnet-reference", "python-zipfile")):
-            observed = reader["adapterCheckOutcomes"].get(action)
-            if observed is None:
-                result.update(
-                    status="not-run",
-                    reason=reader.get("reason", "no operation expectations apply on this host"))
-            else:
+        if adapter in ("dotnet-reference", "python-zipfile"):
+            observed = reader.get("adapterCheckOutcomes", {}).get(action)
+            if observed is not None:
                 result["observedOutcome"] = observed
                 result["status"] = "pass" if observed == expected else "fail"
                 if result["status"] == "fail":
                     result["reason"] = (
                         f"observed outcome {observed!r} does not match {expected!r}")
-        elif reader["status"] == "skipped":
+                results.append(result)
+                continue
+            if reader["status"] == "skipped":
+                result.update(
+                    status="not-run",
+                    reason=reader.get("reason", "no operation expectations apply on this host"))
+                results.append(result)
+                continue
+        if reader["status"] == "skipped":
             result.update(status="skipped", reason=reader.get("reason", "reader unavailable"))
         elif adapter == "7zip":
             fixture = seven_zip_fixtures.get(case["fixtureId"])

@@ -636,6 +636,44 @@ else:
             ["list-succeeds", "read-entry-content-matches"],
             [check["observedOutcome"] for check in fixture["adapterChecks"]])
 
+    def test_verifyDirectory_PlatformScopedAdapterCheck_RunsWhenOtherExpectationsApply(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case, python_report = self.make_fixture(temp)
+            case["expectations"][-1]["platform"] = "adls-gen2"
+            case["adapterChecks"] = [
+                {"adapter": adapter, "action": "extract",
+                 "expectedOutcome": "extract-succeeds"}
+                for adapter in ("python-zipfile", "dotnet-reference")
+            ]
+            self.persist_case(temp, case, python_report)
+            dotnet_report = self.make_dotnet_report(case)
+
+            reports = (
+                python_report["fixtures"][0],
+                dotnet_report["fixtures"][0],
+            )
+            for reader_report in reports:
+                reader_report["operations"][-1].update(
+                    normalizedOutcome="not-run", status="not-run")
+                reader_report["adapterCheckOutcomes"] = {
+                    "extract": "extract-succeeds",
+                }
+
+            report, exit_code = MATRIX["verify_directory"](
+                Path(temp), python_report,
+                {"infozip-unzip": None, "7zip": None},
+                dotnet_report=dotnet_report)
+
+        fixture = report["fixtures"][0]
+        self.assertEqual(0, exit_code)
+        self.assertEqual("pass", fixture["status"])
+        self.assertEqual(
+            ["pass", "pass"],
+            [check["status"] for check in fixture["adapterChecks"]])
+        self.assertEqual(
+            ["extract-succeeds", "extract-succeeds"],
+            [check["observedOutcome"] for check in fixture["adapterChecks"]])
+
     def test_verifyDirectory_WrongPythonReportProfile_Fails(self):
         with tempfile.TemporaryDirectory() as temp:
             case, python_report = self.make_fixture(temp)

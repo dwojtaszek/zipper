@@ -1810,8 +1810,10 @@ class PositiveControlTests(TempDirTest):
 
     def test_platformScopedPythonAdapterCheck_RunsWithoutApplicableExpectations(self):
         case, zip_bytes = self.publish_valid()
-        for expectation in case["expectations"]:
-            expectation["platform"] = "adls-gen2"
+        case["expectations"] = [
+            {**expectation, "platform": "adls-gen2"}
+            for expectation in case["expectations"]
+        ]
         case["adapterChecks"] = [
             {"adapter": "python-zipfile", "action": "list",
              "expectedOutcome": "list-succeeds"},
