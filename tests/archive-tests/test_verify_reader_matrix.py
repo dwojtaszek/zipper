@@ -949,6 +949,32 @@ else:
         self.assertEqual("pass", fixture["adapterChecks"][0]["status"])
         self.assertEqual("agree", fixture["agreement"]["operations"]["list"]["status"])
 
+    def test_verifyDirectory_DotNetAdapterCheckMismatch_FailsProfile(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case, python_report = self.make_fixture(temp)
+            case["adapterChecks"] = [
+                {"adapter": "dotnet-reference", "action": "list",
+                 "expectedOutcome": "list-fails"},
+            ]
+            self.persist_case(temp, case, python_report)
+            dotnet_report = self.make_dotnet_report(case)
+            dotnet_report["fixtures"][0]["adapterCheckOutcomes"] = {
+                "list": "list-succeeds",
+            }
+
+            report, exit_code = MATRIX["verify_directory"](
+                Path(temp), python_report,
+                {"infozip-unzip": None, "7zip": None},
+                dotnet_report=dotnet_report)
+
+        fixture = report["fixtures"][0]
+        self.assertEqual(1, exit_code)
+        self.assertEqual("fail", fixture["adapterChecks"][0]["status"])
+        self.assertEqual("list-succeeds", fixture["adapterChecks"][0]["observedOutcome"])
+        self.assertEqual("fail", fixture["readers"]["dotnet-reference"]["status"])
+        self.assertEqual("fail", report["profiles"]["dotnet-reference"]["status"])
+        self.assertEqual("fail", fixture["status"])
+
     def test_verifyDirectory_DotNetOutcomeAllowedBySecondaryReaderProfile_Passes(self):
         with tempfile.TemporaryDirectory() as temp:
             case, python_report = self.make_fixture(temp)
