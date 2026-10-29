@@ -562,7 +562,7 @@ REQ-212	unit	ArchiveReferenceReaderTests.ReadOperations_ExtraFieldTruncated_Pins
 REQ-212	unit	ArchiveTestSuiteContractTests.ReaderAdapterProfiles_RegistersBuiltInAndOptionalAdaptersWithScopedOutcomes	Reader Adapter Profile registry lists required Python/.NET and optional Info-ZIP/7-Zip adapters with per-adapter check outcomes
 REQ-212	e2e	test-archive-test-suites.sh	Archive Test E2E requires per-fixture .NET/Python results, runs available optional readers, gates declared 7-Zip Adapter Checks (including timeouts), and reports agreement/splits
 REQ-212	e2e	test-archive-test-suites.bat	Windows Archive Test E2E requires per-fixture .NET/Python results, runs available optional readers, gates declared 7-Zip Adapter Checks (including timeouts), and reports agreement/splits
-REQ-212	e2e	archive-tests/test_verify_reader_matrix.py	Reader matrix tests cover input binding, Info-ZIP Adapter Check mismatch gates, non-gating execution errors, and failed 7-Zip timeout reports
+REQ-212	e2e	archive-tests/test_verify_reader_matrix.py	Reader matrix tests cover input binding, Python/Info-ZIP Adapter Check mismatches, non-gating execution errors, and failed 7-Zip timeout reports
 REQ-212	e2e	archive-tests/test_verify_7zip_adapter.py	7-Zip Adapter Checks enforce one fixture deadline; a timeout is recorded as a failed check and gates matrix success
 REQ-212	e2e	archive-tests/test_verify_fixtures.py	Independent Python verifier covers hostile sidecar tampering, extraction-check classification, and the declared central extra-field overrun
 REQ-212	unit	ArchiveTestCaseSemanticsTests.Validate_NonValidFixtureCannotDeclareReferenceExtractAdapterCheck	Rejects .NET and Python reference-reader extraction Adapter Checks for malformed and policy-sensitive fixtures

@@ -603,6 +603,27 @@ else:
             ["read-entry-content-matches", "integrity-passes", "list-succeeds"],
             [check["observedOutcome"] for check in checks])
 
+    def test_verifyDirectory_PythonAdapterCheckMismatch_FailsProfile(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case, python_report = self.make_fixture(temp)
+            case["adapterChecks"] = [
+                {"adapter": "python-zipfile", "action": "list",
+                 "expectedOutcome": "list-fails"},
+            ]
+            self.persist_case(temp, case, python_report)
+
+            report, exit_code = MATRIX["verify_directory"](
+                Path(temp), python_report,
+                {"infozip-unzip": None, "7zip": None},
+                dotnet_report=self.make_dotnet_report(case))
+
+        check = report["fixtures"][0]["adapterChecks"][0]
+        self.assertEqual(1, exit_code)
+        self.assertEqual("list-succeeds", check["observedOutcome"])
+        self.assertEqual("fail", check["status"])
+        self.assertEqual("fail", report["profiles"]["python-zipfile"]["status"])
+        self.assertEqual(1, report["summary"]["failedReaderAdapterProfiles"])
+
     def test_verifyDirectory_DeclaredCheckMismatch_FailsNamedProfile(self):
         with tempfile.TemporaryDirectory() as temp:
             case, python_report = self.make_fixture(temp)

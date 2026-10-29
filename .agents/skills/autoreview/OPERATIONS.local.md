@@ -393,3 +393,11 @@
 - **telemetry**: host=droid mode=branch specialists=5 bundle=27325c
 - **lessons**: none
 - **suppressions**: none
+
+### 2026-10-29 droid:branch:issue-1304-python-check-regression
+
+- **findings**: 0 ACTION, 0 INFO from one fast-pass correctness reviewer.
+- **outcome**: Added a direct regression for a mismatched Python Adapter Check; the complete matrix suite (64 tests) passed.
+- **telemetry**: host=droid mode=branch specialists=1 bundle=3586c
+- **lessons**: none
+- **suppressions**: none
