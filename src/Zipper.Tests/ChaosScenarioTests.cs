@@ -615,6 +615,21 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public async Task ChaosScenario_AdversarialValues_WithMultiRatioMixAndZeroCount_ReturnsCleanCliError()
+    {
+        var outputPath = Path.Combine(this.TempDir, $"zipper_adversarial_types_zero_{Guid.NewGuid():N}");
+        var (exitCode, _, stderr) = await RunWithCapture(new[]
+        {
+            "--loadfile-only", "--types", "pdf:50,jpg:50", "--count", "0", "--output-path", outputPath,
+            "--chaos-mode", "--chaos-scenario", "adversarial-values", "--seed", "42",
+        });
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Error: --types is not supported with --loadfile-only.", stderr, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(outputPath));
+    }
+
+    [Fact]
     public async Task ChaosScenario_AdversarialValues_WithAmountOverride_UsesOneCombinedTailRecord()
     {
         var outputPath = Path.Combine(this.TempDir, $"zipper_adversarial_amount_{Guid.NewGuid():N}");
@@ -1190,7 +1205,7 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
         });
 
         Assert.Equal(1, exitCode);
-        Assert.Contains("requires DAT-only output", stderr, StringComparison.Ordinal);
+        Assert.Contains("requires DAT-only output. Image file types default to DAT and OPT; pass --loadfile-format dat explicitly.", stderr, StringComparison.Ordinal);
         Assert.False(Directory.Exists(outputPath));
     }
 

@@ -111,7 +111,7 @@ public static class Pipeline
         var resolvedLoadFile = ApplyImageTypeLoadFileOverride(loadFile, modules.LoadFile.IsLoadFileFormatExplicit, output, sourceRecords);
         if (modules.Chaos.IsAdversarialValuesScenario && resolvedLoadFile.Formats.Any(format => format != LoadFileFormat.Dat))
         {
-            Console.Error.WriteLine("Error: Chaos scenario 'adversarial-values' requires DAT-only output.");
+            Console.Error.WriteLine("Error: Chaos scenario 'adversarial-values' requires DAT-only output. Image file types default to DAT and OPT; pass --loadfile-format dat explicitly.");
             return null;
         }
 

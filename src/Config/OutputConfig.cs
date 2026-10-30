@@ -61,7 +61,7 @@ public record OutputConfig
     public bool IsTiff => string.Equals(this.FileTypeLower, "tiff", StringComparison.Ordinal);
 
     /// <summary>Gets whether more than one File Type participates in this run.</summary>
-    public bool IsMixedFileTypes => this.FileTypePlan is not null || this.SourceFileTypes is { Count: > 1 };
+    public bool IsMixedFileTypes => this.FileTypePlan is not null || this.FileTypeRatios is { Count: > 1 } || this.SourceFileTypes is { Count: > 1 };
 
     /// <summary>Returns whether the given File Type participates in this run (single type, mix, or source-driven).</summary>
     public bool HasFileType(string type)
@@ -70,6 +70,11 @@ public record OutputConfig
         if (this.FileTypePlan is not null)
         {
             return this.FileTypePlan.ContainsType(type);
+        }
+
+        if (this.FileTypeRatios is not null)
+        {
+            return this.FileTypeRatios.Any(r => string.Equals(r.Type, type, StringComparison.OrdinalIgnoreCase));
         }
 
         if (this.SourceFileTypes is not null)

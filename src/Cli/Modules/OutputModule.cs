@@ -323,7 +323,7 @@ public sealed class OutputModule : CliModule
         return (
             parsedRatios[0].Type,
             parsedRatios,
-            new FileTypePlan(parsedRatios, this._count!.Value));
+            this._count == 0 ? null : new FileTypePlan(parsedRatios, this._count!.Value));
     }
 
     private bool TryResolveCompressionMethod(out ZipCompressionMethod compressionMethod)

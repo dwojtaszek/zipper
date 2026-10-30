@@ -695,6 +695,7 @@ REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithMatchingDeli
 REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithUnrepresentableEncoding_ReturnsError	Rejects encodings that cannot round-trip tail values or delimiters
 REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithUnsafeEncodingFallback_ReturnsError	Rejects encoder fallbacks that can inject DAT quote syntax
 REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithNegativeCount_ReturnsError	Negative count remains invalid for adversarial-values
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithMultiRatioMixAndZeroCount_ReturnsCleanCliError	Multi-ratio mix with zero count fails cleanly on unsupported --loadfile-only mix
 REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithExpandedRecordCountAboveIntMax_CreatesLongSafePlan	Adversarial value planner handles family-expanded record counts above Int32.MaxValue
 REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithIntMaxCount_PreservesSamplerSelection	Adversarial value selection preserves ChaosSampler indices at Int32.MaxValue
 REQ-232	e2e	test-chaos-anomaly-coverage.sh	Valid adversarial-values records and header-only DAT output
