@@ -29,12 +29,12 @@ internal sealed class AdversarialValueTailPlan
         this.targetedRecords = targetedRecords;
         this.targetAllRecords = targetAllRecords;
         this.firstTargetRecord = targetAllRecords ? 1 : targetedRecords?.Min() ?? 0;
-        this.escapedDelimiterValue = $"Escaped delimiters: left{columnDelimiter}middle{quoteDelimiter}right";
+        this.escapedDelimiterValue = BuildEscapedDelimiterValue(columnDelimiter, quoteDelimiter);
         string platformLengthPrefix = $"{this.escapedDelimiterValue} | {QuoteLookalikeValue} | ";
         this.platformLengthValue = platformLengthPrefix + new string('L', PlatformFieldLength - platformLengthPrefix.Length);
     }
 
-    internal static AdversarialValueTailPlan? Create(FileGenerationRequest request)
+    internal static AdversarialValueTailPlan? Create(FileGenerationRequest request, int recordCount)
     {
         if (!request.Chaos.ChaosMode || !ChaosScenarios.GeneratesAdversarialValues(request.Chaos.ChaosScenario))
         {
@@ -42,7 +42,6 @@ internal sealed class AdversarialValueTailPlan
         }
 
         var scenario = ChaosScenarios.GetByName(request.Chaos.ChaosScenario!)!;
-        int recordCount = checked((int)request.Output.FileCount);
         int targetCount = recordCount == 0
             ? 0
             : ChaosSampler.ParseChaosAmount(request.Chaos.ChaosAmount ?? scenario.DefaultAmount, recordCount);
@@ -88,7 +87,7 @@ internal sealed class AdversarialValueTailPlan
             return false;
         }
 
-        string escapedDelimiters = $"Escaped delimiters: left{columnDelimiter}middle{quoteDelimiter}right";
+        string escapedDelimiters = BuildEscapedDelimiterValue(columnDelimiter, quoteDelimiter);
         return CanRoundTrip(encoding, $"{escapedDelimiters}{newlineDelimiter}")
             && CanRoundTrip(encoding, QuoteLookalikeValue)
             && HasParserSafeEncoderFallback(encoding, quoteDelimiter);
@@ -124,6 +123,9 @@ internal sealed class AdversarialValueTailPlan
         }
     }
 
+    private static string BuildEscapedDelimiterValue(char columnDelimiter, char quoteDelimiter) =>
+        $"Escaped delimiters: left{columnDelimiter}middle{quoteDelimiter}right";
+
     internal static bool IsEligibleColumn(ColumnDefinition column)
     {
         if (column.Type.ToLowerInvariant() is not ("text" or "longtext" or "legacyauthor" or "emailsubject" or "syntheticemailsubject"))
@@ -137,16 +139,15 @@ internal sealed class AdversarialValueTailPlan
             return false;
         }
 
-        return column.Name.ToUpperInvariant() is not (
+        string upperName = column.Name.ToUpperInvariant();
+        return Config.HashUtility.GetColumnAlgorithm(upperName) is null
+            && upperName is not (
             "FILEPATH" or "FILE_PATH" or "FILE PATH" or
             "NATIVEPATH" or "NATIVE_PATH" or "NATIVE PATH" or
             "TEXTPATH" or "TEXT_PATH" or "TEXT PATH" or
             "FILENAME" or "FILEEXT" or "DOCID" or
             "CONTROLNUMBER" or "CONTROL_NUMBER" or "CONTROL NUMBER" or
-            "BEGBATES" or "ENDBATES" or "BATES" or "BATESNUMBER" or
-            "MD5HASH" or "MD5_HASH" or "MD5 HASH" or
-            "SHA1HASH" or "SHA1_HASH" or "SHA1 HASH" or
-            "SHA256HASH" or "SHA256_HASH" or "SHA256 HASH");
+            "BEGBATES" or "ENDBATES" or "BATES" or "BATESNUMBER");
     }
 
     internal static ColumnDefinition? FindColumn(IEnumerable<ColumnDefinition> columns) =>

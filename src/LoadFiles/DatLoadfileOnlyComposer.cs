@@ -1,5 +1,3 @@
-using Zipper.Profiles.Generation;
-
 namespace Zipper.LoadFiles;
 
 /// <summary>
@@ -11,18 +9,15 @@ internal sealed class DatLoadfileOnlyComposer
     private readonly FileGenerationRequest request;
     private readonly BatesSequence? batesSequence;
     private readonly IReadOnlyList<string> headerColumns;
-    private readonly AdversarialValueTailPlan? adversarialValueTailPlan;
 
     public DatLoadfileOnlyComposer(
         FileGenerationRequest request,
         BatesSequence? batesSequence,
-        IReadOnlyList<string> headerColumns,
-        AdversarialValueTailPlan? adversarialValueTailPlan = null)
+        IReadOnlyList<string> headerColumns)
     {
         this.request = request;
         this.batesSequence = batesSequence;
         this.headerColumns = headerColumns;
-        this.adversarialValueTailPlan = adversarialValueTailPlan;
     }
 
     /// <summary>
@@ -64,7 +59,7 @@ internal sealed class DatLoadfileOnlyComposer
 
             var custodian = $"Custodian {(i % 10) + 1}";
             var dateSent = now.AddDays(-random.Next(1, 365)).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
-            var author = this.adversarialValueTailPlan?.GetValue(i) ?? $"Author {random.Next(1, 100):D3}";
+            var author = $"Author {random.Next(1, 100):D3}";
             var fileSize = random.Next(1024, 10485760).ToString(System.Globalization.CultureInfo.InvariantCulture);
             var subjLine = $"Email Subject {i}";
             var senderAddr = $"sender{i}@example.com";

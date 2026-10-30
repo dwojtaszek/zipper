@@ -45,6 +45,11 @@ internal static class LoadFileAuditWriter
         IReadOnlyCollection<FileData> composedRecords,
         LoadFileFormat format)
     {
+        if (ChaosScenarios.GeneratesAdversarialValues(request.Chaos.ChaosScenario))
+        {
+            return null;
+        }
+
         var (_, totalLines) = ComputeRecordCounts(request, composedRecords, format);
         return ChaosEngineBuilder.Build(request, totalLines, format);
     }

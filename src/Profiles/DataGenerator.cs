@@ -14,8 +14,6 @@ internal class DataGenerator
     private readonly Dictionary<string, string[]> dataSources;
     private readonly Dictionary<string, int[]> distributionIndices;
     private readonly Dictionary<string, IColumnValueGenerator> columnGenerators;
-    private readonly AdversarialValueTailPlan? adversarialValueTailPlan;
-    private readonly string? adversarialValueColumn;
     private readonly DateTime now;
     private int documentIndex;
 
@@ -28,8 +26,7 @@ internal class DataGenerator
         DateTime? now = null,
         int? custodianCountOverride = null,
         string? dateFormatOverride = null,
-        int? emptyPercentageOverride = null,
-        AdversarialValueTailPlan? adversarialValueTailPlan = null)
+        int? emptyPercentageOverride = null)
     {
         var clonedProfile = profile.Clone();
         var tempProfile = custodianCountOverride.HasValue
@@ -37,11 +34,6 @@ internal class DataGenerator
             : clonedProfile;
 
         this.profile = tempProfile;
-        this.adversarialValueTailPlan = adversarialValueTailPlan;
-        this.adversarialValueColumn = adversarialValueTailPlan is null
-            ? null
-            : AdversarialValueTailPlan.FindColumn(this.profile.Columns)?.Name
-                ?? throw new InvalidOperationException("The adversarial-values scenario requires at least one text or long-text Column Profile column.");
         if (!string.IsNullOrEmpty(dateFormatOverride))
         {
             this.profile.Settings.DateFormat = dateFormatOverride;
@@ -131,19 +123,8 @@ internal class DataGenerator
             FileData = fileData,
         };
         var row = new Dictionary<string, string>(this.profile.Columns.Count, StringComparer.Ordinal);
-        string? adversarialValue = this.adversarialValueTailPlan?.GetValue(this.documentIndex);
         foreach (var col in this.profile.Columns)
         {
-            if (adversarialValue is not null && string.Equals(col.Name, this.adversarialValueColumn, StringComparison.Ordinal))
-            {
-                row[col.Name] = this.columnGenerators[col.Name].Generate(ctx with
-                {
-                    ProfileColumn = col,
-                    AdversarialValue = adversarialValue,
-                });
-                continue;
-            }
-
             var emptyPct = col.EmptyPercentage ?? this.profile.Settings.EmptyValuePercentage;
             if (!col.Required && this.random.Next(100) < emptyPct)
             {

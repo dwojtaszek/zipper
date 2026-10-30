@@ -19,11 +19,6 @@ internal sealed class TextGenerator : IColumnValueGenerator
 
     public string Generate(ColumnGenerationContext context)
     {
-        if (context.AdversarialValue is not null)
-        {
-            return context.AdversarialValue;
-        }
-
         if (this.colName.Equals("FILEPATH", StringComparison.OrdinalIgnoreCase))
         {
             return context.FileData?.WorkItem.FilePathInZip ?? string.Empty;

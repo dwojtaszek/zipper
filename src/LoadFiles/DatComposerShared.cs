@@ -1,5 +1,4 @@
 using Zipper.Profiles;
-using Zipper.Profiles.Generation;
 using Zipper.Utils;
 
 namespace Zipper.LoadFiles;
@@ -101,13 +100,7 @@ internal static class DatComposerShared
             return null;
         }
 
-        var algo = upperColumnName switch
-        {
-            "MD5HASH" or "MD5_HASH" or "MD5 HASH" => Config.HashAlgorithm.MD5,
-            "SHA1HASH" or "SHA1_HASH" or "SHA1 HASH" => Config.HashAlgorithm.SHA1,
-            "SHA256HASH" or "SHA256_HASH" or "SHA256 HASH" => Config.HashAlgorithm.SHA256,
-            _ => (Config.HashAlgorithm?)null,
-        };
+        var algo = Config.HashUtility.GetColumnAlgorithm(upperColumnName);
 
         if (algo.HasValue && fileData.Hashes.TryGetValue(algo.Value, out var hashValue))
         {
@@ -121,10 +114,7 @@ internal static class DatComposerShared
     /// Returns the effective column-profile generator for Standard mode, or null when
     /// no profile applies. Falls back to built-in profiles when metadata columns are requested.
     /// </summary>
-    internal static DataGenerator? GetEffectiveProfileGenerator(
-        FileGenerationRequest request,
-        DateTime now,
-        AdversarialValueTailPlan? adversarialValueTailPlan = null)
+    internal static DataGenerator? GetEffectiveProfileGenerator(FileGenerationRequest request, DateTime now)
     {
         var profile = request.Metadata.ColumnProfile;
         if (profile is null && request.Metadata.ShouldIncludeMetadataColumns(request.Output))
@@ -135,7 +125,7 @@ internal static class DatComposerShared
         }
 
         return profile is not null
-            ? new DataGenerator(profile, request.Metadata.Seed, now, adversarialValueTailPlan: adversarialValueTailPlan)
+            ? new DataGenerator(profile, request.Metadata.Seed, now)
             : null;
     }
 }

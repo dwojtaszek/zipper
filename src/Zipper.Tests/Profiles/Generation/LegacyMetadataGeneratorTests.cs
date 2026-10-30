@@ -92,16 +92,6 @@ public class LegacyMetadataGeneratorTests
     }
 
     [Fact]
-    public void EmailSubjectGenerators_UseAdversarialValueWhenPresent()
-    {
-        const string adversarialValue = "escaped delimiter Ã¾";
-        var context = MakeContext() with { AdversarialValue = adversarialValue };
-
-        Assert.Equal(adversarialValue, new LegacyEmailSubjectGenerator().Generate(context));
-        Assert.Equal(adversarialValue, new LegacySyntheticEmailSubjectGenerator().Generate(context));
-    }
-
-    [Fact]
     public void FileSizeFromDataGenerator_ReturnsDataLength()
     {
         var gen = new LegacyFileSizeFromDataGenerator();

@@ -28,8 +28,4 @@ internal sealed record ColumnGenerationContext
     /// </summary>
     public string? ProfileValue { get; init; }
 
-    /// <summary>
-    /// Optional valid parser-tail value for the adversarial-values Chaos Scenario.
-    /// </summary>
-    public string? AdversarialValue { get; init; }
 }

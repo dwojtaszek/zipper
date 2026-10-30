@@ -29,11 +29,6 @@ internal sealed class LongTextGenerator : IColumnValueGenerator
 
     public string Generate(ColumnGenerationContext context)
     {
-        if (context.AdversarialValue is not null)
-        {
-            return context.AdversarialValue;
-        }
-
         if (string.Equals(this.generatorName, "reviewNote", StringComparison.Ordinal))
         {
             return ReviewNotes.GetRandomNote(context.Seeded);

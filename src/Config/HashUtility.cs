@@ -4,6 +4,15 @@ namespace Zipper.Config;
 
 internal static class HashUtility
 {
+    internal static HashAlgorithm? GetColumnAlgorithm(string upperColumnName) =>
+        upperColumnName switch
+        {
+            "MD5HASH" or "MD5_HASH" or "MD5 HASH" => HashAlgorithm.MD5,
+            "SHA1HASH" or "SHA1_HASH" or "SHA1 HASH" => HashAlgorithm.SHA1,
+            "SHA256HASH" or "SHA256_HASH" or "SHA256 HASH" => HashAlgorithm.SHA256,
+            _ => null,
+        };
+
     internal static string ComputeHashHex(ReadOnlySpan<byte> data, HashAlgorithm algo)
     {
 #pragma warning disable S4790 // Cryptographic algorithms should be robust

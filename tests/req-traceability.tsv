@@ -379,6 +379,7 @@ REQ-164	unit	PathAndSourceInputPropertyTests.PathValidator_ResolveSecurePath_Sho
 REQ-165	unit	HashModuleTests.TryBuild_ValidHashMode_ReturnsTrue	--hash-mode actual|simulated|none
 REQ-166	unit	HashModuleTests.Parse_SimulatedMode_ReturnsDefaultMD5	--hash-algorithms, default md5
 REQ-167	unit	ParallelFileGeneratorTests.GenerateFileData_WithHashModeActual_ComputesAllConfiguredHashes	Hash columns MD5HASH/SHA1HASH/SHA256HASH
+REQ-167	unit	HashUtilityTests.GetColumnAlgorithm_KnownAndUnknownNames_ReturnsExpectedAlgorithm	Hash column aliases resolve to their configured algorithm
 REQ-168	unit	HashModuleTests.TryBuild_InvalidHashMode_ReturnsFalse	Invalid hash-mode/algorithms fail validation
 REQ-169	unit	HashModuleTests.TryBuild_HashAlgorithmsWithoutHashMode_ReturnsFalse	Algorithms without hash-mode fail
 REQ-170	unit	ProductionSetTests.ProductionSet_RollingArgs_ParsesCorrectly	--production-id single/list, defaults; 250 UTF-8 byte cap after rolling derivation
@@ -670,6 +671,7 @@ REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_GeneratesDetermi
 REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithZeroCount_WritesHeaderOnlyAndPassesValidation	Header-only DAT output with two trailing empty rows and validator success
 REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithAmountOverride_UsesOneCombinedTailRecord	Chaos amount overrides target only one combined tail value
 REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithPartialAmount_SelectsMultipleRecords	Chaos amount selects exactly two records with adversarial values
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithEmailFamilies_SelectsEmittedRecords	Chaos amount selects emitted records, including Email Family child records
 REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithAmountAboveTotal_TargetsEveryRecord	Chaos percentages above 100% select every record
 REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithColumnProfile_GeneratesValidTailValues	Column Profile path generates parser-valid adversarial values
 REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithCustomDelimiters_GeneratesValidTailValues	Custom representable delimiters produce parser-valid adversarial values

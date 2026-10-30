@@ -612,6 +612,57 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public async Task ChaosScenario_AdversarialValues_WithEmailFamilies_SelectsEmittedRecords()
+    {
+        var outputPath = Path.Combine(this.TempDir, $"zipper_adversarial_families_{Guid.NewGuid():N}");
+        try
+        {
+            var (exitCode, _, stderr) = await RunWithCapture(new[]
+            {
+                "--loadfile-only", "--type", "eml", "--count", "4", "--output-path", outputPath,
+                "--with-families", "--attachment-rate", "100",
+                "--chaos-mode", "--chaos-scenario", "adversarial-values", "--chaos-amount", "50%", "--seed", "42",
+            });
+
+            Assert.Equal(0, exitCode);
+            Assert.Empty(stderr);
+            string loadFile = Assert.Single(Directory.GetFiles(outputPath, "*.dat"));
+            var lines = await File.ReadAllLinesAsync(loadFile);
+            var header = DatLineParser.Parse(lines[0], '\u0014', '\u00fe');
+            int authorIndex = header.FindIndex(column => string.Equals(column, "Author", StringComparison.OrdinalIgnoreCase));
+            Assert.True(authorIndex >= 0);
+
+            var rows = lines
+                .Where(line => !string.IsNullOrEmpty(line))
+                .Skip(1)
+                .Select(line => DatLineParser.Parse(line, '\u0014', '\u00fe'))
+                .ToArray();
+            Assert.Equal(8, rows.Length);
+            var adversarialRows = rows.Where(row =>
+                row[authorIndex].StartsWith("Escaped delimiters:", StringComparison.Ordinal)
+                || row[authorIndex].StartsWith("Quote lookalike:", StringComparison.Ordinal)).ToArray();
+            Assert.Equal(4, adversarialRows.Length);
+            Assert.Contains(adversarialRows.Select(row => row[authorIndex]), value => value.Length == 32_768);
+
+            var validation = new ValidatorRunner().ValidateLoadFile(
+                loadFile,
+                "dat",
+                headerColumns: null,
+                expectedEol: "\r\n",
+                columnDelimiter: '\u0014',
+                quoteDelimiter: '\u00fe');
+            Assert.Empty(validation.Findings);
+        }
+        finally
+        {
+            if (Directory.Exists(outputPath))
+            {
+                Directory.Delete(outputPath, true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task ChaosScenario_AdversarialValues_WithAmountAboveTotal_TargetsEveryRecord()
     {
         var outputPath = Path.Combine(this.TempDir, $"zipper_adversarial_over_amount_{Guid.NewGuid():N}");
