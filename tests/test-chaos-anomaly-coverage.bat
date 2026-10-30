@@ -8,13 +8,6 @@ call "%~dp0_zipper-cli.bat"
 set PASSED=0
 set FAILED=0
 set TEST_OUTPUT_DIR=.\results\chaos-anomaly-coverage
-set PYCMD=
-python3 --version >nul 2>&1 && set "PYCMD=python3"
-if not defined PYCMD python --version >nul 2>&1 && set "PYCMD=python"
-if not defined PYCMD (
-    echo [ ERROR ] Python 3 is required for adversarial-values validation
-    exit /b 1
-)
 
 if exist "%TEST_OUTPUT_DIR%" rmdir /s /q "%TEST_OUTPUT_DIR%"
 mkdir "%TEST_OUTPUT_DIR%"
@@ -119,6 +112,10 @@ exit /b 0
 
 :adversarial_values
 echo [ INFO ] Test: Chaos scenario adversarial-values
+set "PYCMD="
+python3 --version >nul 2>&1 && set "PYCMD=python3"
+if not defined PYCMD python --version >nul 2>&1 && set "PYCMD=python"
+if not defined PYCMD goto :adversarial_values_failed
 %ZIPPER_CMD% --loadfile-only --count 6 --output-path "%TEST_OUTPUT_DIR%\adversarial_values" --chaos-mode --chaos-scenario adversarial-values --seed 42 >nul 2>&1
 if errorlevel 1 goto :adversarial_values_failed
 set "ADVERSARIAL_DAT="

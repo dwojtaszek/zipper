@@ -65,6 +65,13 @@ zipper --loadfile-only --count 100000 --output-path ./import-failures \
 ```
 Each `path-pointer` Anomaly is checked against its original File Path by `PathReconciliationValidator` and recorded in the Audit File as a `PathReconciliation` mismatch. If colliding Source Record paths prevent a safe missing-path candidate, the Anomaly uses an empty File Path instead.
 
+Format-specific chaos scenarios cover the other Load File formats: `csv-escaping-failures` for CSV, `concordance-import-failures` for Concordance, and `edrm-xml-structural-failures` for EDRM-XML. For example:
+
+```bash
+zipper --loadfile-only --loadfile-format edrm-xml --count 10000 --output-path ./xml-failures \
+    --chaos-mode --chaos-scenario edrm-xml-structural-failures --seed 42
+```
+
 #### 7. Generate parser-valid adversarial DAT values
 Exercise DAT parsers with correctly escaped delimiters, the literal `Ã¾` lookalike, a 32,768-character value, and two trailing empty rows:
 ```bash
@@ -72,13 +79,6 @@ zipper --loadfile-only --count 100 --output-path ./adversarial-values \
     --chaos-mode --chaos-scenario adversarial-values --seed 42
 ```
 The first selected record contains all three value classes. `--chaos-amount` controls which records receive the adversarial values. Use `--count 0` with this scenario to write a header-only Load File followed by the same two empty rows. This scenario requires DAT-only output; for TIFF or JPG generation, specify `--loadfile-format dat` to avoid the usual implicit OPT Load File. Custom delimiters and encodings must round-trip the generated values and avoid fallback characters that corrupt DAT quoting or record boundaries.
-
-Format-specific chaos scenarios cover the other Load File formats: `csv-escaping-failures` for CSV, `concordance-import-failures` for Concordance, and `edrm-xml-structural-failures` for EDRM-XML. For example:
-
-```bash
-zipper --loadfile-only --loadfile-format edrm-xml --count 10000 --output-path ./xml-failures \
-    --chaos-mode --chaos-scenario edrm-xml-structural-failures --seed 42
-```
 
 #### 8. Publish Archive Test Fixture pairs
 Publish the frozen smoke suite (five cases: three valid controls plus a CRC lie and a missing EOCD) as flat `<fixtureId>.zip` / `<fixtureId>.json` pairs for extractor testing — see [Archive Test Suites](docs/archive-test-suites.md):
