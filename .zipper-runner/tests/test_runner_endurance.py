@@ -9,6 +9,7 @@ Run from the .zipper-runner directory:
     python3 -m unittest discover -s tests
 """
 
+import ast
 import contextlib
 import json
 import os
@@ -791,6 +792,308 @@ class WorktreeBackoffTests(unittest.TestCase):
                              mission_result=(1, "", "Error: quota exceeded"))
         self.assertIn("every launched candidate was quota-exhausted", out)
         self.assertNotIn("all parked", out)
+
+    def test_babysitWithFallback_whenTheOnlyMissionIsCut_recordsNoFailure(self):
+        """A cut is the runtime stopping the mission, not a verdict about the branch.
+
+        Measured on the host 2026-10-30: three quota-exhausted candidates were
+        correctly skipped, and the single droid hang that followed still spent the
+        ladder six cycles running, parking a branch that carried real work and an
+        open PR for 64 minutes.
+        """
+        mock_plugin = MagicMock()
+        mock_plugin.run_mission.return_value = (
+            -1, "", "Error: Droid mission hung and was forcefully killed after 900 seconds "
+                    "with no output and no new commit.")
+        with (
+            patch.dict(runner.AGENT_PLUGINS, {"opencode": mock_plugin}, clear=True),
+            patch.object(runner, "AGENT_CANDIDATES", [("opencode", "opencode/live")]),
+            patch.object(runner, "_babysit_snapshot", return_value=("", -1, "")),
+            patch.object(runner, "send_email"),
+            patch.object(runner, "_should_send_rate_limited", return_value=False),
+        ):
+            runner._babysit_with_fallback("prompt", "/tmp/wt", self.BRANCH, 903)
+        self.assertFalse(os.path.exists(runner._worktree_backoff_path(self.BRANCH)),
+                         "a mission cut by its own bound must not spend the backoff ladder")
+
+    def test_babysitWithFallback_whenACutFollowsQuotaExhaustion_recordsNoFailure(self):
+        """Both no-verdict shapes together still prove nothing about the branch."""
+        mock_plugin = MagicMock()
+        mock_plugin.run_mission.side_effect = [
+            (1, "", "Error: quota exceeded"),
+            (-1, "", "Error: Droid mission timed out after 7200 seconds."),
+        ]
+        with (
+            patch.dict(runner.AGENT_PLUGINS, {"opencode": mock_plugin}, clear=True),
+            patch.object(runner, "AGENT_CANDIDATES",
+                         [("opencode", "opencode/capped"), ("opencode", "opencode/cut")]),
+            patch.object(runner, "mark_model_exhausted"),
+            patch.object(runner, "_babysit_snapshot", return_value=("", -1, "")),
+            patch.object(runner, "send_email"),
+            patch.object(runner, "_should_send_rate_limited", return_value=False),
+        ):
+            runner._babysit_with_fallback("prompt", "/tmp/wt", self.BRANCH, 903)
+        self.assertFalse(os.path.exists(runner._worktree_backoff_path(self.BRANCH)))
+
+    def test_babysitWithFallback_whenACutMovedTheHead_recordsTheInterruptedRepair(self):
+        """Withholding the ladder must not withhold the bookkeeping.
+
+        A cut mission can still commit before it dies. If that commit goes
+        unrecorded, the gate state keeps describing the pre-mission head, and the
+        next pass reads the difference as a divergence and stalls the worktree on a
+        human -- which is the stall this fix exists to remove.
+        """
+        mock_plugin = MagicMock()
+        mock_plugin.run_mission.return_value = (
+            -1, "", "Error: Droid mission timed out after 7200 seconds.")
+        with (
+            patch.dict(runner.AGENT_PLUGINS, {"opencode": mock_plugin}, clear=True),
+            patch.object(runner, "AGENT_CANDIDATES", [("opencode", "opencode/live")]),
+            # `before` is the pre-mission head; the cut then left a new one.
+            patch.object(runner, "_babysit_snapshot",
+                         side_effect=[("", -1, "aaa"), ("", -1, "bbb")]),
+            patch.object(runner, "_authorized_pr", return_value={"head": {"sha": "abc"}}),
+            patch.object(runner, "_record_coderabbit_gate_failure") as record,
+            patch.object(runner, "send_email"),
+            patch.object(runner, "_should_send_rate_limited", return_value=False),
+        ):
+            runner._babysit_with_fallback("prompt", "/tmp/wt", self.BRANCH, 903, 99)
+        record.assert_called_once_with(99, self.BRANCH, "Repair mission interrupted before completion", False)
+        self.assertFalse(os.path.exists(runner._worktree_backoff_path(self.BRANCH)),
+                         "and the ladder is still untouched")
+
+    def test_babysitWithFallback_whenACutLeftTheHeadAlone_recordsNothing(self):
+        """The record is for a commit the cut left behind, not for the cut itself."""
+        mock_plugin = MagicMock()
+        mock_plugin.run_mission.return_value = (
+            -1, "", "Error: Droid mission timed out after 7200 seconds.")
+        with (
+            patch.dict(runner.AGENT_PLUGINS, {"opencode": mock_plugin}, clear=True),
+            patch.object(runner, "AGENT_CANDIDATES", [("opencode", "opencode/live")]),
+            patch.object(runner, "_babysit_snapshot", return_value=("", -1, "aaa")),
+            patch.object(runner, "_authorized_pr", return_value={"head": {"sha": "abc"}}),
+            patch.object(runner, "_record_coderabbit_gate_failure") as record,
+            patch.object(runner, "send_email"),
+            patch.object(runner, "_should_send_rate_limited", return_value=False),
+        ):
+            runner._babysit_with_fallback("prompt", "/tmp/wt", self.BRANCH, 903, 99)
+        record.assert_not_called()
+
+    def test_noVerdictCycle_shouldNameTheCutAlongsideQuotaExhaustion(self):
+        """The cut shape needs its own message: it calls for different operator action."""
+        out = self._skip_log(candidates=[("opencode", "opencode/cut")],
+                             mission_result=(-1, "", "Error: Agent process hung and was "
+                                                    "forcefully killed after 15 minutes."))
+        self.assertIn("quota-exhausted or cut by its own bound", out)
+
+    def test_babysitWithFallback_whenACutFollowsARealFailure_stillRecordsFailure(self):
+        """A cut must not mask a genuine verdict produced by another candidate."""
+        mock_plugin = MagicMock()
+        mock_plugin.run_mission.side_effect = [
+            (-1, "", "Error: Agent process hung and was forcefully killed after 15 minutes."),
+            (1, "", "Error: tests failed"),
+        ]
+        with (
+            patch.dict(runner.AGENT_PLUGINS, {"opencode": mock_plugin}, clear=True),
+            patch.object(runner, "AGENT_CANDIDATES",
+                         [("opencode", "opencode/cut"), ("opencode", "opencode/live")]),
+            patch.object(runner, "_babysit_snapshot", return_value=("", -1, "")),
+            patch.object(runner, "send_email"),
+            patch.object(runner, "_should_send_rate_limited", return_value=False),
+        ):
+            runner._babysit_with_fallback("prompt", "/tmp/wt", self.BRANCH, 903)
+        with open(runner._worktree_backoff_path(self.BRANCH)) as f:
+            state = json.load(f)
+        self.assertEqual(state["failures"], 1)
+
+
+class MissionCutClassificationTests(unittest.TestCase):
+    """`is_mission_cut` against every kill message the plugins actually emit."""
+
+    def test_producedVerdict_onlyProviderConditions_areNotVerdicts(self):
+        """The ladder decision, in one place, for both dispatch paths.
+
+        A clean exit *is* a verdict even when it did no work -- that is the
+        fruitless mission the ladder exists for. The two provider conditions are
+        not verdicts.
+        """
+        cut = (1, "", "Error: Agent process hung and was forcefully killed after 15 minutes.")
+        capped = (1, "", "Error: Free usage limit reached.")
+        real = (1, "", "Error: assertion failed in ChaosEngineBuilderTests")
+        quiet = (0, "done", "")
+
+        self.assertTrue(runner.produced_verdict(*quiet), "a clean exit is a verdict, even with no work")
+        self.assertTrue(runner.produced_verdict(*real), "a failure on its own merits is a verdict")
+        self.assertFalse(runner.produced_verdict(*cut), "a cut only describes the runtime")
+        self.assertFalse(runner.produced_verdict(*capped), "a quota refusal only describes the provider")
+
+    def test_producedVerdict_cleanExitWhoseOutputMentionsAQuotaKeyword_isStillAVerdict(self):
+        """The quota keywords are loose, so only a non-zero exit may be refused by them.
+
+        This repository's own work is full of "rate limit" and "run out of": a clean
+        cycle that reports either in its summary would otherwise read as a provider
+        refusal, and every candidate ending that way would leave the ladder unspent
+        and the same fruitless mission dispatched again, forever.
+        """
+        for out in ("Tests run out of memory on the 32-bit leg.",
+                    "Added tracking of rate limit headers to the client.",
+                    "429 appears in the fixture as an expected status."):
+            with self.subTest(out=out[:40]):
+                self.assertTrue(runner.produced_verdict(0, out, ""),
+                                "a clean exit is a verdict whatever its summary says")
+
+    def test_anyVerdict_anyCandidateInASequence_isEnough(self):
+        """The orphan path folds a whole fallback sequence, not just its last entry.
+
+        Reading only the final candidate would let a trailing cut hide an earlier
+        verdict and leave the ladder unspent.
+        """
+        self.assertTrue(runner.any_verdict([
+            (1, "", "Error: tests failed"),
+            (1, "", "Error: Droid mission timed out after 7200 seconds."),
+        ]))
+        self.assertTrue(runner.any_verdict([
+            (0, "did nothing", ""),
+            (1, "", "Error: Droid mission timed out after 7200 seconds."),
+        ]), "an earlier clean-but-fruitless cycle is still a verdict")
+        self.assertFalse(runner.any_verdict([
+            (1, "", "Error: Free usage limit reached."),
+            (1, "", "Error: Droid mission timed out after 7200 seconds."),
+        ]))
+        self.assertFalse(runner.any_verdict([]), "no candidates proves nothing")
+
+    def test_removeWorktreeOrRecordOutcome_onlyAVerdict_spendsTheLadder(self):
+        """The orphan path's single ladder decision, for all three exit shapes.
+
+        A worktree that cannot be removed is the only place the ladder is spent, and
+        a runtime-only sequence must not spend it: that is how a branch carrying real
+        work gets parked for up to 6h while the "all agents failed" email names
+        agents that never produced a verdict.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            wt = os.path.join(tmp, "wt")
+            os.makedirs(wt)
+            capped = (1, "", "Error: Free usage limit reached.")
+            cut = (1, "", "Error: Droid mission timed out after 7200 seconds.")
+
+            with patch.object(runner, "_remove_worktree", return_value=False), \
+                 patch.object(runner, "_record_worktree_failure") as failure, \
+                 patch.object(runner, "_record_worktree_progress") as progress, \
+                 redirect_stdout(StringIO()) as out:
+                runner._remove_worktree_or_record_outcome(
+                    wt, "feat/ISSUE-1-x", [capped, cut])
+            failure.assert_not_called()
+            progress.assert_not_called()
+            self.assertIn("No candidate produced a verdict", out.getvalue())
+
+            with patch.object(runner, "_remove_worktree", return_value=False), \
+                 patch.object(runner, "_record_worktree_failure") as failure, \
+                 patch.object(runner, "_record_worktree_progress") as progress, \
+                 redirect_stdout(StringIO()):
+                runner._remove_worktree_or_record_outcome(
+                    wt, "feat/ISSUE-1-x", [capped, (1, "", "Error: tests failed")])
+            failure.assert_called_once_with("feat/ISSUE-1-x")
+            progress.assert_not_called()
+
+            with patch.object(runner, "_remove_worktree", return_value=True), \
+                 patch.object(runner, "_record_worktree_failure") as failure, \
+                 patch.object(runner, "_record_worktree_progress") as progress, \
+                 redirect_stdout(StringIO()):
+                runner._remove_worktree_or_record_outcome(wt, "feat/ISSUE-1-x", [])
+            progress.assert_called_once_with("feat/ISSUE-1-x")
+            failure.assert_not_called()
+
+    def test_isMissionCut_everyPluginKillMessage_isRecognised(self):
+        for err in (
+            # opencode, hermes, codex, claude: the shared _HUNG_KILL_MESSAGE shape.
+            "Error: Agent process hung and was forcefully killed after 15 minutes.",
+            # codex composes a partial provider error and then its own kill message.
+            "API Error: upstream unavailable\nError: Agent process hung and was forcefully killed after 15 minutes.",
+            # droid, both bounds.
+            "Error: Droid mission hung and was forcefully killed after 900 seconds with no output and no new commit.",
+            "Error: Droid mission timed out after 7200 seconds.",
+            # opencode wraps its provider errors in colour codes; the kill message
+            # arrives unwrapped, but a wrapped one must not defeat the match either.
+            "\x1b[91m\x1b[1mError: \x1b[0mAgent process hung and was forcefully killed after 15 minutes.",
+            # Matching is case-insensitive, as it is for provider errors above.
+            "Error: DROID MISSION TIMED OUT AFTER 7200 SECONDS.",
+        ):
+            with self.subTest(err=err[:60]):
+                self.assertTrue(runner.is_mission_cut(err))
+
+    def test_isMissionCut_ordinaryFailures_areNotCuts(self):
+        for err in (
+            "Error: tests failed",
+            "Error: quota exceeded",
+            "Error: Free usage limit reached.",
+            "",
+            "The agent finished and reported a summary",
+            # The plugins' other failures name a different cause and must not read
+            # as a cut just because they are also errors.
+            "Error: Timeout before process start",
+            "Error: hermes binary not found.",
+            # Only an error-announcing line is the plugin's termination diagnostic;
+            # a bare mention elsewhere on stderr is not it.
+            "Waiting for the build to finish\nforcefully killed after 15 minutes\n",
+        ):
+            with self.subTest(err=err[:40]):
+                self.assertFalse(runner.is_mission_cut(err))
+
+    def test_isMissionCut_killMessageQuotedInAssistantProse_isNotACut(self):
+        """stdout is assistant prose, and prose can quote a kill message.
+
+        Every plugin returns its kill message on stderr, so reading stderr alone is
+        enough -- and reading stdout would let a mission that merely *quotes* one
+        (plausible here, where the runner's own source contains these strings) be
+        mistaken for a cut, discarding the real failure it reported.
+        """
+        prose = (
+            "I found the earlier failure. The log said:\n"
+            "  Error: Agent process hung and was forcefully killed after 15 minutes.\n"
+            "That was the old run. My change fixes it, but the tests still fail.\n"
+        )
+        self.assertFalse(runner.is_mission_cut(""),
+                         "prose on stdout must never be read as a cut")
+        self.assertTrue(runner.produced_verdict(1, prose, ""),
+                        "a real failure whose prose quotes a kill message is still a verdict")
+
+
+class OrphanLadderSiteTests(unittest.TestCase):
+    """Every orphan-path ladder decision reads the whole fallback sequence.
+
+    The three exit shapes (quota-exhausted, clean-but-fruitless, real failure) each
+    call one helper, and *which* sequence that call passes is what decides whether
+    the ladder is spent. A site that passed a literal would restore the pre-fix
+    behaviour for that shape alone, which no unit test of the helper can see -- the
+    quota shape parked a branch this way in the original defect.
+    """
+
+    def _sites(self):
+        tree = ast.parse(Path(runner.__file__).read_text(encoding="utf-8"))
+        return tree, [n for n in ast.walk(tree)
+                      if isinstance(n, ast.Call)
+                      and getattr(n.func, "id", "") == "_remove_worktree_or_record_outcome"]
+
+    def test_everyOrphanLadderSite_passesTheSequenceItself(self):
+        _, sites = self._sites()
+        self.assertEqual(len(sites), 3,
+                         "the orphan path decides the ladder from exactly three exit shapes")
+        for call in sites:
+            third = call.args[2]
+            self.assertIsInstance(third, ast.Name, f"line {call.lineno} passes a literal, not the sequence")
+            self.assertEqual(third.id, "candidate_results", f"line {call.lineno}")
+
+    def test_theSequenceEachSiteReads_isTheOneTheLoopFills(self):
+        """Guard the guard: the helper unpacks (code, out, err) triples, so the loop
+        must record exactly those three values, once per candidate."""
+        tree, _ = self._sites()
+        appends = [n for n in ast.walk(tree)
+                   if isinstance(n, ast.Call) and getattr(n.func, "attr", "") == "append"
+                   and getattr(n.func.value, "id", "") == "candidate_results"]
+        self.assertEqual(len(appends), 1, "the orphan loop records each candidate exactly once")
+        recorded = [getattr(e, "id", None) for e in appends[0].args[0].elts]
+        self.assertEqual(recorded, ["agy_code", "agy_out", "agy_err"],
+                         "the helper reads (code, out, err) triples in that order")
 
 
 class RefreshModelsGuardTests(unittest.TestCase):
