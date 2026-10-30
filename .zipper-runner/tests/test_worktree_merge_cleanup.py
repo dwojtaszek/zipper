@@ -317,6 +317,220 @@ class SquashMergeCleanupTests(unittest.TestCase):
         self.assertNotIn("MOCK SUCCESS", out)
 
 
+class DirtyMergedWorktreeTests(unittest.TestCase):
+    """A dirty worktree on a merged PR must not hold the only slot forever.
+
+    `_remove_worktree` returned at its cleanliness check *before* the merge check
+    ever ran, and nothing re-examines a preserved worktree. A mission killed
+    between its last WIP checkpoint and cleanup -- the 900s liveness watchdog and
+    the 7200s ceiling both do this -- therefore held the runner's only slot until
+    a human looked. The fix snapshots the uncommitted work onto a backup branch
+    and frees the slot, in the same spirit as the post-merge-commit pin (#1304).
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def fixture(self, **kwargs):
+        fixture = _Fixture(self.root, **kwargs)
+        self.addCleanup(fixture.close)
+        return fixture
+
+    def test_babysit_mergedPrWithDirtyWorktree_archivesWorkAndFreesSlot(self):
+        """The new path end to end: the slot frees and the dirty work survives."""
+        fixture = self.fixture()
+        (fixture.worktree / "half-done.txt").write_text("uncommitted agent work")
+        (fixture.worktree / "base.txt").write_text("modified but uncommitted")
+
+        fixture.babysit()
+
+        self.assertFalse(fixture.worktree.exists(),
+                         "a merged PR's dirty worktree must not keep the only slot")
+        self.assertNotIn(BRANCH, fixture.git("branch", "--list", BRANCH))
+        backups = fixture.backup_branches()
+        self.assertEqual(1, len(backups), f"expected exactly one snapshot pin, got {backups}")
+        self.assertFalse(fixture.git_fails("cat-file", "-e", f"refs/heads/{backups[0]}:half-done.txt"),
+                         "the untracked file must be in the snapshot")
+        self.assertEqual("uncommitted agent work",
+                         fixture.git("show", f"refs/heads/{backups[0]}:half-done.txt"))
+        self.assertEqual("modified but uncommitted",
+                         fixture.git("show", f"refs/heads/{backups[0]}:base.txt"))
+        self.assertEqual("", fixture.git("status", "--porcelain", cwd=fixture.worktree)
+                         if fixture.worktree.exists() else "")
+        self.assertFalse((self.root / "state" / "issue-1304.json").exists())
+        self.assertTrue(any(backups[0] in str(body) for _, body in fixture.emails),
+                        f"the operator must be told where the work went: {fixture.emails}")
+
+    def test_babysit_mergedPrWithDirtyWorktree_emailRangeListsOnlyTheSnapshot(self):
+        """The suggested range must not point at work the merge already took.
+
+        A squash merge leaves the branch's own commits out of main's history, so
+        `main..<pin>` also lists the PR's already-merged commits. An operator
+        following that guidance could re-cherry-pick changes that are in main.
+        """
+        fixture = self.fixture()
+        (fixture.worktree / "half-done.txt").write_text("uncommitted agent work")
+        pre_tip = fixture.git("rev-parse", BRANCH)
+
+        fixture.babysit()
+
+        backups = fixture.backup_branches()
+        self.assertEqual(1, len(backups))
+        bodies = " ".join(str(body) for _, body in fixture.emails)
+        self.assertIn(f"git log {pre_tip}..{backups[0]}", bodies,
+                      f"the email must name the pre-snapshot base, not main: {bodies}")
+        self.assertNotIn(f"git log main..{backups[0]}", bodies,
+                         "main..<pin> also lists the PR's already-merged commits")
+
+        # The two ranges really do differ here, which is why the base matters.
+        suggested = [l for l in fixture.git(
+            "log", "--format=%s", f"{pre_tip}..{backups[0]}").splitlines() if l.strip()]
+        via_main = [l for l in fixture.git(
+            "log", "--format=%s", f"main..{backups[0]}").splitlines() if l.strip()]
+        self.assertEqual(1, len(suggested), f"the range must list only the snapshot: {suggested}")
+        self.assertGreater(len(via_main), len(suggested),
+                           "main as the base would have listed the merged PR commit too")
+
+    def test_babysit_mergedPrWithDirtyWorktreeAndPostMergeCommit_reusesOnePin(self):
+        """Both shapes at once: the snapshot and the surplus commit share one pin."""
+        fixture = self.fixture()
+        extra = fixture.commit_in_worktree("post-merge.txt", "fix: post-merge mission work")
+        (fixture.worktree / "half-done.txt").write_text("uncommitted agent work")
+
+        fixture.babysit()
+
+        self.assertFalse(fixture.worktree.exists())
+        backups = fixture.backup_branches()
+        self.assertEqual(1, len(backups), f"the two shapes must not mint two pins: {backups}")
+        self.assertNotEqual(extra, fixture.git("rev-parse", backups[0]),
+                            "the pin must sit at the snapshot tip, above the surplus commit")
+        self.assertEqual("half-done.txt",
+                         fixture.git("diff", "--name-only", f"{extra}..{backups[0]}"))
+        self.assertFalse(fixture.git_fails("cat-file", "-e", f"refs/heads/{backups[0]}:post-merge.txt"),
+                         "the surplus commit's work must still be in the pin")
+
+    def test_babysit_closedPrWithDirtyWorktree_preservesWorktree(self):
+        """A close without a merge proves nothing about the branch, so preserve."""
+        fixture = self.fixture(pr_state="CLOSED")
+        (fixture.worktree / "half-done.txt").write_text("uncommitted agent work")
+
+        fixture.babysit()
+
+        self.assertTrue(fixture.worktree.exists())
+        self.assertIn(BRANCH, fixture.git("branch", "--list", BRANCH))
+        self.assertEqual([], fixture.backup_branches())
+
+    def test_removeWorktree_dirtyWorktreeNotMerged_preservesWorktree(self):
+        """Without a merge the branch may still be live work, so nothing is removed."""
+        fixture = self.fixture()
+        (fixture.worktree / "half-done.txt").write_text("uncommitted agent work")
+
+        removed = fixture.runner._remove_worktree(str(fixture.worktree), BRANCH, is_merged=False)
+
+        self.assertFalse(removed)
+        self.assertTrue(fixture.worktree.exists())
+        self.assertEqual([], fixture.backup_branches())
+
+    def test_removeWorktree_snapshotPinFails_preservesWorktree(self):
+        """The snapshot is the promise that no work is lost, so failing it fails closed."""
+        fixture = self.fixture()
+        (fixture.worktree / "half-done.txt").write_text("uncommitted agent work")
+        fixture.runner._pin_backup_branch = lambda *args, **kwargs: (None, False)
+
+        removed = fixture.runner._remove_worktree(
+            str(fixture.worktree), BRANCH, is_merged=True, merged_head=fixture.merged_head)
+
+        self.assertFalse(removed)
+        self.assertTrue(fixture.worktree.exists())
+        self.assertIn(BRANCH, fixture.git("branch", "--list", BRANCH))
+
+    def test_removeWorktree_snapshotCommitFails_preservesWorktree(self):
+        """A snapshot that could not be committed must not be deleted anyway."""
+        fixture = self.fixture()
+        (fixture.worktree / "half-done.txt").write_text("uncommitted agent work")
+        runner = fixture.runner
+        original = runner.run_cmd
+
+        def failing_commit(cmd, cwd=None, **kwargs):
+            if cmd[:2] == ["git", "commit"]:
+                return 1, "", "fatal: pre-commit hook rejected"
+            return original(cmd, cwd=cwd, **kwargs)
+
+        runner.run_cmd = failing_commit
+        try:
+            removed = runner._remove_worktree(str(fixture.worktree), BRANCH,
+                                              is_merged=True, merged_head=fixture.merged_head)
+        finally:
+            runner.run_cmd = original
+
+        self.assertFalse(removed)
+        self.assertTrue(fixture.worktree.exists())
+        self.assertEqual([], fixture.backup_branches())
+
+    def test_removeWorktree_snapshotCommitReportsSuccessButTreeStaysDirty_preservesWorktree(self):
+        """A commit that claims success without committing must not be trusted.
+
+        The pin is taken at HEAD, so a snapshot that did not actually take the
+        work would pin the wrong tree and then delete the real one. The recheck
+        after the commit is what stands between that and data loss.
+        """
+        fixture = self.fixture()
+        (fixture.worktree / "half-done.txt").write_text("uncommitted agent work")
+        runner = fixture.runner
+        original = runner.run_cmd
+
+        def lying_commit(cmd, cwd=None, **kwargs):
+            if cmd[:2] == ["git", "commit"]:
+                return 0, "", ""
+            return original(cmd, cwd=cwd, **kwargs)
+
+        runner.run_cmd = lying_commit
+        try:
+            removed = runner._remove_worktree(str(fixture.worktree), BRANCH,
+                                              is_merged=True, merged_head=fixture.merged_head)
+        finally:
+            runner.run_cmd = original
+
+        self.assertFalse(removed, "a dirty tree after a 'successful' commit must not be removed")
+        self.assertTrue(fixture.worktree.exists())
+        self.assertEqual([], fixture.backup_branches())
+        self.assertEqual("uncommitted agent work", (fixture.worktree / "half-done.txt").read_text())
+
+    def test_removeWorktree_dirtyMergedWorktreeBranchTipMoved_snapshotsThenRemoves(self):
+        """The snapshot moves the tip, so the merge must be judged before it.
+
+        Reading the live tip after the snapshot would make a fully merged branch
+        look unmerged and refuse removal -- the same livelock, one layer down.
+        """
+        fixture = self.fixture()
+        (fixture.worktree / "half-done.txt").write_text("uncommitted agent work")
+
+        removed = fixture.runner._remove_worktree(
+            str(fixture.worktree), BRANCH, is_merged=True, merged_head=fixture.merged_head)
+
+        self.assertTrue(removed, "the snapshot commit must not make the branch look unmerged")
+        self.assertFalse(fixture.worktree.exists())
+
+    def test_babysit_dryRun_mergedPrWithDirtyWorktree_createsNoBackupRef(self):
+        """A dry run must not commit the dirty work or mint a ref for it."""
+        fixture = self.fixture()
+        (fixture.worktree / "half-done.txt").write_text("uncommitted agent work")
+        before = fixture.git("rev-parse", BRANCH)
+        fixture.runner.DRY_RUN = True
+
+        fixture.babysit()
+
+        self.assertEqual([], fixture.backup_branches(), "a dry run must not create a ref")
+        self.assertTrue(fixture.worktree.exists(), "a dry run must not remove the worktree")
+        self.assertEqual(before, fixture.git("rev-parse", BRANCH), "a dry run must not move the branch")
+        self.assertEqual("uncommitted agent work", (fixture.worktree / "half-done.txt").read_text(),
+                         "a dry run must not discard the dirty work")
+        self.assertNotEqual("", fixture.git("status", "--porcelain", cwd=fixture.worktree),
+                            "a dry run must leave the work uncommitted, not snapshot it")
+
+
 class GitBranchClassificationTests(unittest.TestCase):
     """Every real `git branch` form in the module, against the real classifier.
 

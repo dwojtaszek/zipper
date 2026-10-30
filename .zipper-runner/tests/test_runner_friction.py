@@ -737,7 +737,14 @@ class WorktreeResilienceTests(unittest.TestCase):
             module.babysit_active_worktrees()
             self.assertFalse(worktree.exists())
 
-    def test_babysit_stateMergedPr_dirtyWorktree_preservesWorktree(self):
+    def test_babysit_stateMergedPr_dirtyWorktree_archivesWorkAndFreesSlot(self):
+        """A merged PR's dirty worktree used to be preserved forever, holding the slot.
+
+        Nothing re-examines a preserved worktree, so a mission killed between its
+        last WIP checkpoint and cleanup kept the runner's only slot until a human
+        looked. The work is now snapshotted onto a backup branch and the slot
+        frees; the assertions below guard the archive, not the removal alone.
+        """
         gh_script = (
             "#!/usr/bin/env python3\nimport json, sys\n"
             "if sys.argv[1:4] == ['pr', 'view', '500']:\n"
@@ -758,8 +765,16 @@ class WorktreeResilienceTests(unittest.TestCase):
             module.STATE_DIR = str(state_dir)
 
             module.babysit_active_worktrees()
-            self.assertTrue(worktree.exists())
-            self.assertTrue((state_dir / "issue-500.json").exists())
+            self.assertFalse(worktree.exists(),
+                             "a merged PR's dirty worktree must not keep the only slot")
+            self.assertNotIn("fix/ISSUE-500-test", git("branch", "--list", "fix/ISSUE-500-test"))
+            self.assertFalse((state_dir / "issue-500.json").exists())
+
+            backups = [line.strip().lstrip("*+ ").strip()
+                       for line in git("branch", "--list", "runner-backup-*").splitlines() if line.strip()]
+            self.assertEqual(1, len(backups), f"expected exactly one snapshot pin, got {backups}")
+            self.assertEqual("uncommitted work", git("show", f"refs/heads/{backups[0]}:dirty.txt"),
+                             "the uncommitted work must survive the cleanup")
 
     def test_babysit_closedIssueOnGithub_unpushedBranch_retainsBranch(self):
         gh_script = (
