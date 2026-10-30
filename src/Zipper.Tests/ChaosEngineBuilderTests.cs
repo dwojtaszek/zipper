@@ -328,6 +328,21 @@ public class ChaosEngineBuilderTests
     }
 
     [Fact]
+    public void Build_WithAdversarialValuesScenario_DoesNotCreateCorruptionEngine()
+    {
+        var request = new FileGenerationRequest();
+        request.Chaos = request.Chaos with
+        {
+            ChaosMode = true,
+            ChaosScenario = "adversarial-values",
+        };
+
+        var engine = ChaosEngineBuilder.Build(request, 7, LoadFileFormat.Dat);
+
+        Assert.Null(engine);
+    }
+
+    [Fact]
     public void Build_WithFullChaosScenario_IncludesOptEncoding()
     {
         var request = new FileGenerationRequest();

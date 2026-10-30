@@ -146,6 +146,14 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
         Assert.Equal("xml-unclosed-tag,xml-bad-entity,xml-encoding-lie", xml.ChaosTypes);
         Assert.Equal("5%", xml.DefaultAmount);
         Assert.Equal(LoadFileFormat.EdrmXml, xml.RequiredFormat);
+
+        // 11. adversarial-values
+        var adversarial = ChaosScenarios.GetByName("adversarial-values");
+        Assert.NotNull(adversarial);
+        Assert.Equal("quotes,mixed-delimiters,eol", adversarial.ChaosTypes);
+        Assert.Equal("100%", adversarial.DefaultAmount);
+        Assert.Equal(LoadFileFormat.Dat, adversarial.RequiredFormat);
+        Assert.True(adversarial.GenerateAdversarialValues);
     }
 
     // --- CLI integration tests ---
@@ -157,6 +165,7 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
         Assert.Contains("Available Chaos Scenarios", stdout, StringComparison.Ordinal);
         Assert.Contains("structured-import-failures", stdout, StringComparison.Ordinal);
         Assert.Contains("realistic-import-failures", stdout, StringComparison.Ordinal);
+        Assert.Contains("adversarial-values", stdout, StringComparison.Ordinal);
         Assert.Contains("full-chaos", stdout, StringComparison.Ordinal);
     }
 
@@ -374,6 +383,167 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
             if (Directory.Exists(baselinePath))
             {
                 Directory.Delete(baselinePath, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ChaosScenario_AdversarialValues_GeneratesDeterministicValidTailValues()
+    {
+        var firstOutputPath = Path.Combine(this.TempDir, $"zipper_adversarial_first_{Guid.NewGuid():N}");
+        var secondOutputPath = Path.Combine(this.TempDir, $"zipper_adversarial_second_{Guid.NewGuid():N}");
+        try
+        {
+            foreach (var outputPath in new[] { firstOutputPath, secondOutputPath })
+            {
+                var (exitCode, stdout, stderr) = await RunWithCapture(new[]
+                {
+                    "--loadfile-only", "--count", "6", "--output-path", outputPath,
+                    "--chaos-mode", "--chaos-scenario", "adversarial-values", "--seed", "42",
+                });
+
+                Assert.Equal(0, exitCode);
+                Assert.Empty(stderr);
+                Assert.Contains("Chaos Scenario: adversarial-values", stdout, StringComparison.Ordinal);
+            }
+
+            string firstLoadFile = Assert.Single(Directory.GetFiles(firstOutputPath, "*.dat"));
+            string secondLoadFile = Assert.Single(Directory.GetFiles(secondOutputPath, "*.dat"));
+            byte[] firstBytes = await File.ReadAllBytesAsync(firstLoadFile);
+            byte[] secondBytes = await File.ReadAllBytesAsync(secondLoadFile);
+            Assert.Equal(firstBytes, secondBytes);
+
+            string content = await File.ReadAllTextAsync(firstLoadFile);
+            Assert.EndsWith("\r\n\r\n\r\n", content, StringComparison.Ordinal);
+            var lines = await File.ReadAllLinesAsync(firstLoadFile);
+            Assert.Equal(2, lines.Count(string.IsNullOrEmpty));
+            var rows = lines
+                .Where(line => !string.IsNullOrEmpty(line))
+                .Skip(1)
+                .Select(line => DatLineParser.Parse(line, '\u0014', '\u00fe'))
+                .ToArray();
+            Assert.Equal(6, rows.Length);
+
+            var values = rows.SelectMany(row => row).ToArray();
+            Assert.Contains(values, value => value.Contains('\u0014') && value.Contains('\u00fe'));
+            Assert.Contains(values, value => value.Contains("Ã¾", StringComparison.Ordinal));
+            Assert.Contains(values, value => value.Length >= 32_768);
+
+            var validation = new ValidatorRunner().ValidateLoadFile(
+                firstLoadFile,
+                "dat",
+                headerColumns: null,
+                expectedEol: "\r\n",
+                columnDelimiter: '\u0014',
+                quoteDelimiter: '\u00fe');
+            Assert.Empty(validation.Findings);
+
+            string propertiesPath = Assert.Single(Directory.GetFiles(firstOutputPath, "*_properties.json"));
+            using var properties = JsonDocument.Parse(await File.ReadAllTextAsync(propertiesPath));
+            var chaosMode = properties.RootElement.GetProperty("chaosMode");
+            Assert.True(chaosMode.GetProperty("enabled").GetBoolean());
+            Assert.Equal(0, chaosMode.GetProperty("totalAnomalies").GetInt32());
+        }
+        finally
+        {
+            if (Directory.Exists(firstOutputPath))
+            {
+                Directory.Delete(firstOutputPath, true);
+            }
+            if (Directory.Exists(secondOutputPath))
+            {
+                Directory.Delete(secondOutputPath, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ChaosScenario_AdversarialValues_WithZeroCount_WritesHeaderOnlyAndPassesValidation()
+    {
+        var outputPath = Path.Combine(this.TempDir, $"zipper_adversarial_header_{Guid.NewGuid():N}");
+        try
+        {
+            var (exitCode, _, stderr) = await RunWithCapture(new[]
+            {
+                "--loadfile-only", "--count", "0", "--output-path", outputPath,
+                "--chaos-mode", "--chaos-scenario", "adversarial-values", "--seed", "42",
+            });
+
+            Assert.Equal(0, exitCode);
+            Assert.Empty(stderr);
+            string loadFile = Assert.Single(Directory.GetFiles(outputPath, "*.dat"));
+            string content = await File.ReadAllTextAsync(loadFile);
+            Assert.EndsWith("\r\n\r\n\r\n", content, StringComparison.Ordinal);
+            var lines = File.ReadAllLines(loadFile);
+            Assert.Single(lines, line => !string.IsNullOrEmpty(line));
+            Assert.Equal(2, lines.Count(string.IsNullOrEmpty));
+
+            var validation = new ValidatorRunner().ValidateLoadFile(
+                loadFile,
+                "dat",
+                headerColumns: null,
+                expectedEol: "\r\n",
+                columnDelimiter: '\u0014',
+                quoteDelimiter: '\u00fe');
+            Assert.Empty(validation.Findings);
+        }
+        finally
+        {
+            if (Directory.Exists(outputPath))
+            {
+                Directory.Delete(outputPath, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ChaosScenario_AdversarialValues_WithAmountOverride_UsesOneCombinedTailRecord()
+    {
+        var outputPath = Path.Combine(this.TempDir, $"zipper_adversarial_amount_{Guid.NewGuid():N}");
+        try
+        {
+            var (exitCode, _, stderr) = await RunWithCapture(new[]
+            {
+                "--loadfile-only", "--count", "6", "--output-path", outputPath,
+                "--chaos-mode", "--chaos-scenario", "adversarial-values",
+                "--chaos-amount", "1", "--seed", "42",
+            });
+
+            Assert.Equal(0, exitCode);
+            Assert.Empty(stderr);
+            string loadFile = Assert.Single(Directory.GetFiles(outputPath, "*.dat"));
+            var lines = await File.ReadAllLinesAsync(loadFile);
+            var rows = lines
+                .Where(line => !string.IsNullOrEmpty(line))
+                .Skip(1)
+                .Select(line => DatLineParser.Parse(line, '\u0014', '\u00fe'))
+                .ToArray();
+            Assert.Equal(6, rows.Length);
+            var adversarialRecords = rows.Where(row => row.Any(value =>
+                value.StartsWith("Escaped delimiters:", StringComparison.Ordinal)
+                || value.StartsWith("Quote lookalike:", StringComparison.Ordinal))).ToArray();
+
+            var adversarialRecord = Assert.Single(adversarialRecords);
+            var platformValue = Assert.Single(adversarialRecord, value => value.StartsWith("Escaped delimiters:", StringComparison.Ordinal));
+            Assert.Contains('\u0014', platformValue);
+            Assert.Contains('\u00fe', platformValue);
+            Assert.Contains("Ã¾", platformValue, StringComparison.Ordinal);
+            Assert.Equal(32_768, platformValue.Length);
+
+            var validation = new ValidatorRunner().ValidateLoadFile(
+                loadFile,
+                "dat",
+                headerColumns: null,
+                expectedEol: "\r\n",
+                columnDelimiter: '\u0014',
+                quoteDelimiter: '\u00fe');
+            Assert.Empty(validation.Findings);
+        }
+        finally
+        {
+            if (Directory.Exists(outputPath))
+            {
+                Directory.Delete(outputPath, true);
             }
         }
     }

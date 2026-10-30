@@ -29,7 +29,8 @@ internal sealed class LegacyDateCreatedGenerator : IColumnValueGenerator
 /// <summary>Legacy Author: "Author NNN" from random 1-99.</summary>
 internal sealed class LegacyAuthorGenerator : IColumnValueGenerator
 {
-    public string Generate(ColumnGenerationContext context) => $"Author {context.Seeded.Next(1, 100):D3}";
+    public string Generate(ColumnGenerationContext context) =>
+        context.AdversarialValue ?? $"Author {context.Seeded.Next(1, 100):D3}";
 }
 
 /// <summary>FileSize from actual FileData.DataLength.</summary>
@@ -71,7 +72,7 @@ internal sealed class LegacyEmailCcGenerator : IColumnValueGenerator
 internal sealed class LegacyEmailSubjectGenerator : IColumnValueGenerator
 {
     public string Generate(ColumnGenerationContext context) =>
-        context.FileData?.Email?.Subject ?? $"Email Subject {context.NativeFileIndex}";
+        context.AdversarialValue ?? context.FileData?.Email?.Subject ?? $"Email Subject {context.NativeFileIndex}";
 }
 
 /// <summary>EmailSentDate column: reads fileData.Email.SentDate; falls back to random.</summary>
@@ -110,7 +111,8 @@ internal sealed class LegacySyntheticEmailCcGenerator : IColumnValueGenerator
 /// <summary>Synthetic EmailSubject: index-based for loadfile-only mode.</summary>
 internal sealed class LegacySyntheticEmailSubjectGenerator : IColumnValueGenerator
 {
-    public string Generate(ColumnGenerationContext context) => $"Email Subject {context.NativeFileIndex}";
+    public string Generate(ColumnGenerationContext context) =>
+        context.AdversarialValue ?? $"Email Subject {context.NativeFileIndex}";
 }
 
 /// <summary>Synthetic EmailSentDate: random within 30 days of Now.</summary>

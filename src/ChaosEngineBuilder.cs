@@ -26,6 +26,11 @@ internal static class ChaosEngineBuilder
             return null;
         }
 
+        if (ChaosScenarios.GeneratesAdversarialValues(request.Chaos.ChaosScenario))
+        {
+            return null;
+        }
+
         string? resolvedTypes = request.Chaos.ChaosTypes;
         string? resolvedAmount = request.Chaos.ChaosAmount;
 

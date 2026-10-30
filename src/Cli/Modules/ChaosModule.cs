@@ -1,5 +1,6 @@
 using System.Globalization;
 using Zipper.Config;
+using Zipper.Profiles.Generation;
 
 namespace Zipper.Cli.Modules;
 
@@ -16,6 +17,8 @@ public sealed class ChaosModule : CliModule
     /// Gets the comma-separated chaos types specified via --chaos-types, or null if not specified.
     /// </summary>
     public string? ChaosTypes => _types;
+
+    internal bool IsAdversarialValuesScenario => ChaosScenarios.GeneratesAdversarialValues(_scenario);
 
     internal bool RequiresSourcePaths(IReadOnlyList<LoadFileFormat>? formats)
     {
@@ -67,7 +70,11 @@ public sealed class ChaosModule : CliModule
         }
     }
 
-    public bool TryBuild(bool loadfileOnly, IReadOnlyList<LoadFileFormat> formats, out ChaosConfig config)
+    public bool TryBuild(
+        bool loadfileOnly,
+        IReadOnlyList<LoadFileFormat> formats,
+        out ChaosConfig config,
+        DelimiterConfig? delimiters = null)
     {
         if (_mode)
         {
@@ -128,6 +135,14 @@ public sealed class ChaosModule : CliModule
                     config = default!;
                     return false;
                 }
+            }
+
+            if (scenario.GenerateAdversarialValues
+                && !AdversarialValueTailPlan.HasValidDelimiters(delimiters ?? new DelimiterConfig()))
+            {
+                Console.Error.WriteLine("Error: Chaos scenario 'adversarial-values' requires distinct single-character column and quote delimiters.");
+                config = default!;
+                return false;
             }
         }
 

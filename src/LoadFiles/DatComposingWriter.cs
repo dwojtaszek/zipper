@@ -36,6 +36,15 @@ internal sealed class DatComposingWriter : ILoadFileWriter
         var policy = new TextOutputPolicy(request, LoadFileFormat.Dat, this.mode, chaosEngine is not null);
 
         var records = composer.Compose(processedFiles);
-        await LoadFileEmitter.EmitAsync(stream, serializer, composer.HeaderColumns, records, policy.Encoding, policy.EndOfLine, chaosEngine, cancellationToken).ConfigureAwait(false);
+        await LoadFileEmitter.EmitAsync(
+            stream,
+            serializer,
+            composer.HeaderColumns,
+            records,
+            policy.Encoding,
+            policy.EndOfLine,
+            chaosEngine,
+            cancellationToken,
+            composer.TrailingEmptyRows).ConfigureAwait(false);
     }
 }

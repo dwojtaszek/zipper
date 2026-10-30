@@ -146,12 +146,15 @@ public sealed class OutputModule : CliModule
     public bool WithText => _withText;
     public string? Compression => _compression;
 
-    internal bool TryBuild(IReadOnlyList<SourceInput.SourceRecord>? sourceRecords, out OutputConfig config)
+    internal bool TryBuild(
+        IReadOnlyList<SourceInput.SourceRecord>? sourceRecords,
+        out OutputConfig config,
+        bool allowZeroCount = false)
     {
         // Check order: CrossCuttingRules (--type/--count gates) runs before this TryBuild,
         // which owns count bounds, path, known type, folders, target-zip-size,
         // --type x --types conflicts, ratio syntax, encoding, and distribution.
-        if (_count is <= 0)
+        if (_count is < 0 || _count == 0 && (!allowZeroCount || sourceRecords is not null))
         {
             Console.Error.WriteLine("Error: --count must be a positive number.");
             config = default!;

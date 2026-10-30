@@ -8,3 +8,4 @@ realistic-import-failures
 csv-escaping-failures
 concordance-import-failures
 edrm-xml-structural-failures
+adversarial-values

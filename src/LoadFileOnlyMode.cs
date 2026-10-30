@@ -36,7 +36,10 @@ internal class LoadFileOnlyMode : IGenerationMode
                         request.Chaos = request.Chaos with { ChaosAmount = scenario.DefaultAmount };
                     }
 
-                    request.Chaos = request.Chaos with { ChaosTypes = string.IsNullOrEmpty(scenario.ChaosTypes) ? null : scenario.ChaosTypes };
+                    if (!scenario.GenerateAdversarialValues)
+                    {
+                        request.Chaos = request.Chaos with { ChaosTypes = string.IsNullOrEmpty(scenario.ChaosTypes) ? null : scenario.ChaosTypes };
+                    }
 
                     Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Chaos Scenario: {0} ({1})", scenario.Name, scenario.Description));
                 }
@@ -47,9 +50,13 @@ internal class LoadFileOnlyMode : IGenerationMode
             }
 
             Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Chaos Mode: Enabled (amount: {0})", request.Chaos.ChaosAmount ?? "1%"));
-            if (!string.IsNullOrEmpty(request.Chaos.ChaosTypes))
+            if (!string.IsNullOrEmpty(request.Chaos.ChaosTypes) && !ChaosScenarios.GeneratesAdversarialValues(request.Chaos.ChaosScenario))
             {
                 Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Chaos Types: {0}", request.Chaos.ChaosTypes));
+            }
+            else if (ChaosScenarios.GeneratesAdversarialValues(request.Chaos.ChaosScenario))
+            {
+                Console.WriteLine("  Adversarial Values: enabled");
             }
         }
 
@@ -60,7 +67,8 @@ internal class LoadFileOnlyMode : IGenerationMode
         Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Properties: {0}", result.PropertiesFilePath));
         Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Records: {0:N0}", result.TotalRecords));
 
-        if (!string.IsNullOrEmpty(result.LoadFilePath) && !request.Chaos.ChaosMode)
+        bool adversarialValues = ChaosScenarios.GeneratesAdversarialValues(request.Chaos.ChaosScenario);
+        if (!string.IsNullOrEmpty(result.LoadFilePath) && (!request.Chaos.ChaosMode || adversarialValues))
         {
             var formats = request.LoadFile.Formats.Count > 0 ? request.LoadFile.Formats : new[] { LoadFileFormat.Dat };
             var loadFiles = new Dictionary<string, string>();

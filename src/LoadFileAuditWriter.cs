@@ -205,6 +205,7 @@ internal static class LoadFileAuditWriter
             }
         }
 
+        bool adversarialValues = ChaosScenarios.GeneratesAdversarialValues(request.Chaos.ChaosScenario);
         var audit = new AuditDocument
         {
             FileName = Path.GetFileName(outputPath),
@@ -218,8 +219,8 @@ internal static class LoadFileAuditWriter
             },
             ChaosMode = new AuditChaosMode
             {
-                Enabled = request.Chaos.ChaosMode && anomalies is not null,
-                TargetAmount = request.Chaos.ChaosMode && anomalies is not null ? request.Chaos.ChaosAmount : null,
+                Enabled = request.Chaos.ChaosMode && (anomalies is not null || adversarialValues),
+                TargetAmount = request.Chaos.ChaosMode && (anomalies is not null || adversarialValues) ? request.Chaos.ChaosAmount : null,
                 TotalAnomalies = anomalies?.Count ?? 0,
                 InjectedAnomalies = anomalies is not null && anomalies.Count > 0
                     ? anomalies.Select(a => new AuditAnomalyEntry

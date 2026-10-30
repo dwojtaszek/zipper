@@ -1,5 +1,7 @@
 using Zipper.Cli.Modules;
 using Zipper.Config;
+using Zipper.Profiles;
+using Zipper.Profiles.Generation;
 
 namespace Zipper.Cli;
 
@@ -34,15 +36,40 @@ public static class Pipeline
                 modules.Chaos.RequiresSourcePaths(modules.LoadFile.Formats),
                 out var sourceRecords,
                 out var sourcePaths) ||
-            !modules.Output.TryBuild(sourceRecords, out var output) ||
+            !modules.Output.TryBuild(sourceRecords, out var output, allowZeroCount: modules.Chaos.IsAdversarialValuesScenario) ||
             !modules.Metadata.TryBuild(output.HasFileType("eml"), modules.SourceInput.HasSourceInput, out var metadata) ||
             !modules.LoadFile.TryBuild(modules.Metadata.AttachmentRate, modules.Output.Encoding, modules.Output.IsEncodingExplicit, modules.Output.Distribution, modules.Output.TargetZipSize, modules.Output.IncludeLoadFile, out var loadFile) ||
             !modules.Delimiter.TryBuild(modules.LoadFile.LoadfileOnly, production.ProductionSet, out var delimiters) ||
             !modules.Tiff.TryBuild(out var tiff) ||
-            !modules.Chaos.TryBuild(modules.LoadFile.LoadfileOnly, modules.LoadFile.Formats ?? new List<LoadFileFormat> { LoadFileFormat.Dat }, out var chaos) ||
+            !modules.Chaos.TryBuild(
+                modules.LoadFile.LoadfileOnly,
+                modules.LoadFile.Formats ?? new List<LoadFileFormat> { LoadFileFormat.Dat },
+                out var chaos,
+                delimiters) ||
             !modules.Hash.TryBuild(modules.LoadFile.LoadfileOnly, out var hash))
         {
             return null;
+        }
+
+        if (modules.Chaos.IsAdversarialValuesScenario)
+        {
+            var columnProfile = metadata.ColumnProfile;
+            if (sourceRecords is not null && columnProfile is null && !metadata.ShouldIncludeMetadataColumns(output))
+            {
+                Console.Error.WriteLine("Error: The adversarial-values scenario requires --with-metadata or a --column-profile when used with Source-Driven Generation.");
+                return null;
+            }
+
+            if (columnProfile is null && metadata.ShouldIncludeMetadataColumns(output))
+            {
+                columnProfile = output.HasFileType("eml") ? BuiltInProfiles.LegacyEml : BuiltInProfiles.LegacyWithMetadata;
+            }
+
+            if (columnProfile is not null && AdversarialValueTailPlan.FindColumn(columnProfile.Columns) is null)
+            {
+                Console.Error.WriteLine("Error: The adversarial-values scenario requires a text or long-text Column Profile column.");
+                return null;
+            }
         }
 
         return new FileGenerationRequest

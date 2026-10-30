@@ -65,6 +65,14 @@ zipper --loadfile-only --count 100000 --output-path ./import-failures \
 ```
 Each `path-pointer` Anomaly is checked against its original File Path by `PathReconciliationValidator` and recorded in the Audit File as a `PathReconciliation` mismatch. If colliding Source Record paths prevent a safe missing-path candidate, the Anomaly uses an empty File Path instead.
 
+#### 7. Generate parser-valid adversarial DAT values
+Exercise DAT parsers with correctly escaped delimiters, the literal `Ã¾` lookalike, a 32,768-character value, and two trailing empty rows:
+```bash
+zipper --loadfile-only --count 100 --output-path ./adversarial-values \
+    --chaos-mode --chaos-scenario adversarial-values --seed 42
+```
+The first selected record contains all three value classes. `--chaos-amount` controls which records receive the adversarial values. Use `--count 0` with this scenario to write a header-only Load File followed by the same two empty rows.
+
 Format-specific chaos scenarios cover the other Load File formats: `csv-escaping-failures` for CSV, `concordance-import-failures` for Concordance, and `edrm-xml-structural-failures` for EDRM-XML. For example:
 
 ```bash
@@ -156,7 +164,7 @@ All command-line flags recognized by Zipper:
 | `--types` | none | comma-separated `type:weight` (e.g. `pdf:70,eml:30`) | File type mix weights |
 | `--input-csv` | none | file path | Source-driven generation from CSV |
 | `--directory-template` | none | directory path | Source-driven generation mirroring directory structure |
-| `--count` | **required** | positive integer | Total number of files/records to generate |
+| `--count` | **required** | non-negative integer for `adversarial-values`; otherwise positive | Total number of files/records to generate |
 | `--output-path` | **required** | directory path | Target output directory |
 | `--folders` | `1` | `1` to `100` | Number of subfolders for file distribution |
 | `--encoding` | `UTF-8` | `UTF-8`, `UTF-16`, `ANSI` | Text encoding for Load Files |
@@ -195,7 +203,7 @@ All command-line flags recognized by Zipper:
 | `--chaos-mode` | `false` | flag | Enable Chaos Engine anomaly injection |
 | `--chaos-amount` | `1%` | exact count `N` or percentage `N%` | Anomaly target count/percentage |
 | `--chaos-types` | format defaults | comma-separated list | Filter anomaly types for the selected format: DAT (`mixed-delimiters`, `quotes`, `columns`, `eol`, `encoding`, `path-pointer`, `field-length`, `date-format`, `null-byte`, `trailing-empties`), OPT (`opt-boundary`, `opt-columns`, `opt-pagecount`, `opt-path`, `opt-batesnumber`, `opt-encoding`), CSV (`csv-quote-escape`, `csv-embedded-newline`, `csv-bom`), Concordance (`concordance-delimiter`, `concordance-quote-escape`), or EDRM-XML (`xml-unclosed-tag`, `xml-bad-entity`, `xml-encoding-lie`); the new DAT types are opt-in and `full-chaos` enables all types for the selected format |
-| `--chaos-scenario` | none | scenario name | Predefined chaos scenario |
+| `--chaos-scenario` | none | scenario name | Predefined chaos scenario (DAT `adversarial-values` emits valid edge-case values, not anomalies) |
 | `--chaos-list` | `false` | flag | Print available chaos scenarios and exit |
 | `--production-set` | `false` | flag | Structured Production Set output |
 | `--volume-size` | `5000` | positive integer | Maximum documents per volume subfolder |
@@ -219,7 +227,7 @@ All command-line flags recognized by Zipper:
 | `--archive-test-cases` | none | comma-separated Case Keys | Filter the suite to the named cases (closed flag set; requires `--archive-test-suite`) |
 | `--version` | `false` | flag | Print full embedded version string and exit |
 
-Chaos requires `--loadfile-only`; `--chaos-scenario` conflicts with `--chaos-types`. The five documented platform import-failure DAT types are opt-in, and `realistic-import-failures` requires DAT. Each format has its own anomaly catalog: CSV, Concordance, and EDRM-XML no longer inherit the DAT arms. `full-chaos` enables every anomaly type for the selected format.
+Chaos requires `--loadfile-only`; `--chaos-scenario` conflicts with `--chaos-types`. Only the DAT `adversarial-values` scenario accepts `--count 0`, which writes a header-only Load File plus two trailing empty rows. It bypasses anomaly injection and remains parser-valid. For positive counts, `--chaos-amount` controls which records receive the adversarial values; the first selected record contains the escaped delimiters, `Ã¾` lookalike, and a 32,768-character value. The five documented platform import-failure DAT types are opt-in, and `realistic-import-failures` requires DAT. Each format has its own anomaly catalog: CSV, Concordance, and EDRM-XML no longer inherit the DAT arms. `full-chaos` enables every anomaly type for the selected format.
 
 ### Standard Load File Columns
 

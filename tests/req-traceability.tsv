@@ -666,3 +666,8 @@ REQ-205	unit	StreamingAndCliRulesPropertyTests.CrossCuttingRules_Validate_Should
 REQ-081	unit	StreamingAndCliRulesPropertyTests.DelimiterModule_TryBuild_LegacyDelimiterValues_ShouldRejectOnlyMultiCharacterColumnAndQuote	Property: legacy --delimiter-* flags accept single characters, ASCII codes, and escapes and reject a multi-character column or quote delimiter
 REQ-092	unit	StreamingAndCliRulesPropertyTests.DelimiterModule_TryBuild_EolValues_ShouldRequireLoadFileOnlyOrProductionSet	Property: --eol is gated on --loadfile-only or --production-set and accepts only CRLF, LF, or CR
 REQ-093	unit	StreamingAndCliRulesPropertyTests.DelimiterModule_TryBuild_StrictDelimiterValues_ShouldRejectValuesWithoutTheRequiredPrefix	Property: strict-prefix delimiter flags accept only ascii:<N>, char:<c>, and the quote-only none keyword
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_GeneratesDeterministicValidTailValues	Deterministic parser-valid DAT edge-case values and validator success
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithZeroCount_WritesHeaderOnlyAndPassesValidation	Header-only DAT output with two trailing empty rows and validator success
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithAmountOverride_UsesOneCombinedTailRecord	Chaos amount overrides target only one combined tail value
+REQ-232	e2e	test-chaos-anomaly-coverage.sh	Valid adversarial-values records and header-only DAT output
+REQ-232	e2e	test-chaos-anomaly-coverage.bat	Valid adversarial-values records and header-only DAT output

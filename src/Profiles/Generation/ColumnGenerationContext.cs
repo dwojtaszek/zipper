@@ -27,4 +27,9 @@ internal sealed record ColumnGenerationContext
     /// file-context value is not applicable; null for ordinary profile generation.
     /// </summary>
     public string? ProfileValue { get; init; }
+
+    /// <summary>
+    /// Optional valid parser-tail value for the adversarial-values Chaos Scenario.
+    /// </summary>
+    public string? AdversarialValue { get; init; }
 }

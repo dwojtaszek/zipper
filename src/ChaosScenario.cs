@@ -8,7 +8,8 @@ internal record ChaosScenarioDefinition(
     string Description,
     string ChaosTypes,
     string DefaultAmount,
-    LoadFileFormat? RequiredFormat);
+    LoadFileFormat? RequiredFormat,
+    bool GenerateAdversarialValues = false);
 
 /// <summary>
 /// Registry of built-in chaos scenarios that bundle realistic combinations
@@ -78,6 +79,13 @@ internal static class ChaosScenarios
             ChaosTypes: "xml-unclosed-tag,xml-bad-entity,xml-encoding-lie",
             DefaultAmount: "5%",
             RequiredFormat: LoadFileFormat.EdrmXml),
+        new(
+            Name: "adversarial-values",
+            Description: "Valid DAT records with escaped delimiters, quote lookalikes, platform-length values, and empty-row tails",
+            ChaosTypes: "quotes,mixed-delimiters,eol",
+            DefaultAmount: "100%",
+            RequiredFormat: LoadFileFormat.Dat,
+            GenerateAdversarialValues: true),
     };
 
     private static readonly IReadOnlyList<string> CachedScenarioNames =
@@ -102,6 +110,9 @@ internal static class ChaosScenarios
     {
         return ScenariosArray.FirstOrDefault(s => s.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
     }
+
+    internal static bool GeneratesAdversarialValues(string? name) =>
+        name is not null && GetByName(name)?.GenerateAdversarialValues == true;
 
     internal static IReadOnlyList<string> ResolveTypes(ChaosScenarioDefinition scenario, LoadFileFormat format)
     {

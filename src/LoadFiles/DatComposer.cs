@@ -1,4 +1,5 @@
 using Zipper.Profiles;
+using Zipper.Profiles.Generation;
 
 namespace Zipper.LoadFiles;
 
@@ -24,10 +25,12 @@ internal sealed class DatComposer : ILoadFileComposer
     private readonly DatProductionComposer? productionComposer;
     private readonly DatLoadfileOnlyComposer? loadfileOnlyComposer;
     private readonly DatStandardComposer? standardComposer;
+    private readonly AdversarialValueTailPlan? adversarialValueTailPlan;
 
     public DatComposer(FileGenerationRequest request, WriterMode mode)
     {
         this.mode = mode;
+        this.adversarialValueTailPlan = AdversarialValueTailPlan.Create(request);
         var namingConvention = request.Metadata.ColumnProfile?.FieldNamingConvention;
         this.batesSequence = request.Bates != null ? BatesSequence.FromConfig(request.Bates) : null;
 
@@ -45,28 +48,33 @@ internal sealed class DatComposer : ILoadFileComposer
                 request.Metadata.Seed,
                 custodianCountOverride: request.Metadata.CustodianCountOverride,
                 dateFormatOverride: request.Metadata.DateFormatOverride,
-                emptyPercentageOverride: request.Metadata.EmptyPercentageOverride);
+                emptyPercentageOverride: request.Metadata.EmptyPercentageOverride,
+                adversarialValueTailPlan: this.adversarialValueTailPlan);
             var profileColumnNames = this.profileGenerator.GetColumnNames().ToList();
             this.headerColumns = profileColumnNames.Select(n => DatComposerShared.ApplyConvention(n, namingConvention)).ToList();
             this.standardComposer = new DatStandardComposer(
                 request, this.batesSequence, this.headerColumns,
-                this.profileGenerator, profileColumnNames);
+                this.profileGenerator, profileColumnNames, this.adversarialValueTailPlan);
         }
         else if (mode == WriterMode.LoadfileOnly)
         {
             this.headerColumns = DatLoadfileOnlyComposer.BuildHeaders(request, namingConvention);
             this.loadfileOnlyComposer = new DatLoadfileOnlyComposer(
-                request, this.batesSequence, this.headerColumns);
+                request, this.batesSequence, this.headerColumns, this.adversarialValueTailPlan);
         }
         else
         {
             this.headerColumns = DatStandardComposer.BuildHeaders(request, namingConvention);
             this.standardComposer = new DatStandardComposer(
-                request, this.batesSequence, this.headerColumns);
+                request, this.batesSequence, this.headerColumns, adversarialValueTailPlan: this.adversarialValueTailPlan);
         }
     }
 
     public IReadOnlyList<string> HeaderColumns => this.headerColumns;
+
+    internal int TrailingEmptyRows => this.adversarialValueTailPlan is null
+        ? 0
+        : AdversarialValueTailPlan.TrailingEmptyRowCount;
 
     public IEnumerable<LoadFileRecord> Compose(IReadOnlyList<FileData> processedFiles)
         => this.mode switch

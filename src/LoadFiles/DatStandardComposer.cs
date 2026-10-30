@@ -16,19 +16,22 @@ internal sealed class DatStandardComposer
     private readonly DataGenerator? profileGenerator;
     private readonly List<string>? profileColumnNames;
     private readonly bool hasTextPathColumn;
+    private readonly AdversarialValueTailPlan? adversarialValueTailPlan;
 
     public DatStandardComposer(
         FileGenerationRequest request,
         BatesSequence? batesSequence,
         IReadOnlyList<string> headerColumns,
         DataGenerator? profileGenerator = null,
-        List<string>? profileColumnNames = null)
+        List<string>? profileColumnNames = null,
+        AdversarialValueTailPlan? adversarialValueTailPlan = null)
     {
         this.request = request;
         this.batesSequence = batesSequence;
         this.headerColumns = headerColumns;
         this.profileGenerator = profileGenerator;
         this.profileColumnNames = profileColumnNames;
+        this.adversarialValueTailPlan = adversarialValueTailPlan;
         this.hasTextPathColumn = profileColumnNames?.Any(
             n => StandardRowValueGenerators.ByName.TryGetValue(n, out var gen) && gen is TextPathGenerator) ?? false;
     }
@@ -94,7 +97,7 @@ internal sealed class DatStandardComposer
     public IEnumerable<LoadFileRecord> ComposeStandard(IReadOnlyList<FileData> processedFiles)
     {
         var generator = this.profileGenerator ?? DatComposerShared.GetEffectiveProfileGenerator(
-            this.request, DatComposerShared.EffectiveNow(this.request));
+            this.request, DatComposerShared.EffectiveNow(this.request), this.adversarialValueTailPlan);
 
         foreach (var fileData in processedFiles)
         {
@@ -104,6 +107,7 @@ internal sealed class DatStandardComposer
                 // Source Metadata surfaces only through an explicit Column Profile (REQ-203);
                 // built-in fallback profiles (LegacyEml/LegacyWithMetadata) never merge.
                 DatComposerShared.MergeSourceMetadata(profileValues, fileData.WorkItem.SourceMetadata);
+                this.ApplyAdversarialValue(profileValues, fileData.WorkItem.Index);
             }
             var (parentId, childId, hasAttachment) = DatComposerShared.GetFamilyIdentifiers(
                 fileData, this.request, this.batesSequence);
@@ -363,6 +367,20 @@ internal sealed class DatStandardComposer
         }
 
         return v;
+    }
+
+    private void ApplyAdversarialValue(Dictionary<string, string>? profileValues, long recordIndex)
+    {
+        if (profileValues is null || this.adversarialValueTailPlan?.GetValue(recordIndex) is not { } value)
+        {
+            return;
+        }
+
+        var targetColumn = AdversarialValueTailPlan.FindColumn(this.request.Metadata.ColumnProfile!.Columns);
+        if (targetColumn is not null)
+        {
+            profileValues[targetColumn.Name] = value;
+        }
     }
 
     private string StandardTextPath(FileData fileData, DatRowContext ctx)

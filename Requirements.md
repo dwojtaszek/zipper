@@ -757,6 +757,9 @@ This section clarifies behavior when multiple arguments interact:
 | `csv-escaping-failures` | RFC 4180 CSV escaping failures | `csv-quote-escape`, `csv-embedded-newline`, `csv-bom` | 5% | CSV |
 | `concordance-import-failures` | Concordance delimiter and quote-wrapper corruption | `concordance-delimiter`, `concordance-quote-escape` | 5% | Concordance |
 | `edrm-xml-structural-failures` | EDRM-XML structural failures | `xml-unclosed-tag`, `xml-bad-entity`, `xml-encoding-lie` | 5% | EDRM-XML |
+| `adversarial-values` | Parser-valid DAT edge-case values and trailing empty rows | `quotes`, `mixed-delimiters`, `eol` (metadata only; no anomalies injected) | 100% | DAT |
+
+- **REQ-232**: The built-in DAT `adversarial-values` Chaos Scenario shall generate parser-valid DAT records through the existing DAT composer, serializer, and emitter path, without applying Chaos Engine anomalies. `--chaos-amount` shall select the records receiving scenario values; the first selected record shall contain a correctly quoted column delimiter, an escaped quote delimiter, the literal `Ã¾` lookalike, and a value of exactly 32,768 characters. The Load File shall end with two empty rows. `--count 0` shall be accepted only with this scenario and shall produce a header-only Load File followed by the same two empty rows. The generated Load File shall pass existing Load File validators.
 
 ---
 

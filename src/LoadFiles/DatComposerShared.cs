@@ -1,4 +1,5 @@
 using Zipper.Profiles;
+using Zipper.Profiles.Generation;
 using Zipper.Utils;
 
 namespace Zipper.LoadFiles;
@@ -120,7 +121,10 @@ internal static class DatComposerShared
     /// Returns the effective column-profile generator for Standard mode, or null when
     /// no profile applies. Falls back to built-in profiles when metadata columns are requested.
     /// </summary>
-    internal static DataGenerator? GetEffectiveProfileGenerator(FileGenerationRequest request, DateTime now)
+    internal static DataGenerator? GetEffectiveProfileGenerator(
+        FileGenerationRequest request,
+        DateTime now,
+        AdversarialValueTailPlan? adversarialValueTailPlan = null)
     {
         var profile = request.Metadata.ColumnProfile;
         if (profile is null && request.Metadata.ShouldIncludeMetadataColumns(request.Output))
@@ -130,6 +134,8 @@ internal static class DatComposerShared
                 : BuiltInProfiles.LegacyWithMetadata;
         }
 
-        return profile is not null ? new DataGenerator(profile, request.Metadata.Seed, now) : null;
+        return profile is not null
+            ? new DataGenerator(profile, request.Metadata.Seed, now, adversarialValueTailPlan: adversarialValueTailPlan)
+            : null;
     }
 }
