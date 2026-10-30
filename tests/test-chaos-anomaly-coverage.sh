@@ -343,14 +343,8 @@ while IFS= read -r SCENARIO; do
     SAFE="${SCENARIO//-/_}"
     OUT_DIR="$TEST_OUTPUT_DIR/scenario_${SAFE}"
 
-    # Look up format and declared chaos types from TSV (skip header line)
-    FMT=$(tsv_lookup "$SCENARIO" 3)
-    DECLARED_TYPES=$(tsv_lookup "$SCENARIO" 2)
-    FMT="${FMT:-dat}"
-
-    print_info "B2 Scenario: $SCENARIO (format: $FMT)"
-
     if [[ "$SCENARIO" == "adversarial-values" ]]; then
+        print_info "B2 Scenario: $SCENARIO (format: dat)"
         zipper --loadfile-only --count 1000 --output-path "$OUT_DIR/run1" \
             --chaos-mode --chaos-scenario "$SCENARIO" --seed 42
         FILE1=$(find "$OUT_DIR/run1" -name "*.dat" -print -quit)
@@ -381,6 +375,13 @@ while IFS= read -r SCENARIO; do
         print_success "B2 Scenario 'adversarial-values' — PASSED (valid values, no anomalies)"
         continue
     fi
+
+    # Look up format and declared chaos types from TSV (skip header line)
+    FMT=$(tsv_lookup "$SCENARIO" 3)
+    DECLARED_TYPES=$(tsv_lookup "$SCENARIO" 2)
+    FMT="${FMT:-dat}"
+
+    print_info "B2 Scenario: $SCENARIO (format: $FMT)"
 
     # Build format arg
     FORMAT_FLAG=""
