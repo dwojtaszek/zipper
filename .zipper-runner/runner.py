@@ -875,6 +875,76 @@ def _send_pr_escalation(pr_number, head_sha: str, subject: str, body_html: str, 
     _record_escalation_head(pr_number, head_sha, key)
 
 
+# `git branch` flags that only read: every listing/filter form the module uses,
+# plus the rest git documents, so a listing is never mistaken for a creation.
+_GIT_BRANCH_READ_ONLY_FLAGS = frozenset({
+    "-l", "--list", "--show-current", "-a", "--all", "-r", "--remotes",
+    "-v", "-vv", "--verbose", "--contains", "--no-contains", "--merged",
+    "--no-merged", "--points-at", "--format", "--column", "--sort",
+    "-i", "--ignore-case", "--omit-empty", "--no-color", "--no-abbrev", "--abbrev",
+})
+# Flags that delete, move, copy, force, or reconfigure a ref rather than read one.
+_GIT_BRANCH_MUTATING_FLAGS = frozenset({
+    "-d", "-D", "--delete", "-m", "-M", "--move", "-c", "-C", "--copy",
+    "-f", "--force", "-u", "--set-upstream-to", "--unset-upstream",
+    "--edit-description", "-t", "--track", "--no-track",
+})
+
+
+def _git_branch_is_mutating(args: list) -> bool:
+    """Whether `git branch ...` creates, deletes, moves, or reconfigures a ref.
+
+    Creation is `git branch <name> [<start-point>]`, which carries no flag at all,
+    so a flag list alone cannot catch it. `run_cmd` bypasses a mutating command in
+    a dry run, and creation was classified read-only, so `--dry-run` really did
+    create a `runner-backup-*` ref while reporting a simulated cleanup — the one
+    real mutation in a mode whose whole contract is "nothing is changed". Every
+    listing form carries a read-only flag, so a positional argument with no known
+    read-only flag beside it names a new ref.
+
+    An unrecognised flag beside a positional argument resolves to mutating on
+    purpose: bypassing a listing in a dry run costs one printed line, while
+    creating the ref a dry run was told not to create is a real mutation.
+    """
+    rest = args[2:]
+    if _GIT_BRANCH_MUTATING_FLAGS.intersection(rest):
+        return True
+    if not any(not arg.startswith("-") for arg in rest):
+        return False
+    return not _GIT_BRANCH_READ_ONLY_FLAGS.intersection(rest)
+
+
+def _is_mutating_cmd(a: list) -> bool:
+    """Whether `run_cmd` must bypass this command in a dry run.
+
+    Module-level rather than nested in `run_cmd` so the classification can be
+    asserted directly instead of inferred from a side effect.
+    """
+    if "worktree" in a:
+        return True
+    if "merge" in a:
+        return True
+    if "rebase" in a:
+        return True
+    if "reset" in a:
+        return True
+    if a[:2] == ["git", "stash"]:
+        if len(a) >= 3 and a[2] in ("list", "show"):
+            return False
+        return True
+    if a[:2] == ["git", "checkout"] or a[:2] == ["git", "switch"]:
+        return True
+    if a[:2] == ["git", "branch"]:
+        return _git_branch_is_mutating(a)
+    if a[:2] == ["git", "push"]:
+        return True
+    if a[:3] == ["gh", "pr", "create"]:
+        return True
+    if a[:3] == ["gh", "pr", "merge"]:
+        return True
+    return False
+
+
 def run_cmd(args, cwd=None, timeout=None, env=None):
     """Runs a system command, returning exit code, stdout, and stderr.
 
@@ -895,32 +965,6 @@ def run_cmd(args, cwd=None, timeout=None, env=None):
             if target in ("main", "master"):
                 print(f"SAFETY: Refusing to checkout main branch in worktree at {cwd}")
                 return 1, "", "Blocked: checkout to main in worktree is not allowed"
-
-    def _is_mutating_cmd(a: list) -> bool:
-        if "worktree" in a:
-            return True
-        if "merge" in a:
-            return True
-        if "rebase" in a:
-            return True
-        if "reset" in a:
-            return True
-        if a[:2] == ["git", "stash"]:
-            if len(a) >= 3 and a[2] in ("list", "show"):
-                return False
-            return True
-        if a[:2] == ["git", "checkout"] or a[:2] == ["git", "switch"]:
-            return True
-        if a[:2] == ["git", "branch"]:
-            mutating_flags = {"-d", "-D", "-m", "-M", "--delete", "--move"}
-            return bool(mutating_flags.intersection(a[2:]))
-        if a[:2] == ["git", "push"]:
-            return True
-        if a[:3] == ["gh", "pr", "create"]:
-            return True
-        if a[:3] == ["gh", "pr", "merge"]:
-            return True
-        return False
 
     if DRY_RUN and _is_mutating_cmd(args):
         print(f"[DRY RUN] Bypassed modifying command: {' '.join(args)}")
@@ -1001,10 +1045,71 @@ def _is_branch_safe_to_delete(branch: str) -> bool:
     return False
 
 
+def _commits_past_merged_head(branch: str, merged_head: str) -> list[str] | None:
+    """One line per commit `branch` carries that the merged head does not contain.
+
+    None means the range could not be read, which a caller about to delete the
+    branch has to read as "unknown" rather than as "nothing there".
+    """
+    code, out, _ = run_cmd(["git", "log", "--format=%h %s", f"{merged_head}..refs/heads/{branch}"], cwd=REPO_PATH)
+    if code != 0:
+        return None
+    return [line.strip() for line in out.splitlines() if line.strip()]
+
+
+def _pin_commits_past_merged_head(branch: str, merged_head: str) -> tuple[str, list[str]] | None:
+    """Pin what a merged branch carries past its merged head, then allow removal.
+
+    Returns (backup branch, commits), or None when the branch may not be removed.
+    Reached only when the merged head is in the branch's history but the branch tip
+    is not inside the merged head, so there is always something to pin.
+
+    A squash merge rewrites history, so the branch tip is a *descendant* of the
+    merged head rather than an ancestor of it: `git merge-base --is-ancestor
+    refs/heads/<branch> <merged_head>` is false even though every commit the PR
+    merged is in main. On issue #1304 a repair mission committed to the branch
+    after the PR was squash-merged, which put it in exactly that shape, and all
+    three safety checks refused at once: not an ancestor of the merged head, not
+    patch-identical under `git cherry` (one squashed commit cannot match the 19
+    commits it replaced), and absent from origin because the merge had deleted the
+    remote branch. Nothing self-healed, so the worktree held the runner's only slot
+    until a human reset the branch by hand.
+
+    Everything up to the merged head is provably in main, but the commits past it
+    are not, so they are pinned on a `runner-backup-*` branch before anything is
+    deleted: the slot frees automatically and no commit is lost.
+    """
+    contains_code, _, _ = run_cmd(
+        ["git", "merge-base", "--is-ancestor", merged_head, f"refs/heads/{branch}"], cwd=REPO_PATH)
+    if contains_code != 0:
+        # The merged head is not in this branch's history at all, so the merge says
+        # nothing about what the branch holds. Only the caller's own check (the
+        # branch inside the merged head) or main/origin can clear that.
+        return None
+    commits = _commits_past_merged_head(branch, merged_head)
+    if commits is None:
+        print(f"SAFETY: Could not read the commits '{branch}' carries past merged head {merged_head[:8]}. "
+              f"Preserving worktree and branch.")
+        return None
+    tip_code, tip, _ = run_cmd(["git", "rev-parse", "--verify", f"refs/heads/{branch}"], cwd=REPO_PATH)
+    if tip_code != 0:
+        return None
+    pin, _created = _pin_backup_branch(REPO_PATH, branch, tip.strip())
+    if not pin:
+        print(f"SAFETY: Could not pin the commits '{branch}' carries past merged head {merged_head[:8]}. "
+              f"Preserving worktree and branch.")
+        return None
+    print(f"SAFETY: Branch '{branch}' carries {len(commits)} commit(s) past merged head "
+          f"{merged_head[:8]}; pinned on '{pin}'.")
+    return pin, commits
+
+
 def _remove_worktree(wt_path: str, branch: str = "", *, is_merged: bool = False, merged_head: str = "") -> bool:
     """Remove git worktree and its branch, then delete the directory if safe.
 
     Verifies the worktree is clean and branch is merged or on origin before removal (#1223).
+    A merged branch that also carries commits past the merged head has those pinned
+    on a backup branch rather than blocking removal forever (#1304).
     Aborts, preserves work, and sends safety email on any dirty/unpushed state or failure.
     Returns True if worktree was removed, False if preserved or failed.
     """
@@ -1038,6 +1143,8 @@ def _remove_worktree(wt_path: str, branch: str = "", *, is_merged: bool = False,
             _, cur_branch, _ = run_cmd(["git", "branch", "--show-current"], cwd=wt_path)
             branch = cur_branch.strip()
 
+    post_merge_pin = ""
+    post_merge_commits: list[str] = []
     if branch and branch != "main":
         merged_ok = False
         if is_merged and merged_head:
@@ -1046,6 +1153,14 @@ def _remove_worktree(wt_path: str, branch: str = "", *, is_merged: bool = False,
         elif is_merged and not merged_head:
             anc, _, _ = run_cmd(["git", "merge-base", "--is-ancestor", f"refs/heads/{branch}", "main"], cwd=REPO_PATH)
             merged_ok = (anc == 0)
+
+        if not merged_ok and is_merged and merged_head:
+            # The shape a squash merge produces: the merged head is in the branch's
+            # history, and the branch may carry commits the merge never took.
+            pinned = _pin_commits_past_merged_head(branch, merged_head)
+            if pinned is not None:
+                post_merge_pin, post_merge_commits = pinned
+                merged_ok = True
 
         if not merged_ok and not _is_branch_safe_to_delete(branch):
             print(f"SAFETY: Branch '{branch}' has unpushed commits or is not merged into main. Preserving worktree {wt_path} and branch.")
@@ -1080,6 +1195,22 @@ def _remove_worktree(wt_path: str, branch: str = "", *, is_merged: bool = False,
         shutil.rmtree(wt_path, ignore_errors=True)
 
     run_cmd(["git", "worktree", "prune"], cwd=REPO_PATH)
+
+    if post_merge_pin:
+        subject = f"[Runner] Preserved commits past the merged head of '{branch}'"
+        if _should_send_rate_limited(subject):
+            commit_list = "".join(f"<li><code>{html.escape(c)}</code></li>" for c in post_merge_commits)
+            send_email(
+                subject,
+                f"<h3>Preserved commits the merge did not take from '{branch}'</h3>"
+                f"<p>PR <code>{html.escape(merged_head[:8])}</code> merged and its worktree at {html.escape(wt_path)} was "
+                f"removed, but branch '{html.escape(branch)}' also carried {len(post_merge_commits)} commit(s) "
+                f"the merge never took — work committed after the PR had already merged. They are pinned on "
+                f"<code>{html.escape(post_merge_pin)}</code>, so nothing was discarded.</p>"
+                f"<p>Review them with <code>git log main..{html.escape(post_merge_pin)}</code> and either "
+                f"cherry-pick or drop them deliberately. The worktree slot is free again.</p>"
+                f"<ul>{commit_list}</ul>",
+            )
     return True
 
 
@@ -3686,7 +3817,13 @@ def _rebase_in_progress(wt_path: str) -> bool:
 
 
 def _pin_backup_branch(wt_path: str, branch: str, tip: str) -> tuple[str | None, bool]:
-    """Return a runner-backup-* branch pinning tip, reusing an existing one."""
+    """Return a runner-backup-* branch pinning tip, reusing an existing one.
+
+    In a dry run the name it would create is returned and no ref is created: the
+    creation goes through `run_cmd`, which bypasses `git branch <name> <tip>` as a
+    mutating command. Returning the name rather than None keeps a dry-run report
+    meaningful, and the caller's email is suppressed anyway.
+    """
     code, out, _ = run_cmd(["git", "branch", "--list", "runner-backup-*", "--points-at", tip], cwd=wt_path)
     if code == 0:
         existing = [line.strip().lstrip("*+ ").strip() for line in out.splitlines() if line.strip()]

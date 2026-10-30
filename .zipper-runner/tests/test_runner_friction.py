@@ -903,7 +903,12 @@ class WorktreeResilienceTests(unittest.TestCase):
             self.assertFalse(worktree.exists())
             self.assertNotIn("fix/ISSUE-995-squashed", git("branch", "--list", "fix/ISSUE-995-squashed"))
 
-    def test_removeWorktree_squashMergedPr_unpushedLocalCommitsAfterMergedHead_preservesWorktree(self):
+    def test_removeWorktree_squashMergedPr_unpushedLocalCommitsAfterMergedHead_pinsThemAndFreesTheSlot(self):
+        """The #1304 shape: the merged content is in main, the extra commit is not.
+
+        Refusing to remove the worktree protected that commit but held the runner's
+        only slot forever. The commit must survive instead of the worktree.
+        """
         with self._runner_env() as (root, repo, git, module):
             git("commit", "--allow-empty", "-m", "test: initial")
 
@@ -918,12 +923,23 @@ class WorktreeResilienceTests(unittest.TestCase):
             (worktree / "extra.txt").write_text("extra local commit")
             git("add", "extra.txt", cwd=worktree)
             git("commit", "-m", "test: extra work", cwd=worktree)
+            extra_sha = git("rev-parse", "HEAD", cwd=worktree)
 
-            # Local tip is ahead of merged_sha; cleanup must abort to prevent losing the extra commit
             removed = module._remove_worktree(str(worktree), "fix/ISSUE-993-extra", is_merged=True, merged_head=merged_sha)
-            self.assertFalse(removed)
-            self.assertTrue(worktree.exists())
-            self.assertIn("fix/ISSUE-993-extra", git("branch", "--list", "fix/ISSUE-993-extra"))
+            self.assertTrue(removed)
+            self.assertFalse(worktree.exists())
+            self.assertNotIn("fix/ISSUE-993-extra", git("branch", "--list", "fix/ISSUE-993-extra"))
+
+            # The extra commit is not lost: it is reachable by name from a backup
+            # branch, and its content is still in the object store.
+            pinned = git("branch", "--list", "runner-backup-*", "--points-at", extra_sha)
+            self.assertIn("runner-backup-fix/ISSUE-993-extra", pinned)
+            backup = pinned.split()[0].lstrip("*+ ")
+            self.assertEqual(git("rev-parse", f"{backup}:extra.txt"), git("rev-parse", f"{extra_sha}:extra.txt"))
+
+            emails = (root / "emails.txt").read_text()
+            self.assertIn(backup, emails)
+            self.assertIn("test: extra work", emails)
 
     def test_removeWorktree_gitWorktreeRemoveFails_neverRmtreesDirectory(self):
         with self._runner_env() as (root, repo, git, module):
