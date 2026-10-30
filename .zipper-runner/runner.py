@@ -1104,15 +1104,68 @@ def _pin_commits_past_merged_head(branch: str, merged_head: str) -> tuple[str, l
     return pin, commits
 
 
+def _archive_dirty_worktree(wt_path: str, branch: str) -> str | None:
+    """Snapshot a dirty worktree's uncommitted work onto a runner-backup-* ref.
+
+    `_remove_worktree` refuses to delete a worktree holding uncommitted changes.
+    That is right for a branch that is still live, but it left a *merged* PR's
+    worktree holding the runner's only slot forever: nothing re-examines a
+    preserved worktree, so a mission killed between its last WIP checkpoint and
+    cleanup keeps the slot until a human looks. Both kill paths land there --
+    the liveness watchdog and the 7200s ceiling.
+
+    The snapshot is committed with `--no-verify` deliberately. It is never
+    pushed and exists only to make the removal lossless, so the pre-commit suite
+    would add minutes to the cleanup path and verify nothing that is not already
+    about to be archived.
+
+    Returns the pinning branch on success, or None when the worktree is not
+    provably clean and pinned. Every failure returns None, and the caller
+    preserves the worktree and branch instead.
+    """
+    if DRY_RUN:
+        print(f"[DRY RUN] Would snapshot uncommitted work in '{wt_path}' onto a backup branch.")
+        return f"runner-backup-{branch}-<dry-run>"
+
+    run_cmd(["git", "add", "-A"], cwd=wt_path)
+    msg = f"wip: preserve uncommitted work in '{branch}' before worktree cleanup"
+    code, _, err = run_cmd(["git", "commit", "--no-verify", "-m", msg], cwd=wt_path)
+    if code != 0 and not _worktree_is_clean(wt_path):
+        print(f"SAFETY: Could not snapshot uncommitted work in '{wt_path}' (exit {code}): {err.strip()}")
+        return None
+    if not _worktree_is_clean(wt_path):
+        # The commit reported success but something is still uncommitted -- a
+        # second writer, or a path the commit could not take. Do not delete it.
+        print(f"SAFETY: Worktree '{wt_path}' is still dirty after the snapshot commit.")
+        return None
+
+    tip_code, tip, _ = run_cmd(["git", "rev-parse", "HEAD"], cwd=wt_path)
+    if tip_code != 0:
+        return None
+    pin, created = _pin_backup_branch(REPO_PATH, branch, tip.strip())
+    if not pin:
+        print(f"SAFETY: Could not pin the snapshot of '{wt_path}'. Preserving worktree and branch '{branch}'.")
+        return None
+    print(f"SAFETY: Snapshotted uncommitted work in '{wt_path}' onto '{pin}'"
+          f"{'' if created else ' (existing pin reused)'}.")
+    return pin
+
+
 def _remove_worktree(wt_path: str, branch: str = "", *, is_merged: bool = False, merged_head: str = "") -> bool:
     """Remove git worktree and its branch, then delete the directory if safe.
 
     Verifies the worktree is clean and branch is merged or on origin before removal (#1223).
     A merged branch that also carries commits past the merged head has those pinned
     on a backup branch rather than blocking removal forever (#1304).
+    A merged PR's worktree that is still dirty has its uncommitted work snapshotted
+    on a backup branch instead of being preserved forever (#1304's class).
     Aborts, preserves work, and sends safety email on any dirty/unpushed state or failure.
     Returns True if worktree was removed, False if preserved or failed.
     """
+    # Set when cleanup snapshotted uncommitted work: the branch tip the merge is
+    # then judged against, since the snapshot commit itself is already pinned.
+    pre_snapshot_tip = ""
+    snapshot_pin = ""
     if os.path.exists(wt_path):
         clean_code, clean_out, clean_err = run_cmd(["git", "status", "--porcelain"], cwd=wt_path)
         if clean_code != 0:
@@ -1128,16 +1181,42 @@ def _remove_worktree(wt_path: str, branch: str = "", *, is_merged: bool = False,
             return False
 
         if clean_out.strip():
-            print(f"SAFETY: Worktree {wt_path} has uncommitted changes. Preserving worktree and branch '{branch}'.")
-            subject = f"[Runner] Safety: Preserved dirty worktree on branch '{branch}'"
-            if _should_send_rate_limited(subject):
-                send_email(
-                    subject,
-                    f"<h3>Safety: Preserved dirty worktree at {wt_path}</h3>"
-                    f"<p>Worktree on branch '{branch}' has uncommitted changes. Cleanup was aborted and work was preserved to prevent data loss.</p>"
-                    f"<pre>{clean_out.strip()}</pre>",
-                )
-            return False
+            if not is_merged:
+                print(f"SAFETY: Worktree {wt_path} has uncommitted changes. Preserving worktree and branch '{branch}'.")
+                subject = f"[Runner] Safety: Preserved dirty worktree on branch '{branch}'"
+                if _should_send_rate_limited(subject):
+                    send_email(
+                        subject,
+                        f"<h3>Safety: Preserved dirty worktree at {wt_path}</h3>"
+                        f"<p>Worktree on branch '{branch}' has uncommitted changes. Cleanup was aborted and work was preserved to prevent data loss.</p>"
+                        f"<pre>{clean_out.strip()}</pre>",
+                    )
+                return False
+
+            # The PR is merged, so this worktree will never be re-examined:
+            # preserving it would hold the runner's only slot forever. Archive
+            # the uncommitted work on a backup branch and free the slot instead.
+            if not branch:
+                _, cur_branch, _ = run_cmd(["git", "branch", "--show-current"], cwd=wt_path)
+                branch = cur_branch.strip()
+            tip_code, tip, _ = run_cmd(["git", "rev-parse", "--verify", f"refs/heads/{branch}"], cwd=REPO_PATH)
+            if tip_code != 0:
+                print(f"SAFETY: Could not read the tip of branch '{branch}' in {wt_path}. Preserving worktree.")
+                return False
+            pre_snapshot_tip = tip.strip()
+            snapshot_pin = _archive_dirty_worktree(wt_path, branch)
+            if not snapshot_pin:
+                print(f"SAFETY: Could not snapshot uncommitted work in {wt_path}. Preserving worktree and branch '{branch}'.")
+                subject = f"[Runner] Safety: Preserved dirty worktree on branch '{branch}'"
+                if _should_send_rate_limited(subject):
+                    send_email(
+                        subject,
+                        f"<h3>Safety: Preserved dirty worktree at {wt_path}</h3>"
+                        f"<p>Worktree on branch '{branch}' has uncommitted changes and could not be snapshotted. "
+                        f"Cleanup was aborted and work was preserved to prevent data loss.</p>"
+                        f"<pre>{clean_out.strip()}</pre>",
+                    )
+                return False
 
         if not branch:
             _, cur_branch, _ = run_cmd(["git", "branch", "--show-current"], cwd=wt_path)
@@ -1147,11 +1226,15 @@ def _remove_worktree(wt_path: str, branch: str = "", *, is_merged: bool = False,
     post_merge_commits: list[str] = []
     if branch and branch != "main":
         merged_ok = False
+        # A snapshot moved the branch tip, so judge the merge against the tip the
+        # branch had before it: the snapshot commit is already pinned, and reading
+        # the live tip would make a fully merged branch look unmerged.
+        merge_ref = pre_snapshot_tip or f"refs/heads/{branch}"
         if is_merged and merged_head:
-            anc, _, _ = run_cmd(["git", "merge-base", "--is-ancestor", f"refs/heads/{branch}", merged_head], cwd=REPO_PATH)
+            anc, _, _ = run_cmd(["git", "merge-base", "--is-ancestor", merge_ref, merged_head], cwd=REPO_PATH)
             merged_ok = (anc == 0)
         elif is_merged and not merged_head:
-            anc, _, _ = run_cmd(["git", "merge-base", "--is-ancestor", f"refs/heads/{branch}", "main"], cwd=REPO_PATH)
+            anc, _, _ = run_cmd(["git", "merge-base", "--is-ancestor", merge_ref, "main"], cwd=REPO_PATH)
             merged_ok = (anc == 0)
 
         if not merged_ok and is_merged and merged_head:
@@ -1207,9 +1290,31 @@ def _remove_worktree(wt_path: str, branch: str = "", *, is_merged: bool = False,
                 f"removed, but branch '{html.escape(branch)}' also carried {len(post_merge_commits)} commit(s) "
                 f"the merge never took — work committed after the PR had already merged. They are pinned on "
                 f"<code>{html.escape(post_merge_pin)}</code>, so nothing was discarded.</p>"
-                f"<p>Review them with <code>git log main..{html.escape(post_merge_pin)}</code> and either "
+                # The range base is the merged head, not `main`: a squash merge leaves the
+                # branch's own commits out of main's history, so `main..<pin>` would also
+                # list the PR's already-merged commits and invite re-cherry-picking them.
+                # `<merged head>..<pin>` is exactly the commits listed below.
+                f"<p>Review them with <code>git log {html.escape(merged_head)}..{html.escape(post_merge_pin)}</code> and either "
                 f"cherry-pick or drop them deliberately. The worktree slot is free again.</p>"
                 f"<ul>{commit_list}</ul>",
+            )
+    elif snapshot_pin:
+        # Only when the snapshot was the sole thing pinned: in the shape where the
+        # branch also carried commits past the merged head, the email above reuses
+        # the same pin and already lists every commit, the snapshot included.
+        subject = f"[Runner] Archived uncommitted work from the worktree of '{branch}'"
+        if _should_send_rate_limited(subject):
+            send_email(
+                subject,
+                f"<h3>Archived uncommitted work before freeing the worktree slot</h3>"
+                f"<p>The merged PR's worktree at {html.escape(wt_path)} still held uncommitted changes, so they were "
+                f"snapshotted on <code>{html.escape(snapshot_pin)}</code> and the worktree was removed. Nothing was "
+                f"discarded, and the worktree slot is free again.</p>"
+                # Base is the tip before the snapshot, which in this shape is the merged
+                # head. `main..<pin>` would also list the PR's own commits, because a
+                # squash merge never puts them in main's history.
+                f"<p>Review it with <code>git log {html.escape(pre_snapshot_tip)}..{html.escape(snapshot_pin)}</code> "
+                f"and cherry-pick or drop it deliberately.</p>",
             )
     return True
 
@@ -4474,18 +4579,22 @@ def babysit_active_worktrees():
                             pr_code = 0
                         elif verify_data.get("state") in ("MERGED", "CLOSED"):
                             if verify_data.get("headRefName") == branch:
-                                if _worktree_is_clean(wt_path):
-                                    is_merged = verify_data.get("state") == "MERGED"
-                                    merged_head = verify_data.get("headRefOid", "")
-                                    print(f"PR #{state_pr} (from state) is {verify_data.get('state')} and worktree is clean. Cleaning up worktree.")
-                                    if _remove_worktree(wt_path, branch, is_merged=is_merged, merged_head=merged_head):
-                                        _clear_pr_state(issue_number)
-                                        continue
-                                    else:
-                                        print(f"Worktree {wt_path} or branch '{branch}' could not be safely removed. Preserving.")
-                                        continue
+                                pr_state_from = verify_data.get("state")
+                                # A merged PR's worktree is never re-examined, so a
+                                # dirty one is handed to `_remove_worktree` to be
+                                # snapshotted rather than preserved forever. A closed
+                                # PR is different: the branch may still be live.
+                                if not _worktree_is_clean(wt_path) and pr_state_from != "MERGED":
+                                    print(f"PR #{state_pr} (from state) is {pr_state_from} but worktree has uncommitted changes. Preserving worktree.")
+                                    continue
+                                is_merged = pr_state_from == "MERGED"
+                                merged_head = verify_data.get("headRefOid", "")
+                                print(f"PR #{state_pr} (from state) is {pr_state_from}. Cleaning up worktree.")
+                                if _remove_worktree(wt_path, branch, is_merged=is_merged, merged_head=merged_head):
+                                    _clear_pr_state(issue_number)
+                                    continue
                                 else:
-                                    print(f"PR #{state_pr} (from state) is {verify_data.get('state')} but worktree has uncommitted changes. Preserving worktree.")
+                                    print(f"Worktree {wt_path} or branch '{branch}' could not be safely removed. Preserving.")
                                     continue
                             else:
                                 print(f"PR #{state_pr} (from state) branch mismatch: expected '{branch}', got '{verify_data.get('headRefName')}'. Ignoring state.")
@@ -4718,7 +4827,10 @@ def babysit_active_worktrees():
 
         if pr_state in ("MERGED", "CLOSED"):
             print(f"PR #{pr_number} is {pr_state}. Cleaning up worktree.")
-            if not _worktree_is_clean(wt_path):
+            # A merged PR's worktree is never re-examined, so a dirty one is handed
+            # to `_remove_worktree` to be snapshotted rather than preserved forever.
+            # A closed PR is different: its branch may still be live work.
+            if not _worktree_is_clean(wt_path) and pr_state != "MERGED":
                 print(f"PR #{pr_number} is {pr_state} but worktree has uncommitted changes. Preserving worktree.")
                 continue
             is_merged = (pr_state == "MERGED")
