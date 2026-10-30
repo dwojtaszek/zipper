@@ -565,6 +565,88 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public async Task ChaosScenario_AdversarialValues_WithPartialAmount_SelectsMultipleRecords()
+    {
+        var outputPath = Path.Combine(this.TempDir, $"zipper_adversarial_partial_amount_{Guid.NewGuid():N}");
+        try
+        {
+            var (exitCode, _, stderr) = await RunWithCapture(new[]
+            {
+                "--loadfile-only", "--count", "6", "--output-path", outputPath,
+                "--chaos-mode", "--chaos-scenario", "adversarial-values",
+                "--chaos-amount", "2", "--seed", "42",
+            });
+
+            Assert.Equal(0, exitCode);
+            Assert.Empty(stderr);
+            string loadFile = Assert.Single(Directory.GetFiles(outputPath, "*.dat"));
+            var rows = (await File.ReadAllLinesAsync(loadFile))
+                .Where(line => !string.IsNullOrEmpty(line))
+                .Skip(1)
+                .Select(line => DatLineParser.Parse(line, '\u0014', '\u00fe'))
+                .ToArray();
+            Assert.Equal(6, rows.Length);
+
+            var adversarialRows = rows.Where(row => row.Any(value =>
+                value.StartsWith("Escaped delimiters:", StringComparison.Ordinal)
+                || value.StartsWith("Quote lookalike:", StringComparison.Ordinal))).ToArray();
+            Assert.Equal(2, adversarialRows.Length);
+            Assert.Contains(adversarialRows.SelectMany(row => row), value => value.Length == 32_768);
+
+            var validation = new ValidatorRunner().ValidateLoadFile(
+                loadFile,
+                "dat",
+                headerColumns: null,
+                expectedEol: "\r\n",
+                columnDelimiter: '\u0014',
+                quoteDelimiter: '\u00fe');
+            Assert.Empty(validation.Findings);
+        }
+        finally
+        {
+            if (Directory.Exists(outputPath))
+            {
+                Directory.Delete(outputPath, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ChaosScenario_AdversarialValues_WithAmountAboveTotal_TargetsEveryRecord()
+    {
+        var outputPath = Path.Combine(this.TempDir, $"zipper_adversarial_over_amount_{Guid.NewGuid():N}");
+        try
+        {
+            var (exitCode, _, stderr) = await RunWithCapture(new[]
+            {
+                "--loadfile-only", "--count", "6", "--output-path", outputPath,
+                "--chaos-mode", "--chaos-scenario", "adversarial-values",
+                "--chaos-amount", "200%", "--seed", "42",
+            });
+
+            Assert.Equal(0, exitCode);
+            Assert.Empty(stderr);
+            string loadFile = Assert.Single(Directory.GetFiles(outputPath, "*.dat"));
+            var rows = (await File.ReadAllLinesAsync(loadFile))
+                .Where(line => !string.IsNullOrEmpty(line))
+                .Skip(1)
+                .Select(line => DatLineParser.Parse(line, '\u0014', '\u00fe'))
+                .ToArray();
+            Assert.Equal(6, rows.Length);
+            Assert.All(rows, row => Assert.Contains(row, value =>
+                value.StartsWith("Escaped delimiters:", StringComparison.Ordinal)
+                || value.StartsWith("Quote lookalike:", StringComparison.Ordinal)));
+        }
+        finally
+        {
+            if (Directory.Exists(outputPath))
+            {
+                Directory.Delete(outputPath, true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task ChaosScenario_AdversarialValues_WithColumnProfile_GeneratesValidTailValues()
     {
         var outputPath = Path.Combine(this.TempDir, $"zipper_adversarial_profile_{Guid.NewGuid():N}");
@@ -815,6 +897,49 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
 
         Assert.Equal(1, exitCode);
         Assert.Contains("requires a text or long-text Column Profile column", stderr, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(outputPath));
+    }
+
+    [Fact]
+    public async Task ChaosScenario_AdversarialValues_WithFileSizeOnlyProfile_ReturnsError()
+    {
+        string profilePath = Path.Combine(this.TempDir, "file-size-only-profile.json");
+        var outputPath = Path.Combine(this.TempDir, $"zipper_adversarial_file_size_profile_{Guid.NewGuid():N}");
+        var profile = new ColumnProfile
+        {
+            Name = "file-size-only",
+            Columns =
+            [
+                new ColumnDefinition { Name = "DOCID", Type = "identifier", Required = true },
+                new ColumnDefinition { Name = "FILESIZE", Type = "text", Required = true },
+            ],
+        };
+        await File.WriteAllTextAsync(profilePath, JsonSerializer.Serialize(profile));
+
+        var (exitCode, _, stderr) = await RunWithCapture(new[]
+        {
+            "--loadfile-only", "--count", "1", "--output-path", outputPath,
+            "--chaos-mode", "--chaos-scenario", "adversarial-values",
+            "--column-profile", profilePath, "--seed", "42",
+        });
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("requires a text or long-text Column Profile column", stderr, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(outputPath));
+    }
+
+    [Fact]
+    public async Task ChaosScenario_AdversarialValues_WithImplicitOptFormat_ReturnsError()
+    {
+        var outputPath = Path.Combine(this.TempDir, $"zipper_adversarial_implicit_opt_{Guid.NewGuid():N}");
+        var (exitCode, _, stderr) = await RunWithCapture(new[]
+        {
+            "--loadfile-only", "--type", "tiff", "--count", "1", "--output-path", outputPath,
+            "--chaos-mode", "--chaos-scenario", "adversarial-values", "--seed", "42",
+        });
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("requires DAT-only output", stderr, StringComparison.Ordinal);
         Assert.False(Directory.Exists(outputPath));
     }
 

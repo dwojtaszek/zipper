@@ -73,11 +73,18 @@ public static class Pipeline
             }
         }
 
+        var resolvedLoadFile = ApplyImageTypeLoadFileOverride(loadFile, modules.LoadFile.IsLoadFileFormatExplicit, output, sourceRecords);
+        if (modules.Chaos.IsAdversarialValuesScenario && resolvedLoadFile.Formats.Any(format => format != LoadFileFormat.Dat))
+        {
+            Console.Error.WriteLine("Error: Chaos scenario 'adversarial-values' requires DAT-only output.");
+            return null;
+        }
+
         return new FileGenerationRequest
         {
             Output = output,
             Metadata = metadata,
-            LoadFile = ApplyImageTypeLoadFileOverride(loadFile, modules.LoadFile.IsLoadFileFormatExplicit, output, sourceRecords),
+            LoadFile = resolvedLoadFile,
             Delimiters = delimiters,
             Bates = bates,
             Tiff = tiff,

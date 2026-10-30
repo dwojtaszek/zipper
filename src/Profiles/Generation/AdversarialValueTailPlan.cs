@@ -46,7 +46,7 @@ internal sealed class AdversarialValueTailPlan
         int targetCount = recordCount == 0
             ? 0
             : ChaosSampler.ParseChaosAmount(request.Chaos.ChaosAmount ?? scenario.DefaultAmount, recordCount);
-        bool allRecords = recordCount > 0 && targetCount == recordCount;
+        bool allRecords = recordCount > 0 && targetCount >= recordCount;
         HashSet<long>? selectedRecords = null;
         if (targetCount > 0 && !allRecords)
         {
@@ -127,6 +127,12 @@ internal sealed class AdversarialValueTailPlan
     internal static bool IsEligibleColumn(ColumnDefinition column)
     {
         if (column.Type.ToLowerInvariant() is not ("text" or "longtext" or "legacyauthor" or "emailsubject" or "syntheticemailsubject"))
+        {
+            return false;
+        }
+
+        if (StandardRowValueGenerators.ByName.TryGetValue(column.Name, out var rowValueGenerator)
+            && rowValueGenerator is not ProfileValueUnlessChildGenerator)
         {
             return false;
         }
