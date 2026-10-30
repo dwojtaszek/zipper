@@ -195,4 +195,12 @@ public class ChaosSamplerTests
         int count = ChaosSampler.ParseChaosAmount("500", 100);
         Assert.Equal(100, count);
     }
+
+    [Fact]
+    public void ParseChaosAmount_LongExactCountAboveIntMax_ParsesAndCapsToTotalLines()
+    {
+        Assert.Equal(3_000_000_000L, ChaosSampler.ParseChaosAmount("3000000000", 5_000_000_000L));
+        Assert.Equal(2_500_000_000L, ChaosSampler.ParseChaosAmount("3000000000", 2_500_000_000L));
+        Assert.Equal(100, ChaosSampler.ParseChaosAmount("3000000000", 100));
+    }
 }

@@ -100,7 +100,7 @@ internal class ChaosSampler
             throw new ArgumentException($"Invalid chaos amount percentage format: '{chaosAmount}'.", nameof(chaosAmount));
         }
 
-        if (int.TryParse(trimmed, System.Globalization.CultureInfo.InvariantCulture, out var exact))
+        if (long.TryParse(trimmed, System.Globalization.CultureInfo.InvariantCulture, out var exact))
         {
             if (exact < 0)
             {
@@ -110,7 +110,7 @@ internal class ChaosSampler
             {
                 return 0;
             }
-            return Math.Min((long)exact, totalLines);
+            return Math.Min(exact, totalLines);
         }
 
         throw new ArgumentException($"Invalid chaos amount format: '{chaosAmount}'. Must be a percentage (e.g., '1%') or an exact count (e.g., '500').", nameof(chaosAmount));
