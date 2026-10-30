@@ -146,9 +146,13 @@ internal sealed class DatComposer : ILoadFileComposer
                 continue;
             }
 
-            var values = record.Values.ToArray();
+            if (record.Values is not IList<string> values || values.IsReadOnly)
+            {
+                throw new InvalidOperationException("The DAT composer must provide mutable values for the adversarial-values scenario.");
+            }
+
             values[this.adversarialValueColumnIndex] = value;
-            yield return LoadFileRecordBuilder.Build(record.Columns, values, record.RecordId);
+            yield return record;
         }
     }
 }
