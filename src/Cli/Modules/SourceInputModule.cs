@@ -41,6 +41,7 @@ public sealed class SourceInputModule : CliModule
     public bool HasSourceInput => !string.IsNullOrEmpty(_inputCsv) || !string.IsNullOrEmpty(_directoryTemplate);
     public string? InputCsv => _inputCsv;
     public string? DirectoryTemplate => _directoryTemplate;
+    internal IReadOnlySet<string>? SourceMetadataKeys { get; private set; }
 
     internal bool TryBuild(
         long? declaredCount,
@@ -57,6 +58,7 @@ public sealed class SourceInputModule : CliModule
         out IReadOnlyList<SourceInput.SourceRecord>? sourceRecords,
         out IReadOnlySet<string>? sourcePaths)
     {
+        this.SourceMetadataKeys = null;
         if (!HasSourceInput)
         {
             sourceRecords = null;
@@ -97,8 +99,9 @@ public sealed class SourceInputModule : CliModule
 
         IReadOnlyList<SourceInput.SourceRecord> rows;
         IReadOnlySet<string>? readPaths;
+        IReadOnlySet<string>? readMetadataKeys = null;
         var readOk = hasCsv
-            ? SourceInput.SourceCsvReader.TryRead(_inputCsv!, out rows, out readPaths, out var readError)
+            ? SourceInput.SourceCsvReader.TryRead(_inputCsv!, out rows, out readPaths, out readMetadataKeys, out var readError)
             : SourceInput.DirectoryTemplateReader.TryRead(_directoryTemplate!, out rows, out readPaths, out readError);
         if (!readOk)
         {
@@ -146,6 +149,7 @@ public sealed class SourceInputModule : CliModule
 
         sourceRecords = rows;
         sourcePaths = retainSourcePaths ? readPaths : null;
+        this.SourceMetadataKeys = readMetadataKeys;
         return true;
     }
 

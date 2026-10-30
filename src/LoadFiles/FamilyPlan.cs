@@ -44,6 +44,11 @@ internal static class FamilyPlan
             return 0;
         }
 
+        if (request.LoadFile.AttachmentRate >= 100)
+        {
+            return Math.Max(0, request.Output.FileCount);
+        }
+
         long childCount = 0;
         for (long i = 1; i <= request.Output.FileCount; i++)
         {

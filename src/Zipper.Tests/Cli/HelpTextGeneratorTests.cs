@@ -22,6 +22,13 @@ public class HelpTextGeneratorTests
         Assert.Contains("Load File Options:", stderr, StringComparison.Ordinal);
         Assert.Contains("Loadfile-Only Options:", stderr, StringComparison.Ordinal);
         Assert.Contains("Chaos Engine Options:", stderr, StringComparison.Ordinal);
+        var normalizedHelpLines = stderr
+            .Split(Environment.NewLine)
+            .Select(line => string.Join(" ", line.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)))
+            .ToArray();
+        Assert.Contains("--chaos-mode Enable Chaos Engine processing", normalizedHelpLines);
+        Assert.Contains("--chaos-amount <value> Target count: percentage (1%) or exact (500)", normalizedHelpLines);
+        Assert.Contains("--chaos-scenario <name> Predefined scenario; conflicts with --chaos-types; adversarial-values emits valid DAT values", normalizedHelpLines);
         Assert.Contains(string.Join(", ", ArchiveTestCatalog.SupportedSuites), stderr, StringComparison.Ordinal);
         Assert.Contains("Production Set Options:", stderr, StringComparison.Ordinal);
         Assert.Contains("--redacted-production", stderr, StringComparison.Ordinal);

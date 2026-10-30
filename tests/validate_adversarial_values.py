@@ -28,13 +28,24 @@ def main() -> int:
         raise AssertionError(f"expected {expected_records} data records plus a header, got {len(records)} non-empty rows")
 
     if expected_records:
-        value_fields = [value for row in records[1:] for value in row]
-        if not any("\x14" in value and "\xfe" in value for value in value_fields):
-            raise AssertionError("escaped column and quote delimiter values were not found")
-        if not any("Ã¾" in value for value in value_fields):
-            raise AssertionError("quote-lookalike value was not found")
-        if not any(len(value) >= 32_768 for value in value_fields):
-            raise AssertionError("platform-length value was not found")
+        column_delimiter = "\x14"
+        quote_delimiter = "\xfe"
+        platform_value_prefix = (
+            f"Escaped delimiters: left{column_delimiter}middle{quote_delimiter}right"
+            " | Quote lookalike: Ã¾ | "
+        )
+        platform_values = [
+            value for row in records[1:] for value in row
+            if value.startswith(platform_value_prefix)
+        ]
+        if len(platform_values) != 1:
+            raise AssertionError(f"expected exactly one generated platform-length value, got {len(platform_values)}")
+        platform_value = platform_values[0]
+        if len(platform_value) != 32_768:
+            raise AssertionError(f"expected a generated value of 32,768 characters, got {len(platform_value)}")
+        expected_platform_value = platform_value_prefix + "L" * (32_768 - len(platform_value_prefix))
+        if platform_value != expected_platform_value:
+            raise AssertionError("platform-length value must match the generated escaped-delimiter and quote-lookalike pattern")
 
     print(f"Validated {expected_records} valid adversarial-values DAT records")
     return 0

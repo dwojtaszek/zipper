@@ -63,30 +63,16 @@ internal static class DatComposerShared
         var normalizedProfileKeys = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var profileKey in profileValues.Keys)
         {
-            normalizedProfileKeys.TryAdd(NormalizeMetadataKey(profileKey), profileKey);
+            normalizedProfileKeys.TryAdd(SourceMetadataKeyNormalizer.Normalize(profileKey), profileKey);
         }
 
         foreach (var (key, value) in sourceMetadata)
         {
-            if (normalizedProfileKeys.TryGetValue(NormalizeMetadataKey(key), out var profileKey))
+            if (normalizedProfileKeys.TryGetValue(SourceMetadataKeyNormalizer.Normalize(key), out var profileKey))
             {
                 profileValues[profileKey] = value;
             }
         }
-    }
-
-    private static string NormalizeMetadataKey(string key)
-    {
-        var builder = new System.Text.StringBuilder(key.Length);
-        foreach (var c in key)
-        {
-            if (char.IsLetterOrDigit(c))
-            {
-                builder.Append(char.ToUpperInvariant(c));
-            }
-        }
-
-        return builder.ToString();
     }
 
     /// <summary>

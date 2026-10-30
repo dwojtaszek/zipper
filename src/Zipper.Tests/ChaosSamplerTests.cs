@@ -52,6 +52,15 @@ public class ChaosSamplerTests
     }
 
     [Fact]
+    public void SelectTargetLines_IntMaxTotal_ReturnsExactUniqueSample()
+    {
+        var selected = ChaosSampler.SelectTargetLines(int.MaxValue, 3, new Random(42));
+
+        Assert.Equal(3, selected.Count);
+        Assert.All(selected, line => Assert.InRange(line, 1L, int.MaxValue));
+    }
+
+    [Fact]
     public void SelectTargetLines_ZeroCount_ReturnsEmpty()
     {
         var random = new Random(42);
@@ -135,9 +144,43 @@ public class ChaosSamplerTests
     }
 
     [Fact]
+    public void ParseChaosAmount_LongPercentage_UsesExactFractionBeforeTruncating()
+    {
+        Assert.Equal(894_174_264L, ChaosSampler.ParseChaosAmount("33.3%", 2_685_208_000L));
+    }
+
+    [Fact]
+    public void ParseChaosAmount_IntMaxBoundary_PreservesHistoricalDoubleRounding()
+    {
+        Assert.Equal(366_509_607, ChaosSampler.ParseChaosAmount("17.066933548574770%", int.MaxValue));
+    }
+
+    [Theory]
+    [InlineData("100%", long.MaxValue)]
+    [InlineData("200%", long.MaxValue)]
+    [InlineData("100%", 9_007_199_254_740_894L)]
+    public void ParseChaosAmount_PercentageAtOrAboveHundred_ReturnsTotalCount(string chaosAmount, long totalLines)
+    {
+        Assert.Equal(totalLines, ChaosSampler.ParseChaosAmount(chaosAmount, totalLines));
+        Assert.Equal(100, ChaosSampler.ParseChaosAmount(chaosAmount, 100));
+    }
+
+    [Fact]
+    public void ParseChaosAmount_LongPercentageSlightlyAboveHundred_ReturnsTotalCount()
+    {
+        Assert.Equal(long.MaxValue, ChaosSampler.ParseChaosAmount("100.0000000000000001%", long.MaxValue));
+    }
+
+    [Fact]
     public void ParseChaosAmount_PercentageOnlySign_ThrowsArgumentException()
     {
         Assert.Throws<ArgumentException>(() => ChaosSampler.ParseChaosAmount("%", 100));
+    }
+
+    [Fact]
+    public void ParseChaosAmount_NaNPercentage_ThrowsArgumentException()
+    {
+        Assert.Throws<ArgumentException>(() => ChaosSampler.ParseChaosAmount("NaN%", 100));
     }
 
     [Fact]

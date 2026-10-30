@@ -1,7 +1,8 @@
 namespace Zipper;
 
 /// <summary>
-/// Defines a named chaos scenario with predefined anomaly types and amounts.
+/// Defines a named Chaos Scenario with predefined Anomaly Types and Chaos Amounts,
+/// or parser-valid adversarial values.
 /// </summary>
 internal record ChaosScenarioDefinition(
     string Name,
@@ -12,8 +13,8 @@ internal record ChaosScenarioDefinition(
     bool GenerateAdversarialValues = false);
 
 /// <summary>
-/// Registry of built-in chaos scenarios that bundle realistic combinations
-/// of anomaly types modeled after real-world platform ingestion failures.
+/// Registry of built-in Chaos Scenarios for realistic ingestion anomalies
+/// and parser-valid adversarial values.
 /// </summary>
 internal static class ChaosScenarios
 {

@@ -36,10 +36,12 @@ internal sealed class DatComposer : ILoadFileComposer
         long recordCount = request.Output.FileCount;
         if (isAdversarialValuesScenario && mode == WriterMode.LoadfileOnly && request.SourceRecords is null)
         {
-            recordCount += FamilyPlan.GetSimulatedChildCount(request);
+            // Reuse the same deterministic count when the Audit File is generated.
+            request.SimulatedFamilyChildCount = FamilyPlan.GetSimulatedChildCount(request);
+            recordCount += request.SimulatedFamilyChildCount.Value;
         }
         this.adversarialValueTailPlan = isAdversarialValuesScenario
-            ? AdversarialValueTailPlan.Create(request, checked((int)recordCount))
+            ? AdversarialValueTailPlan.Create(request, recordCount)
             : null;
         var namingConvention = request.Metadata.ColumnProfile?.FieldNamingConvention;
         this.batesSequence = request.Bates != null ? BatesSequence.FromConfig(request.Bates) : null;
@@ -109,9 +111,12 @@ internal sealed class DatComposer : ILoadFileComposer
         IReadOnlyList<string> headerColumns,
         string? namingConvention)
     {
-        string? columnName = request.Metadata.ColumnProfile is { } profile
-            ? AdversarialValueTailPlan.FindColumn(profile.Columns)?.Name
-            : "Author";
+        string? columnName = request.AdversarialValueColumnName
+            ?? (request.Metadata.ColumnProfile is { } profile
+                ? AdversarialValueTailPlan.FindColumn(
+                    profile.Columns,
+                    request.SourceRecords?.SelectMany(record => record.Metadata?.Keys ?? Enumerable.Empty<string>()))?.Name
+                : "Author");
         if (columnName is null)
         {
             return -1;
@@ -131,7 +136,7 @@ internal sealed class DatComposer : ILoadFileComposer
 
     private IEnumerable<LoadFileRecord> ApplyAdversarialValues(IEnumerable<LoadFileRecord> records)
     {
-        if (this.adversarialValueColumnIndex < 0)
+        if (this.adversarialValueColumnIndex < 0 || this.adversarialValueTailPlan is not { } tailPlan)
         {
             throw new InvalidOperationException("The adversarial-values scenario requires an eligible DAT value column.");
         }
@@ -139,7 +144,7 @@ internal sealed class DatComposer : ILoadFileComposer
         long recordIndex = 0;
         foreach (var record in records)
         {
-            string? value = this.adversarialValueTailPlan!.GetValue(++recordIndex);
+            string? value = tailPlan.GetValue(++recordIndex);
             if (value is null)
             {
                 yield return record;

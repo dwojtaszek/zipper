@@ -27,11 +27,14 @@ internal class ChaosSampler
 
     public bool ShouldIntercept(long lineNumber) => this.targetLines.Contains(lineNumber);
 
-    public static int ParseChaosAmount(string? chaosAmount, int totalLines)
+    public static int ParseChaosAmount(string? chaosAmount, int totalLines) =>
+        checked((int)Math.Min(totalLines, ParseChaosAmount(chaosAmount, (long)totalLines)));
+
+    public static long ParseChaosAmount(string? chaosAmount, long totalLines)
     {
         if (string.IsNullOrEmpty(chaosAmount))
         {
-            return Math.Max(1, totalLines / 100);
+            return Math.Max(1L, totalLines / 100);
         }
 
         string trimmed = chaosAmount.Trim();
@@ -41,24 +44,58 @@ internal class ChaosSampler
             string pctStr = trimmed[..^1].Trim();
             if (double.TryParse(pctStr, System.Globalization.CultureInfo.InvariantCulture, out var pct))
             {
-                if (pct < 0)
+                if (double.IsNaN(pct) || pct < 0)
                 {
-                    throw new ArgumentException("Chaos amount percentage cannot be negative.", nameof(chaosAmount));
+                    throw new ArgumentException("Chaos amount percentage must be a non-negative number.", nameof(chaosAmount));
                 }
                 if (pct == 0)
                 {
                     return 0;
                 }
-                if (pct == 0)
+                long count;
+                if (totalLines <= int.MaxValue)
                 {
-                    return 0;
+                    if (pct > 100)
+                    {
+                        return totalLines;
+                    }
+
+                    // Preserve historical seeded target counts for existing supported record totals.
+                    count = (long)(totalLines * pct / 100.0);
                 }
-                var count = (int)(totalLines * pct / 100.0);
+                else
+                {
+                    decimal exactPercentage;
+                    if (decimal.TryParse(
+                        pctStr,
+                        System.Globalization.NumberStyles.Float | System.Globalization.NumberStyles.AllowThousands,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        out var parsedPercentage))
+                    {
+                        exactPercentage = parsedPercentage;
+                    }
+                    else if (pct <= 100)
+                    {
+                        exactPercentage = (decimal)pct;
+                    }
+                    else
+                    {
+                        return totalLines;
+                    }
+
+                    if (exactPercentage >= 100m)
+                    {
+                        return totalLines;
+                    }
+
+                    count = (long)((decimal)totalLines * exactPercentage / 100m);
+                }
+
                 if (count < 1)
                 {
                     count = 1;
                 }
-                return count;
+                return Math.Min(count, totalLines);
             }
             throw new ArgumentException($"Invalid chaos amount percentage format: '{chaosAmount}'.", nameof(chaosAmount));
         }
@@ -73,7 +110,7 @@ internal class ChaosSampler
             {
                 return 0;
             }
-            return Math.Min(exact, totalLines);
+            return Math.Min((long)exact, totalLines);
         }
 
         throw new ArgumentException($"Invalid chaos amount format: '{chaosAmount}'. Must be a percentage (e.g., '1%') or an exact count (e.g., '500').", nameof(chaosAmount));

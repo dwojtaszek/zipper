@@ -1,6 +1,9 @@
 using System.Text.Json;
 using Xunit;
+using Zipper.Config;
+using Zipper.LoadFiles;
 using Zipper.Profiles;
+using Zipper.Profiles.Generation;
 using Zipper.Validation;
 
 namespace Zipper.Tests;
@@ -428,7 +431,12 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
             var values = rows.SelectMany(row => row).ToArray();
             Assert.Contains(values, value => value.Contains('\u0014') && value.Contains('\u00fe'));
             Assert.Contains(values, value => value.Contains("Ã¾", StringComparison.Ordinal));
-            Assert.Contains(values, value => value.Length >= 32_768);
+            Assert.Contains(values, value => value.StartsWith("Quote lookalike:", StringComparison.Ordinal));
+            Assert.Contains(values, value => value.StartsWith("Escaped delimiters:", StringComparison.Ordinal));
+            var platformLengthValue = Assert.Single(values, value => value.Length == 32_768);
+            Assert.Contains('\u0014', platformLengthValue);
+            Assert.Contains('\u00fe', platformLengthValue);
+            Assert.Contains("Ã¾", platformLengthValue, StringComparison.Ordinal);
 
             var validation = new ValidatorRunner().ValidateLoadFile(
                 firstLoadFile,
@@ -495,6 +503,100 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
                 Directory.Delete(outputPath, true);
             }
         }
+    }
+
+    [Fact]
+    public void ChaosScenario_AdversarialValues_WithExpandedRecordCountAboveIntMax_CreatesLongSafePlan()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileCount = 1_073_741_824,
+                FileType = "eml",
+            },
+            LoadFile = new LoadFileConfig { AttachmentRate = 100 },
+            Chaos = new ChaosConfig
+            {
+                ChaosMode = true,
+                ChaosAmount = "1",
+                ChaosScenario = "adversarial-values",
+            },
+            Metadata = new MetadataConfig { Seed = 42, WithFamilies = true },
+        };
+        var composer = new DatComposer(request, WriterMode.LoadfileOnly);
+        Assert.Equal(request.Output.FileCount, request.SimulatedFamilyChildCount);
+        Assert.Equal(AdversarialValueTailPlan.TrailingEmptyRowCount, composer.TrailingEmptyRows);
+        long recordCount = request.Output.FileCount + request.SimulatedFamilyChildCount!.Value;
+
+        var plan = Assert.IsType<AdversarialValueTailPlan>(
+            AdversarialValueTailPlan.Create(request, recordCount));
+        Assert.Null(plan.GetValue(0));
+
+        string platformLengthValue = Assert.IsType<string>(plan.GetValue(recordCount));
+        Assert.Equal(AdversarialValueTailPlan.PlatformFieldLength, platformLengthValue.Length);
+        Assert.Contains('\u0014', platformLengthValue);
+        Assert.Contains('\u00fe', platformLengthValue);
+        Assert.Contains("Ã¾", platformLengthValue, StringComparison.Ordinal);
+        Assert.Null(plan.GetValue(recordCount + 1));
+    }
+
+    [Fact]
+    public void ChaosScenario_AdversarialValues_WithIntMaxCount_PreservesSamplerSelection()
+    {
+        const int recordCount = int.MaxValue;
+        const int seed = 42;
+        var request = new FileGenerationRequest
+        {
+            Chaos = new ChaosConfig
+            {
+                ChaosMode = true,
+                ChaosAmount = "1",
+                ChaosScenario = "adversarial-values",
+            },
+            Metadata = new MetadataConfig { Seed = seed },
+        };
+        var selectedRecords = ChaosSampler.SelectTargetLines(recordCount, 1, new Random(seed));
+        Assert.DoesNotContain(recordCount, selectedRecords);
+
+        var plan = Assert.IsType<AdversarialValueTailPlan>(
+            AdversarialValueTailPlan.Create(request, recordCount));
+
+        Assert.Null(plan.GetValue(recordCount));
+    }
+
+    [Fact]
+    public void ChaosScenario_AdversarialValues_WithAboveIntMaxCount_UsesSeededStreamingSelection()
+    {
+        const long recordCount = (long)int.MaxValue + 1;
+        const int sampleSize = 100;
+        const int seed = 42;
+        var request = new FileGenerationRequest
+        {
+            Chaos = new ChaosConfig
+            {
+                ChaosMode = true,
+                ChaosAmount = "50%",
+                ChaosScenario = "adversarial-values",
+            },
+            Metadata = new MetadataConfig { Seed = seed },
+        };
+        var plan = Assert.IsType<AdversarialValueTailPlan>(
+            AdversarialValueTailPlan.Create(request, recordCount));
+        var replay = Assert.IsType<AdversarialValueTailPlan>(
+            AdversarialValueTailPlan.Create(request, recordCount));
+        var selected = new bool[sampleSize];
+        var replaySelected = new bool[sampleSize];
+
+        for (int index = 1; index <= sampleSize; index++)
+        {
+            selected[index - 1] = plan.GetValue(index) is not null;
+            replaySelected[index - 1] = replay.GetValue(index) is not null;
+        }
+
+        Assert.Equal(selected, replaySelected);
+        Assert.Contains(true, selected);
+        Assert.Contains(false, selected);
     }
 
     [Fact]
@@ -591,7 +693,8 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
                 value.StartsWith("Escaped delimiters:", StringComparison.Ordinal)
                 || value.StartsWith("Quote lookalike:", StringComparison.Ordinal))).ToArray();
             Assert.Equal(2, adversarialRows.Length);
-            Assert.Contains(adversarialRows.SelectMany(row => row), value => value.Length == 32_768);
+            var platformLengthValue = Assert.Single(rows.SelectMany(row => row), value => value.Length == 32_768);
+            Assert.Contains(adversarialRows[0], value => value == platformLengthValue);
 
             var validation = new ValidatorRunner().ValidateLoadFile(
                 loadFile,
@@ -638,11 +741,21 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
                 .Select(line => DatLineParser.Parse(line, '\u0014', '\u00fe'))
                 .ToArray();
             Assert.Equal(8, rows.Length);
+            string propertiesPath = Assert.Single(Directory.GetFiles(outputPath, "*_properties.json"));
+            using var properties = JsonDocument.Parse(await File.ReadAllTextAsync(propertiesPath));
+            Assert.Equal(rows.Length, properties.RootElement.GetProperty("totalRecords").GetInt64());
+
             var adversarialRows = rows.Where(row =>
                 row[authorIndex].StartsWith("Escaped delimiters:", StringComparison.Ordinal)
                 || row[authorIndex].StartsWith("Quote lookalike:", StringComparison.Ordinal)).ToArray();
             Assert.Equal(4, adversarialRows.Length);
-            Assert.Contains(adversarialRows.Select(row => row[authorIndex]), value => value.Length == 32_768);
+            string platformLengthValue = Assert.Single(
+                rows.Select(row => row[authorIndex]),
+                value => value.Length == AdversarialValueTailPlan.PlatformFieldLength);
+            Assert.Equal(platformLengthValue, adversarialRows[0][authorIndex]);
+            Assert.Contains('\u0014', platformLengthValue);
+            Assert.Contains('\u00fe', platformLengthValue);
+            Assert.Contains("Ã¾", platformLengthValue, StringComparison.Ordinal);
 
             var validation = new ValidatorRunner().ValidateLoadFile(
                 loadFile,
@@ -874,11 +987,66 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public async Task ChaosScenario_AdversarialValues_WithPlatformLengthSourceMetadata_PreservesBothValues()
+    {
+        string sourceCsv = Path.Combine(this.TempDir, "adversarial-source-long-metadata.csv");
+        var outputPath = Path.Combine(this.TempDir, $"zipper_adversarial_source_long_metadata_{Guid.NewGuid():N}");
+        string sourceValue = new('S', AdversarialValueTailPlan.PlatformFieldLength);
+        const string sourceAuthor = "Source Counsel";
+        await File.WriteAllTextAsync(
+            sourceCsv,
+            $"FilePath,FileType,AUTHOR,REVIEWNOTES\nfolder/doc.pdf,pdf,{sourceAuthor},{sourceValue}\n");
+
+        try
+        {
+            var (exitCode, _, stderr) = await RunWithCapture(new[]
+            {
+                "--loadfile-only", "--input-csv", sourceCsv, "--count", "1", "--output-path", outputPath,
+                "--chaos-mode", "--chaos-scenario", "adversarial-values",
+                "--column-profile", "litigation", "--seed", "42",
+            });
+
+            Assert.True(exitCode == 0, stderr);
+            Assert.Empty(stderr);
+            string loadFile = Assert.Single(Directory.GetFiles(outputPath, "*.dat"));
+            var lines = await File.ReadAllLinesAsync(loadFile);
+            var header = DatLineParser.Parse(lines[0], '\u0014', '\u00fe');
+            int reviewNotesIndex = header.FindIndex(column => string.Equals(column, "REVIEWNOTES", StringComparison.Ordinal));
+            int authorIndex = header.FindIndex(column => string.Equals(column, "AUTHOR", StringComparison.Ordinal));
+            Assert.True(reviewNotesIndex >= 0);
+            Assert.True(authorIndex >= 0);
+            var row = DatLineParser.Parse(lines[1], '\u0014', '\u00fe');
+            Assert.Equal(sourceAuthor, row[authorIndex]);
+            Assert.Equal(sourceValue, row[reviewNotesIndex]);
+            const string generatedPrefix = "Escaped delimiters: left\u0014middle\u00feright | Quote lookalike: Ã¾ | ";
+            string generatedValue = Assert.Single(row, value => value.StartsWith(generatedPrefix, StringComparison.Ordinal));
+            Assert.Equal(AdversarialValueTailPlan.PlatformFieldLength, generatedValue.Length);
+            Assert.Equal(2, row.Count(value => value.Length == AdversarialValueTailPlan.PlatformFieldLength));
+
+            var validation = new ValidatorRunner().ValidateLoadFile(
+                loadFile,
+                "dat",
+                headerColumns: null,
+                expectedEol: "\r\n",
+                columnDelimiter: '\u0014',
+                quoteDelimiter: '\u00fe');
+            Assert.Empty(validation.Findings);
+        }
+        finally
+        {
+            if (Directory.Exists(outputPath))
+            {
+                Directory.Delete(outputPath, true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task ChaosScenario_AdversarialValues_WithSourceRecordsAndMetadata_GeneratesValidTailValues()
     {
         string sourceCsv = Path.Combine(this.TempDir, "adversarial-source-metadata.csv");
         var outputPath = Path.Combine(this.TempDir, $"zipper_adversarial_source_metadata_{Guid.NewGuid():N}");
-        await File.WriteAllTextAsync(sourceCsv, "FilePath,FileType\nfolder/doc.pdf,pdf\n");
+        await File.WriteAllTextAsync(sourceCsv, "FilePath,FileType,AUTHOR\nfolder/doc.pdf,pdf,Source Counsel\n");
 
         var (exitCode, _, stderr) = await RunWithCapture(new[]
         {
@@ -898,6 +1066,7 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
         Assert.Contains('\u0014', row[authorIndex]);
         Assert.Contains('\u00fe', row[authorIndex]);
         Assert.Contains("Ã¾", row[authorIndex], StringComparison.Ordinal);
+        Assert.DoesNotContain("Source Counsel", row);
 
         var validation = new ValidatorRunner().ValidateLoadFile(
             loadFile,
@@ -979,6 +1148,37 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
         Assert.False(Directory.Exists(outputPath));
     }
 
+    [Theory]
+    [InlineData("Source Counsel")]
+    [InlineData("")]
+    public async Task ChaosScenario_AdversarialValues_WithEveryEligibleColumnMappedToSourceMetadata_ReturnsError(string authorValue)
+    {
+        string sourceCsv = Path.Combine(this.TempDir, "adversarial-source-author.csv");
+        string profilePath = Path.Combine(this.TempDir, "author-only-profile.json");
+        var outputPath = Path.Combine(this.TempDir, $"zipper_adversarial_source_author_{Guid.NewGuid():N}");
+        await File.WriteAllTextAsync(sourceCsv, $"FilePath,FileType,AUTHOR\nfolder/doc.pdf,pdf,{authorValue}\n");
+        await File.WriteAllTextAsync(profilePath, JsonSerializer.Serialize(new ColumnProfile
+        {
+            Name = "author-only",
+            Columns =
+            [
+                new ColumnDefinition { Name = "DOCID", Type = "identifier", Required = true },
+                new ColumnDefinition { Name = "AUTHOR", Type = "text", Required = true },
+            ],
+        }));
+
+        var (exitCode, _, stderr) = await RunWithCapture(new[]
+        {
+            "--loadfile-only", "--input-csv", sourceCsv, "--count", "1", "--output-path", outputPath,
+            "--chaos-mode", "--chaos-scenario", "adversarial-values",
+            "--column-profile", profilePath, "--seed", "42",
+        });
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("not mapped to Source Metadata", stderr, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(outputPath));
+    }
+
     [Fact]
     public async Task ChaosScenario_AdversarialValues_WithImplicitOptFormat_ReturnsError()
     {
@@ -1000,6 +1200,7 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
     [InlineData("--quote-delim", "ascii:0")]
     [InlineData("--quote-delim", "ascii:10")]
     [InlineData("--quote-delim", "none")]
+    [InlineData("--newline-delim", "ascii:254")]
     [InlineData("--newline-delim", "ascii:0")]
     [InlineData("--newline-delim", "ascii:10")]
     [InlineData("--newline-delim", "ascii:13")]

@@ -1,4 +1,5 @@
 using System.Text;
+using Zipper.Utils;
 
 namespace Zipper.Profiles.Generation;
 
@@ -12,50 +13,79 @@ internal sealed class AdversarialValueTailPlan
     internal const int PlatformFieldLength = 32_768;
     internal const int TrailingEmptyRowCount = 2;
 
+    private readonly long recordCount;
     private readonly HashSet<long>? targetedRecords;
     private readonly bool targetAllRecords;
-    private readonly long firstTargetRecord;
+    private readonly Random? random;
     private readonly string escapedDelimiterValue;
     private readonly string platformLengthValue;
+    private long remainingTargetCount;
+    private bool emittedPlatformLengthValue;
 
     private const string QuoteLookalikeValue = "Quote lookalike: Ã¾";
 
     private AdversarialValueTailPlan(
+        long recordCount,
+        long targetCount,
         HashSet<long>? targetedRecords,
         bool targetAllRecords,
+        Random? random,
         char columnDelimiter,
         char quoteDelimiter)
     {
+        this.recordCount = recordCount;
+        this.remainingTargetCount = targetCount;
         this.targetedRecords = targetedRecords;
         this.targetAllRecords = targetAllRecords;
-        this.firstTargetRecord = targetAllRecords ? 1 : targetedRecords?.Min() ?? 0;
+        this.random = random;
         this.escapedDelimiterValue = BuildEscapedDelimiterValue(columnDelimiter, quoteDelimiter);
         string platformLengthPrefix = $"{this.escapedDelimiterValue} | {QuoteLookalikeValue} | ";
         this.platformLengthValue = platformLengthPrefix + new string('L', PlatformFieldLength - platformLengthPrefix.Length);
     }
 
-    internal static AdversarialValueTailPlan? Create(FileGenerationRequest request, int recordCount)
+    internal static AdversarialValueTailPlan? Create(FileGenerationRequest request, long recordCount)
     {
-        if (!request.Chaos.ChaosMode || !ChaosScenarios.GeneratesAdversarialValues(request.Chaos.ChaosScenario))
+        if (!request.Chaos.ChaosMode || request.Chaos.ChaosScenario is not { } scenarioName)
         {
             return null;
         }
 
-        var scenario = ChaosScenarios.GetByName(request.Chaos.ChaosScenario!)!;
-        int targetCount = recordCount == 0
+        var scenario = ChaosScenarios.GetByName(scenarioName);
+        if (scenario?.GenerateAdversarialValues != true)
+        {
+            return null;
+        }
+
+        long targetCount = recordCount == 0
             ? 0
             : ChaosSampler.ParseChaosAmount(request.Chaos.ChaosAmount ?? scenario.DefaultAmount, recordCount);
-        bool allRecords = recordCount > 0 && targetCount >= recordCount;
+        targetCount = Math.Min(targetCount, recordCount);
         HashSet<long>? selectedRecords = null;
-        if (targetCount > 0 && !allRecords)
+        Random? selectionRandom = null;
+        if (targetCount > 0 && targetCount < recordCount)
         {
-            var random = request.Metadata.Seed.HasValue ? new Random(request.Metadata.Seed.Value) : Random.Shared;
-            selectedRecords = ChaosSampler.SelectTargetLines(recordCount, targetCount, random);
+            // PRNG is required for deterministic, seeded selection of simulated records.
+#pragma warning disable S2245 // Seeded randomness selects mock-data records, not security decisions.
+            var selectionGenerator = request.Metadata.Seed.HasValue
+                ? new Random(request.Metadata.Seed.Value)
+                : Random.Shared;
+#pragma warning restore S2245
+            if (recordCount <= int.MaxValue)
+            {
+                selectedRecords = ChaosSampler.SelectTargetLines((int)recordCount, (int)targetCount, selectionGenerator);
+            }
+            else
+            {
+                selectionRandom = selectionGenerator;
+            }
         }
 
         return new AdversarialValueTailPlan(
+            recordCount,
+            targetCount,
             selectedRecords,
-            allRecords,
+            recordCount > 0 && targetCount >= recordCount,
+            selectionRandom,
             request.Delimiters.ColumnDelimiter[0],
             request.Delimiters.QuoteDelimiter[0]);
     }
@@ -150,21 +180,65 @@ internal sealed class AdversarialValueTailPlan
             "BEGBATES" or "ENDBATES" or "BATES" or "BATESNUMBER");
     }
 
-    internal static ColumnDefinition? FindColumn(IEnumerable<ColumnDefinition> columns) =>
-        columns.FirstOrDefault(column => IsEligibleColumn(column) && column.Name.Equals("AUTHOR", StringComparison.OrdinalIgnoreCase))
-        ?? columns.FirstOrDefault(IsEligibleColumn);
+    internal static ColumnDefinition? FindColumn(
+        IEnumerable<ColumnDefinition> columns,
+        IEnumerable<string>? sourceMetadataKeys = null)
+    {
+        HashSet<string>? normalizedSourceMetadataKeys = null;
+        if (sourceMetadataKeys is not null)
+        {
+            foreach (var key in sourceMetadataKeys)
+            {
+                (normalizedSourceMetadataKeys ??= new HashSet<string>(StringComparer.Ordinal)).Add(SourceMetadataKeyNormalizer.Normalize(key));
+            }
+        }
+
+        bool IsAvailableColumn(ColumnDefinition column) =>
+            IsEligibleColumn(column)
+            && (normalizedSourceMetadataKeys is null || !normalizedSourceMetadataKeys.Contains(SourceMetadataKeyNormalizer.Normalize(column.Name)));
+
+        return columns.FirstOrDefault(column =>
+                   IsAvailableColumn(column)
+                   && column.Name.Equals("AUTHOR", StringComparison.OrdinalIgnoreCase))
+               ?? columns.FirstOrDefault(IsAvailableColumn);
+    }
 
     internal string? GetValue(long recordIndex)
     {
-        if (recordIndex < 1
-            || this.targetedRecords is not null && !this.targetedRecords.Contains(recordIndex)
-            || this.targetedRecords is null && !this.targetAllRecords)
+        if (recordIndex < 1 || recordIndex > this.recordCount || this.remainingTargetCount == 0)
         {
             return null;
         }
 
-        return recordIndex == this.firstTargetRecord
-            ? this.platformLengthValue
-            : recordIndex % 2 == 0 ? QuoteLookalikeValue : this.escapedDelimiterValue;
+        bool isTargeted = this.targetAllRecords;
+        if (!isTargeted)
+        {
+            if (this.targetedRecords is not null)
+            {
+                isTargeted = this.targetedRecords.Contains(recordIndex);
+            }
+            else if (this.random is not null)
+            {
+                isTargeted = this.random.NextInt64(this.recordCount - recordIndex + 1) < this.remainingTargetCount;
+            }
+            else
+            {
+                throw new InvalidOperationException("The adversarial-value target plan has no record selector.");
+            }
+        }
+
+        if (!isTargeted)
+        {
+            return null;
+        }
+
+        this.remainingTargetCount--;
+        if (!this.emittedPlatformLengthValue)
+        {
+            this.emittedPlatformLengthValue = true;
+            return this.platformLengthValue;
+        }
+
+        return recordIndex % 2 == 0 ? QuoteLookalikeValue : this.escapedDelimiterValue;
     }
 }

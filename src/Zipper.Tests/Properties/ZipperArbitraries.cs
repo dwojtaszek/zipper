@@ -304,6 +304,23 @@ public readonly record struct ChaosSeedPropertyInput(
     int FileOrdinal);
 
 /// <summary>
+/// Long record count and tenths-of-a-percent for exact Chaos Engine target-count properties.
+/// </summary>
+[StructLayout(LayoutKind.Auto)]
+public readonly record struct ChaosLongPercentagePropertyInput(
+    long RecordCount,
+    int PercentageTenths);
+
+/// <summary>
+/// Bounded record count, target count, and seed for adversarial value tail planning properties.
+/// </summary>
+[StructLayout(LayoutKind.Auto)]
+public readonly record struct AdversarialValueTailPropertyInput(
+    int RecordCount,
+    int TargetCount,
+    int Seed);
+
+/// <summary>
 /// Shared FsCheck Arbitrary registrations for Zipper domain property-based tests.
 /// <para>
 /// Seed ranges are drawn from <c>0</c> (inclusive) so they match the CLI's documented
@@ -775,6 +792,41 @@ public static class ZipperArbitraries
             select new ChaosSeedPropertyInput(seed, recordOrdinal, lineNumber, dataLength, pageCount, fileOrdinal);
 
         return Arb.From(gen, ShrinkChaosSeedInput);
+    }
+
+    public static Arbitrary<AdversarialValueTailPropertyInput> AdversarialValueTailPropertyInputArb()
+    {
+        var gen =
+            from recordCount in Gen.Choose(1, 500)
+            from targetCount in Gen.Choose(0, recordCount)
+            from seed in Gen.Choose(0, 1_000_000)
+            select new AdversarialValueTailPropertyInput(recordCount, targetCount, seed);
+
+        return Arb.From(gen);
+    }
+
+    public static Arbitrary<ChaosLongPercentagePropertyInput> ChaosLongPercentagePropertyInputArb()
+    {
+        var gen =
+            from recordCountThousands in Gen.Choose(2_685_208, 2_785_208)
+            from percentageTenths in Gen.Choose(1, 999)
+            select new ChaosLongPercentagePropertyInput((long)recordCountThousands * 1_000, percentageTenths);
+
+        return Arb.From(gen, ShrinkChaosLongPercentageInput);
+    }
+
+    private static IEnumerable<ChaosLongPercentagePropertyInput> ShrinkChaosLongPercentageInput(
+        ChaosLongPercentagePropertyInput input)
+    {
+        if (input.RecordCount > 2_685_208_000L)
+        {
+            yield return input with { RecordCount = 2_685_208_000L };
+        }
+
+        if (input.PercentageTenths > 1)
+        {
+            yield return input with { PercentageTenths = 1 };
+        }
     }
 
     private static IEnumerable<BatesPropertyInput> ShrinkBatesInput(BatesPropertyInput input)

@@ -77,125 +77,13 @@ public sealed class ChaosModule : CliModule
         DelimiterConfig? delimiters = null,
         string? encoding = null)
     {
-        if (_mode)
+        if (!this.TryValidateMode(loadfileOnly)
+            || !this.TryValidateScenario(formats, delimiters, encoding)
+            || !this.TryValidateAmount()
+            || !this.TryNormalizeChaosTypes(formats, out var normalizedChaosTypes))
         {
-            if (!loadfileOnly)
-            {
-                Console.Error.WriteLine("Error: --chaos-mode requires --loadfile-only.");
-                config = default!;
-                return false;
-            }
-        }
-        else
-        {
-            if (!string.IsNullOrEmpty(_amount))
-            {
-                Console.Error.WriteLine("Error: --chaos-amount requires --chaos-mode.");
-                config = default!;
-                return false;
-            }
-            if (!string.IsNullOrEmpty(_types))
-            {
-                Console.Error.WriteLine("Error: --chaos-types requires --chaos-mode.");
-                config = default!;
-                return false;
-            }
-            if (!string.IsNullOrEmpty(_scenario))
-            {
-                Console.Error.WriteLine("Error: --chaos-scenario requires --chaos-mode.");
-                config = default!;
-                return false;
-            }
-        }
-
-        if (!string.IsNullOrEmpty(_scenario) && !string.IsNullOrEmpty(_types))
-        {
-            Console.Error.WriteLine("Error: --chaos-scenario conflicts with --chaos-types. Use one or the other.");
             config = default!;
             return false;
-        }
-
-        if (!string.IsNullOrEmpty(_scenario))
-        {
-            var scenario = ChaosScenarios.GetByName(_scenario);
-            if (scenario == null)
-            {
-                Console.Error.WriteLine($"Error: Unknown chaos scenario '{_scenario}'.\n       Available scenarios: {string.Join(", ", ChaosScenarios.ScenarioNames)}");
-                config = default!;
-                return false;
-            }
-
-            // A scenario with a required format must match every selected format (Dat when none given).
-            var effectiveFormats = formats is { Count: > 0 } ? formats : new[] { LoadFileFormat.Dat };
-            if (scenario.RequiredFormat.HasValue)
-            {
-                var mismatched = effectiveFormats.FirstOrDefault(f => f != scenario.RequiredFormat.Value, scenario.RequiredFormat.Value);
-                if (mismatched != scenario.RequiredFormat.Value)
-                {
-                    Console.Error.WriteLine($"Error: Chaos scenario '{_scenario}' requires --loadfile-format {scenario.RequiredFormat.Value.ToString().ToLowerInvariant()} but got {mismatched.ToString().ToLowerInvariant()}.");
-                    config = default!;
-                    return false;
-                }
-            }
-
-            if (scenario.GenerateAdversarialValues
-                && !AdversarialValueTailPlan.HasValidDatConfiguration(delimiters ?? new DelimiterConfig(), encoding ?? "UTF-8"))
-            {
-                Console.Error.WriteLine("Error: Chaos scenario 'adversarial-values' requires DAT-safe delimiters and an encoding that preserves its values.");
-                config = default!;
-                return false;
-            }
-        }
-
-        if (!string.IsNullOrEmpty(_amount) && !IsValidChaosAmount(_amount))
-        {
-            Console.Error.WriteLine("Error: --chaos-amount must be a percentage (e.g., '1%') or an exact count (e.g., '500').");
-            config = default!;
-            return false;
-        }
-
-        // Defaults to the raw value so an unset/unparseable input is never silently widened.
-        string? normalizedChaosTypes = _types;
-        if (!string.IsNullOrEmpty(_types))
-        {
-            // Build union of valid types for all formats
-            var validTypesUnion = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (formats is { Count: > 0 })
-            {
-                foreach (var format in formats)
-                {
-                    foreach (var t in ChaosAnomalyTypes.ForFormat(format))
-                    {
-                        validTypesUnion.Add(t);
-                    }
-                }
-            }
-            else
-            {
-                // Fallback to dat format if no formats specified
-                foreach (var t in ChaosAnomalyTypes.ForFormat(LoadFileFormat.Dat))
-                {
-                    validTypesUnion.Add(t);
-                }
-            }
-
-            var normalized = new List<string>();
-            foreach (var t in _types.Split(','))
-            {
-                var trimmed = t.Trim();
-                if (!validTypesUnion.Contains(trimmed))
-                {
-                    Console.Error.WriteLine($"Error: Invalid chaos type '{trimmed}'. Valid types for selected formats: {string.Join(", ", validTypesUnion.OrderBy(x => x))}");
-                    config = default!;
-                    return false;
-                }
-
-                normalized.Add(trimmed);
-            }
-
-            // Store the trimmed names that were actually validated so downstream consumers
-            // see exactly the set that passed validation.
-            normalizedChaosTypes = string.Join(",", normalized);
         }
 
         config = new ChaosConfig
@@ -205,6 +93,140 @@ public sealed class ChaosModule : CliModule
             ChaosTypes = normalizedChaosTypes,
             ChaosScenario = _scenario,
         };
+        return true;
+    }
+
+    private bool TryValidateMode(bool loadfileOnly)
+    {
+        if (this._mode)
+        {
+            if (!loadfileOnly)
+            {
+                Console.Error.WriteLine("Error: --chaos-mode requires --loadfile-only.");
+                return false;
+            }
+
+            return true;
+        }
+
+        if (!string.IsNullOrEmpty(this._amount))
+        {
+            Console.Error.WriteLine("Error: --chaos-amount requires --chaos-mode.");
+            return false;
+        }
+
+        if (!string.IsNullOrEmpty(this._types))
+        {
+            Console.Error.WriteLine("Error: --chaos-types requires --chaos-mode.");
+            return false;
+        }
+
+        if (!string.IsNullOrEmpty(this._scenario))
+        {
+            Console.Error.WriteLine("Error: --chaos-scenario requires --chaos-mode.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool TryValidateScenario(
+        IReadOnlyList<LoadFileFormat> formats,
+        DelimiterConfig? delimiters,
+        string? encoding)
+    {
+        if (string.IsNullOrEmpty(this._scenario))
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrEmpty(this._types))
+        {
+            Console.Error.WriteLine("Error: --chaos-scenario conflicts with --chaos-types. Use one or the other.");
+            return false;
+        }
+
+        var scenario = ChaosScenarios.GetByName(this._scenario);
+        if (scenario is null)
+        {
+            Console.Error.WriteLine($"Error: Unknown chaos scenario '{this._scenario}'.\n       Available scenarios: {string.Join(", ", ChaosScenarios.ScenarioNames)}");
+            return false;
+        }
+
+        // A scenario with a required format must match every selected format (Dat when none given).
+        var effectiveFormats = formats is { Count: > 0 } ? formats : new[] { LoadFileFormat.Dat };
+        if (scenario.RequiredFormat.HasValue)
+        {
+            var mismatched = effectiveFormats.FirstOrDefault(f => f != scenario.RequiredFormat.Value, scenario.RequiredFormat.Value);
+            if (mismatched != scenario.RequiredFormat.Value)
+            {
+                Console.Error.WriteLine($"Error: Chaos scenario '{this._scenario}' requires --loadfile-format {scenario.RequiredFormat.Value.ToString().ToLowerInvariant()} but got {mismatched.ToString().ToLowerInvariant()}.");
+                return false;
+            }
+        }
+
+        if (scenario.GenerateAdversarialValues
+            && !AdversarialValueTailPlan.HasValidDatConfiguration(delimiters ?? new DelimiterConfig(), encoding ?? "UTF-8"))
+        {
+            Console.Error.WriteLine("Error: Chaos scenario 'adversarial-values' requires DAT-safe delimiters and an encoding that preserves its values.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool TryValidateAmount()
+    {
+        if (!string.IsNullOrEmpty(this._amount) && !IsValidChaosAmount(this._amount))
+        {
+            Console.Error.WriteLine("Error: --chaos-amount must be a percentage (e.g., '1%') or an exact count (e.g., '500').");
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool TryNormalizeChaosTypes(
+        IReadOnlyList<LoadFileFormat> formats,
+        out string? normalizedChaosTypes)
+    {
+        // Defaults to the raw value so an unset/unparseable input is never silently widened.
+        normalizedChaosTypes = this._types;
+        if (string.IsNullOrEmpty(this._types))
+        {
+            return true;
+        }
+
+        // Build union of valid types for all formats.
+        var validTypesUnion = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (formats is { Count: > 0 })
+        {
+            foreach (var format in formats)
+            {
+                validTypesUnion.UnionWith(ChaosAnomalyTypes.ForFormat(format));
+            }
+        }
+        else
+        {
+            validTypesUnion.UnionWith(ChaosAnomalyTypes.ForFormat(LoadFileFormat.Dat));
+        }
+
+        var normalized = new List<string>();
+        foreach (var type in this._types.Split(','))
+        {
+            var trimmed = type.Trim();
+            if (!validTypesUnion.Contains(trimmed))
+            {
+                Console.Error.WriteLine($"Error: Invalid chaos type '{trimmed}'. Valid types for selected formats: {string.Join(", ", validTypesUnion.OrderBy(value => value))}");
+                return false;
+            }
+
+            normalized.Add(trimmed);
+        }
+
+        // Store the trimmed names that were actually validated so downstream consumers
+        // see exactly the set that passed validation.
+        normalizedChaosTypes = string.Join(",", normalized);
         return true;
     }
 
