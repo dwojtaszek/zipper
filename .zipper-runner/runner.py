@@ -283,6 +283,90 @@ def is_quota_exhausted(output: str, stderr: str = "") -> bool:
         return True
     return False
 
+
+# A mission stopped by one of its own bounds is not a verdict about the branch,
+# for the same reason a quota refusal is not: the runtime stopped it, so nothing
+# was learned about the code. Every plugin composes these messages from the bound
+# that fired -- opencode, hermes, codex and claude all emit "Agent process hung and
+# was forcefully killed after N minutes", droid emits "Droid mission hung and was
+# forcefully killed after N seconds with no output and no new commit" or "Droid
+# mission timed out after N seconds" -- so the shapes are matched here exactly the
+# way `is_quota_exhausted` matches provider errors above.
+#
+# Measured on the host 2026-10-30: the three configured opencode free models were
+# quota-exhausted and were correctly skipped without spending the ladder, but the
+# single droid hang that followed did spend it, six cycles running, until the
+# branch was parked for 64 minutes. That branch carried real work and an open PR.
+_MISSION_CUT_MARKERS = ("forcefully killed after", "mission timed out after")
+
+
+def is_mission_cut(stderr: str) -> bool:
+    """True when a mission was cut by its own bound rather than judged by its work.
+
+    Both a liveness kill and a ceiling cut say the runtime stopped the mission;
+    neither says anything about whether the branch's code is right.
+
+    Only stderr is read, and only a line that announces itself as an error. Every
+    plugin returns its kill message in the third element of the result -- opencode,
+    hermes, codex, claude and droid all compose it from the bound that fired -- so
+    stderr is where the diagnostic lives. stdout carries assistant prose, which can
+    quote a kill message (plausible in this repository, whose own source contains
+    these strings) while the mission reports a real failure; reading it would let a
+    quoted phrase discard that failure.
+    """
+    return any(_ERROR_LINE_RE.match(line) and any(m in line.lower() for m in _MISSION_CUT_MARKERS)
+               for line in _reason_lines(stderr))
+
+
+def produced_verdict(code: int, output: str, stderr: str = "") -> bool:
+    """Whether a mission result says something about the branch rather than the runtime.
+
+    Two outcomes describe the provider and prove nothing about the code: a quota
+    refusal, and a mission stopped by one of its own bounds. Everything else is a
+    verdict, including a clean exit that did no work -- that is the fruitless
+    mission the ladder exists for. Only a verdict may spend a branch's backoff
+    ladder, and only a verdict makes the "all agents failed" email truthful.
+
+    The exit code gates the quota check, as it does at every other call site,
+    because that check matches loose keywords: a clean exit whose output merely
+    mentions a rate limit ("tests run out of memory") would otherwise read as a
+    provider refusal and leave the ladder unspent forever.
+    """
+    if code == 0:
+        return True
+    return not (is_quota_exhausted(output, stderr) or is_mission_cut(stderr))
+
+
+def any_verdict(results) -> bool:
+    """Whether any candidate in a fallback sequence produced a verdict.
+
+    The ladder decision is made once, after the last candidate, so a verdict from
+    an earlier one has to survive the ones that follow it: reading only the final
+    result would let a trailing cut or quota refusal hide an earlier verdict and
+    leave the ladder unspent.
+    """
+    return any(produced_verdict(code, out, err) for code, out, err in results)
+
+
+def _remove_worktree_or_record_outcome(wt_path: str, branch: str, results) -> None:
+    """Remove the worktree, spending the ladder only if a candidate produced a verdict.
+
+    Shared by the orphan path's three exit shapes so they cannot drift apart on
+    which candidates may spend the ladder: a preserved worktree records a failure
+    when any candidate produced a verdict, and leaves the ladder untouched when
+    every candidate was stopped by the runtime.
+    """
+    if _remove_worktree(wt_path, branch):
+        _record_worktree_progress(branch)
+        return
+    print(f"Worktree '{branch}' preserved due to uncommitted changes or unpushed commits.")
+    if any_verdict(results):
+        _record_worktree_failure(branch)
+    else:
+        print(f"[backoff] No candidate produced a verdict for '{branch}'; "
+              f"leaving the branch backoff untouched.")
+
+
 # A mission that ends non-zero has to say why in the run log. Each plugin reports
 # its reason on one of the returned streams: a kill message naming the bound that
 # fired, a provider error, or an exception string. Without it a ceiling cut, a
@@ -3767,11 +3851,13 @@ def _babysit_with_fallback(
             return
         # Two separate facts, because they mean different things. `launched` says a
         # mission was actually started; `real_outcome` says one got past the quota
-        # check and therefore produced a verdict about this branch. A candidate that
-        # fails on quota was launched but proves nothing about the branch, so only
-        # `real_outcome` may spend the backoff ladder.
+        # and cut checks and therefore produced a verdict about this branch. A
+        # candidate that fails on quota, or that its own bound stops, was launched
+        # but proves nothing about the branch, so only `real_outcome` may spend the
+        # backoff ladder.
         launched = False
         real_outcome = False
+        cut_seen = False
         for agent_name, model_name in AGENT_CANDIDATES:
             plugin = AGENT_PLUGINS.get(agent_name)
             if plugin is None:
@@ -3792,8 +3878,32 @@ def _babysit_with_fallback(
                 print(f"[babysit] {agent_name}/{model_name} exhausted quota. Trying next candidate...")
                 continue
 
-            # Past the quota check the mission produced a verdict about this branch,
-            # whether it completed the work or failed for a reason the agent owns.
+            if code != 0 and is_mission_cut(err):
+                # The runtime stopped this mission, so it produced no verdict about
+                # the branch -- the same fact as a quota refusal, reached by a
+                # different route. It must not spend the ladder either, or a branch
+                # carrying real work gets parked for the cooldown's whole span
+                # because the agent runtime was unhealthy rather than the code
+                # wrong. The next candidate may still produce a verdict, so this
+                # continues rather than returning.
+                print(f"[babysit] {agent_name}/{model_name} was cut by its own bound; "
+                      f"no verdict about '{branch}'.")
+                cut_seen = True
+                # The runtime stopped this mission, but it may still have committed
+                # before it died, and that commit is real work. Record it as an
+                # interrupted repair so the gate state is not left describing the
+                # pre-mission head -- which is what raises a spurious divergence alert
+                # against the worktree on the next pass. Only the ladder decision is
+                # withheld here, not the bookkeeping.
+                after = _babysit_snapshot(wt_path, branch, pr_number)
+                if pr_number and after[2].strip() != before[2].strip():
+                    _record_coderabbit_gate_failure(pr_number, branch, "Repair mission interrupted before completion", False)
+                before = after
+                continue
+
+            # Past the quota and cut checks the mission produced a verdict about
+            # this branch, whether it completed the work or failed for a reason the
+            # agent owns.
             real_outcome = True
             after = _babysit_snapshot(wt_path, branch, pr_number)
             if code != 0 and pr_number and after[2].strip() != before[2].strip():
@@ -3827,8 +3937,12 @@ def _babysit_with_fallback(
         # backoff ladder -- which reaches a 6h cap -- and the "all agents failed" email
         # would name agents that never produced a verdict. A provider outage must not
         # park a branch that is in fact healthy.
-        reason = ("every launched candidate was quota-exhausted" if launched
-                  else "no candidate was available (all parked)")
+        if not launched:
+            reason = "no candidate was available (all parked)"
+        elif cut_seen:
+            reason = ("every launched candidate was quota-exhausted or cut by its own bound")
+        else:
+            reason = "every launched candidate was quota-exhausted"
         print(f"[babysit] No mission produced a verdict this cycle: {reason}; "
               f"leaving the branch backoff untouched.")
         return
@@ -4698,6 +4812,10 @@ def babysit_active_worktrees():
                 prompt = _build_babysit_prompt(issue_number, issue_title, safe_body, branch, pr_create_err)
                 pre_loop_pr_err = bool(pr_create_err)
                 made_any_progress = False
+                # Every candidate's result, kept because the ladder decision is made
+                # once, after the last one: reading only the final candidate would let
+                # a trailing cut hide an earlier real failure.
+                candidate_results = []
                 # One lock across the whole re-invoke loop: it can run several
                 # missions for this worktree, and a concurrent babysit would drive
                 # the same files and branch.
@@ -4725,6 +4843,7 @@ def babysit_active_worktrees():
                             before_head.strip() and after_head.strip() and before_head.strip() != after_head.strip()
                         )
                         made_any_progress = made_any_progress or made_progress
+                        candidate_results.append((agy_code, agy_out, agy_err))
 
                         pr_num_val, pr_url = _check_pr(branch)
 
@@ -4773,11 +4892,7 @@ def babysit_active_worktrees():
                                     _record_worktree_progress(branch)
                                 else:
                                     print(f"All agents/models exhausted for issue #{issue_number}. Removing worktree '{branch}' if safe.")
-                                    if not _remove_worktree(wt_path, branch):
-                                        print(f"Worktree '{branch}' preserved due to uncommitted changes or unpushed commits.")
-                                        _record_worktree_failure(branch)
-                                    else:
-                                        _record_worktree_progress(branch)
+                                    _remove_worktree_or_record_outcome(wt_path, branch, candidate_results)
                                 break
                             print(f"Switching to {_current_agent()}/{_current_model()} and continuing orphaned issue #{issue_number}...")
                         elif agy_code == 0 and made_progress:
@@ -4792,11 +4907,7 @@ def babysit_active_worktrees():
                                     _record_worktree_progress(branch)
                                 else:
                                     print(f"All agents failed for issue #{issue_number}. Removing worktree '{branch}' if safe.")
-                                    if not _remove_worktree(wt_path, branch):
-                                        print(f"Worktree '{branch}' preserved due to uncommitted changes or unpushed commits.")
-                                        _record_worktree_failure(branch)
-                                    else:
-                                        _record_worktree_progress(branch)
+                                    _remove_worktree_or_record_outcome(wt_path, branch, candidate_results)
                                 break
                             print(f"Switching to {_current_agent()}/{_current_model()} and continuing orphaned issue #{issue_number}...")
                         elif agy_code != 0:
@@ -4806,11 +4917,7 @@ def babysit_active_worktrees():
                                     _record_worktree_progress(branch)
                                 else:
                                     print(f"All agents failed for issue #{issue_number}. Removing worktree '{branch}' if safe.")
-                                    if not _remove_worktree(wt_path, branch):
-                                        print(f"Worktree '{branch}' preserved due to uncommitted changes or unpushed commits.")
-                                        _record_worktree_failure(branch)
-                                    else:
-                                        _record_worktree_progress(branch)
+                                    _remove_worktree_or_record_outcome(wt_path, branch, candidate_results)
                                 break
                             print(f"Switching to {_current_agent()}/{_current_model()} and continuing orphaned issue #{issue_number}...")
                 continue
