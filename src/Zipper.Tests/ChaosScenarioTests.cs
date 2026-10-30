@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Xunit;
+using Zipper.Profiles;
 using Zipper.Validation;
 
 namespace Zipper.Tests;
@@ -497,6 +498,21 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public async Task ChaosScenario_AdversarialValues_WithNegativeCount_ReturnsError()
+    {
+        var outputPath = Path.Combine(this.TempDir, $"zipper_adversarial_negative_{Guid.NewGuid():N}");
+        var (exitCode, _, stderr) = await RunWithCapture(new[]
+        {
+            "--loadfile-only", "--count", "-1", "--output-path", outputPath,
+            "--chaos-mode", "--chaos-scenario", "adversarial-values", "--seed", "42",
+        });
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("--count must be a positive number", stderr, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(outputPath));
+    }
+
+    [Fact]
     public async Task ChaosScenario_AdversarialValues_WithAmountOverride_UsesOneCombinedTailRecord()
     {
         var outputPath = Path.Combine(this.TempDir, $"zipper_adversarial_amount_{Guid.NewGuid():N}");
@@ -546,6 +562,367 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
                 Directory.Delete(outputPath, true);
             }
         }
+    }
+
+    [Fact]
+    public async Task ChaosScenario_AdversarialValues_WithColumnProfile_GeneratesValidTailValues()
+    {
+        var outputPath = Path.Combine(this.TempDir, $"zipper_adversarial_profile_{Guid.NewGuid():N}");
+        try
+        {
+            var (exitCode, _, stderr) = await RunWithCapture(new[]
+            {
+                "--loadfile-only", "--count", "4", "--output-path", outputPath,
+                "--chaos-mode", "--chaos-scenario", "adversarial-values",
+                "--column-profile", "standard", "--seed", "42",
+            });
+
+            Assert.Equal(0, exitCode);
+            Assert.Empty(stderr);
+            string loadFile = Assert.Single(Directory.GetFiles(outputPath, "*.dat"));
+            var lines = await File.ReadAllLinesAsync(loadFile);
+            var header = DatLineParser.Parse(lines[0], '\u0014', '\u00fe');
+            int authorIndex = header.FindIndex(column => string.Equals(column, "AUTHOR", StringComparison.Ordinal));
+            Assert.True(authorIndex >= 0);
+
+            var rows = lines
+                .Where(line => !string.IsNullOrEmpty(line))
+                .Skip(1)
+                .Select(line => DatLineParser.Parse(line, '\u0014', '\u00fe'))
+                .ToArray();
+            Assert.Equal(4, rows.Length);
+            var platformValue = rows[0][authorIndex];
+            Assert.Equal(32_768, platformValue.Length);
+            Assert.Contains('\u0014', platformValue);
+            Assert.Contains('\u00fe', platformValue);
+            Assert.Contains("Ã¾", platformValue, StringComparison.Ordinal);
+
+            var validation = new ValidatorRunner().ValidateLoadFile(
+                loadFile,
+                "dat",
+                headerColumns: null,
+                expectedEol: "\r\n",
+                columnDelimiter: '\u0014',
+                quoteDelimiter: '\u00fe');
+            Assert.Empty(validation.Findings);
+        }
+        finally
+        {
+            if (Directory.Exists(outputPath))
+            {
+                Directory.Delete(outputPath, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ChaosScenario_AdversarialValues_WithCustomDelimiters_GeneratesValidTailValues()
+    {
+        var outputPath = Path.Combine(this.TempDir, $"zipper_adversarial_custom_delimiters_{Guid.NewGuid():N}");
+        try
+        {
+            var (exitCode, _, stderr) = await RunWithCapture(new[]
+            {
+                "--loadfile-only", "--count", "2", "--output-path", outputPath,
+                "--chaos-mode", "--chaos-scenario", "adversarial-values",
+                "--col-delim", "char:|", "--quote-delim", "char:\"",
+                "--seed", "42",
+            });
+
+            Assert.Equal(0, exitCode);
+            Assert.Empty(stderr);
+            string loadFile = Assert.Single(Directory.GetFiles(outputPath, "*.dat"));
+            var lines = await File.ReadAllLinesAsync(loadFile);
+            var header = DatLineParser.Parse(lines[0], '|', '"');
+            int authorIndex = header.FindIndex(column => string.Equals(column, "Author", StringComparison.Ordinal));
+            Assert.True(authorIndex >= 0);
+            var firstRow = DatLineParser.Parse(lines[1], '|', '"');
+            Assert.Contains('|', firstRow[authorIndex]);
+            Assert.Contains('"', firstRow[authorIndex]);
+            Assert.Contains("Ã¾", firstRow[authorIndex], StringComparison.Ordinal);
+            Assert.Equal(32_768, firstRow[authorIndex].Length);
+
+            var validation = new ValidatorRunner().ValidateLoadFile(
+                loadFile,
+                "dat",
+                headerColumns: null,
+                expectedEol: "\r\n",
+                columnDelimiter: '|',
+                quoteDelimiter: '"');
+            Assert.Empty(validation.Findings);
+        }
+        finally
+        {
+            if (Directory.Exists(outputPath))
+            {
+                Directory.Delete(outputPath, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ChaosScenario_AdversarialValues_WithUtf16Encoding_GeneratesValidTailValues()
+    {
+        var outputPath = Path.Combine(this.TempDir, $"zipper_adversarial_utf16_{Guid.NewGuid():N}");
+        try
+        {
+            var (exitCode, _, stderr) = await RunWithCapture(new[]
+            {
+                "--loadfile-only", "--count", "1", "--output-path", outputPath,
+                "--chaos-mode", "--chaos-scenario", "adversarial-values",
+                "--encoding", "UTF-16", "--seed", "42",
+            });
+
+            Assert.Equal(0, exitCode);
+            Assert.Empty(stderr);
+            string loadFile = Assert.Single(Directory.GetFiles(outputPath, "*.dat"));
+            var encoding = EncodingHelper.GetEncoding("UTF-16");
+            Assert.NotNull(encoding);
+            var lines = await File.ReadAllLinesAsync(loadFile, encoding);
+            var header = DatLineParser.Parse(lines[0], '\u0014', '\u00fe');
+            int authorIndex = header.FindIndex(column => string.Equals(column, "Author", StringComparison.Ordinal));
+            Assert.True(authorIndex >= 0);
+            var row = DatLineParser.Parse(lines[1], '\u0014', '\u00fe');
+            Assert.Equal(32_768, row[authorIndex].Length);
+            Assert.Contains("Ã¾", row[authorIndex], StringComparison.Ordinal);
+
+            var validation = new ValidatorRunner().ValidateLoadFile(
+                loadFile,
+                "dat",
+                headerColumns: null,
+                expectedEol: "\r\n",
+                encoding: encoding,
+                columnDelimiter: '\u0014',
+                quoteDelimiter: '\u00fe');
+            Assert.Empty(validation.Findings);
+        }
+        finally
+        {
+            if (Directory.Exists(outputPath))
+            {
+                Directory.Delete(outputPath, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ChaosScenario_AdversarialValues_WithSourceRecordsAndProfile_GeneratesValidTailValues()
+    {
+        string sourceCsv = Path.Combine(this.TempDir, "adversarial-source.csv");
+        var outputPath = Path.Combine(this.TempDir, $"zipper_adversarial_source_{Guid.NewGuid():N}");
+        await File.WriteAllTextAsync(sourceCsv, "FilePath,FileType\nfolder/doc.pdf,pdf\n");
+
+        var (exitCode, _, stderr) = await RunWithCapture(new[]
+        {
+            "--loadfile-only", "--input-csv", sourceCsv, "--count", "1", "--output-path", outputPath,
+            "--chaos-mode", "--chaos-scenario", "adversarial-values",
+            "--column-profile", "standard", "--seed", "42",
+        });
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(stderr);
+        string loadFile = Assert.Single(Directory.GetFiles(outputPath, "*.dat"));
+        var lines = await File.ReadAllLinesAsync(loadFile);
+        var header = DatLineParser.Parse(lines[0], '\u0014', '\u00fe');
+        int authorIndex = header.FindIndex(column => string.Equals(column, "Author", StringComparison.OrdinalIgnoreCase));
+        Assert.True(authorIndex >= 0);
+        var row = DatLineParser.Parse(lines[1], '\u0014', '\u00fe');
+        Assert.Equal(32_768, row[authorIndex].Length);
+        Assert.Contains("Ã¾", row[authorIndex], StringComparison.Ordinal);
+
+        var validation = new ValidatorRunner().ValidateLoadFile(
+            loadFile,
+            "dat",
+            headerColumns: null,
+            expectedEol: "\r\n",
+            columnDelimiter: '\u0014',
+            quoteDelimiter: '\u00fe');
+        Assert.Empty(validation.Findings);
+    }
+
+    [Fact]
+    public async Task ChaosScenario_AdversarialValues_WithSourceRecordsAndMetadata_GeneratesValidTailValues()
+    {
+        string sourceCsv = Path.Combine(this.TempDir, "adversarial-source-metadata.csv");
+        var outputPath = Path.Combine(this.TempDir, $"zipper_adversarial_source_metadata_{Guid.NewGuid():N}");
+        await File.WriteAllTextAsync(sourceCsv, "FilePath,FileType\nfolder/doc.pdf,pdf\n");
+
+        var (exitCode, _, stderr) = await RunWithCapture(new[]
+        {
+            "--loadfile-only", "--input-csv", sourceCsv, "--count", "1", "--output-path", outputPath,
+            "--with-metadata", "--chaos-mode", "--chaos-scenario", "adversarial-values", "--seed", "42",
+        });
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(stderr);
+        string loadFile = Assert.Single(Directory.GetFiles(outputPath, "*.dat"));
+        var lines = await File.ReadAllLinesAsync(loadFile);
+        var header = DatLineParser.Parse(lines[0], '\u0014', '\u00fe');
+        int authorIndex = header.FindIndex(column => string.Equals(column, "Author", StringComparison.OrdinalIgnoreCase));
+        Assert.True(authorIndex >= 0);
+        var row = DatLineParser.Parse(lines[1], '\u0014', '\u00fe');
+        Assert.Equal(32_768, row[authorIndex].Length);
+        Assert.Contains('\u0014', row[authorIndex]);
+        Assert.Contains('\u00fe', row[authorIndex]);
+        Assert.Contains("Ã¾", row[authorIndex], StringComparison.Ordinal);
+
+        var validation = new ValidatorRunner().ValidateLoadFile(
+            loadFile,
+            "dat",
+            headerColumns: null,
+            expectedEol: "\r\n",
+            columnDelimiter: '\u0014',
+            quoteDelimiter: '\u00fe');
+        Assert.Empty(validation.Findings);
+    }
+
+    [Fact]
+    public async Task ChaosScenario_AdversarialValues_WithSourceRecordsWithoutProfile_ReturnsError()
+    {
+        string sourceCsv = Path.Combine(this.TempDir, "adversarial-source.csv");
+        var outputPath = Path.Combine(this.TempDir, $"zipper_adversarial_source_without_profile_{Guid.NewGuid():N}");
+        await File.WriteAllTextAsync(sourceCsv, "FilePath,FileType\nfolder/doc.pdf,pdf\n");
+
+        var (exitCode, _, stderr) = await RunWithCapture(new[]
+        {
+            "--loadfile-only", "--input-csv", sourceCsv, "--count", "1", "--output-path", outputPath,
+            "--chaos-mode", "--chaos-scenario", "adversarial-values", "--seed", "42",
+        });
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("requires --with-metadata or a --column-profile", stderr, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(outputPath));
+    }
+
+    [Fact]
+    public async Task ChaosScenario_AdversarialValues_WithProfileWithoutTextColumn_ReturnsError()
+    {
+        string profilePath = Path.Combine(this.TempDir, "identifier-only-profile.json");
+        var outputPath = Path.Combine(this.TempDir, $"zipper_adversarial_identifier_profile_{Guid.NewGuid():N}");
+        var profile = new ColumnProfile
+        {
+            Name = "identifier-only",
+            Columns = [new ColumnDefinition { Name = "DOCID", Type = "identifier", Required = true }],
+        };
+        await File.WriteAllTextAsync(profilePath, JsonSerializer.Serialize(profile));
+
+        var (exitCode, _, stderr) = await RunWithCapture(new[]
+        {
+            "--loadfile-only", "--count", "1", "--output-path", outputPath,
+            "--chaos-mode", "--chaos-scenario", "adversarial-values",
+            "--column-profile", profilePath, "--seed", "42",
+        });
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("requires a text or long-text Column Profile column", stderr, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(outputPath));
+    }
+
+    [Theory]
+    [InlineData("--col-delim", "ascii:10")]
+    [InlineData("--col-delim", "ascii:0")]
+    [InlineData("--quote-delim", "ascii:0")]
+    [InlineData("--quote-delim", "ascii:10")]
+    [InlineData("--quote-delim", "none")]
+    [InlineData("--newline-delim", "ascii:0")]
+    [InlineData("--newline-delim", "ascii:10")]
+    [InlineData("--newline-delim", "ascii:13")]
+    public async Task ChaosScenario_AdversarialValues_WithInvalidDelimiters_ReturnsError(
+        string delimiterFlag,
+        string delimiter)
+    {
+        var outputPath = Path.Combine(this.TempDir, $"zipper_adversarial_delimiter_{Guid.NewGuid():N}");
+        var (exitCode, _, stderr) = await RunWithCapture(new[]
+        {
+            "--loadfile-only", "--count", "1", "--output-path", outputPath,
+            "--chaos-mode", "--chaos-scenario", "adversarial-values",
+            delimiterFlag, delimiter,
+        });
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("requires DAT-safe delimiters", stderr, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(outputPath));
+    }
+
+    [Fact]
+    public async Task ChaosScenario_AdversarialValues_WithMultilineReplacementDelimiter_ReturnsError()
+    {
+        var outputPath = Path.Combine(this.TempDir, $"zipper_adversarial_multiline_replacement_{Guid.NewGuid():N}");
+        var (exitCode, _, stderr) = await RunWithCapture(new[]
+        {
+            "--loadfile-only", "--count", "1", "--output-path", outputPath,
+            "--chaos-mode", "--chaos-scenario", "adversarial-values",
+            "--delimiter-newline", "\\r\\n",
+        });
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("requires DAT-safe delimiters", stderr, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(outputPath));
+    }
+
+    [Fact]
+    public async Task ChaosScenario_AdversarialValues_WithMatchingDelimiters_ReturnsError()
+    {
+        var outputPath = Path.Combine(this.TempDir, $"zipper_adversarial_matching_delimiters_{Guid.NewGuid():N}");
+        var (exitCode, _, stderr) = await RunWithCapture(new[]
+        {
+            "--loadfile-only", "--count", "1", "--output-path", outputPath,
+            "--chaos-mode", "--chaos-scenario", "adversarial-values",
+            "--col-delim", "char:|", "--quote-delim", "char:|",
+        });
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("requires DAT-safe delimiters", stderr, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(outputPath));
+    }
+
+    [Fact]
+    public async Task ChaosScenario_AdversarialValues_WithUnsafeEncodingFallback_ReturnsError()
+    {
+        string sourceCsv = Path.Combine(this.TempDir, "adversarial-source-encoding.csv");
+        var outputPath = Path.Combine(this.TempDir, $"zipper_adversarial_unsafe_fallback_{Guid.NewGuid():N}");
+        await File.WriteAllTextAsync(
+            sourceCsv,
+            "FilePath,FileType,REVIEWNOTES\nfolder/doc.pdf,pdf,before 中|after\n");
+
+        var (exitCode, _, stderr) = await RunWithCapture(new[]
+        {
+            "--loadfile-only", "--input-csv", sourceCsv, "--count", "1", "--output-path", outputPath,
+            "--chaos-mode", "--chaos-scenario", "adversarial-values",
+            "--column-profile", "litigation", "--encoding", "ANSI",
+            "--col-delim", "char:|", "--quote-delim", "char:?", "--seed", "42",
+        });
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("requires DAT-safe delimiters", stderr, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(outputPath));
+    }
+
+    [Theory]
+    [InlineData("ASCII", null)]
+    [InlineData("ANSI", "char:漢")]
+    public async Task ChaosScenario_AdversarialValues_WithUnrepresentableEncoding_ReturnsError(
+        string encoding,
+        string? quoteDelimiter)
+    {
+        var outputPath = Path.Combine(this.TempDir, $"zipper_adversarial_encoding_{Guid.NewGuid():N}");
+        var args = new List<string>
+        {
+            "--loadfile-only", "--count", "1", "--output-path", outputPath,
+            "--chaos-mode", "--chaos-scenario", "adversarial-values",
+            "--encoding", encoding,
+        };
+        if (quoteDelimiter is not null)
+        {
+            args.Add("--quote-delim");
+            args.Add(quoteDelimiter);
+        }
+
+        var (exitCode, _, stderr) = await RunWithCapture(args.ToArray());
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("requires DAT-safe delimiters", stderr, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(outputPath));
     }
 
     [Fact]

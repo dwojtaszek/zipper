@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace Zipper.Profiles.Generation;
 
 /// <summary>
@@ -14,8 +16,9 @@ internal sealed class AdversarialValueTailPlan
     private readonly bool targetAllRecords;
     private readonly long firstTargetRecord;
     private readonly string escapedDelimiterValue;
-    private readonly string quoteLookalikeValue = "Quote lookalike: Ã¾";
     private readonly string platformLengthValue;
+
+    private const string QuoteLookalikeValue = "Quote lookalike: Ã¾";
 
     private AdversarialValueTailPlan(
         HashSet<long>? targetedRecords,
@@ -27,7 +30,7 @@ internal sealed class AdversarialValueTailPlan
         this.targetAllRecords = targetAllRecords;
         this.firstTargetRecord = targetAllRecords ? 1 : targetedRecords?.Min() ?? 0;
         this.escapedDelimiterValue = $"Escaped delimiters: left{columnDelimiter}middle{quoteDelimiter}right";
-        string platformLengthPrefix = $"{this.escapedDelimiterValue} | {this.quoteLookalikeValue} | ";
+        string platformLengthPrefix = $"{this.escapedDelimiterValue} | {QuoteLookalikeValue} | ";
         this.platformLengthValue = platformLengthPrefix + new string('L', PlatformFieldLength - platformLengthPrefix.Length);
     }
 
@@ -58,10 +61,68 @@ internal sealed class AdversarialValueTailPlan
             request.Delimiters.QuoteDelimiter[0]);
     }
 
-    internal static bool HasValidDelimiters(Zipper.Config.DelimiterConfig delimiters) =>
-        delimiters.ColumnDelimiter.Length == 1
-        && delimiters.QuoteDelimiter.Length == 1
-        && delimiters.ColumnDelimiter[0] != delimiters.QuoteDelimiter[0];
+    internal static bool HasValidDatConfiguration(Zipper.Config.DelimiterConfig delimiters, string encodingName)
+    {
+        if (delimiters.ColumnDelimiter.Length != 1
+            || delimiters.QuoteDelimiter.Length != 1
+            || delimiters.NewlineDelimiter.Length != 1)
+        {
+            return false;
+        }
+
+        char columnDelimiter = delimiters.ColumnDelimiter[0];
+        char quoteDelimiter = delimiters.QuoteDelimiter[0];
+        char newlineDelimiter = delimiters.NewlineDelimiter[0];
+        if (columnDelimiter is '\0' or '\r' or '\n'
+            || columnDelimiter == quoteDelimiter
+            || quoteDelimiter is '\0' or '\r' or '\n'
+            || newlineDelimiter is '\0' or '\r' or '\n'
+            || newlineDelimiter == quoteDelimiter)
+        {
+            return false;
+        }
+
+        var encoding = EncodingHelper.GetEncoding(encodingName);
+        if (encoding is null)
+        {
+            return false;
+        }
+
+        string escapedDelimiters = $"Escaped delimiters: left{columnDelimiter}middle{quoteDelimiter}right";
+        return CanRoundTrip(encoding, $"{escapedDelimiters}{newlineDelimiter}")
+            && CanRoundTrip(encoding, QuoteLookalikeValue)
+            && HasParserSafeEncoderFallback(encoding, quoteDelimiter);
+    }
+
+    private static bool HasParserSafeEncoderFallback(Encoding encoding, char quoteDelimiter)
+    {
+        if (encoding.EncoderFallback is EncoderExceptionFallback)
+        {
+            return true;
+        }
+
+        if (encoding.EncoderFallback is not EncoderReplacementFallback replacementFallback)
+        {
+            return false;
+        }
+
+        string replacement = replacementFallback.DefaultString;
+        return !replacement.Contains(quoteDelimiter, StringComparison.Ordinal)
+            && !replacement.Contains('\r')
+            && !replacement.Contains('\n');
+    }
+
+    private static bool CanRoundTrip(Encoding encoding, string value)
+    {
+        try
+        {
+            return string.Equals(encoding.GetString(encoding.GetBytes(value)), value, StringComparison.Ordinal);
+        }
+        catch (EncoderFallbackException)
+        {
+            return false;
+        }
+    }
 
     internal static bool IsEligibleColumn(ColumnDefinition column)
     {
@@ -97,6 +158,6 @@ internal sealed class AdversarialValueTailPlan
 
         return recordIndex == this.firstTargetRecord
             ? this.platformLengthValue
-            : recordIndex % 2 == 0 ? this.quoteLookalikeValue : this.escapedDelimiterValue;
+            : recordIndex % 2 == 0 ? QuoteLookalikeValue : this.escapedDelimiterValue;
     }
 }

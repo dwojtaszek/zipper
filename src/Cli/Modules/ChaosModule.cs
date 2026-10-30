@@ -74,7 +74,8 @@ public sealed class ChaosModule : CliModule
         bool loadfileOnly,
         IReadOnlyList<LoadFileFormat> formats,
         out ChaosConfig config,
-        DelimiterConfig? delimiters = null)
+        DelimiterConfig? delimiters = null,
+        string? encoding = null)
     {
         if (_mode)
         {
@@ -138,9 +139,9 @@ public sealed class ChaosModule : CliModule
             }
 
             if (scenario.GenerateAdversarialValues
-                && !AdversarialValueTailPlan.HasValidDelimiters(delimiters ?? new DelimiterConfig()))
+                && !AdversarialValueTailPlan.HasValidDatConfiguration(delimiters ?? new DelimiterConfig(), encoding ?? "UTF-8"))
             {
-                Console.Error.WriteLine("Error: Chaos scenario 'adversarial-values' requires distinct single-character column and quote delimiters.");
+                Console.Error.WriteLine("Error: Chaos scenario 'adversarial-values' requires DAT-safe delimiters and an encoding that preserves its values.");
                 config = default!;
                 return false;
             }

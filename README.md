@@ -71,7 +71,7 @@ Exercise DAT parsers with correctly escaped delimiters, the literal `Ã¾` looka
 zipper --loadfile-only --count 100 --output-path ./adversarial-values \
     --chaos-mode --chaos-scenario adversarial-values --seed 42
 ```
-The first selected record contains all three value classes. `--chaos-amount` controls which records receive the adversarial values. Use `--count 0` with this scenario to write a header-only Load File followed by the same two empty rows.
+The first selected record contains all three value classes. `--chaos-amount` controls which records receive the adversarial values. Use `--count 0` with this scenario to write a header-only Load File followed by the same two empty rows. Custom delimiters and encodings must round-trip the generated values and avoid fallback characters that corrupt DAT quoting or record boundaries.
 
 Format-specific chaos scenarios cover the other Load File formats: `csv-escaping-failures` for CSV, `concordance-import-failures` for Concordance, and `edrm-xml-structural-failures` for EDRM-XML. For example:
 
@@ -80,7 +80,7 @@ zipper --loadfile-only --loadfile-format edrm-xml --count 10000 --output-path ./
     --chaos-mode --chaos-scenario edrm-xml-structural-failures --seed 42
 ```
 
-#### 7. Publish Archive Test Fixture pairs
+#### 8. Publish Archive Test Fixture pairs
 Publish the frozen smoke suite (five cases: three valid controls plus a CRC lie and a missing EOCD) as flat `<fixtureId>.zip` / `<fixtureId>.json` pairs for extractor testing — see [Archive Test Suites](docs/archive-test-suites.md):
 ```bash
 zipper --archive-test-suite smoke --seed 42 --output-path ./archive-cases
@@ -132,7 +132,7 @@ To generate the policy-sensitive `name-sibling-prefix-traversal` Archive Test Fi
 zipper --archive-test-suite security --archive-test-cases name-sibling-prefix-traversal --seed 42 --output-path ./sibling-prefix-traversal
 ```
 
-#### 8. Choose the Archive compression method
+#### 9. Choose the Archive compression method
 `--compression` sets the ZIP compression method for every Archive the run produces (Standard mode, `--include-load-file`, and `--production-zip`) and defaults to `deflate`:
 ```bash
 zipper --type pdf --count 1000 --output-path ./stored_archive --compression store

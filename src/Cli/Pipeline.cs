@@ -45,7 +45,8 @@ public static class Pipeline
                 modules.LoadFile.LoadfileOnly,
                 modules.LoadFile.Formats ?? new List<LoadFileFormat> { LoadFileFormat.Dat },
                 out var chaos,
-                delimiters) ||
+                delimiters,
+                loadFile.Encoding) ||
             !modules.Hash.TryBuild(modules.LoadFile.LoadfileOnly, out var hash))
         {
             return null;

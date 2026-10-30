@@ -17,6 +17,7 @@ internal sealed class DatStandardComposer
     private readonly List<string>? profileColumnNames;
     private readonly bool hasTextPathColumn;
     private readonly AdversarialValueTailPlan? adversarialValueTailPlan;
+    private readonly string? adversarialValueColumn;
 
     public DatStandardComposer(
         FileGenerationRequest request,
@@ -32,6 +33,10 @@ internal sealed class DatStandardComposer
         this.profileGenerator = profileGenerator;
         this.profileColumnNames = profileColumnNames;
         this.adversarialValueTailPlan = adversarialValueTailPlan;
+        this.adversarialValueColumn = adversarialValueTailPlan is not null
+            && request.Metadata.ColumnProfile is { } profile
+                ? AdversarialValueTailPlan.FindColumn(profile.Columns)?.Name
+                : null;
         this.hasTextPathColumn = profileColumnNames?.Any(
             n => StandardRowValueGenerators.ByName.TryGetValue(n, out var gen) && gen is TextPathGenerator) ?? false;
     }
@@ -371,16 +376,14 @@ internal sealed class DatStandardComposer
 
     private void ApplyAdversarialValue(Dictionary<string, string>? profileValues, long recordIndex)
     {
-        if (profileValues is null || this.adversarialValueTailPlan?.GetValue(recordIndex) is not { } value)
+        if (profileValues is null
+            || this.adversarialValueColumn is not { } targetColumn
+            || this.adversarialValueTailPlan?.GetValue(recordIndex) is not { } value)
         {
             return;
         }
 
-        var targetColumn = AdversarialValueTailPlan.FindColumn(this.request.Metadata.ColumnProfile!.Columns);
-        if (targetColumn is not null)
-        {
-            profileValues[targetColumn.Name] = value;
-        }
+        profileValues[targetColumn] = value;
     }
 
     private string StandardTextPath(FileData fileData, DatRowContext ctx)
