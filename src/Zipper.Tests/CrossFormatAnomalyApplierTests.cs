@@ -784,6 +784,111 @@ public sealed class CrossFormatAnomalyApplierTests : IDisposable
         Assert.Contains(report.Findings, f => f.Code == "BatesConsistency");
     }
 
+    [Fact]
+    public void Apply_MissingChild_OptChildNull_DoesNotSkipNextCandidate()
+    {
+        var datLines = new List<string>
+        {
+            JoinDat("DOCID", "BATES_NUMBER", "PARENTDOCID", "IMAGE_PATH", "PAGECOUNT", "VOLUME"),
+            JoinDat("DOC00000001", "TEST00000001", "", "IMAGES\\VOL001\\DOC00000001.tif", "1", "VOL001"),
+            JoinDat("DOC00000002", "TEST00000002", "DOC00000001", "IMAGES\\VOL001\\DOC00000002.tif", "1", "VOL001"),
+            JoinDat("DOC00000003", "TEST00000003", "DOC00000001", "IMAGES\\VOL001\\DOC00000003.tif", "1", "VOL001"),
+        };
+        // OPT only has parent DOC1 and child DOC3 (DOC2 has no matching OPT row)
+        var optLines = new List<string>
+        {
+            "TEST00000001,VOL001,IMAGES\\VOL001\\DOC00000001.tif,Y,,,1",
+            "TEST00000003,VOL001,IMAGES\\VOL001\\DOC00000003.tif,Y,,,1",
+        };
+
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.MissingChild,
+            chaosAmount: "1",
+            random: new FirstIndexRandom());
+
+        // Because DOC2 has no OPT row, it shouldn't cause DOC3 to be skipped; DOC3 should be selected as the missing child
+        var datAnomaly = Assert.Single(result.Anomalies, a => a.File == "loadfile.dat");
+        Assert.Equal(ChaosAnomalyTypes.CrossFormat.MissingChild, datAnomaly.ErrorType);
+        Assert.Equal("DOC00000003", datAnomaly.RecordID);
+    }
+
+    [Fact]
+    public void Apply_OrphanAttachment_DoesNotDropParentAlreadyTargeted()
+    {
+        var datLines = new List<string>
+        {
+            JoinDat("DOCID", "BATES_NUMBER", "PARENTDOCID", "IMAGE_PATH", "PAGECOUNT", "VOLUME"),
+            JoinDat("DOC00000001", "TEST00000001", "", "IMAGES\\VOL001\\DOC00000001.tif", "1", "VOL001"),
+            JoinDat("DOC00000002", "TEST00000002", "DOC00000001", "IMAGES\\VOL001\\DOC00000002.tif", "1", "VOL001"),
+            JoinDat("DOC00000003", "TEST00000003", "", "IMAGES\\VOL001\\DOC00000003.tif", "1", "VOL001"),
+            JoinDat("DOC00000004", "TEST00000004", "DOC00000003", "IMAGES\\VOL001\\DOC00000004.tif", "1", "VOL001"),
+        };
+        var optLines = new List<string>
+        {
+            "TEST00000001,VOL001,IMAGES\\VOL001\\DOC00000001.tif,Y,,,1",
+            "TEST00000002,VOL001,IMAGES\\VOL001\\DOC00000002.tif,Y,,,1",
+            "TEST00000003,VOL001,IMAGES\\VOL001\\DOC00000003.tif,Y,,,1",
+            "TEST00000004,VOL001,IMAGES\\VOL001\\DOC00000004.tif,Y,,,1",
+        };
+
+        // First apply desync-path targeting DOC00000001, then orphan-attachment
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: $"{ChaosAnomalyTypes.CrossFormat.DesyncPath},{ChaosAnomalyTypes.CrossFormat.OrphanAttachment}",
+            chaosAmount: "2",
+            random: new FirstIndexRandom());
+
+        Assert.Equal(4, result.Anomalies.Count); // 2 DAT, 2 OPT
+        var pathAnomaly = Assert.Single(result.Anomalies, a => a.File == "loadfile.dat" && a.ErrorType == ChaosAnomalyTypes.CrossFormat.DesyncPath);
+        Assert.Equal("DOC00000001", pathAnomaly.RecordID);
+
+        // DOC00000001 was targeted by desync-path, so orphan-attachment must NOT drop DOC00000001; it must target DOC00000004 with parent DOC00000003
+        var orphanAnomaly = Assert.Single(result.Anomalies, a => a.File == "loadfile.dat" && a.ErrorType == ChaosAnomalyTypes.CrossFormat.OrphanAttachment);
+        Assert.Equal("DOC00000004", orphanAnomaly.RecordID);
+    }
+
+    [Fact]
+    public void Apply_ScenarioOrTypes_TrimsAndNormalizesWhitespaceAndCasing()
+    {
+        var (datLines, optLines) = CreateSampleLines();
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: "  DESYNC-PATH  ,  DESYNC-ORDER  ",
+            chaosAmount: "1",
+            random: new FirstIndexRandom());
+
+        Assert.NotEmpty(result.Anomalies);
+        Assert.Equal(ChaosAnomalyTypes.CrossFormat.DesyncPath, result.Anomalies[0].ErrorType);
+    }
+
+    [Fact]
+    public void Apply_ShortDatRows_SafelyPadsFieldsWithoutThrowing()
+    {
+        var datLines = new List<string>
+        {
+            JoinDat("DOCID", "BATES_NUMBER", "PARENTDOCID", "IMAGE_PATH", "PAGECOUNT", "VOLUME"),
+            JoinDat("DOC00000001", "TEST00000001"), // Only 2 fields, while header has 6 fields
+        };
+        var optLines = new List<string>
+        {
+            "TEST00000001,VOL001,IMAGES\\VOL001\\DOC00000001.tif,Y,,,1",
+        };
+
+        // Applying broken-parent requires writing to PARENTDOCID (column index 2)
+        var exception = Record.Exception(() => CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.BrokenParent,
+            chaosAmount: "1",
+            random: new FirstIndexRandom()));
+
+        Assert.Null(exception);
+    }
+
     private static FileGenerationRequest CreateRequest()
     {
         return new FileGenerationRequest

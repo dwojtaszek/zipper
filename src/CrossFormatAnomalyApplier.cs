@@ -575,14 +575,11 @@ internal static class CrossFormatAnomalyApplier
         }
 
         var scenario = ChaosScenarios.GetByName(scenarioOrTypes);
-        if (scenario is not null)
-        {
-            return string.IsNullOrEmpty(scenario.ChaosTypes)
-                ? ChaosAnomalyTypes.CrossFormat.All
-                : scenario.ChaosTypes.Split(',');
-        }
+        string rawTypes = scenario is not null && !string.IsNullOrEmpty(scenario.ChaosTypes)
+            ? scenario.ChaosTypes
+            : scenarioOrTypes;
 
-        var split = scenarioOrTypes.Split(',')
+        var split = rawTypes.Split(',')
             .Select(s => s.Trim().ToLowerInvariant())
             .Where(s => ChaosAnomalyTypes.CrossFormat.All.Contains(s, StringComparer.OrdinalIgnoreCase))
             .ToList();
@@ -996,10 +993,12 @@ internal static class CrossFormatAnomalyApplier
             requireActiveParent: true);
         if (childRec is not null
             && datRecordsByDocId.TryGetValue(childRec.ParentId, out var parentRec)
-            && datRecords.IsActive(parentRec))
+            && datRecords.IsActive(parentRec)
+            && !targetedRecords.Contains(parentRec))
         {
             datRecords.Remove(parentRec);
             targetedRecords.Add(childRec);
+            targetedRecords.Add(parentRec);
 
             var optParent = FindMatchingOptForDat(optDocsByKey, parentRec)
                 ?? optDocs[Math.Min(Math.Max(childRec.ActiveIndex, 0), optDocs.Count - 1)];
@@ -1052,7 +1051,7 @@ internal static class CrossFormatAnomalyApplier
         string orphanParentIdColumnName = headers[parentIdIndex];
         string missingParentId = "DOC_PARENT_MISSING";
         targetRec.ParentId = missingParentId;
-        targetRec.Fields[parentIdIndex] = missingParentId;
+        SetField(targetRec.Fields, parentIdIndex, missingParentId);
         targetRec.IsDirty = true;
 
         var optPeer = FindMatchingOptForDat(optDocsByKey, targetRec)
@@ -1116,21 +1115,25 @@ internal static class CrossFormatAnomalyApplier
             return;
         }
 
-        var childRec = FindFamilyCandidate(
-            datRecords,
-            familyCandidates,
-            ref familyCandidateIndex,
-            targetedRecords,
-            datRecordsByDocId,
-            requireActiveParent: false);
-        if (childRec is not null)
+        while (true)
         {
+            var childRec = FindFamilyCandidate(
+                datRecords,
+                familyCandidates,
+                ref familyCandidateIndex,
+                targetedRecords,
+                datRecordsByDocId,
+                requireActiveParent: false);
+            if (childRec is null)
+            {
+                break;
+            }
+
             var optChild = FindMatchingOptForDat(optDocsByKey, childRec);
             if (optChild is null)
             {
                 targetedRecords.Add(childRec);
-                familyCandidateIndex++;
-                return;
+                continue;
             }
 
             datRecords.Remove(childRec);
@@ -1179,68 +1182,73 @@ internal static class CrossFormatAnomalyApplier
             return;
         }
 
-        var childRecord = FindRandomUnprocessedDatRecord(datRecords, targetedRecords, random);
-        if (childRecord is null)
+        for (int attempt = 0; attempt < datRecords.Count; attempt++)
         {
-            return;
-        }
-
-        var fallbackOptChild = FindMatchingOptForDat(optDocsByKey, childRecord);
-        if (fallbackOptChild is null)
-        {
-            return;
-        }
-
-        var parentRecord = datRecords[0];
-        if (ReferenceEquals(parentRecord, childRecord))
-        {
-            parentRecord = datRecords[1];
-        }
-
-        endAttachIndex = EnsureEndAttachColumn(endAttachIndex, headers, datRecords);
-        string endAttachColumnName = headers[endAttachIndex];
-
-        string childEndId = string.IsNullOrEmpty(childRecord.Bates) ? childRecord.DocId : childRecord.Bates;
-        parentRecord.Fields[endAttachIndex] = childEndId;
-        parentRecord.IsDirty = true;
-
-        datRecords.Remove(childRecord);
-
-        datAnomalies.Add(new ChaosAnomaly
-        {
-            File = datFileName,
-            LineNumber = childRecord.LineNumber.ToString(CultureInfo.InvariantCulture),
-            RecordID = childRecord.DocId,
-            Column = endAttachColumnName,
-            ErrorType = "missing-child",
-            Description = $"Parent document '{parentRecord.DocId}' references missing DAT child '{childRecord.DocId}', which remains in OPT.",
-            Peer = new ChaosAnomalyPeer
+            var childRecord = FindRandomUnprocessedDatRecord(datRecords, targetedRecords, random);
+            if (childRecord is null)
             {
-                File = optFileName,
-                LineNumber = fallbackOptChild.BreakLineNumber.ToString(CultureInfo.InvariantCulture),
-                RecordID = fallbackOptChild.DocKey,
-                Column = "DocBreak",
-            },
-        });
+                return;
+            }
 
-        optAnomalies.Add(new ChaosAnomaly
-        {
-            File = optFileName,
-            LineNumber = fallbackOptChild.BreakLineNumber.ToString(CultureInfo.InvariantCulture),
-            RecordID = fallbackOptChild.DocKey,
-            Column = "DocBreak",
-            ErrorType = "missing-child",
-            Description = $"OPT child '{fallbackOptChild.DocKey}' remains present while its DAT record '{childRecord.DocId}' is missing.",
-            Peer = new ChaosAnomalyPeer
+            var fallbackOptChild = FindMatchingOptForDat(optDocsByKey, childRecord);
+            if (fallbackOptChild is null)
+            {
+                targetedRecords.Add(childRecord);
+                continue;
+            }
+
+            var parentRecord = datRecords[0];
+            if (ReferenceEquals(parentRecord, childRecord))
+            {
+                parentRecord = datRecords[1];
+            }
+
+            endAttachIndex = EnsureEndAttachColumn(endAttachIndex, headers, datRecords);
+            string endAttachColumnName = headers[endAttachIndex];
+
+            string childEndId = string.IsNullOrEmpty(childRecord.Bates) ? childRecord.DocId : childRecord.Bates;
+            SetField(parentRecord.Fields, endAttachIndex, childEndId);
+            parentRecord.IsDirty = true;
+
+            datRecords.Remove(childRecord);
+
+            datAnomalies.Add(new ChaosAnomaly
             {
                 File = datFileName,
                 LineNumber = childRecord.LineNumber.ToString(CultureInfo.InvariantCulture),
                 RecordID = childRecord.DocId,
                 Column = endAttachColumnName,
-            },
-        });
+                ErrorType = "missing-child",
+                Description = $"Parent document '{parentRecord.DocId}' references missing DAT child '{childRecord.DocId}', which remains in OPT.",
+                Peer = new ChaosAnomalyPeer
+                {
+                    File = optFileName,
+                    LineNumber = fallbackOptChild.BreakLineNumber.ToString(CultureInfo.InvariantCulture),
+                    RecordID = fallbackOptChild.DocKey,
+                    Column = "DocBreak",
+                },
+            });
 
-        targetedRecords.Add(childRecord);
+            optAnomalies.Add(new ChaosAnomaly
+            {
+                File = optFileName,
+                LineNumber = fallbackOptChild.BreakLineNumber.ToString(CultureInfo.InvariantCulture),
+                RecordID = fallbackOptChild.DocKey,
+                Column = "DocBreak",
+                ErrorType = "missing-child",
+                Description = $"OPT child '{fallbackOptChild.DocKey}' remains present while its DAT record '{childRecord.DocId}' is missing.",
+                Peer = new ChaosAnomalyPeer
+                {
+                    File = datFileName,
+                    LineNumber = childRecord.LineNumber.ToString(CultureInfo.InvariantCulture),
+                    RecordID = childRecord.DocId,
+                    Column = endAttachColumnName,
+                },
+            });
+
+            targetedRecords.Add(childRecord);
+            return;
+        }
     }
 
     private static void ApplyBrokenParent(
@@ -1280,7 +1288,7 @@ internal static class CrossFormatAnomalyApplier
         string parentIdColumnName = headers[parentIdIndex];
         string corruptParent = "INVALID_PARENT_PTR";
         targetRec.ParentId = corruptParent;
-        targetRec.Fields[parentIdIndex] = corruptParent;
+        SetField(targetRec.Fields, parentIdIndex, corruptParent);
         targetRec.IsDirty = true;
         AddFamilyCandidate(targetRec, familyCandidates);
 
@@ -1346,6 +1354,7 @@ internal static class CrossFormatAnomalyApplier
             if (requireActiveParent
                 && (!recordsByDocId.TryGetValue(candidate.ParentId, out var parent)
                     || !records.IsActive(parent)
+                    || targetedRecords.Contains(parent)
                     || ReferenceEquals(candidate, parent)))
             {
                 candidateIndex++;
@@ -1366,6 +1375,16 @@ internal static class CrossFormatAnomalyApplier
             record.IsFamilyCandidate = true;
             familyCandidates.Add(record);
         }
+    }
+
+    private static void SetField(List<string> fields, int index, string value)
+    {
+        while (fields.Count <= index)
+        {
+            fields.Add(string.Empty);
+        }
+
+        fields[index] = value;
     }
 
     private static int EnsureColumn(
