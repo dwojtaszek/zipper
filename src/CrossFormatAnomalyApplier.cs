@@ -428,8 +428,8 @@ internal static class CrossFormatAnomalyApplier
 
         if (datAnomalies.Count > 0 || optAnomalies.Count > 0)
         {
-            long maxDatLineNumber = Math.Max(2L, (long)outDatLines.Count);
-            long maxOptLineNumber = Math.Max(1L, (long)outOptLines.Count);
+            long maxDatLineNumber = (long)outDatLines.Count + 1L;
+            long maxOptLineNumber = (long)outOptLines.Count + 1L;
             var datLineNumbers = BuildDatLineNumbers(datRecords, docIdIdx, batesIdx, maxDatLineNumber);
             var optLineNumbers = BuildOptLineNumbers(optDocs, maxOptLineNumber);
             UpdateAnomalyLineNumbers(

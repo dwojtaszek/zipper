@@ -379,7 +379,8 @@ public sealed class CrossFormatAnomalyApplierTests : IDisposable
             seed: 42);
 
         Assert.Equal(2, result.DatLines.Count);
-        Assert.All(result.DatAnomalies, anomaly => Assert.Equal("2", anomaly.LineNumber));
+        Assert.Equal("2", result.DatAnomalies[0].LineNumber);
+        Assert.Equal("3", result.DatAnomalies[1].LineNumber);
     }
 
     [Fact]
