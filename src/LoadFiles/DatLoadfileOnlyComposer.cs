@@ -38,6 +38,10 @@ internal sealed class DatLoadfileOnlyComposer
         {
             lfCols.AddRange(new[] { "BEGATTACH", "ENDATTACH", "PARENTDOCID" });
         }
+        if (request.Metadata.WithThreading)
+        {
+            lfCols.AddRange(new[] { "Thread ID", "Inclusive", "Thread Parent" });
+        }
         return lfCols.Select(c => DatComposerShared.ApplyConvention(c, namingConvention)).ToList();
     }
 
@@ -50,6 +54,7 @@ internal sealed class DatLoadfileOnlyComposer
 
         for (long i = 1; i <= this.request.Output.FileCount; i++)
         {
+            bool recordIsEml = string.Equals(this.request.Output.ResolveFileType(i), "eml", StringComparison.Ordinal);
             var parentId = this.batesSequence is not null
                 ? this.batesSequence.Next().ToString()
                 : $"DOC{i:D8}";
@@ -84,6 +89,22 @@ internal sealed class DatLoadfileOnlyComposer
                 parentRecordValues.AddRange(new[] { parentId, childId, string.Empty });
             }
 
+            if (this.request.Metadata.WithThreading)
+            {
+                if (recordIsEml)
+                {
+                    var plan = Emails.EmailThreadPlan.GetOrCreate(this.request);
+                    var node = plan.GetNode(i);
+                    parentRecordValues.Add(node.ThreadDocId);
+                    parentRecordValues.Add(node.IsInclusive ? "Y" : "N");
+                    parentRecordValues.Add(node.ThreadParentDocId);
+                }
+                else
+                {
+                    parentRecordValues.AddRange([string.Empty, string.Empty, string.Empty]);
+                }
+            }
+
             yield return DatComposerShared.MakeRecord(this.headerColumns, parentId, parentRecordValues);
 
             if (hasAttachment)
@@ -105,6 +126,13 @@ internal sealed class DatLoadfileOnlyComposer
                 if (this.request.Metadata.WithFamilies)
                 {
                     childRecordValues.AddRange(new[] { parentId, childId, parentId });
+                }
+
+                if (this.request.Metadata.WithThreading)
+                {
+                    childRecordValues.Add(string.Empty);
+                    childRecordValues.Add(string.Empty);
+                    childRecordValues.Add(string.Empty);
                 }
 
                 yield return DatComposerShared.MakeRecord(this.headerColumns, childId, childRecordValues);

@@ -158,6 +158,41 @@ public class DiskBackedFileDataListTests
     }
 
     [Fact]
+    public void RoundTrip_PreservesThreadingFields_WhenPresent()
+    {
+        using var list = new DiskBackedFileDataList();
+        var originalData = new FileData
+        {
+            WorkItem = new FileWorkItem { Index = 1 },
+            Email = new Email
+            {
+                To = "to@example.com",
+                From = "from@example.com",
+                Subject = "Threading Test",
+                SentDate = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                Cc = "cc@example.com",
+                MessageId = "<msg001@example.com>",
+                InReplyTo = "<parent001@example.com>",
+                References = "<root001@example.com> <parent001@example.com>",
+                ThreadId = "DOC00000001",
+                IsInclusive = true,
+                ThreadParentId = "DOC00000001",
+            }
+        };
+
+        list.Add(originalData);
+        var deserialized = Assert.Single(list.ToList());
+
+        Assert.NotNull(deserialized.Email);
+        Assert.Equal("<msg001@example.com>", deserialized.Email.MessageId);
+        Assert.Equal("<parent001@example.com>", deserialized.Email.InReplyTo);
+        Assert.Equal("<root001@example.com> <parent001@example.com>", deserialized.Email.References);
+        Assert.Equal("DOC00000001", deserialized.Email.ThreadId);
+        Assert.True(deserialized.Email.IsInclusive);
+        Assert.Equal("DOC00000001", deserialized.Email.ThreadParentId);
+    }
+
+    [Fact]
     public void RoundTrip_PreservesAttachmentLength_WithoutSpoolingFullPayload()
     {
         using var list = new DiskBackedFileDataList();

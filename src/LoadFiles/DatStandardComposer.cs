@@ -1,3 +1,4 @@
+using Zipper.Emails;
 using Zipper.Profiles;
 using Zipper.Profiles.Generation;
 
@@ -83,6 +84,11 @@ internal sealed class DatStandardComposer
         if (request.Metadata.WithFamilies)
         {
             cols.AddRange(new[] { "BEGATTACH", "ENDATTACH", "PARENTDOCID" });
+        }
+
+        if (request.Metadata.WithThreading)
+        {
+            cols.AddRange(new[] { "Thread ID", "Inclusive", "Thread Parent" });
         }
 
         return cols.Select(c => DatComposerShared.ApplyConvention(c, namingConvention)).ToList();
@@ -271,6 +277,22 @@ internal sealed class DatStandardComposer
         var recordType = wi.EffectiveFileType(this.request);
         var recordIsEml = string.Equals(recordType, "eml", StringComparison.Ordinal);
         var recordIsTiff = string.Equals(recordType, "tiff", StringComparison.Ordinal);
+        EmailThreadNode? threadNode = null;
+        if (this.request.Metadata.WithThreading && recordIsEml && !ctx.IsChild)
+        {
+            if (fileData.Email?.ThreadId is null)
+            {
+                threadNode = Emails.EmailThreadPlan.GetOrCreate(this.request).GetNode(wi.Index);
+            }
+            else if (fileData.Email.IsInclusive is null || fileData.Email.ThreadParentId is null)
+            {
+                var candidate = Emails.EmailThreadPlan.GetOrCreate(this.request).GetNode(wi.Index);
+                if (string.Equals(fileData.Email.ThreadId, candidate.ThreadDocId, StringComparison.Ordinal))
+                {
+                    threadNode = candidate;
+                }
+            }
+        }
 
         var v = new List<string>(this.headerColumns.Count)
         {
@@ -360,6 +382,19 @@ internal sealed class DatStandardComposer
             v.Add(ctx.BegAttach);
             v.Add(ctx.EndAttach);
             v.Add(ctx.ParentDocId);
+        }
+
+        if (this.request.Metadata.WithThreading)
+        {
+            var isEml = recordIsEml && !ctx.IsChild;
+            var threadId = isEml ? fileData.Email?.ThreadId ?? threadNode?.ThreadDocId ?? string.Empty : string.Empty;
+            var isInclusive = fileData.Email?.IsInclusive ?? threadNode?.IsInclusive;
+            var inclusive = isEml && isInclusive.HasValue ? (isInclusive.Value ? "Y" : "N") : string.Empty;
+            var threadParent = isEml ? fileData.Email?.ThreadParentId ?? threadNode?.ThreadParentDocId ?? string.Empty : string.Empty;
+
+            v.Add(threadId);
+            v.Add(inclusive);
+            v.Add(threadParent);
         }
 
         return v;

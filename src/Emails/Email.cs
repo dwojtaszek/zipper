@@ -24,4 +24,16 @@ public record Email
     public bool IsHighPriority { get; init; }
 
     public bool RequestReadReceipt { get; init; }
+
+    public string? MessageId { get; init; }
+
+    public string? InReplyTo { get; init; }
+
+    public string? References { get; init; }
+
+    public string? ThreadId { get; init; }
+
+    public bool? IsInclusive { get; init; }
+
+    public string? ThreadParentId { get; init; }
 }

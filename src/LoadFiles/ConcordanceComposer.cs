@@ -36,6 +36,9 @@ internal sealed class ConcordanceComposer : StandardRowComposer
         "BATES" => "BATES",
         "PAGECOUNT" => "PAGECOUNT",
         "TEXT" => "TEXT_PATH",
+        "THREADID" => "THREAD_ID",
+        "INCLUSIVE" => "INCLUSIVE",
+        "THREADPARENT" => "THREAD_PARENT",
         _ => columnKey,
     };
 }

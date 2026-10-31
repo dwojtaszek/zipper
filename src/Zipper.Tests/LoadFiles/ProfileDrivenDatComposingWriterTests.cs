@@ -57,6 +57,36 @@ public class ProfileDrivenDatComposingWriterTests
     }
 
     [Fact]
+    public void ComposeProfile_WithThreading_PreservesProfileEmailValues()
+    {
+        var profile = new ColumnProfile
+        {
+            Name = "email-thread-values",
+            Settings = new ProfileSettings { EmptyValuePercentage = 0 },
+            Columns =
+            [
+                new() { Name = "EMAILCC", Type = "emailcc" },
+                new() { Name = "EMAILSENTDATE", Type = "emailsentdate" },
+            ],
+        };
+        var withoutThreading = MakeRequest(profile, fileCount: 2);
+        withoutThreading.Output = withoutThreading.Output with { FileType = "eml" };
+        withoutThreading.LoadfileOnly = true;
+        var withThreading = MakeRequest(profile, fileCount: 2);
+        withThreading.Output = withThreading.Output with { FileType = "eml" };
+        withThreading.Metadata = withThreading.Metadata with { WithThreading = true };
+        withThreading.LoadfileOnly = true;
+
+        var standardComposer = new DatComposer(withoutThreading, WriterMode.LoadfileOnly);
+        var threadedComposer = new DatComposer(withThreading, WriterMode.LoadfileOnly);
+        var standardRecords = standardComposer.Compose(Array.Empty<FileData>()).ToList();
+        var threadedRecords = threadedComposer.Compose(Array.Empty<FileData>()).ToList();
+
+        Assert.Equal(standardComposer.HeaderColumns, threadedComposer.HeaderColumns);
+        Assert.Equal(standardRecords.Select(record => record.Values), threadedRecords.Select(record => record.Values));
+    }
+
+    [Fact]
     public async Task WriteAsync_DataRows_WrappedInQuoteDelimiter()
     {
         var profile = MakeMinimalProfile();

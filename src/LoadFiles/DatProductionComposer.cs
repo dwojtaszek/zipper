@@ -1,3 +1,5 @@
+using Zipper.Emails;
+
 namespace Zipper.LoadFiles;
 
 /// <summary>
@@ -41,6 +43,11 @@ internal sealed class DatProductionComposer
         if (request.Metadata.WithFamilies)
         {
             headers.AddRange(new[] { "BEGATTACH", "ENDATTACH", "PARENTDOCID" });
+        }
+
+        if (request.Metadata.WithThreading)
+        {
+            headers.AddRange(new[] { "Thread ID", "Inclusive", "Thread Parent" });
         }
 
         return headers.Select(h => DatComposerShared.ApplyConvention(h, namingConvention)).ToList();
@@ -180,6 +187,36 @@ internal sealed class DatProductionComposer
             v.Add(ctx.BegAttach);
             v.Add(ctx.EndAttach);
             v.Add(ctx.ParentDocId);
+        }
+
+        if (this.request.Metadata.WithThreading)
+        {
+            var isEml = string.Equals(wi.EffectiveFileType(this.request), "eml", StringComparison.Ordinal) && !ctx.IsChild;
+            EmailThreadNode? threadNode = null;
+            if (isEml)
+            {
+                if (fileData.Email?.ThreadId is null)
+                {
+                    threadNode = EmailThreadPlan.GetOrCreate(this.request).GetNode(wi.Index);
+                }
+                else if (fileData.Email.IsInclusive is null || fileData.Email.ThreadParentId is null)
+                {
+                    var candidate = EmailThreadPlan.GetOrCreate(this.request).GetNode(wi.Index);
+                    if (string.Equals(fileData.Email.ThreadId, candidate.ThreadDocId, StringComparison.Ordinal))
+                    {
+                        threadNode = candidate;
+                    }
+                }
+            }
+
+            var threadId = isEml ? fileData.Email?.ThreadId ?? threadNode?.ThreadDocId ?? string.Empty : string.Empty;
+            var isInclusive = fileData.Email?.IsInclusive ?? threadNode?.IsInclusive;
+            var inclusive = isEml && isInclusive.HasValue ? (isInclusive.Value ? "Y" : "N") : string.Empty;
+            var threadParent = isEml ? fileData.Email?.ThreadParentId ?? threadNode?.ThreadParentDocId ?? string.Empty : string.Empty;
+
+            v.Add(threadId);
+            v.Add(inclusive);
+            v.Add(threadParent);
         }
 
         return v;
