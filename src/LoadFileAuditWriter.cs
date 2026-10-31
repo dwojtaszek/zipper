@@ -45,6 +45,11 @@ internal static class LoadFileAuditWriter
         IReadOnlyCollection<FileData> composedRecords,
         LoadFileFormat format)
     {
+        if (ChaosScenarios.GeneratesAdversarialValues(request.Chaos.ChaosScenario))
+        {
+            return null;
+        }
+
         var (_, totalLines) = ComputeRecordCounts(request, composedRecords, format);
         return ChaosEngineBuilder.Build(request, totalLines, format);
     }
@@ -106,7 +111,8 @@ internal static class LoadFileAuditWriter
     {
         if (request.Metadata.WithFamilies && request.Output.IsEml && request.LoadFile.AttachmentRate > 0)
         {
-            long childCount = LoadFiles.FamilyPlan.GetSimulatedChildCount(request);
+            long childCount = request.SimulatedFamilyChildCount
+                ?? LoadFiles.FamilyPlan.GetSimulatedChildCount(request);
             return request.Output.FileCount + childCount;
         }
         return request.Output.FileCount;
@@ -216,25 +222,34 @@ internal static class LoadFileAuditWriter
                 LineEnding = request.Delimiters.EndOfLine,
                 Delimiters = delimiters,
             },
-            ChaosMode = new AuditChaosMode
-            {
-                Enabled = request.Chaos.ChaosMode && anomalies is not null,
-                TargetAmount = request.Chaos.ChaosMode && anomalies is not null ? request.Chaos.ChaosAmount : null,
-                TotalAnomalies = anomalies?.Count ?? 0,
-                InjectedAnomalies = anomalies is not null && anomalies.Count > 0
-                    ? anomalies.Select(a => new AuditAnomalyEntry
-                    {
-                        LineNumber = a.LineNumber,
-                        RecordID = a.RecordID,
-                        Column = a.Column,
-                        ErrorType = a.ErrorType,
-                        Description = a.Description,
-                    }).ToList()
-                    : null,
-            },
+            ChaosMode = CreateAuditChaosMode(request, anomalies),
         };
 
         return JsonSerializer.Serialize(audit, JsonOptions);
+    }
+
+    private static AuditChaosMode CreateAuditChaosMode(
+        FileGenerationRequest request,
+        IReadOnlyList<ChaosAnomaly>? anomalies)
+    {
+        bool adversarialValues = ChaosScenarios.GeneratesAdversarialValues(request.Chaos.ChaosScenario);
+        bool isEnabled = request.Chaos.ChaosMode && (anomalies is not null || adversarialValues);
+        return new AuditChaosMode
+        {
+            Enabled = isEnabled,
+            TargetAmount = isEnabled ? request.Chaos.ChaosAmount : null,
+            TotalAnomalies = anomalies?.Count ?? 0,
+            InjectedAnomalies = anomalies is not null && anomalies.Count > 0
+                ? anomalies.Select(a => new AuditAnomalyEntry
+                {
+                    LineNumber = a.LineNumber,
+                    RecordID = a.RecordID,
+                    Column = a.Column,
+                    ErrorType = a.ErrorType,
+                    Description = a.Description,
+                }).ToList()
+                : null,
+        };
     }
 
     private static string FormatDelimiter(string delimiter)

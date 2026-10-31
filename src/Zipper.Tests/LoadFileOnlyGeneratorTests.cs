@@ -3,6 +3,7 @@ using System.Text.Json;
 using Xunit;
 using Zipper.Config;
 using Zipper.LoadFiles;
+using Zipper.Validation;
 
 [assembly: CollectionBehavior(DisableTestParallelization = true)]
 
@@ -73,6 +74,20 @@ public class LoadFileOnlyGeneratorTests : IDisposable
         Assert.Contains("Custodian", firstLine, StringComparison.Ordinal);
         Assert.Contains("EmailSubject", firstLine, StringComparison.Ordinal);
         Assert.Contains("ExtractedText", firstLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_Dat_UsesSyntheticAuthorValuesWithoutChaos()
+    {
+        var request = this.CreateRequest(count: 1);
+        var result = await LoadFileOnlyGenerator.GenerateAsync(request);
+        var lines = await File.ReadAllLinesAsync(result.LoadFilePath);
+        var header = DatLineParser.Parse(lines[0], '\u0014', '\u00fe');
+        var record = DatLineParser.Parse(lines[1], '\u0014', '\u00fe');
+        int authorIndex = header.FindIndex(column => string.Equals(column, "Author", StringComparison.Ordinal));
+
+        Assert.True(authorIndex >= 0);
+        Assert.Matches(@"^Author \d{3}$", record[authorIndex]);
     }
 
     [Fact]

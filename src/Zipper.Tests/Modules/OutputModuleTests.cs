@@ -411,6 +411,27 @@ public class OutputModuleTests
     }
 
     [Fact]
+    public void TryBuild_MultiRatioMix_WithZeroCountWhenAllowed_SkipsFileTypePlan()
+    {
+        var module = new OutputModule();
+        Assert.True(module.TryApply("--types", "pdf:50,jpg:50"));
+        Assert.True(module.TryApply("--count", "0"));
+        Assert.True(module.TryApply("--output-path", Directory.GetCurrentDirectory()));
+
+        Assert.True(module.TryBuild(null, out var config, allowZeroCount: true));
+
+        Assert.Equal(0, config.FileCount);
+        Assert.Equal("pdf", config.FileType);
+        Assert.True(config.IsMixedFileTypes);
+        Assert.Null(config.FileTypePlan);
+        Assert.NotNull(config.FileTypeRatios);
+        Assert.Equal(2, config.FileTypeRatios!.Count);
+        Assert.True(config.HasFileType("pdf"));
+        Assert.True(config.HasFileType("jpg"));
+        Assert.False(config.HasFileType("eml"));
+    }
+
+    [Fact]
     public void TryBuild_SourceDriven_ComputesFromRecords()
     {
         var cwd = Directory.GetCurrentDirectory();

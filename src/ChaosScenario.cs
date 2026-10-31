@@ -1,18 +1,20 @@
 namespace Zipper;
 
 /// <summary>
-/// Defines a named chaos scenario with predefined anomaly types and amounts.
+/// Defines a named Chaos Scenario with predefined Anomaly Types and Chaos Amounts,
+/// or parser-valid adversarial values.
 /// </summary>
 internal record ChaosScenarioDefinition(
     string Name,
     string Description,
     string ChaosTypes,
     string DefaultAmount,
-    LoadFileFormat? RequiredFormat);
+    LoadFileFormat? RequiredFormat,
+    bool GenerateAdversarialValues = false);
 
 /// <summary>
-/// Registry of built-in chaos scenarios that bundle realistic combinations
-/// of anomaly types modeled after real-world platform ingestion failures.
+/// Registry of built-in Chaos Scenarios for realistic ingestion anomalies
+/// and parser-valid adversarial values.
 /// </summary>
 internal static class ChaosScenarios
 {
@@ -78,6 +80,13 @@ internal static class ChaosScenarios
             ChaosTypes: "xml-unclosed-tag,xml-bad-entity,xml-encoding-lie",
             DefaultAmount: "5%",
             RequiredFormat: LoadFileFormat.EdrmXml),
+        new(
+            Name: "adversarial-values",
+            Description: "Valid DAT records with escaped delimiters, quote lookalikes, platform-length values, and empty-row tails",
+            ChaosTypes: "quotes,mixed-delimiters,eol",
+            DefaultAmount: "100%",
+            RequiredFormat: LoadFileFormat.Dat,
+            GenerateAdversarialValues: true),
     };
 
     private static readonly IReadOnlyList<string> CachedScenarioNames =
@@ -102,6 +111,9 @@ internal static class ChaosScenarios
     {
         return ScenariosArray.FirstOrDefault(s => s.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
     }
+
+    internal static bool GeneratesAdversarialValues(string? name) =>
+        name is not null && GetByName(name)?.GenerateAdversarialValues == true;
 
     internal static IReadOnlyList<string> ResolveTypes(ChaosScenarioDefinition scenario, LoadFileFormat format)
     {

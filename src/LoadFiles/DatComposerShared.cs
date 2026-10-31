@@ -63,30 +63,16 @@ internal static class DatComposerShared
         var normalizedProfileKeys = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var profileKey in profileValues.Keys)
         {
-            normalizedProfileKeys.TryAdd(NormalizeMetadataKey(profileKey), profileKey);
+            normalizedProfileKeys.TryAdd(SourceMetadataKeyNormalizer.Normalize(profileKey), profileKey);
         }
 
         foreach (var (key, value) in sourceMetadata)
         {
-            if (normalizedProfileKeys.TryGetValue(NormalizeMetadataKey(key), out var profileKey))
+            if (normalizedProfileKeys.TryGetValue(SourceMetadataKeyNormalizer.Normalize(key), out var profileKey))
             {
                 profileValues[profileKey] = value;
             }
         }
-    }
-
-    private static string NormalizeMetadataKey(string key)
-    {
-        var builder = new System.Text.StringBuilder(key.Length);
-        foreach (var c in key)
-        {
-            if (char.IsLetterOrDigit(c))
-            {
-                builder.Append(char.ToUpperInvariant(c));
-            }
-        }
-
-        return builder.ToString();
     }
 
     /// <summary>
@@ -100,13 +86,7 @@ internal static class DatComposerShared
             return null;
         }
 
-        var algo = upperColumnName switch
-        {
-            "MD5HASH" or "MD5_HASH" or "MD5 HASH" => Config.HashAlgorithm.MD5,
-            "SHA1HASH" or "SHA1_HASH" or "SHA1 HASH" => Config.HashAlgorithm.SHA1,
-            "SHA256HASH" or "SHA256_HASH" or "SHA256 HASH" => Config.HashAlgorithm.SHA256,
-            _ => (Config.HashAlgorithm?)null,
-        };
+        var algo = Config.HashUtility.GetColumnAlgorithm(upperColumnName);
 
         if (algo.HasValue && fileData.Hashes.TryGetValue(algo.Value, out var hashValue))
         {
@@ -130,6 +110,8 @@ internal static class DatComposerShared
                 : BuiltInProfiles.LegacyWithMetadata;
         }
 
-        return profile is not null ? new DataGenerator(profile, request.Metadata.Seed, now) : null;
+        return profile is not null
+            ? new DataGenerator(profile, request.Metadata.Seed, now)
+            : null;
     }
 }

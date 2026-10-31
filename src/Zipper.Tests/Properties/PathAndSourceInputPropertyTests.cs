@@ -429,20 +429,24 @@ public sealed class PathAndSourceInputPropertyTests : IDisposable
         var complexNotes = string.Concat("Value, with \"quotes\", ", sanitizedRaw, "\nSecond line ", safeStem);
 
         var csvContent = string.Concat(
-            "FilePath,FileType,Notes", newline,
+            "FilePath,FileType,Notes,EmptyMetadata", newline,
             newline,
-            EscapeCsvField(string.Concat("docs/", safeStem, ".pdf")), ",pdf,", EscapeCsvField(complexNotes), newline);
+            EscapeCsvField(string.Concat("docs/", safeStem, ".pdf")), ",pdf,", EscapeCsvField(complexNotes), ",", newline);
 
         var csvPath = Path.Combine(this.tempRoot, string.Concat("quoted_", iter.ToString(CultureInfo.InvariantCulture), ".csv"));
         File.WriteAllText(csvPath, csvContent, new UTF8Encoding(encoderShouldEmitUTF8Identifier: emitBom));
 
-        Assert.True(SourceCsvReader.TryRead(csvPath, out var records, out var error));
+        Assert.True(SourceCsvReader.TryRead(csvPath, out var records, out _, out var sourceMetadataKeys, out var error));
         Assert.Null(error);
         var record = Assert.Single(records);
         Assert.Equal(string.Concat("docs/", safeStem, ".pdf"), record.RelativePath);
         Assert.Equal("pdf", record.FileType);
         Assert.NotNull(record.Metadata);
         Assert.Equal(complexNotes, record.Metadata["Notes"]);
+        Assert.False(record.Metadata.ContainsKey("EmptyMetadata"));
+        Assert.Equal(2, sourceMetadataKeys!.Count);
+        Assert.Contains("Notes", sourceMetadataKeys);
+        Assert.Contains("EmptyMetadata", sourceMetadataKeys);
     }
 
     [Property]

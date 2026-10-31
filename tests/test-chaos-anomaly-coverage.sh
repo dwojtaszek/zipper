@@ -343,6 +343,39 @@ while IFS= read -r SCENARIO; do
     SAFE="${SCENARIO//-/_}"
     OUT_DIR="$TEST_OUTPUT_DIR/scenario_${SAFE}"
 
+    if [[ "$SCENARIO" == "adversarial-values" ]]; then
+        print_info "B2 Scenario: $SCENARIO (format: dat)"
+        zipper --loadfile-only --count 1000 --output-path "$OUT_DIR/run1" \
+            --chaos-mode --chaos-scenario "$SCENARIO" --seed 42
+        FILE1=$(find "$OUT_DIR/run1" -name "*.dat" -print -quit)
+        PROPS=$(find "$OUT_DIR/run1" -name "*_properties.json" -print -quit)
+        [[ -z "$FILE1" || -z "$PROPS" ]] && print_error "Missing adversarial-values output"
+        python3 "$SCRIPT_DIR/validate_adversarial_values.py" "$FILE1" 1000
+        validate_properties_json "$PROPS"
+        jq -e '.chaosMode.enabled and .chaosMode.totalAnomalies == 0' "$PROPS" >/dev/null \
+            || print_error "adversarial-values should be enabled without injecting anomalies"
+
+        zipper --loadfile-only --count 1000 --output-path "$OUT_DIR/run2" \
+            --chaos-mode --chaos-scenario "$SCENARIO" --seed 42
+        FILE2=$(find "$OUT_DIR/run2" -name "*.dat" -print -quit)
+        PROPS2=$(find "$OUT_DIR/run2" -name "*_properties.json" -print -quit)
+        cmp -s "$FILE1" "$FILE2" || print_error "Determinism failed for adversarial-values"
+        PROPS_CANONICAL=$(canonicalize_props "$PROPS")
+        PROPS2_CANONICAL=$(canonicalize_props "$PROPS2")
+        [[ "$PROPS_CANONICAL" != "$PROPS2_CANONICAL" ]] \
+            && print_error "Determinism failed (_properties.json differs) for adversarial-values"
+
+        zipper --loadfile-only --count 0 --output-path "$OUT_DIR/header-only" \
+            --chaos-mode --chaos-scenario "$SCENARIO" --seed 42
+        HEADER_ONLY=$(find "$OUT_DIR/header-only" -name "*.dat" -print -quit)
+        [[ -z "$HEADER_ONLY" ]] && print_error "Missing adversarial-values header-only DAT file"
+        python3 "$SCRIPT_DIR/validate_adversarial_values.py" "$HEADER_ONLY" 0
+
+        PASSED=$((PASSED + 1))
+        print_success "B2 Scenario 'adversarial-values' — PASSED (valid values, no anomalies)"
+        continue
+    fi
+
     # Look up format and declared chaos types from TSV (skip header line)
     FMT=$(tsv_lookup "$SCENARIO" 3)
     DECLARED_TYPES=$(tsv_lookup "$SCENARIO" 2)

@@ -315,6 +315,11 @@ zipper --loadfile-only --count 100000 --output-path ./platform_test \
 # Documented platform import failures
 zipper --loadfile-only --count 100000 --output-path ./realistic_import_failures \
     --chaos-mode --chaos-scenario realistic-import-failures --seed 42
+# Parser-valid adversarial values and a header-only edge case
+zipper --loadfile-only --count 100 --output-path ./adversarial-values \
+    --chaos-mode --chaos-scenario adversarial-values --seed 42
+zipper --loadfile-only --count 0 --output-path ./adversarial-values-header \
+    --chaos-mode --chaos-scenario adversarial-values --seed 42
 # RFC 4180 CSV escaping failures
 zipper --loadfile-only --loadfile-format csv --count 100000 --output-path ./csv_escaping_failures \
     --chaos-mode --chaos-scenario csv-escaping-failures --seed 42

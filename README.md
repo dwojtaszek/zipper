@@ -72,7 +72,15 @@ zipper --loadfile-only --loadfile-format edrm-xml --count 10000 --output-path ./
     --chaos-mode --chaos-scenario edrm-xml-structural-failures --seed 42
 ```
 
-#### 7. Publish Archive Test Fixture pairs
+#### 7. Generate parser-valid adversarial DAT values
+Exercise DAT parsers with correctly escaped delimiters, the literal `Ã¾` lookalike, a 32,768-character value, and two trailing empty rows:
+```bash
+zipper --loadfile-only --count 100 --output-path ./adversarial-values \
+    --chaos-mode --chaos-scenario adversarial-values --seed 42
+```
+The first selected record contains all three value classes in a generated 32,768-character value. `--chaos-amount` controls which records receive the adversarial values. The scenario defaults to `100%`, so omitting `--chaos-amount` selects every record. Use `--count 0` with this scenario to write a header-only Load File followed by the same two empty rows. This scenario requires DAT-only output; for TIFF or JPG generation, specify `--loadfile-format dat` to avoid the usual implicit OPT Load File. With Source-Driven Generation (`--input-csv` or `--directory-template`), the selected Column Profile must contain an eligible text or long-text column not mapped to Source Metadata; validation fails if no such column exists. Without an explicit Column Profile, use `--with-metadata` or generate Email File Types, which include metadata columns automatically. Source Metadata remains intact, so a supplied value may independently have the same length. Custom delimiters and encodings must round-trip the generated values and avoid fallback characters that corrupt DAT quoting or record boundaries.
+
+#### 8. Publish Archive Test Fixture pairs
 Publish the frozen smoke suite (five cases: three valid controls plus a CRC lie and a missing EOCD) as flat `<fixtureId>.zip` / `<fixtureId>.json` pairs for extractor testing — see [Archive Test Suites](docs/archive-test-suites.md):
 ```bash
 zipper --archive-test-suite smoke --seed 42 --output-path ./archive-cases
@@ -124,7 +132,7 @@ To generate the policy-sensitive `name-sibling-prefix-traversal` Archive Test Fi
 zipper --archive-test-suite security --archive-test-cases name-sibling-prefix-traversal --seed 42 --output-path ./sibling-prefix-traversal
 ```
 
-#### 8. Choose the Archive compression method
+#### 9. Choose the Archive compression method
 `--compression` sets the ZIP compression method for every Archive the run produces (Standard mode, `--include-load-file`, and `--production-zip`) and defaults to `deflate`:
 ```bash
 zipper --type pdf --count 1000 --output-path ./stored_archive --compression store
@@ -141,7 +149,7 @@ zipper --type pdf --count 1000 --output-path ./stored_archive --compression stor
   - **Standard Mode**: Zip Archive + Load File
   - **Production Set Mode**: Volume-structured output (`DATA/`, `IMAGES/`, `NATIVES/`, `TEXT/`, `_manifest.json`). The **Production Manifest** carries an Azure-safe **Production Metadata** block (`metadata`, with `production_id`, `bates_number_start`, `bates_number_end`, and `volume_count`) whose values are normalized (lossy) derivatives of the manifest's own fields and are mapped onto `x-ms-meta-<key>` headers by upload clients. Every value character is tab (0x09) or printable ASCII (0x20–0x7E); CR (0x0D) and LF (0x0A) become a space, tab is preserved, and every other disallowed character (including other C0 controls, DEL 0x7F, and non-ASCII characters) becomes `_`. The combined key/value budget of 8,192 bytes is guaranteed by construction because the CLI rejects any parsed `--bates-prefix` element longer than 200 UTF-8 bytes and any `--production-id` element longer than 250 UTF-8 bytes after rolling Production ID derivation, and the Production Manifest writer refuses to serialize a **Production Metadata** block that exceeds the budget; the comma-joined flag value itself may be longer when every element is within its cap (the worst-case derived Production Metadata block is 759 bytes); post-generation validation rejects values outside the allowed set.
   - **Loadfile-Only Mode**: Standalone Load File + `_properties.json` audit file
-- **Advanced Capabilities**: Email attachment simulation (`--attachment-rate`), family relationships (`--with-families`), redacted production sets (`--redacted-production`), and chaos anomaly injection (`--chaos-mode`).
+- **Advanced Capabilities**: Email attachment simulation (`--attachment-rate`), family relationships (`--with-families`), redacted production sets (`--redacted-production`), and Chaos Engine anomaly injection or parser-valid `adversarial-values` generation (`--chaos-mode`).
 - **Output Safety & Preservation**: Collision-resistant base naming with incremental suffixes (`_1`, `_2`, …) and atomic creation (`FileMode.CreateNew`) prevent overwriting existing Archives or Load Files. In Standard mode, entry path collisions across Native Files, generated Attachments, Extracted Text, and included Load Files/Audit Files fail descriptively rather than silently dropping or renaming records. Production Set mode rejects existing output directories and zip archives upfront before generation, and cleanup routines delete only artifacts created during the failed run.
 
 ---
@@ -156,7 +164,7 @@ All command-line flags recognized by Zipper:
 | `--types` | none | comma-separated `type:weight` (e.g. `pdf:70,eml:30`) | File type mix weights |
 | `--input-csv` | none | file path | Source-driven generation from CSV |
 | `--directory-template` | none | directory path | Source-driven generation mirroring directory structure |
-| `--count` | **required** | positive integer | Total number of files/records to generate |
+| `--count` | **required** | non-negative integer for `adversarial-values`; otherwise positive | Total number of files/records to generate |
 | `--output-path` | **required** | directory path | Target output directory |
 | `--folders` | `1` | `1` to `100` | Number of subfolders for file distribution |
 | `--encoding` | `UTF-8` | `UTF-8`, `UTF-16`, `ANSI` | Text encoding for Load Files |
@@ -192,10 +200,10 @@ All command-line flags recognized by Zipper:
 | `--newline-delim` | ASCII 174 | `ascii:N` or `char:C` | Newline replacement (strict-prefix format) |
 | `--multi-delim` | `;` | `ascii:N` or `char:C` | Multi-value separator |
 | `--nested-delim` | `\` | `ascii:N` or `char:C` | Nested value separator |
-| `--chaos-mode` | `false` | flag | Enable Chaos Engine anomaly injection |
-| `--chaos-amount` | `1%` | exact count `N` or percentage `N%` | Anomaly target count/percentage |
+| `--chaos-mode` | `false` | flag | Enable Chaos Engine anomaly injection or `adversarial-values` generation |
+| `--chaos-amount` | `1%` | exact count `N` or percentage `N%` | Chaos target count/percentage |
 | `--chaos-types` | format defaults | comma-separated list | Filter anomaly types for the selected format: DAT (`mixed-delimiters`, `quotes`, `columns`, `eol`, `encoding`, `path-pointer`, `field-length`, `date-format`, `null-byte`, `trailing-empties`), OPT (`opt-boundary`, `opt-columns`, `opt-pagecount`, `opt-path`, `opt-batesnumber`, `opt-encoding`), CSV (`csv-quote-escape`, `csv-embedded-newline`, `csv-bom`), Concordance (`concordance-delimiter`, `concordance-quote-escape`), or EDRM-XML (`xml-unclosed-tag`, `xml-bad-entity`, `xml-encoding-lie`); the new DAT types are opt-in and `full-chaos` enables all types for the selected format |
-| `--chaos-scenario` | none | scenario name | Predefined chaos scenario |
+| `--chaos-scenario` | none | scenario name | Predefined chaos scenario (DAT `adversarial-values` emits valid edge-case values, not anomalies) |
 | `--chaos-list` | `false` | flag | Print available chaos scenarios and exit |
 | `--production-set` | `false` | flag | Structured Production Set output |
 | `--volume-size` | `5000` | positive integer | Maximum documents per volume subfolder |
@@ -219,7 +227,7 @@ All command-line flags recognized by Zipper:
 | `--archive-test-cases` | none | comma-separated Case Keys | Filter the suite to the named cases (closed flag set; requires `--archive-test-suite`) |
 | `--version` | `false` | flag | Print full embedded version string and exit |
 
-Chaos requires `--loadfile-only`; `--chaos-scenario` conflicts with `--chaos-types`. The five documented platform import-failure DAT types are opt-in, and `realistic-import-failures` requires DAT. Each format has its own anomaly catalog: CSV, Concordance, and EDRM-XML no longer inherit the DAT arms. `full-chaos` enables every anomaly type for the selected format.
+Chaos requires `--loadfile-only`; `--chaos-scenario` conflicts with `--chaos-types`. Only the DAT `adversarial-values` scenario accepts `--count 0`, which writes a header-only Load File plus two trailing empty rows. It requires DAT-only output, bypasses anomaly injection, and remains parser-valid. For TIFF or JPG generation, specify `--loadfile-format dat` because those File Types normally add OPT output implicitly. For positive counts, `--chaos-amount` controls which records receive the adversarial values; the first selected record contains the escaped delimiters, `Ã¾` lookalike, and a 32,768-character value. The five documented platform import-failure DAT types are opt-in, and `realistic-import-failures` requires DAT. Each format has its own anomaly catalog: CSV, Concordance, and EDRM-XML no longer inherit the DAT arms. `full-chaos` enables every anomaly type for the selected format.
 
 ### Standard Load File Columns
 

@@ -208,7 +208,12 @@ REQ-094	unit	ChaosModuleTests.TryBuild_ChaosModeWithoutLoadfileOnly_ReturnsFalse
 REQ-094	unit	LoadFileEmitterTests.Chaos_WithNoTargets_MatchesNoChaosOutput	LoadFileEmitter chaos pipeline integration
 REQ-094	unit	PostGenerationValidatorTests.Validate_ChaosMode_ReturnsEmptyResult	Post-generation validator skips structural errors in chaos mode
 REQ-095	unit	ChaosSamplerTests.ParseChaosAmount_Percentage_ReturnsCorrectCount	--chaos-amount N|N%
+REQ-095	unit	ChaosSamplerTests.ParseChaosAmount_PercentageAtOrAboveHundred_ReturnsTotalCount	Chaos amounts of 100% or more clamp to total lines without overflowing large totals
 REQ-095	unit	ChaosAndComparisonPropertyTests.ChaosSampler_SelectTargets_ShouldRespectBoundsAndDeterminism	Property: ChaosSampler exact count and percentage select bounded unique target lines
+REQ-095	unit	ChaosSamplerTests.ParseChaosAmount_LongPercentage_UsesExactFractionBeforeTruncating	Long record counts preserve the requested fractional percentage before truncation
+REQ-095	unit	ChaosSamplerTests.ParseChaosAmount_NaNPercentage_ThrowsArgumentException	Non-numeric NaN percentages are rejected
+REQ-095	unit	ChaosAndComparisonPropertyTests.ChaosSampler_ParseLongPercentage_ShouldTruncateExactCount	Property: long Chaos Engine percentage counts use exact decimal arithmetic
+REQ-095	unit	ChaosSamplerTests.ParseChaosAmount_IntMaxBoundary_PreservesHistoricalDoubleRounding	Int32.MaxValue preserves historical percentage rounding behavior
 REQ-096	unit	ChaosEngineTests.ChaosTypes_Filtering_OnlyUsesSpecifiedTypes	--chaos-types filter
 REQ-097	unit	ChaosAnomalyTypesTests.Dat_ContainsExpectedTypes	DAT chaos anomaly types
 REQ-097	unit	ChaosAndComparisonPropertyTests.DatAnomalyApplier_Apply_ShouldMutateLineAndRecordAnomalyMetadata	Property: DatAnomalyApplier mutates DAT line and records anomaly metadata
@@ -379,6 +384,7 @@ REQ-164	unit	PathAndSourceInputPropertyTests.PathValidator_ResolveSecurePath_Sho
 REQ-165	unit	HashModuleTests.TryBuild_ValidHashMode_ReturnsTrue	--hash-mode actual|simulated|none
 REQ-166	unit	HashModuleTests.Parse_SimulatedMode_ReturnsDefaultMD5	--hash-algorithms, default md5
 REQ-167	unit	ParallelFileGeneratorTests.GenerateFileData_WithHashModeActual_ComputesAllConfiguredHashes	Hash columns MD5HASH/SHA1HASH/SHA256HASH
+REQ-167	unit	HashUtilityTests.GetColumnAlgorithm_KnownAndUnknownNames_ReturnsExpectedAlgorithm	Hash column aliases resolve to their configured algorithm
 REQ-168	unit	HashModuleTests.TryBuild_InvalidHashMode_ReturnsFalse	Invalid hash-mode/algorithms fail validation
 REQ-169	unit	HashModuleTests.TryBuild_HashAlgorithmsWithoutHashMode_ReturnsFalse	Algorithms without hash-mode fail
 REQ-170	unit	ProductionSetTests.ProductionSet_RollingArgs_ParsesCorrectly	--production-id single/list, defaults; 250 UTF-8 byte cap after rolling derivation
@@ -666,3 +672,33 @@ REQ-205	unit	StreamingAndCliRulesPropertyTests.CrossCuttingRules_Validate_Should
 REQ-081	unit	StreamingAndCliRulesPropertyTests.DelimiterModule_TryBuild_LegacyDelimiterValues_ShouldRejectOnlyMultiCharacterColumnAndQuote	Property: legacy --delimiter-* flags accept single characters, ASCII codes, and escapes and reject a multi-character column or quote delimiter
 REQ-092	unit	StreamingAndCliRulesPropertyTests.DelimiterModule_TryBuild_EolValues_ShouldRequireLoadFileOnlyOrProductionSet	Property: --eol is gated on --loadfile-only or --production-set and accepts only CRLF, LF, or CR
 REQ-093	unit	StreamingAndCliRulesPropertyTests.DelimiterModule_TryBuild_StrictDelimiterValues_ShouldRejectValuesWithoutTheRequiredPrefix	Property: strict-prefix delimiter flags accept only ascii:<N>, char:<c>, and the quote-only none keyword
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_GeneratesDeterministicValidTailValues	Deterministic parser-valid DAT edge-case values and validator success
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithZeroCount_WritesHeaderOnlyAndPassesValidation	Header-only DAT output with two trailing empty rows and validator success
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithAmountOverride_UsesOneCombinedTailRecord	Chaos amount overrides target only one combined tail value
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithPartialAmount_SelectsMultipleRecords	Chaos amount selects exactly two records with adversarial values
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithEmailFamilies_SelectsEmittedRecords	Chaos amount selects emitted records, including Email Family child records
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithAmountAboveTotal_TargetsEveryRecord	Chaos percentages above 100% select every record
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithColumnProfile_GeneratesValidTailValues	Column Profile path generates parser-valid adversarial values
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithCustomDelimiters_GeneratesValidTailValues	Custom representable delimiters produce parser-valid adversarial values
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithUtf16Encoding_GeneratesValidTailValues	UTF-16 encoding generates parser-valid adversarial values
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithSourceRecordsAndProfile_GeneratesValidTailValues	Source Record and Column Profile path generates parser-valid values
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithPlatformLengthSourceMetadata_PreservesBothValues	Preserves same-length Source Metadata and generated tail value
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithEveryEligibleColumnMappedToSourceMetadata_ReturnsError	Rejects a profile when every eligible tail column is mapped to Source Metadata
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithSourceRecordsAndMetadata_GeneratesValidTailValues	Source Record and --with-metadata path generates parser-valid values
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithSourceRecordsWithoutProfile_ReturnsError	Source Records require metadata or an eligible Column Profile
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithProfileWithoutTextColumn_ReturnsError	Rejects profiles without an eligible text column
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithFileSizeOnlyProfile_ReturnsError	Rejects profiles with only a semantic File Size Column
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithImplicitOptFormat_ReturnsError	Rejects OPT output implicitly added for TIFF
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithInvalidDelimiters_ReturnsError	Rejects line breaks, NUL, and no quote delimiter
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithMultilineReplacementDelimiter_ReturnsError	Rejects newline tokens that split physical DAT records
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithMatchingDelimiters_ReturnsError	Rejects matching column and quote delimiters
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithUnrepresentableEncoding_ReturnsError	Rejects encodings that cannot round-trip tail values or delimiters
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithUnsafeEncodingFallback_ReturnsError	Rejects encoder fallbacks that can inject DAT quote syntax
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithNegativeCount_ReturnsError	Negative count remains invalid for adversarial-values
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithMultiRatioMixAndZeroCount_ReturnsCleanCliError	Multi-ratio mix with zero count fails cleanly on unsupported --loadfile-only mix
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithExpandedRecordCountAboveIntMax_CreatesLongSafePlan	Adversarial value planner handles family-expanded record counts above Int32.MaxValue
+REQ-232	unit	ChaosScenarioTests.ChaosScenario_AdversarialValues_WithIntMaxCount_PreservesSamplerSelection	Adversarial value selection preserves ChaosSampler indices at Int32.MaxValue
+REQ-232	e2e	test-chaos-anomaly-coverage.sh	Valid adversarial-values records and header-only DAT output
+REQ-232	e2e	test-chaos-anomaly-coverage.bat	Valid adversarial-values records and header-only DAT output
+REQ-232	unit	ChaosAndComparisonPropertyTests.AdversarialValueTailPlan_Create_ShouldSelectDeterministicBoundedTargets	Property: seeded adversarial tail selection is deterministic and bounded, with exactly one 32,768-character value when records are selected
+REQ-232	unit	ChaosAndComparisonPropertyTests.AdversarialValueTailPlan_FindColumn_ShouldAvoidSourceMetadataColumn	Property: adversarial tail column selection avoids Source Metadata mappings

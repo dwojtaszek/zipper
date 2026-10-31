@@ -27,4 +27,5 @@ internal sealed record ColumnGenerationContext
     /// file-context value is not applicable; null for ordinary profile generation.
     /// </summary>
     public string? ProfileValue { get; init; }
+
 }

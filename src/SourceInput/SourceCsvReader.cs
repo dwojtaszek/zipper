@@ -21,9 +21,19 @@ internal static class SourceCsvReader
         out IReadOnlySet<string>? sourcePaths,
         out string? error,
         int maxRecords = SourceRecordIntake.MaxSourceRecords)
+        => TryRead(filePath, out records, out sourcePaths, out _, out error, maxRecords);
+
+    internal static bool TryRead(
+        string filePath,
+        out IReadOnlyList<SourceRecord> records,
+        out IReadOnlySet<string>? sourcePaths,
+        out IReadOnlySet<string>? sourceMetadataKeys,
+        out string? error,
+        int maxRecords = SourceRecordIntake.MaxSourceRecords)
     {
         records = Array.Empty<SourceRecord>();
         sourcePaths = null;
+        sourceMetadataKeys = null;
         error = null;
 
         List<(int RecordNumber, List<string> Fields)> rows;
@@ -90,6 +100,9 @@ internal static class SourceCsvReader
         }
 
         sourcePaths = intake.SourcePaths;
+        sourceMetadataKeys = layout.MetadataColumns
+            .Select(column => column.Name)
+            .ToHashSet(StringComparer.Ordinal);
         return true;
     }
 

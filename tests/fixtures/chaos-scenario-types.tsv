@@ -9,3 +9,4 @@ realistic-import-failures	path-pointer,field-length,date-format,null-byte,traili
 csv-escaping-failures	csv-quote-escape,csv-embedded-newline,csv-bom	csv
 concordance-import-failures	concordance-delimiter,concordance-quote-escape	concordance
 edrm-xml-structural-failures	xml-unclosed-tag,xml-bad-entity,xml-encoding-lie	xml
+adversarial-values	quotes,mixed-delimiters,eol	dat

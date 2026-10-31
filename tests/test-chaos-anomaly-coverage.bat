@@ -95,6 +95,8 @@ call :assert_chaos_scenario "csv-escaping-failures" "csv" "csv-quote-escape,csv-
 call :assert_chaos_scenario "concordance-import-failures" "concordance" "concordance-delimiter,concordance-quote-escape"
 call :assert_chaos_scenario "edrm-xml-structural-failures" "edrm-xml" "xml-unclosed-tag,xml-bad-entity,xml-encoding-lie"
 
+call :adversarial_values
+
 REM --- Cleanup ---
 if exist "%TEST_OUTPUT_DIR%" rmdir /s /q "%TEST_OUTPUT_DIR%"
 
@@ -107,6 +109,37 @@ if %FAILED% equ 0 (
     exit /b 1
 )
 exit /b 0
+
+:adversarial_values
+echo [ INFO ] Test: Chaos scenario adversarial-values
+set "PYCMD="
+python3 --version >nul 2>&1 && set "PYCMD=python3"
+if not defined PYCMD python --version >nul 2>&1 && set "PYCMD=python"
+if not defined PYCMD goto :adversarial_values_failed
+%ZIPPER_CMD% --loadfile-only --count 6 --output-path "%TEST_OUTPUT_DIR%\adversarial_values" --chaos-mode --chaos-scenario adversarial-values --seed 42 >nul 2>&1
+if errorlevel 1 goto :adversarial_values_failed
+set "ADVERSARIAL_DAT="
+for %%F in ("%TEST_OUTPUT_DIR%\adversarial_values\*.dat") do set "ADVERSARIAL_DAT=%%~fF"
+if not defined ADVERSARIAL_DAT goto :adversarial_values_failed
+%PYCMD% "%~dp0validate_adversarial_values.py" "%ADVERSARIAL_DAT%" 6 >nul 2>&1
+if errorlevel 1 goto :adversarial_values_failed
+
+%ZIPPER_CMD% --loadfile-only --count 0 --output-path "%TEST_OUTPUT_DIR%\adversarial_values_header" --chaos-mode --chaos-scenario adversarial-values --seed 42 >nul 2>&1
+if errorlevel 1 goto :adversarial_values_failed
+set "ADVERSARIAL_HEADER="
+for %%F in ("%TEST_OUTPUT_DIR%\adversarial_values_header\*.dat") do set "ADVERSARIAL_HEADER=%%~fF"
+if not defined ADVERSARIAL_HEADER goto :adversarial_values_failed
+%PYCMD% "%~dp0validate_adversarial_values.py" "%ADVERSARIAL_HEADER%" 0 >nul 2>&1
+if errorlevel 1 goto :adversarial_values_failed
+
+echo [ INFO ] PASS: adversarial-values emits valid tail values and header-only output
+set /a PASSED+=1
+goto :eof
+
+:adversarial_values_failed
+echo [ ERROR ] FAIL: adversarial-values output or parser validity
+set /a FAILED+=1
+goto :eof
 
 :assert_chaos_scenario
 set "SCEN=%~1"

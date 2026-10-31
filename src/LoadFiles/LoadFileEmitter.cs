@@ -42,17 +42,19 @@ internal static class LoadFileEmitter
         Encoding encoding,
         string eol,
         ChaosEngine? chaosEngine,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        int trailingEmptyRows = 0)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(trailingEmptyRows);
         bool hasHeader = headerColumns is { Count: > 0 };
 
         if (chaosEngine is null)
         {
-            await EmitStreamingAsync(stream, serializer, hasHeader, headerColumns, records, encoding, eol, cancellationToken).ConfigureAwait(false);
+            await EmitStreamingAsync(stream, serializer, hasHeader, headerColumns, records, encoding, eol, cancellationToken, trailingEmptyRows).ConfigureAwait(false);
         }
         else
         {
-            await EmitWithChaosAsync(stream, serializer, hasHeader, headerColumns, records, encoding, eol, chaosEngine, cancellationToken).ConfigureAwait(false);
+            await EmitWithChaosAsync(stream, serializer, hasHeader, headerColumns, records, encoding, eol, chaosEngine, cancellationToken, trailingEmptyRows).ConfigureAwait(false);
         }
     }
 
@@ -64,7 +66,8 @@ internal static class LoadFileEmitter
         IEnumerable<LoadFileRecord> records,
         Encoding encoding,
         string eol,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int trailingEmptyRows)
     {
         // A StreamWriter owns the encoding preamble (written once) and chunks output to the
         // underlying stream by its internal buffer, so records stream out without the whole
@@ -88,6 +91,12 @@ internal static class LoadFileEmitter
                 await writer.WriteAsync(eolMemory, cancellationToken).ConfigureAwait(false);
             }
 
+            for (int i = 0; i < trailingEmptyRows; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await writer.WriteAsync(eolMemory, cancellationToken).ConfigureAwait(false);
+            }
+
             await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
         }
     }
@@ -101,7 +110,8 @@ internal static class LoadFileEmitter
         Encoding encoding,
         string eol,
         ChaosEngine chaosEngine,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int trailingEmptyRows)
     {
         // Records stream lazily: raw encoding-anomaly bytes are written straight to the stream
         // after each line's encoded text, so byte ordering is correct without materializing the
@@ -135,6 +145,13 @@ internal static class LoadFileEmitter
                 record,
                 serializer).ConfigureAwait(false);
             lineNumber++;
+        }
+
+        byte[] eolBytes = encoding.GetBytes(eol);
+        for (int i = 0; i < trailingEmptyRows; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await stream.WriteAsync(eolBytes, cancellationToken).ConfigureAwait(false);
         }
     }
 

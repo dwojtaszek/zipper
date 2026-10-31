@@ -59,8 +59,8 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine("  --nested-delim <value>   Nested-value delimiter (ascii:<N> or char:<c>)");
         Console.Error.WriteLine();
         Console.Error.WriteLine("Chaos Engine Options:");
-        Console.Error.WriteLine("  --chaos-mode             Activate deliberate anomaly injection");
-        Console.Error.WriteLine("  --chaos-amount <value>   Anomaly count: percentage (1%) or exact (500)");
+        Console.Error.WriteLine("  --chaos-mode             Enable Chaos Engine processing");
+        Console.Error.WriteLine("  --chaos-amount <value>   Target count: percentage (1%) or exact (500)");
         Console.Error.WriteLine("  --chaos-types <list>     DAT: mixed-delimiters,quotes,columns,eol,encoding,path-pointer,field-length,date-format,null-byte,trailing-empties");
         Console.Error.WriteLine("                           OPT: opt-boundary,opt-columns,opt-pagecount,opt-path,opt-batesnumber,opt-encoding");
         Console.Error.WriteLine("                           CSV: csv-quote-escape,csv-embedded-newline,csv-bom");
@@ -68,7 +68,7 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine("                           EDRM-XML: xml-unclosed-tag,xml-bad-entity,xml-encoding-lie");
         Console.Error.WriteLine("                           DAT record anomalies are opt-in; full-chaos enables all types for the selected format");
         Console.Error.WriteLine("                           OPT opt-encoding is opt-in; full-chaos enables it");
-        Console.Error.WriteLine("  --chaos-scenario <name>  Use a predefined chaos scenario (conflicts with --chaos-types)");
+        Console.Error.WriteLine("  --chaos-scenario <name>  Predefined scenario; conflicts with --chaos-types; adversarial-values emits valid DAT values");
         Console.Error.WriteLine("  --chaos-list             List available chaos scenarios and exit");
         Console.Error.WriteLine();
         Console.Error.WriteLine("Production Set Options:");

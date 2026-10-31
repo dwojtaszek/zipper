@@ -1,4 +1,5 @@
 using Zipper.Profiles;
+using Zipper.Profiles.Generation;
 
 namespace Zipper.LoadFiles;
 
@@ -24,10 +25,24 @@ internal sealed class DatComposer : ILoadFileComposer
     private readonly DatProductionComposer? productionComposer;
     private readonly DatLoadfileOnlyComposer? loadfileOnlyComposer;
     private readonly DatStandardComposer? standardComposer;
+    private readonly AdversarialValueTailPlan? adversarialValueTailPlan;
+    private readonly int adversarialValueColumnIndex;
 
     public DatComposer(FileGenerationRequest request, WriterMode mode)
     {
         this.mode = mode;
+        bool isAdversarialValuesScenario = request.Chaos.ChaosMode
+            && ChaosScenarios.GeneratesAdversarialValues(request.Chaos.ChaosScenario);
+        long recordCount = request.Output.FileCount;
+        if (isAdversarialValuesScenario && mode == WriterMode.LoadfileOnly && request.SourceRecords is null)
+        {
+            // Reuse the same deterministic count when the Audit File is generated.
+            request.SimulatedFamilyChildCount = FamilyPlan.GetSimulatedChildCount(request);
+            recordCount += request.SimulatedFamilyChildCount.Value;
+        }
+        this.adversarialValueTailPlan = isAdversarialValuesScenario
+            ? AdversarialValueTailPlan.Create(request, recordCount)
+            : null;
         var namingConvention = request.Metadata.ColumnProfile?.FieldNamingConvention;
         this.batesSequence = request.Bates != null ? BatesSequence.FromConfig(request.Bates) : null;
 
@@ -61,15 +76,23 @@ internal sealed class DatComposer : ILoadFileComposer
         else
         {
             this.headerColumns = DatStandardComposer.BuildHeaders(request, namingConvention);
-            this.standardComposer = new DatStandardComposer(
-                request, this.batesSequence, this.headerColumns);
+            this.standardComposer = new DatStandardComposer(request, this.batesSequence, this.headerColumns);
         }
+
+        this.adversarialValueColumnIndex = this.adversarialValueTailPlan is null
+            ? -1
+            : FindAdversarialValueColumnIndex(request, this.headerColumns, namingConvention);
     }
 
     public IReadOnlyList<string> HeaderColumns => this.headerColumns;
 
+    internal int TrailingEmptyRows => this.adversarialValueTailPlan is null
+        ? 0
+        : AdversarialValueTailPlan.TrailingEmptyRowCount;
+
     public IEnumerable<LoadFileRecord> Compose(IReadOnlyList<FileData> processedFiles)
-        => this.mode switch
+    {
+        IEnumerable<LoadFileRecord> records = this.mode switch
         {
             WriterMode.LoadfileOnly => this.profileGenerator is not null
                 ? this.standardComposer!.ComposeProfile()
@@ -77,4 +100,64 @@ internal sealed class DatComposer : ILoadFileComposer
             WriterMode.ProductionSet => this.productionComposer!.Compose(processedFiles),
             _ => this.standardComposer!.ComposeStandard(processedFiles),
         };
+
+        return this.adversarialValueTailPlan is null
+            ? records
+            : this.ApplyAdversarialValues(records);
+    }
+
+    private static int FindAdversarialValueColumnIndex(
+        FileGenerationRequest request,
+        IReadOnlyList<string> headerColumns,
+        string? namingConvention)
+    {
+        string? columnName = request.AdversarialValueColumnName
+            ?? (request.Metadata.ColumnProfile is { } profile
+                ? AdversarialValueTailPlan.FindColumn(
+                    profile.Columns,
+                    request.SourceRecords?.SelectMany(record => record.Metadata?.Keys ?? Enumerable.Empty<string>()))?.Name
+                : "Author");
+        if (columnName is null)
+        {
+            return -1;
+        }
+
+        string headerName = DatComposerShared.ApplyConvention(columnName, namingConvention);
+        for (int index = 0; index < headerColumns.Count; index++)
+        {
+            if (string.Equals(headerColumns[index], headerName, StringComparison.Ordinal))
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    private IEnumerable<LoadFileRecord> ApplyAdversarialValues(IEnumerable<LoadFileRecord> records)
+    {
+        if (this.adversarialValueColumnIndex < 0 || this.adversarialValueTailPlan is not { } tailPlan)
+        {
+            throw new InvalidOperationException("The adversarial-values scenario requires an eligible DAT value column.");
+        }
+
+        long recordIndex = 0;
+        foreach (var record in records)
+        {
+            string? value = tailPlan.GetValue(++recordIndex);
+            if (value is null)
+            {
+                yield return record;
+                continue;
+            }
+
+            if (record.Values is not IList<string> values || values.IsReadOnly)
+            {
+                throw new InvalidOperationException("The DAT composer must provide mutable values for the adversarial-values scenario.");
+            }
+
+            values[this.adversarialValueColumnIndex] = value;
+            yield return record;
+        }
+    }
 }

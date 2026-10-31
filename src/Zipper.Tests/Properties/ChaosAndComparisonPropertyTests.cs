@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using FsCheck.Xunit;
 using Xunit;
+using Zipper.Config;
 using Zipper.LoadFiles;
 using Zipper.ManifestComparison;
 using Zipper.Profiles;
@@ -62,6 +63,99 @@ public sealed class ChaosAndComparisonPropertyTests
 
         // "invalid" string now throws ArgumentException instead of falling back
         Assert.Throws<ArgumentException>(() => ChaosSampler.ParseChaosAmount("invalid", totalRecords));
+    }
+
+    [Property]
+    public void ChaosSampler_ParseLongPercentage_ShouldTruncateExactCount(ChaosLongPercentagePropertyInput input)
+    {
+        decimal percentage = input.PercentageTenths / 10m;
+        string amount = percentage.ToString("0.0", CultureInfo.InvariantCulture) + "%";
+        long expectedCount = (long)(input.RecordCount * percentage / 100m);
+
+        Assert.Equal(expectedCount, ChaosSampler.ParseChaosAmount(amount, input.RecordCount));
+    }
+
+    [Property]
+    public void AdversarialValueTailPlan_Create_ShouldSelectDeterministicBoundedTargets(
+        AdversarialValueTailPropertyInput input)
+    {
+        var request = new FileGenerationRequest
+        {
+            Chaos = new ChaosConfig
+            {
+                ChaosMode = true,
+                ChaosAmount = input.TargetCount.ToString(CultureInfo.InvariantCulture),
+                ChaosScenario = "adversarial-values",
+            },
+            Metadata = new MetadataConfig { Seed = input.Seed },
+        };
+
+        var plan = Assert.IsType<AdversarialValueTailPlan>(
+            AdversarialValueTailPlan.Create(request, input.RecordCount));
+        var replayPlan = Assert.IsType<AdversarialValueTailPlan>(
+            AdversarialValueTailPlan.Create(request, input.RecordCount));
+        Assert.Null(plan.GetValue(0));
+        Assert.Null(plan.GetValue((long)input.RecordCount + 1));
+        string?[] values = Enumerable.Range(1, input.RecordCount)
+            .Select(index => plan.GetValue(index))
+            .ToArray();
+        string?[] replayValues = Enumerable.Range(1, input.RecordCount)
+            .Select(index => replayPlan.GetValue(index))
+            .ToArray();
+
+        Assert.Equal(values, replayValues);
+        var selectedIndices = values
+            .Select((value, index) => (value, index))
+            .Where(entry => entry.value is not null)
+            .Select(entry => (long)entry.index + 1)
+            .ToArray();
+        Assert.Equal(input.TargetCount, selectedIndices.Length);
+        Assert.All(selectedIndices, index => Assert.InRange(index, 1L, input.RecordCount));
+        var expectedSelectedIndices = input.TargetCount == input.RecordCount
+            ? Enumerable.Range(1, input.RecordCount).Select(index => (long)index).ToArray()
+            : ChaosSampler.SelectTargetLines(input.RecordCount, input.TargetCount, new Random(input.Seed))
+                .OrderBy(index => index)
+                .ToArray();
+        Assert.Equal(expectedSelectedIndices, selectedIndices.OrderBy(index => index));
+
+        string[] selectedValues = values.OfType<string>().ToArray();
+        if (input.TargetCount == 0)
+        {
+            Assert.Empty(selectedValues);
+            return;
+        }
+
+        string platformLengthValue = Assert.Single(
+            selectedValues,
+            value => value.Length == AdversarialValueTailPlan.PlatformFieldLength);
+        int platformLengthRecordIndex = Array.FindIndex(
+            values,
+            value => value?.Length == AdversarialValueTailPlan.PlatformFieldLength) + 1;
+        Assert.Equal(selectedIndices[0], (long)platformLengthRecordIndex);
+        Assert.Contains('\u0014', platformLengthValue);
+        Assert.Contains('\u00fe', platformLengthValue);
+        Assert.Contains("Ã¾", platformLengthValue, StringComparison.Ordinal);
+    }
+
+    [Property]
+    public void AdversarialValueTailPlan_FindColumn_ShouldAvoidSourceMetadataColumn(byte rawKeyVariant)
+    {
+        string sourceMetadataKey = (rawKeyVariant % 4) switch
+        {
+            0 => "AUTHOR",
+            1 => "Author",
+            2 => "A-U_T H O R",
+            _ => " author ",
+        };
+        var columns = new[]
+        {
+            new ColumnDefinition { Name = "AUTHOR", Type = "text" },
+            new ColumnDefinition { Name = "REVIEWNOTES", Type = "longtext" },
+        };
+
+        var selectedColumn = AdversarialValueTailPlan.FindColumn(columns, [sourceMetadataKey]);
+
+        Assert.Equal("REVIEWNOTES", selectedColumn?.Name);
     }
 
     [Property]
