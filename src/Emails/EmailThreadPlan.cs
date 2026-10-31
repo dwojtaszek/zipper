@@ -86,7 +86,7 @@ internal sealed class EmailThreadPlan
 
             if (emailFileIndices.Count == request.SourceRecords.Count)
             {
-                this.emailCount = Math.Max(1, request.Output.FileCount);
+                this.emailCount = Math.Max(request.SourceRecords.Count, request.Output.FileCount);
             }
             else if (emailFileIndices.Count > 0)
             {

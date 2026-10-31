@@ -344,4 +344,28 @@ public class EmailThreadPlanTests
         Assert.Equal(1, node2.ParentIndex);
         Assert.Equal("CUSTOM-ROOT", node2.ThreadParentDocId);
     }
+
+    [Fact]
+    public void GetNode_AllSourceRecordsEml_WithoutOutputCount_UsesSourceRecordsCount()
+    {
+        var records = new List<Zipper.SourceInput.SourceRecord>
+        {
+            new() { RelativePath = "eml1.eml", FileType = "eml" },
+            new() { RelativePath = "eml2.eml", FileType = "eml" },
+            new() { RelativePath = "eml3.eml", FileType = "eml" },
+        };
+
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml" }, // FileCount defaults to 0
+            Metadata = new MetadataConfig { WithThreading = true, Seed = 42 },
+            SourceRecords = records,
+        };
+
+        var plan = EmailThreadPlan.GetOrCreate(request);
+        var node3 = plan.GetNode(3);
+
+        Assert.NotNull(node3);
+        Assert.NotNull(node3.MessageId);
+    }
 }

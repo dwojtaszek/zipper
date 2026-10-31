@@ -740,6 +740,27 @@ public class EmailSerializerTests
     }
 
     [Fact]
+    public void ToEml_WithMessageIdContainingWhitespace_TrimsAndWrapsAngleBrackets()
+    {
+        var email = new Email
+        {
+            To = "to@example.com",
+            From = "from@example.com",
+            Subject = "Whitespace ID",
+            SentDate = new DateTime(2024, 1, 15, 12, 0, 0, DateTimeKind.Utc),
+            Body = "Message ID with surrounding whitespace.",
+            MessageId = "  <msg.00000001@example.com>  ",
+            InReplyTo = "  parent.00000001@example.com  ",
+        };
+
+        var result = EmailSerializer.ToEml(email, null);
+        var content = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("Message-ID: <msg.00000001@example.com>\r\n", content, StringComparison.Ordinal);
+        Assert.Contains("In-Reply-To: <parent.00000001@example.com>\r\n", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ToEml_WithInReplyToAndReferences_EmitsThreadHeaders()
     {
         var email = new Email

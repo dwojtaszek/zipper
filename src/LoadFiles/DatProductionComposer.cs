@@ -1,3 +1,5 @@
+using Zipper.Emails;
+
 namespace Zipper.LoadFiles;
 
 /// <summary>
@@ -190,9 +192,12 @@ internal sealed class DatProductionComposer
         if (this.request.Metadata.WithThreading)
         {
             var isEml = string.Equals(wi.EffectiveFileType(this.request), "eml", StringComparison.Ordinal) && !ctx.IsChild;
-            var threadId = isEml ? fileData.Email?.ThreadId ?? string.Empty : string.Empty;
-            var inclusive = isEml ? (fileData.Email?.IsInclusive == true ? "Y" : (fileData.Email?.IsInclusive == false ? "N" : string.Empty)) : string.Empty;
-            var threadParent = isEml ? fileData.Email?.ThreadParentId ?? string.Empty : string.Empty;
+            var threadNode = isEml && fileData.Email?.ThreadId is null
+                ? EmailThreadPlan.GetOrCreate(this.request).GetNode(wi.Index)
+                : null;
+            var threadId = isEml ? fileData.Email?.ThreadId ?? threadNode?.ThreadDocId ?? string.Empty : string.Empty;
+            var inclusive = isEml ? (fileData.Email?.IsInclusive == true || (fileData.Email?.IsInclusive is null && threadNode?.IsInclusive == true) ? "Y" : (fileData.Email?.IsInclusive == false || (fileData.Email?.IsInclusive is null && threadNode?.IsInclusive == false) ? "N" : string.Empty)) : string.Empty;
+            var threadParent = isEml ? fileData.Email?.ThreadParentId ?? threadNode?.ThreadParentDocId ?? string.Empty : string.Empty;
 
             v.Add(threadId);
             v.Add(inclusive);

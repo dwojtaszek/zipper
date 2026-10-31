@@ -272,6 +272,32 @@ public class ThreadMetadataColumnTests
         Assert.Contains("Thread Parent", headers);
     }
 
+    [Fact]
+    public void DatProductionComposer_WithThreadingAndNullEmailObject_FallsBackToThreadPlan()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 2 },
+            Metadata = new MetadataConfig { Seed = 42, WithThreading = true },
+            Production = new ProductionConfig { ProductionSet = true },
+        };
+
+        var composer = new DatComposer(request, WriterMode.ProductionSet);
+        var files = new[]
+        {
+            new FileData { WorkItem = new FileWorkItem { Index = 1, FileName = "00000001.eml" }, Email = null },
+            new FileData { WorkItem = new FileWorkItem { Index = 2, FileName = "00000002.eml" }, Email = null },
+        };
+
+        var records = composer.Compose(files).ToList();
+        var headers = composer.HeaderColumns.ToList();
+        int threadIdIdx = headers.IndexOf("Thread ID");
+        int inclusiveIdx = headers.IndexOf("Inclusive");
+
+        Assert.NotEmpty(records[0].Values[threadIdIdx]);
+        Assert.Contains(records[0].Values[inclusiveIdx], new[] { "Y", "N" });
+    }
+
     private static FileGenerationRequest CreateMixedSourceRequest()
     {
         var sourceRecords = new[]

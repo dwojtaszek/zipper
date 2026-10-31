@@ -220,6 +220,7 @@ internal static class EmailSerializer
             return id;
         }
 
+        id = id.Trim();
         if (id.StartsWith('<') && id.EndsWith('>'))
         {
             return id;
