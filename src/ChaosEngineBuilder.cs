@@ -26,7 +26,8 @@ internal static class ChaosEngineBuilder
             return null;
         }
 
-        if (ChaosScenarios.GeneratesAdversarialValues(request.Chaos.ChaosScenario))
+        if (ChaosScenarios.GeneratesAdversarialValues(request.Chaos.ChaosScenario)
+            || ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario))
         {
             return null;
         }

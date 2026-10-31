@@ -18,6 +18,11 @@ public sealed class ChaosModule : CliModule
     /// </summary>
     public string? ChaosTypes => _types;
 
+    /// <summary>
+    /// Gets the chaos scenario name specified via --chaos-scenario, or null if not specified.
+    /// </summary>
+    public string? ChaosScenario => _scenario;
+
     internal bool IsAdversarialValuesScenario => ChaosScenarios.GeneratesAdversarialValues(_scenario);
 
     internal bool RequiresSourcePaths(IReadOnlyList<LoadFileFormat>? formats)
@@ -75,9 +80,10 @@ public sealed class ChaosModule : CliModule
         IReadOnlyList<LoadFileFormat> formats,
         out ChaosConfig config,
         DelimiterConfig? delimiters = null,
-        string? encoding = null)
+        string? encoding = null,
+        bool productionSet = false)
     {
-        if (!this.TryValidateMode(loadfileOnly)
+        if (!this.TryValidateMode(loadfileOnly, productionSet)
             || !this.TryValidateScenario(formats, delimiters, encoding)
             || !this.TryValidateAmount()
             || !this.TryNormalizeChaosTypes(formats, out var normalizedChaosTypes))
@@ -96,13 +102,19 @@ public sealed class ChaosModule : CliModule
         return true;
     }
 
-    private bool TryValidateMode(bool loadfileOnly)
+    private bool TryValidateMode(bool loadfileOnly, bool productionSet)
     {
         if (this._mode)
         {
-            if (!loadfileOnly)
+            if (!loadfileOnly && !productionSet)
             {
-                Console.Error.WriteLine("Error: --chaos-mode requires --loadfile-only.");
+                Console.Error.WriteLine("Error: --chaos-mode requires --loadfile-only or --production-set.");
+                return false;
+            }
+
+            if (!loadfileOnly && !ChaosScenarios.IsCrossFormat(this._scenario))
+            {
+                Console.Error.WriteLine("Error: --chaos-mode with --production-set requires a cross-format chaos scenario ('cross-format-desync' or 'broken-families').");
                 return false;
             }
 
@@ -153,10 +165,18 @@ public sealed class ChaosModule : CliModule
             return false;
         }
 
-        // A scenario with a required format must match every selected format (Dat when none given).
-        var effectiveFormats = formats is { Count: > 0 } ? formats : new[] { LoadFileFormat.Dat };
-        if (scenario.RequiredFormat.HasValue)
+        if (scenario.IsCrossFormat)
         {
+            var effectiveFormats = formats is { Count: > 0 } ? formats : new[] { LoadFileFormat.Dat, LoadFileFormat.Opt };
+            if (!effectiveFormats.Contains(LoadFileFormat.Dat) || !effectiveFormats.Contains(LoadFileFormat.Opt))
+            {
+                Console.Error.WriteLine($"Error: Chaos scenario '{this._scenario}' requires both DAT and OPT load file formats.");
+                return false;
+            }
+        }
+        else if (scenario.RequiredFormat.HasValue)
+        {
+            var effectiveFormats = formats is { Count: > 0 } ? formats : new[] { LoadFileFormat.Dat };
             var mismatched = effectiveFormats.FirstOrDefault(f => f != scenario.RequiredFormat.Value, scenario.RequiredFormat.Value);
             if (mismatched != scenario.RequiredFormat.Value)
             {

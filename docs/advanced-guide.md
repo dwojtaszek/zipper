@@ -568,11 +568,11 @@ Written by `--compare-production-manifests` to `--comparison-output`. Records co
 | `--loadfile-only` + `--target-zip-size` | **Conflict**: cannot use both |
 | `--loadfile-only` + `--include-load-file` | **Conflict**: cannot use both |
 | `--col-delim`, `--quote-delim`, etc. | Use `ascii:N` or `char:C` prefix (works in all modes) |
-| `--chaos-mode` | Requires `--loadfile-only` |
-| `--chaos-mode` + `--production-set` | **Conflict**: chaos requires `--loadfile-only` |
+| `--chaos-mode` | Requires `--loadfile-only` or `--production-set` |
+| `--chaos-mode` + `--production-set` | Permitted with cross-format scenarios (`cross-format-desync`, `broken-families`); otherwise requires `--loadfile-only` |
 | `--chaos-amount`, `--chaos-types` | Require `--chaos-mode` |
 | `--chaos-scenario` | Requires `--chaos-mode`; conflicts with `--chaos-types` |
-| `--chaos-scenario` + format | Some scenarios require specific `--loadfile-format` (e.g., `broken-boundaries` requires `opt`, `realistic-import-failures` requires `dat`, `csv-escaping-failures` requires `csv`, `concordance-import-failures` requires `concordance`, `edrm-xml-structural-failures` requires `edrm-xml`) |
+| `--chaos-scenario` + format | Some scenarios require specific `--loadfile-format` (e.g., `broken-boundaries` requires `opt`, `realistic-import-failures` requires `dat`, `csv-escaping-failures` requires `csv`, `concordance-import-failures` requires `concordance`, `edrm-xml-structural-failures` requires `edrm-xml`, while `cross-format-desync` and `broken-families` require `--load-file-formats dat,opt` or `--production-set`) |
 | `--production-set` | Requires `--bates-prefix`; conflicts with `--loadfile-only` |
 | `--redacted-production` | Requires `--production-set`; conflicts with `--loadfile-only`. Redacted text files are only written when `--with-text` is enabled; without it, `REDACTED_TEXT_PATH` is empty in the Load File. |
 | `--withheld-native-policy` | Requires `--redacted-production` |

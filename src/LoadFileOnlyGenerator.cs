@@ -96,6 +96,11 @@ internal static class LoadFileOnlyGenerator
         List<string> createdFiles,
         CancellationToken cancellationToken)
     {
+        if (ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario))
+        {
+            return await GenerateCrossFormatLoadFilesAsync(request, baseFileName, createWriter, createdFiles, cancellationToken).ConfigureAwait(false);
+        }
+
         var formatsToGenerate = (request.LoadFile.Formats is not null && request.LoadFile.Formats.Count > 0)
             ? request.LoadFile.Formats
             : new List<LoadFileFormat> { LoadFileFormat.Dat };
@@ -160,6 +165,90 @@ internal static class LoadFileOnlyGenerator
         }
 
         return (primaryLoadFilePath, primaryPropertiesPath, totalRecords);
+    }
+
+    private static async Task<(string LoadFilePath, string PropertiesFilePath, long TotalRecords)> GenerateCrossFormatLoadFilesAsync(
+        FileGenerationRequest request,
+        string baseFileName,
+        Func<LoadFileFormat, WriterMode, ILoadFileWriter> createWriter,
+        List<string> createdFiles,
+        CancellationToken cancellationToken)
+    {
+        var datRequest = EnsureStableOptPageCounts(request, LoadFileFormat.Dat);
+        var optRequest = EnsureStableOptPageCounts(request, LoadFileFormat.Opt);
+
+        var datPath = Path.Combine(request.Output.OutputPath, $"{baseFileName}.dat");
+        var optPath = Path.Combine(request.Output.OutputPath, $"{baseFileName}.opt");
+
+        var sourceDriven = datRequest.SourceRecords is not null;
+        IReadOnlyList<FileData> records = sourceDriven
+            ? BuildSourceShells(datRequest)
+            : Array.Empty<FileData>();
+        var writerMode = sourceDriven ? WriterMode.Standard : WriterMode.LoadfileOnly;
+
+        var datEncoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
+        var optEncoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.IsEncodingExplicit ? request.LoadFile.Encoding : "ANSI");
+
+        var result = await CrossFormatLoadFileRenderer.RenderAndApplyAsync(
+            datRequest,
+            optRequest,
+            records,
+            createWriter,
+            writerMode,
+            Path.GetFileName(datPath),
+            Path.GetFileName(optPath),
+            datEncoding,
+            optEncoding,
+            cancellationToken).ConfigureAwait(false);
+
+        var eol = LoadFiles.LoadFileEmitter.GetEolString(request.Delimiters.EndOfLine);
+
+        // 4. Write mutated DAT
+        var datFileStream = new FileStream(datPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
+        createdFiles.Add(datPath);
+        await using (datFileStream.ConfigureAwait(false))
+        {
+            using var sw = new StreamWriter(datFileStream, datEncoding, leaveOpen: true);
+            for (int i = 0; i < result.DatLines.Count; i++)
+            {
+                await sw.WriteAsync(result.DatLines[i].AsMemory(), cancellationToken).ConfigureAwait(false);
+                await sw.WriteAsync(eol.AsMemory(), cancellationToken).ConfigureAwait(false);
+            }
+
+            await sw.FlushAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        string datPropertiesPath = Path.ChangeExtension(datPath, null) + "_properties.json";
+        await File.WriteAllTextAsync(
+            datPropertiesPath,
+            LoadFileAuditWriter.GenerateAuditJson(datPath, datRequest, records, result.DatAnomalies, LoadFileFormat.Dat),
+            cancellationToken).ConfigureAwait(false);
+        createdFiles.Add(datPropertiesPath);
+
+        // 5. Write mutated OPT
+        var optFileStream = new FileStream(optPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
+        createdFiles.Add(optPath);
+        await using (optFileStream.ConfigureAwait(false))
+        {
+            using var sw = new StreamWriter(optFileStream, optEncoding, leaveOpen: true);
+            for (int i = 0; i < result.OptLines.Count; i++)
+            {
+                await sw.WriteAsync(result.OptLines[i].AsMemory(), cancellationToken).ConfigureAwait(false);
+                await sw.WriteAsync(eol.AsMemory(), cancellationToken).ConfigureAwait(false);
+            }
+
+            await sw.FlushAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        string optPropertiesPath = optPath + "_properties.json";
+        await File.WriteAllTextAsync(
+            optPropertiesPath,
+            LoadFileAuditWriter.GenerateAuditJson(optPath, optRequest, records, result.OptAnomalies, LoadFileFormat.Opt),
+            cancellationToken).ConfigureAwait(false);
+        createdFiles.Add(optPropertiesPath);
+
+        var (total, _) = LoadFileAuditWriter.ComputeRecordCounts(datRequest, records, LoadFileFormat.Dat);
+        return (datPath, datPropertiesPath, total);
     }
 
     /// <summary>

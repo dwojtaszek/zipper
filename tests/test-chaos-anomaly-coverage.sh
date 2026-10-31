@@ -41,6 +41,12 @@ function canonicalize_props() {
     jq 'del(.fileName) | del(.generationTime)' "$prop_file"
 }
 
+# Cross-format audits also embed the timestamped peer file names, which differ between runs.
+function canonicalize_cross_format_props() {
+    local prop_file="$1"
+    jq 'del(.fileName) | del(.generationTime) | (.chaosMode.injectedAnomalies[]? |= (del(.file) | (.peer |= del(.file))))' "$prop_file"
+}
+
 # Lookup a field from the scenario-types TSV. Usage: tsv_lookup <scenario> <field_index>
 # field_index: 2=chaos_types, 3=format (1-based)
 function tsv_lookup() {
@@ -443,6 +449,59 @@ while IFS= read -r SCENARIO; do
     PASSED=$((PASSED + 1))
     print_success "B2 Scenario '$SCENARIO' — PASSED (anomalies: $ANOMALY_COUNT)"
 done < "$FIXTURES_DIR/chaos-scenarios.txt"
+
+# ---------------------------------------------------------------------------
+# B4 — coordinated cross-format scenarios (DAT ↔ OPT)
+# ---------------------------------------------------------------------------
+for SCENARIO in cross-format-desync broken-families; do
+    TOTAL=$((TOTAL + 1))
+    SAFE="${SCENARIO//-/_}"
+    OUT_DIR="$TEST_OUTPUT_DIR/cross_format_${SAFE}"
+
+    print_info "B4 Cross-format Scenario: $SCENARIO"
+    zipper --loadfile-only --load-file-formats dat,opt --count 100 \
+        --output-path "$OUT_DIR/run1" \
+        --chaos-mode --chaos-scenario "$SCENARIO" --seed 42
+
+    DAT_FILE=$(find "$OUT_DIR/run1" -name "*.dat" -print -quit)
+    OPT_FILE=$(find "$OUT_DIR/run1" -name "*.opt" -print -quit)
+    DAT_PROPS=$(find "$OUT_DIR/run1" -name "*_properties.json" ! -name "*.opt_properties.json" -print -quit)
+    OPT_PROPS=$(find "$OUT_DIR/run1" -name "*.opt_properties.json" -print -quit)
+    [[ -z "$DAT_FILE" || -z "$OPT_FILE" || -z "$DAT_PROPS" || -z "$OPT_PROPS" ]] \
+        && print_error "Missing cross-format output or audit files for scenario: $SCENARIO"
+
+    validate_properties_json "$DAT_PROPS"
+    validate_properties_json "$OPT_PROPS"
+
+    for PROPS in "$DAT_PROPS" "$OPT_PROPS"; do
+        ANOMALY_COUNT=$(jq '.chaosMode.totalAnomalies' "$PROPS")
+        [[ "$ANOMALY_COUNT" -le 0 ]] && print_error "No coordinated anomalies for $SCENARIO in $PROPS"
+        jq -e '[.chaosMode.injectedAnomalies[] | select(.file == null or .peer == null or .peer.file == null or .peer.lineNumber == null)] | length == 0' "$PROPS" >/dev/null \
+            || print_error "Missing reciprocal peer audit for $SCENARIO in $PROPS"
+    done
+
+    jq -e '.fileName | endswith(".dat")' "$DAT_PROPS" >/dev/null \
+        || print_error "DAT audit file does not identify the DAT load file for $SCENARIO"
+    jq -e '.fileName | endswith(".opt")' "$OPT_PROPS" >/dev/null \
+        || print_error "OPT audit file does not identify the OPT load file for $SCENARIO"
+
+    zipper --loadfile-only --load-file-formats dat,opt --count 100 \
+        --output-path "$OUT_DIR/run2" \
+        --chaos-mode --chaos-scenario "$SCENARIO" --seed 42
+    DAT_FILE2=$(find "$OUT_DIR/run2" -name "*.dat" -print -quit)
+    OPT_FILE2=$(find "$OUT_DIR/run2" -name "*.opt" -print -quit)
+    DAT_PROPS2=$(find "$OUT_DIR/run2" -name "*_properties.json" ! -name "*.opt_properties.json" -print -quit)
+    OPT_PROPS2=$(find "$OUT_DIR/run2" -name "*.opt_properties.json" -print -quit)
+    cmp -s "$DAT_FILE" "$DAT_FILE2" || print_error "Determinism failed (DAT differs) for scenario: $SCENARIO"
+    cmp -s "$OPT_FILE" "$OPT_FILE2" || print_error "Determinism failed (OPT differs) for scenario: $SCENARIO"
+    [[ "$(canonicalize_cross_format_props "$DAT_PROPS")" != "$(canonicalize_cross_format_props "$DAT_PROPS2")" ]] \
+        && print_error "Determinism failed (DAT audit differs) for scenario: $SCENARIO"
+    [[ "$(canonicalize_cross_format_props "$OPT_PROPS")" != "$(canonicalize_cross_format_props "$OPT_PROPS2")" ]] \
+        && print_error "Determinism failed (OPT audit differs) for scenario: $SCENARIO"
+
+    PASSED=$((PASSED + 1))
+    print_success "B4 Cross-format Scenario '$SCENARIO' — PASSED (audited on both files)"
+done
 
 # ---------------------------------------------------------------------------
 # Cleanup & summary

@@ -614,6 +614,61 @@ public sealed class ChaosAndComparisonPropertyTests
     }
 
     [Property]
+    public void CrossFormatAnomalyApplier_Apply_ShouldBeDeterministicAndAuditReciprocalPeers(
+        int rawSeed,
+        byte rawTypeIndex)
+    {
+        int seed = Math.Abs((long)rawSeed) > int.MaxValue ? 0 : Math.Abs(rawSeed);
+        string[] allTypes =
+        [
+            ChaosAnomalyTypes.CrossFormat.DesyncPagecount,
+            ChaosAnomalyTypes.CrossFormat.DesyncOrder,
+            ChaosAnomalyTypes.CrossFormat.DesyncPath,
+            ChaosAnomalyTypes.CrossFormat.OrphanAttachment,
+            ChaosAnomalyTypes.CrossFormat.MissingChild,
+            ChaosAnomalyTypes.CrossFormat.BrokenParent,
+        ];
+        string chosenType = allTypes[rawTypeIndex % allTypes.Length];
+
+        var datLines = new List<string>
+        {
+            "\u00feDOCID\u00fe\u0014\u00feBATES_NUMBER\u00fe\u0014\u00fePARENTDOCID\u00fe\u0014\u00feIMAGE_PATH\u00fe\u0014\u00fePAGECOUNT\u00fe\u0014\u00feVOLUME\u00fe",
+            "\u00feDOC00000001\u00fe\u0014\u00feTEST00000001\u00fe\u0014\u00fe\u00fe\u0014\u00feIMAGES\\VOL001\\DOC00000001.tif\u00fe\u0014\u00fe1\u00fe\u0014\u00feVOL001\u00fe",
+            "\u00feDOC00000002\u00fe\u0014\u00feTEST00000002\u00fe\u0014\u00feDOC00000001\u00fe\u0014\u00feIMAGES\\VOL001\\DOC00000002_001.tif\u00fe\u0014\u00fe2\u00fe\u0014\u00feVOL001\u00fe",
+            "\u00feDOC00000003\u00fe\u0014\u00feTEST00000003\u00fe\u0014\u00fe\u00fe\u0014\u00feIMAGES\\VOL001\\DOC00000003.tif\u00fe\u0014\u00fe1\u00fe\u0014\u00feVOL001\u00fe",
+        };
+
+        var optLines = new List<string>
+        {
+            "TEST00000001,VOL001,IMAGES\\VOL001\\DOC00000001.tif,Y,,,1",
+            "TEST00000002,VOL001,IMAGES\\VOL001\\DOC00000002_001.tif,Y,,,2",
+            "TEST00000002_002,VOL001,IMAGES\\VOL001\\DOC00000002_002.tif,,,,",
+            "TEST00000003,VOL001,IMAGES\\VOL001\\DOC00000003.tif,Y,,,1",
+        };
+
+        var result1 = CrossFormatAnomalyApplier.Apply(new List<string>(datLines), new List<string>(optLines), scenarioOrTypes: chosenType, chaosAmount: "1", seed: seed);
+        var result2 = CrossFormatAnomalyApplier.Apply(new List<string>(datLines), new List<string>(optLines), scenarioOrTypes: chosenType, chaosAmount: "1", seed: seed);
+
+        // Determinism
+        Assert.Equal(result1.DatLines, result2.DatLines);
+        Assert.Equal(result1.OptLines, result2.OptLines);
+        Assert.Equal(result1.Anomalies.Count, result2.Anomalies.Count);
+
+        // Invariants on anomalies and reciprocal peers
+        Assert.NotEmpty(result1.Anomalies);
+        foreach (var anomaly in result1.Anomalies)
+        {
+            Assert.True(anomaly.File == "loadfile.dat" || anomaly.File == "loadfile.opt");
+            Assert.NotNull(anomaly.Peer);
+            Assert.NotEqual(anomaly.File, anomaly.Peer.File);
+            Assert.False(string.IsNullOrEmpty(anomaly.RecordID));
+            Assert.False(string.IsNullOrEmpty(anomaly.Peer.RecordID));
+            Assert.False(string.IsNullOrEmpty(anomaly.LineNumber));
+            Assert.False(string.IsNullOrEmpty(anomaly.Peer.LineNumber));
+        }
+    }
+
+    [Property]
     public void ProductionMetadataBudget_SanitizeAndValidate_ShouldEnforceAsciiAndByteBudget(
         PathSegmentPropertyInput segmentInput,
         ushort repeatFactor)

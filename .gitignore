@@ -125,3 +125,4 @@ qa-results/
 
 # Node
 node_modules/
+.tmp-*/

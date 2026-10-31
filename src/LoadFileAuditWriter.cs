@@ -242,11 +242,21 @@ internal static class LoadFileAuditWriter
             InjectedAnomalies = anomalies is not null && anomalies.Count > 0
                 ? anomalies.Select(a => new AuditAnomalyEntry
                 {
+                    File = a.File,
                     LineNumber = a.LineNumber,
                     RecordID = a.RecordID,
                     Column = a.Column,
                     ErrorType = a.ErrorType,
                     Description = a.Description,
+                    Peer = a.Peer is not null
+                        ? new AuditPeerEntry
+                        {
+                            File = a.Peer.File,
+                            LineNumber = a.Peer.LineNumber,
+                            RecordID = a.Peer.RecordID,
+                            Column = a.Peer.Column,
+                        }
+                        : null,
                 }).ToList()
                 : null,
         };
@@ -316,6 +326,8 @@ internal static class LoadFileAuditWriter
 
     private record AuditAnomalyEntry
     {
+        public string? File { get; init; }
+
         public string LineNumber { get; init; } = string.Empty;
 
         public string RecordID { get; init; } = string.Empty;
@@ -325,5 +337,18 @@ internal static class LoadFileAuditWriter
         public string ErrorType { get; init; } = string.Empty;
 
         public string Description { get; init; } = string.Empty;
+
+        public AuditPeerEntry? Peer { get; init; }
+    }
+
+    private record AuditPeerEntry
+    {
+        public string File { get; init; } = string.Empty;
+
+        public string LineNumber { get; init; } = string.Empty;
+
+        public string RecordID { get; init; } = string.Empty;
+
+        public string Column { get; init; } = string.Empty;
     }
 }

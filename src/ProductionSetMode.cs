@@ -59,6 +59,7 @@ internal class ProductionSetMode : IGenerationMode
                 ProductionSetPath = result.ProductionPath,
                 LoadFiles = loadFiles,
                 Request = result.EffectiveRequest ?? request,
+                IsChaosMode = ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario),
             };
             ValidationOrchestrator.RunAfterGeneration(context);
         }

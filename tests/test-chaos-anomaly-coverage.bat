@@ -95,6 +95,9 @@ call :assert_chaos_scenario "csv-escaping-failures" "csv" "csv-quote-escape,csv-
 call :assert_chaos_scenario "concordance-import-failures" "concordance" "concordance-delimiter,concordance-quote-escape"
 call :assert_chaos_scenario "edrm-xml-structural-failures" "edrm-xml" "xml-unclosed-tag,xml-bad-entity,xml-encoding-lie"
 
+call :assert_cross_format "cross-format-desync"
+call :assert_cross_format "broken-families"
+
 call :adversarial_values
 
 REM --- Cleanup ---
@@ -160,4 +163,52 @@ if not errorlevel 1 (
     echo [ ERROR ] FAIL: %SCEN% output or audit
     set /a FAILED+=1
 )
+goto :eof
+
+:assert_cross_format
+set "SCEN=%~1"
+set "SCEN_DIR=%TEST_OUTPUT_DIR%\cross_format_%SCEN%"
+%ZIPPER_CMD% --loadfile-only --load-file-formats dat,opt --count 100 --output-path "%SCEN_DIR%\run1" --chaos-mode --chaos-scenario "%SCEN%" --seed 42 >nul 2>&1
+if errorlevel 1 (
+    echo [ ERROR ] FAIL: %SCEN% cross-format scenario rejected
+    set /a FAILED+=1
+    goto :eof
+)
+set "DAT_FILE="
+set "OPT_FILE="
+set "DAT_PROPS="
+set "OPT_PROPS="
+for %%F in ("%SCEN_DIR%\run1\*.dat") do set "DAT_FILE=%%~fF"
+for %%F in ("%SCEN_DIR%\run1\*.opt") do set "OPT_FILE=%%~fF"
+for %%F in ("%SCEN_DIR%\run1\*_properties.json") do (
+    echo %%~nxF | findstr /i /e ".opt_properties.json" >nul
+    if errorlevel 1 (set "DAT_PROPS=%%~fF") else (set "OPT_PROPS=%%~fF")
+)
+if not defined DAT_FILE goto :cross_format_failed
+if not defined OPT_FILE goto :cross_format_failed
+if not defined DAT_PROPS goto :cross_format_failed
+if not defined OPT_PROPS goto :cross_format_failed
+powershell -NoProfile -Command "$d=Get-Content -Raw '%DAT_PROPS%' | ConvertFrom-Json; $o=Get-Content -Raw '%OPT_PROPS%' | ConvertFrom-Json; $dOk=$d.fileName -like '*.dat' -and $d.chaosMode.totalAnomalies -gt 0; $oOk=$o.fileName -like '*.opt' -and $o.chaosMode.totalAnomalies -gt 0; $peers=@($d.chaosMode.injectedAnomalies + $o.chaosMode.injectedAnomalies | Where-Object { -not $_.file -or -not $_.peer -or -not $_.peer.file -or -not $_.peer.lineNumber }); if ($dOk -and $oOk -and $peers.Count -eq 0) { exit 0 } else { exit 1 }" >nul 2>&1
+if errorlevel 1 goto :cross_format_failed
+
+%ZIPPER_CMD% --loadfile-only --load-file-formats dat,opt --count 100 --output-path "%SCEN_DIR%\run2" --chaos-mode --chaos-scenario "%SCEN%" --seed 42 >nul 2>&1
+if errorlevel 1 goto :cross_format_failed
+set "DAT_FILE2="
+set "OPT_FILE2="
+for %%F in ("%SCEN_DIR%\run2\*.dat") do set "DAT_FILE2=%%~fF"
+for %%F in ("%SCEN_DIR%\run2\*.opt") do set "OPT_FILE2=%%~fF"
+if not defined DAT_FILE2 goto :cross_format_failed
+if not defined OPT_FILE2 goto :cross_format_failed
+fc /b "%DAT_FILE%" "%DAT_FILE2%" >nul 2>&1
+if errorlevel 1 goto :cross_format_failed
+fc /b "%OPT_FILE%" "%OPT_FILE2%" >nul 2>&1
+if errorlevel 1 goto :cross_format_failed
+
+echo [ INFO ] PASS: %SCEN% corrupts and audits both DAT and OPT coherently
+set /a PASSED+=1
+goto :eof
+
+:cross_format_failed
+echo [ ERROR ] FAIL: %SCEN% cross-format output or audit
+set /a FAILED+=1
 goto :eof

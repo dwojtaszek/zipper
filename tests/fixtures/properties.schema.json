@@ -67,11 +67,23 @@
             "required": ["lineNumber", "recordID", "column", "errorType", "description"],
             "additionalProperties": false,
             "properties": {
+              "file":         { "type": "string" },
               "lineNumber":   { "type": "string" },
               "recordID":     { "type": "string" },
               "column":       { "type": "string" },
               "errorType":    { "type": "string", "minLength": 1 },
-              "description":  { "type": "string" }
+              "description":  { "type": "string" },
+              "peer": {
+                "type": "object",
+                "required": ["file", "lineNumber", "recordID", "column"],
+                "additionalProperties": false,
+                "properties": {
+                  "file":       { "type": "string" },
+                  "lineNumber": { "type": "string" },
+                  "recordID":   { "type": "string" },
+                  "column":     { "type": "string" }
+                }
+              }
             }
           }
         }

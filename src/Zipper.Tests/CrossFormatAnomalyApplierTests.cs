@@ -1,0 +1,492 @@
+using System.Text;
+using Xunit;
+using Zipper.Config;
+using Zipper.Validation;
+
+namespace Zipper.Tests;
+
+public sealed class CrossFormatAnomalyApplierTests : IDisposable
+{
+    private const char ColDelim = '\x14';
+    private const char QuoteDelim = '\xfe';
+    private readonly string testOutputPath;
+
+    public CrossFormatAnomalyApplierTests()
+    {
+        this.testOutputPath = Path.Combine(Path.GetTempPath(), $"zipper_cf_test_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(this.testOutputPath);
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(this.testOutputPath))
+        {
+            try
+            {
+                Directory.Delete(this.testOutputPath, true);
+            }
+            catch
+            {
+                // Best-effort cleanup
+            }
+        }
+    }
+
+    private static string JoinDat(params string[] fields)
+    {
+        var quote = QuoteDelim.ToString();
+        var col = ColDelim.ToString();
+        return string.Join(col, fields.Select(f => $"{quote}{f}{quote}"));
+    }
+
+    private static (List<string> datLines, List<string> optLines) CreateSampleLines()
+    {
+        var datLines = new List<string>
+        {
+            JoinDat("DOCID", "BATES_NUMBER", "PARENTDOCID", "IMAGE_PATH", "PAGECOUNT", "VOLUME"),
+            JoinDat("DOC00000001", "TEST00000001", "", "IMAGES\\VOL001\\DOC00000001.tif", "1", "VOL001"),
+            JoinDat("DOC00000002", "TEST00000002", "DOC00000001", "IMAGES\\VOL001\\DOC00000002_001.tif", "2", "VOL001"),
+            JoinDat("DOC00000003", "TEST00000003", "", "IMAGES\\VOL001\\DOC00000003.tif", "1", "VOL001"),
+        };
+
+        var optLines = new List<string>
+        {
+            "TEST00000001,VOL001,IMAGES\\VOL001\\DOC00000001.tif,Y,,,1",
+            "TEST00000002,VOL001,IMAGES\\VOL001\\DOC00000002_001.tif,Y,,,2",
+            "TEST00000002_002,VOL001,IMAGES\\VOL001\\DOC00000002_002.tif,,,,",
+            "TEST00000003,VOL001,IMAGES\\VOL001\\DOC00000003.tif,Y,,,1",
+        };
+
+        return (datLines, optLines);
+    }
+
+    [Fact]
+    public void Apply_ZeroAmount_MakesNoChanges()
+    {
+        var (datLines, optLines) = CreateSampleLines();
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncPagecount,
+            chaosAmount: "0",
+            seed: 42);
+
+        Assert.Equal(datLines, result.DatLines);
+        Assert.Equal(optLines, result.OptLines);
+        Assert.Empty(result.Anomalies);
+    }
+
+    [Fact]
+    public void Apply_DesyncPagecount_CorruptsAndProducesReciprocalPeerAudit()
+    {
+        var (datLines, optLines) = CreateSampleLines();
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncPagecount,
+            chaosAmount: "1",
+            seed: 42);
+
+        Assert.NotEmpty(result.Anomalies);
+        var datAnomaly = Assert.Single(result.Anomalies, a => a.File == "loadfile.dat");
+        var optAnomaly = Assert.Single(result.Anomalies, a => a.File == "loadfile.opt");
+
+        Assert.Equal(ChaosAnomalyTypes.CrossFormat.DesyncPagecount, datAnomaly.ErrorType);
+        Assert.Equal(ChaosAnomalyTypes.CrossFormat.DesyncPagecount, optAnomaly.ErrorType);
+
+        Assert.NotNull(datAnomaly.Peer);
+        Assert.Equal("loadfile.opt", datAnomaly.Peer.File);
+        Assert.Equal(optAnomaly.LineNumber, datAnomaly.Peer.LineNumber);
+        Assert.Equal(optAnomaly.RecordID, datAnomaly.Peer.RecordID);
+
+        Assert.NotNull(optAnomaly.Peer);
+        Assert.Equal("loadfile.dat", optAnomaly.Peer.File);
+        Assert.Equal(datAnomaly.LineNumber, optAnomaly.Peer.LineNumber);
+        Assert.Equal(datAnomaly.RecordID, optAnomaly.Peer.RecordID);
+    }
+
+    [Fact]
+    public void Apply_DesyncOrder_SwapsOptDocumentOrderAndProducesReciprocalAudit()
+    {
+        var (datLines, optLines) = CreateSampleLines();
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncOrder,
+            chaosAmount: "1",
+            seed: 42);
+
+        Assert.NotEmpty(result.Anomalies);
+        var datAnomaly = Assert.Single(result.Anomalies, a => a.File == "loadfile.dat");
+        var optAnomaly = Assert.Single(result.Anomalies, a => a.File == "loadfile.opt");
+
+        Assert.Equal(ChaosAnomalyTypes.CrossFormat.DesyncOrder, datAnomaly.ErrorType);
+        Assert.Equal(ChaosAnomalyTypes.CrossFormat.DesyncOrder, optAnomaly.ErrorType);
+
+        Assert.NotNull(datAnomaly.Peer);
+        Assert.Equal("loadfile.opt", datAnomaly.Peer.File);
+        Assert.NotNull(optAnomaly.Peer);
+        Assert.Equal("loadfile.dat", optAnomaly.Peer.File);
+
+        // Verify OPT order actually changed while DAT preserves its original bytes
+        Assert.NotEqual(optLines, result.OptLines);
+        Assert.Equal(datLines, result.DatLines);
+    }
+
+    [Fact]
+    public void Apply_DesyncPath_MutatesOptVolumeAndProducesReciprocalAudit()
+    {
+        var (datLines, optLines) = CreateSampleLines();
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncPath,
+            chaosAmount: "1",
+            seed: 42);
+
+        Assert.NotEmpty(result.Anomalies);
+        var datAnomaly = Assert.Single(result.Anomalies, a => a.File == "loadfile.dat");
+        var optAnomaly = Assert.Single(result.Anomalies, a => a.File == "loadfile.opt");
+
+        Assert.Equal(ChaosAnomalyTypes.CrossFormat.DesyncPath, datAnomaly.ErrorType);
+        Assert.Equal(ChaosAnomalyTypes.CrossFormat.DesyncPath, optAnomaly.ErrorType);
+
+        Assert.NotNull(datAnomaly.Peer);
+        Assert.Equal("loadfile.opt", datAnomaly.Peer.File);
+        Assert.NotNull(optAnomaly.Peer);
+        Assert.Equal("loadfile.dat", optAnomaly.Peer.File);
+
+        Assert.Contains(result.OptLines, l => l.Contains("VOL999", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Apply_OrphanAttachment_RemovesParentFromDatAndProducesReciprocalAudit()
+    {
+        var (datLines, optLines) = CreateSampleLines();
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.OrphanAttachment,
+            chaosAmount: "1",
+            seed: 42);
+
+        Assert.NotEmpty(result.Anomalies);
+        var datAnomaly = Assert.Single(result.Anomalies, a => a.File == "loadfile.dat");
+        var optAnomaly = Assert.Single(result.Anomalies, a => a.File == "loadfile.opt");
+
+        Assert.Equal(ChaosAnomalyTypes.CrossFormat.OrphanAttachment, datAnomaly.ErrorType);
+        Assert.Equal(ChaosAnomalyTypes.CrossFormat.OrphanAttachment, optAnomaly.ErrorType);
+
+        // Parent DOC00000001 should be dropped from DAT, leaving DOC00000002 orphaned
+        Assert.DoesNotContain(result.DatLines, l => l.StartsWith($"\u00feDOC00000001\u00fe", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Apply_MissingChild_RemovesAttachmentFromDatAndProducesReciprocalAudit()
+    {
+        var (datLines, optLines) = CreateSampleLines();
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.MissingChild,
+            chaosAmount: "1",
+            seed: 42);
+
+        Assert.NotEmpty(result.Anomalies);
+        var datAnomaly = Assert.Single(result.Anomalies, a => a.File == "loadfile.dat");
+        var optAnomaly = Assert.Single(result.Anomalies, a => a.File == "loadfile.opt");
+
+        Assert.Equal(ChaosAnomalyTypes.CrossFormat.MissingChild, datAnomaly.ErrorType);
+        Assert.Equal(ChaosAnomalyTypes.CrossFormat.MissingChild, optAnomaly.ErrorType);
+
+        // Child DOC00000002 should be dropped from DAT while remaining in OPT
+        Assert.DoesNotContain(result.DatLines, l => l.StartsWith($"\u00feDOC00000002\u00fe", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Apply_BrokenParent_CorruptsParentDocIdAndProducesReciprocalAudit()
+    {
+        var (datLines, optLines) = CreateSampleLines();
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.BrokenParent,
+            chaosAmount: "1",
+            seed: 42);
+
+        Assert.NotEmpty(result.Anomalies);
+        var datAnomaly = Assert.Single(result.Anomalies, a => a.File == "loadfile.dat");
+        var optAnomaly = Assert.Single(result.Anomalies, a => a.File == "loadfile.opt");
+
+        Assert.Equal(ChaosAnomalyTypes.CrossFormat.BrokenParent, datAnomaly.ErrorType);
+        Assert.Equal(ChaosAnomalyTypes.CrossFormat.BrokenParent, optAnomaly.ErrorType);
+
+        Assert.Contains(result.DatLines, l => l.Contains("INVALID_PARENT", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Apply_Determinism_SameSeedProducesIdenticalResults()
+    {
+        var (dat1, opt1) = CreateSampleLines();
+        var (dat2, opt2) = CreateSampleLines();
+
+        var res1 = CrossFormatAnomalyApplier.Apply(dat1, opt1, scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncPagecount, chaosAmount: "1", seed: 12345);
+        var res2 = CrossFormatAnomalyApplier.Apply(dat2, opt2, scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncPagecount, chaosAmount: "1", seed: 12345);
+
+        Assert.Equal(res1.DatLines, res2.DatLines);
+        Assert.Equal(res1.OptLines, res2.OptLines);
+        Assert.Equal(res1.Anomalies.Count, res2.Anomalies.Count);
+        for (int i = 0; i < res1.Anomalies.Count; i++)
+        {
+            Assert.Equal(res1.Anomalies[i].ErrorType, res2.Anomalies[i].ErrorType);
+            Assert.Equal(res1.Anomalies[i].LineNumber, res2.Anomalies[i].LineNumber);
+            Assert.Equal(res1.Anomalies[i].RecordID, res2.Anomalies[i].RecordID);
+            Assert.Equal(res1.Anomalies[i].File, res2.Anomalies[i].File);
+            Assert.Equal(res1.Anomalies[i].Peer?.LineNumber, res2.Anomalies[i].Peer?.LineNumber);
+        }
+    }
+
+    [Theory]
+    [InlineData("cross-format-desync")]
+    [InlineData("broken-families")]
+    public void Apply_NamedScenarios_ProduceExpectedAnomalyCategories(string scenario)
+    {
+        var (datLines, optLines) = CreateSampleLines();
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: scenario,
+            chaosAmount: "1",
+            seed: 42);
+
+        Assert.NotEmpty(result.Anomalies);
+        var allTypes = result.Anomalies.Select(a => a.ErrorType).Distinct().ToList();
+
+        if (scenario == "cross-format-desync")
+        {
+            Assert.All(allTypes, t => Assert.Contains(t, ChaosAnomalyTypes.CrossFormat.DesyncTypes));
+        }
+        else
+        {
+            Assert.All(allTypes, t => Assert.Contains(t, ChaosAnomalyTypes.CrossFormat.FamilyTypes));
+        }
+    }
+
+    [Fact]
+    public void ChaosEngine_ApplyCrossFormat_DelegatesCorrectly()
+    {
+        var (datLines, optLines) = CreateSampleLines();
+        var result = ChaosEngine.ApplyCrossFormat(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncPagecount,
+            chaosAmount: "1",
+            seed: 42);
+
+        Assert.NotEmpty(result.Anomalies);
+    }
+
+    [Fact]
+    public void Validator_Dogfooding_CatchesDesyncPagecount()
+    {
+        var prodDir = Path.Combine(this.testOutputPath, "dogfood_pagecount");
+        var (datLines, optLines) = CreateSampleLines();
+        var res = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncPagecount,
+            chaosAmount: "1",
+            seed: 42);
+
+        SetupProductionSet(prodDir, res.DatLines, res.OptLines);
+
+        var request = CreateRequest();
+        var report = ProductionSetPostValidator.Validate(prodDir, request);
+
+        Assert.Equal("failed", report.Status);
+        Assert.True(report.ErrorCount > 0);
+    }
+
+    [Fact]
+    public void Validator_Dogfooding_CatchesDesyncOrder()
+    {
+        var prodDir = Path.Combine(this.testOutputPath, "dogfood_order");
+        var (datLines, optLines) = CreateSampleLines();
+        var res = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncOrder,
+            chaosAmount: "1",
+            seed: 42);
+
+        SetupProductionSet(prodDir, res.DatLines, res.OptLines);
+
+        var request = CreateRequest();
+        var report = ProductionSetPostValidator.Validate(prodDir, request);
+
+        Assert.Equal("failed", report.Status);
+        Assert.True(report.ErrorCount > 0);
+        Assert.Contains(report.Findings, f => f.Code == "BatesConsistency");
+    }
+
+    [Fact]
+    public void Validator_Dogfooding_CatchesDesyncPath()
+    {
+        var prodDir = Path.Combine(this.testOutputPath, "dogfood_path");
+        var (datLines, optLines) = CreateSampleLines();
+        var res = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncPath,
+            chaosAmount: "1",
+            seed: 42);
+
+        SetupProductionSet(prodDir, res.DatLines, res.OptLines);
+
+        var request = CreateRequest();
+        var report = ProductionSetPostValidator.Validate(prodDir, request);
+
+        Assert.Equal("failed", report.Status);
+        Assert.True(report.ErrorCount > 0);
+        Assert.Contains(report.Findings, f => f.Code == "PathReconciliation");
+    }
+
+    [Fact]
+    public void Apply_NamedScenario_WithoutAmount_UsesScenarioDefaultAmount()
+    {
+        var datLines = new List<string> { JoinDat("DOCID", "BATES_NUMBER", "PARENTDOCID", "IMAGE_PATH", "PAGECOUNT", "VOLUME") };
+        var optLines = new List<string>();
+        for (int i = 1; i <= 20; i++)
+        {
+            string key = $"DOC{i:D8}";
+            datLines.Add(JoinDat(key, $"TEST{i:D8}", string.Empty, $"IMAGES\\VOL001\\{key}.tif", "1", "VOL001"));
+            optLines.Add($"TEST{i:D8},VOL001,IMAGES\\VOL001\\{key}.tif,Y,,,1");
+        }
+
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: "cross-format-desync",
+            chaosAmount: null,
+            seed: 42);
+
+        // Scenario default is 5% of 20 DAT documents; each coordinated anomaly records one DAT and one OPT entry.
+        Assert.Equal(2, result.Anomalies.Count);
+    }
+
+    [Fact]
+    public void Validator_Dogfooding_CatchesOrphanAttachment()
+    {
+        var prodDir = Path.Combine(this.testOutputPath, "dogfood_orphan");
+        var (datLines, optLines) = CreateSampleLines();
+        var res = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.OrphanAttachment,
+            chaosAmount: "1",
+            seed: 42);
+
+        SetupProductionSet(prodDir, res.DatLines, res.OptLines);
+
+        var report = ProductionSetPostValidator.Validate(prodDir, CreateRequest());
+
+        Assert.Equal("failed", report.Status);
+        Assert.Contains(report.Findings, f => f.Code == "BatesConsistency");
+    }
+
+    [Fact]
+    public void Validator_Dogfooding_CatchesMissingChild()
+    {
+        var prodDir = Path.Combine(this.testOutputPath, "dogfood_missing_child");
+        var (datLines, optLines) = CreateSampleLines();
+        var res = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.MissingChild,
+            chaosAmount: "1",
+            seed: 42);
+
+        SetupProductionSet(prodDir, res.DatLines, res.OptLines);
+
+        var report = ProductionSetPostValidator.Validate(prodDir, CreateRequest());
+
+        Assert.Equal("failed", report.Status);
+        Assert.Contains(report.Findings, f => f.Code == "OptBoundary");
+    }
+
+    [Fact]
+    public void Validator_Dogfooding_CatchesBrokenParent()
+    {
+        var prodDir = Path.Combine(this.testOutputPath, "dogfood_broken_parent");
+        var (datLines, optLines) = CreateSampleLines();
+        var res = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.BrokenParent,
+            chaosAmount: "1",
+            seed: 42);
+
+        SetupProductionSet(prodDir, res.DatLines, res.OptLines);
+
+        var report = ProductionSetPostValidator.Validate(prodDir, CreateRequest());
+
+        Assert.Equal("failed", report.Status);
+        Assert.Contains(report.Findings, f => f.Code == "BatesConsistency");
+    }
+
+    private static FileGenerationRequest CreateRequest()
+    {
+        return new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                OutputPath = Path.GetTempPath(),
+                FileCount = 3,
+                FileType = "pdf",
+            },
+            Production = new ProductionConfig
+            {
+                ProductionSet = true,
+                VolumeSize = 10,
+            },
+            Metadata = new MetadataConfig { Seed = 42 },
+            Bates = new BatesNumberConfig
+            {
+                Prefix = "TEST",
+                Start = 1,
+                Digits = 8,
+            },
+        };
+    }
+
+    private static void SetupProductionSet(string prodDir, IReadOnlyList<string> datRows, IReadOnlyList<string> optRows)
+    {
+        var dataDir = Path.Combine(prodDir, "DATA");
+        var volDir = Path.Combine(prodDir, "IMAGES", "VOL001");
+        Directory.CreateDirectory(dataDir);
+        Directory.CreateDirectory(volDir);
+
+        File.WriteAllLines(Path.Combine(dataDir, "loadfile.dat"), datRows, Encoding.UTF8);
+        File.WriteAllLines(Path.Combine(dataDir, "loadfile.opt"), optRows, Encoding.UTF8);
+
+        // Create dummy TIFF files matching all paths in optRows
+        foreach (var line in optRows)
+        {
+            var parts = line.Split(',');
+            if (parts.Length >= 3 && !string.IsNullOrWhiteSpace(parts[2]))
+            {
+                var relPath = parts[2].Trim().Replace('\\', '/');
+                var fullPath = Path.Combine(prodDir, relPath);
+                var dir = Path.GetDirectoryName(fullPath);
+                if (!string.IsNullOrEmpty(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+                if (!File.Exists(fullPath))
+                {
+                    File.WriteAllBytes(fullPath, [0x49, 0x49, 0x2A, 0x00]);
+                }
+            }
+        }
+    }
+}

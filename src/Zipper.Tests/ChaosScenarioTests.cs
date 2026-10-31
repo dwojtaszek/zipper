@@ -71,6 +71,20 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void CrossFormatScenarios_ExistInRegistry()
+    {
+        var desync = ChaosScenarios.GetByName("cross-format-desync");
+        Assert.NotNull(desync);
+        Assert.Null(desync.RequiredFormat);
+        Assert.True(desync.IsCrossFormat);
+
+        var families = ChaosScenarios.GetByName("broken-families");
+        Assert.NotNull(families);
+        Assert.Null(families.RequiredFormat);
+        Assert.True(families.IsCrossFormat);
+    }
+
+    [Fact]
     public void BrokenBoundaries_RequiresOptFormat()
     {
         var scenario = ChaosScenarios.GetByName("broken-boundaries");

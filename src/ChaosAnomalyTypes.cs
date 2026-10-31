@@ -53,6 +53,37 @@ internal static class ChaosAnomalyTypes
     };
 
     /// <summary>
+    /// Coordinated cross-format anomalies spanning DAT and OPT load files in a Production Set:
+    /// page-count lies, shifted Bates order, cross-file volume path mismatches, orphaned attachments,
+    /// missing children, and broken parent-document pointers.
+    /// </summary>
+    public static class CrossFormat
+    {
+        public const string DesyncPagecount = "desync-pagecount";
+        public const string DesyncOrder = "desync-order";
+        public const string DesyncPath = "desync-path";
+        public const string OrphanAttachment = "orphan-attachment";
+        public const string MissingChild = "missing-child";
+        public const string BrokenParent = "broken-parent";
+
+        public static readonly IReadOnlyList<string> DesyncTypes = new[]
+        {
+            DesyncPagecount, DesyncOrder, DesyncPath,
+        };
+
+        public static readonly IReadOnlyList<string> FamilyTypes = new[]
+        {
+            OrphanAttachment, MissingChild, BrokenParent,
+        };
+
+        public static readonly IReadOnlyList<string> All = new[]
+        {
+            DesyncPagecount, DesyncOrder, DesyncPath,
+            OrphanAttachment, MissingChild, BrokenParent,
+        };
+    }
+
+    /// <summary>
     /// Returns the valid anomaly types for the given format.
     /// </summary>
     public static IReadOnlyList<string> ForFormat(LoadFileFormat format) =>

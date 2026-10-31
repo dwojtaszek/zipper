@@ -94,6 +94,7 @@ internal class LoadFileOnlyMode : IGenerationMode
             {
                 LoadFiles = loadFiles,
                 Request = request,
+                IsChaosMode = ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario),
             };
             ValidationOrchestrator.RunAfterGeneration(context);
         }

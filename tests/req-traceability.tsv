@@ -714,3 +714,21 @@ REQ-233	unit	ProductionSetPostValidatorTests.Validate_DatImagePath_WithBlankVolu
 REQ-233	unit	ProductionSetPostValidatorTests.Validate_ChaosOptPagecountAnomaly_DetectedByPostValidator	opt-pagecount Chaos anomalies are detected
 REQ-233	e2e	test-production-sets.sh	Generated Production Set has a passed DAT/OPT validation report
 REQ-233	e2e	test-production-sets.bat	Generated Production Set has a passed DAT/OPT validation report
+REQ-234	unit	CrossFormatAnomalyApplierTests.Apply_DesyncPagecount_CorruptsAndProducesReciprocalPeerAudit	Coordinated page-count corruption across DAT and OPT with reciprocal peer audit
+REQ-234	unit	CrossFormatAnomalyApplierTests.Apply_DesyncOrder_SwapsOptDocumentOrderAndProducesReciprocalAudit	Coordinated document sort order corruption across DAT and OPT with reciprocal peer audit
+REQ-234	unit	CrossFormatAnomalyApplierTests.Apply_DesyncPath_MutatesOptVolumeAndProducesReciprocalAudit	Coordinated volume image path corruption across DAT and OPT with reciprocal peer audit
+REQ-234	unit	CrossFormatAnomalyApplierTests.Apply_OrphanAttachment_RemovesParentFromDatAndProducesReciprocalAudit	Coordinated orphaned attachment across DAT and OPT with reciprocal peer audit
+REQ-234	unit	CrossFormatAnomalyApplierTests.Apply_MissingChild_RemovesAttachmentFromDatAndProducesReciprocalAudit	Coordinated missing child attachment across DAT and OPT with reciprocal peer audit
+REQ-234	unit	CrossFormatAnomalyApplierTests.Apply_BrokenParent_CorruptsParentDocIdAndProducesReciprocalAudit	Coordinated broken parent pointer in DAT with reciprocal peer audit
+REQ-234	unit	CrossFormatAnomalyApplierTests.Apply_NamedScenario_WithoutAmount_UsesScenarioDefaultAmount	Cross-format scenario default amount is applied when --chaos-amount is absent
+REQ-234	unit	CrossFormatAnomalyApplierTests.Validator_Dogfooding_CatchesDesyncPagecount	Production Set validator detects coordinated page-count desync
+REQ-234	unit	CrossFormatAnomalyApplierTests.Validator_Dogfooding_CatchesDesyncOrder	Production Set validator detects coordinated sort-order desync
+REQ-234	unit	CrossFormatAnomalyApplierTests.Validator_Dogfooding_CatchesDesyncPath	Production Set validator detects coordinated image-path desync
+REQ-234	unit	CrossFormatAnomalyApplierTests.Validator_Dogfooding_CatchesOrphanAttachment	Production Set validator detects coordinated orphaned attachment
+REQ-234	unit	CrossFormatAnomalyApplierTests.Validator_Dogfooding_CatchesMissingChild	Production Set validator detects coordinated missing child
+REQ-234	unit	CrossFormatAnomalyApplierTests.Validator_Dogfooding_CatchesBrokenParent	Production Set validator detects coordinated broken parent pointer
+REQ-234	unit	ChaosModuleTests.TryBuild_CrossFormatScenario_WithProductionSet_BuildsConfig	Cross-format scenarios are permitted with Production Set generation
+REQ-234	unit	ChaosModuleTests.TryBuild_NonCrossFormatScenario_WithProductionSet_Fails	Single-format scenarios remain rejected with Production Set generation
+REQ-234	unit	ChaosAndComparisonPropertyTests.CrossFormatAnomalyApplier_Apply_ShouldBeDeterministicAndAuditReciprocalPeers	Property: coordinated cross-format anomaly injection is deterministic and records reciprocal peer references
+REQ-234	e2e	test-chaos-anomaly-coverage.sh	Coordinated cross-format chaos scenarios (cross-format-desync, broken-families)
+REQ-234	e2e	test-chaos-anomaly-coverage.bat	Coordinated cross-format chaos scenarios (cross-format-desync, broken-families)
