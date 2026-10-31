@@ -289,6 +289,7 @@ internal static class CrossFormatAnomalyApplier
         var datAnomalies = new List<ChaosAnomaly>();
         var optAnomalies = new List<ChaosAnomaly>();
         var targetedRecords = new HashSet<DatRecordEntry>(ReferenceEqualityComparer.Instance);
+        var targetedOptDocs = new HashSet<OptDocEntry>(ReferenceEqualityComparer.Instance);
 
         int typeIndex = 0;
         for (int k = 0; k < targetCount; k++)
@@ -305,6 +306,7 @@ internal static class CrossFormatAnomalyApplier
                         optDocs,
                         optDocsByKey,
                         targetedRecords,
+                        targetedOptDocs,
                         random,
                         datAnomalies,
                         optAnomalies,
@@ -331,6 +333,7 @@ internal static class CrossFormatAnomalyApplier
                         datRecordsByKey,
                         optDocs,
                         targetedRecords,
+                        targetedOptDocs,
                         random,
                         datAnomalies,
                         optAnomalies,
@@ -602,6 +605,7 @@ internal static class CrossFormatAnomalyApplier
         IReadOnlyDictionary<string, DatRecordEntry> datRecordsByKey,
         ActiveDatRecords datRecords,
         HashSet<DatRecordEntry> targetedRecords,
+        HashSet<OptDocEntry> targetedOptDocs,
         Random random)
     {
         if (optDocs.Count == 0 || datRecords.Count == 0)
@@ -614,6 +618,11 @@ internal static class CrossFormatAnomalyApplier
         {
             int index = (start + offset) % optDocs.Count;
             var optDoc = optDocs[index];
+            if (targetedOptDocs.Contains(optDoc))
+            {
+                continue;
+            }
+
             DatRecordEntry? datDoc;
             if (FindMatchingDatRecord(datRecordsByKey, optDoc.DocKey) is { } mappedRecord)
             {
@@ -687,6 +696,7 @@ internal static class CrossFormatAnomalyApplier
         List<OptDocEntry> optDocs,
         IReadOnlyDictionary<string, OptDocEntry> optDocsByKey,
         HashSet<DatRecordEntry> targetedRecords,
+        HashSet<OptDocEntry> targetedOptDocs,
         Random random,
         List<ChaosAnomaly> datAnomalies,
         List<ChaosAnomaly> optAnomalies,
@@ -694,7 +704,7 @@ internal static class CrossFormatAnomalyApplier
         string optFileName,
         string pageCountColumnName)
     {
-        var target = FindRandomUnprocessedOptDocument(optDocs, datRecordsByKey, datRecords, targetedRecords, random);
+        var target = FindRandomUnprocessedOptDocument(optDocs, datRecordsByKey, datRecords, targetedRecords, targetedOptDocs, random);
         if (target is null)
         {
             return;
@@ -797,6 +807,7 @@ internal static class CrossFormatAnomalyApplier
         }
 
         targetedRecords.Add(datDoc);
+        targetedOptDocs.Add(optDoc);
     }
 
     private static void ApplyDesyncOrder(
@@ -902,6 +913,7 @@ internal static class CrossFormatAnomalyApplier
         IReadOnlyDictionary<string, DatRecordEntry> datRecordsByKey,
         List<OptDocEntry> optDocs,
         HashSet<DatRecordEntry> targetedRecords,
+        HashSet<OptDocEntry> targetedOptDocs,
         Random random,
         List<ChaosAnomaly> datAnomalies,
         List<ChaosAnomaly> optAnomalies,
@@ -909,7 +921,7 @@ internal static class CrossFormatAnomalyApplier
         string optFileName,
         string imageColumnName)
     {
-        var target = FindRandomUnprocessedOptDocument(optDocs, datRecordsByKey, datRecords, targetedRecords, random);
+        var target = FindRandomUnprocessedOptDocument(optDocs, datRecordsByKey, datRecords, targetedRecords, targetedOptDocs, random);
         if (target is null)
         {
             return;
@@ -972,6 +984,7 @@ internal static class CrossFormatAnomalyApplier
         });
 
         targetedRecords.Add(datDoc);
+        targetedOptDocs.Add(optDoc);
     }
 
     private static void ApplyOrphanAttachment(

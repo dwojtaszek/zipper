@@ -1020,6 +1020,35 @@ public sealed class CrossFormatAnomalyApplierTests : IDisposable
         Assert.DoesNotContain("\0", result.DatLines[1], StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Apply_DesyncPagecount_SingleOptDocWithMultipleDatRecords_DoesNotMutateSameOptDocTwice()
+    {
+        var datLines = new List<string>
+        {
+            JoinDat("DOCID", "BATES_NUMBER", "IMAGE_PATH", "PAGECOUNT", "VOLUME"),
+            JoinDat("DOC00000001", "TEST00000001", "IMAGES\\001\\DOC00000001.tif", "1", "001"),
+            JoinDat("DOC00000002", "TEST00000002", "IMAGES\\001\\DOC00000002.tif", "1", "001"),
+        };
+        // Single OPT doc with key that does not match DAT doc key
+        var optLines = new List<string>
+        {
+            "UNMAPPED_DOC,001,IMAGES\\001\\UNMAPPED_DOC.tif,Y,,,1",
+        };
+
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncPagecount,
+            chaosAmount: "2",
+            random: new FirstIndexRandom());
+
+        // Exactly one pair of anomalies should be injected; the single OPT doc must not be mutated twice (which would toggle page count back)
+        Assert.Single(result.DatAnomalies);
+        Assert.Single(result.OptAnomalies);
+        Assert.Equal(2, result.OptLines.Count);
+        Assert.StartsWith("UNMAPPED_DOC_002", result.OptLines[1], StringComparison.Ordinal);
+    }
+
     private static FileGenerationRequest CreateRequest()
     {
         return new FileGenerationRequest
