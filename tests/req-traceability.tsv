@@ -702,3 +702,15 @@ REQ-232	e2e	test-chaos-anomaly-coverage.sh	Valid adversarial-values records and 
 REQ-232	e2e	test-chaos-anomaly-coverage.bat	Valid adversarial-values records and header-only DAT output
 REQ-232	unit	ChaosAndComparisonPropertyTests.AdversarialValueTailPlan_Create_ShouldSelectDeterministicBoundedTargets	Property: seeded adversarial tail selection is deterministic and bounded, with exactly one 32,768-character value when records are selected
 REQ-232	unit	ChaosAndComparisonPropertyTests.AdversarialValueTailPlan_FindColumn_ShouldAvoidSourceMetadataColumn	Property: adversarial tail column selection avoids Source Metadata mappings
+REQ-233	unit	ProductionSetPostValidatorTests.Validate_MatchingDatAndOpt_PassesWithoutErrors	Matching DAT/OPT Load Files pass reconciliation
+REQ-233	unit	ProductionSetPostValidatorTests.Validate_CrossReference_BatesKeyWinsDocIdCollision_Passes	BATES_NUMBER takes precedence over a colliding DOCID
+REQ-233	unit	ProductionSetPostValidatorTests.Validate_CrossReference_UsesDocIdWhenBatesNumberIsMissing_Passes	DOCID is used when DAT has no BATES_NUMBER column
+REQ-233	unit	ProductionSetPostValidatorTests.Validate_SortOrderWithDocIdBatesCollision_Fails	Sort order is checked by BATES_NUMBER when identifiers collide
+REQ-233	unit	ProductionSetPostValidatorTests.Validate_PageCountDesync_OptMissingPageCount_FailsWithActionableMessage	OPT document-break page count is required
+REQ-233	unit	ProductionSetPostValidatorTests.Validate_ContinuationKeyMismatch_FailsWithActionableMessage	Continuation page keys follow page sequence
+REQ-233	unit	ProductionSetPostValidatorTests.Validate_DuplicateKey_DuplicateDocBreakInOpt_FailsWithActionableMessage	OPT document-break image keys are unique
+REQ-233	unit	ProductionSetPostValidatorTests.Validate_ImagePathWithoutVolumeDirectory_FailsWithActionableMessage	Image paths must identify a Volume under IMAGES
+REQ-233	unit	ProductionSetPostValidatorTests.Validate_DatImagePath_WithBlankVolume_FailsWithActionableMessage	A present DAT VOLUME column must be non-empty
+REQ-233	unit	ProductionSetPostValidatorTests.Validate_ChaosOptPagecountAnomaly_DetectedByPostValidator	opt-pagecount Chaos anomalies are detected
+REQ-233	e2e	test-production-sets.sh	Generated Production Set has a passed DAT/OPT validation report
+REQ-233	e2e	test-production-sets.bat	Generated Production Set has a passed DAT/OPT validation report

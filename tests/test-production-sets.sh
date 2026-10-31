@@ -62,6 +62,7 @@ if [[ ! -d "$prod_dir/TEXT" ]]; then print_error "Missing TEXT dir"; fi
 if [[ ! -f "$prod_dir/DATA/loadfile.dat" ]]; then print_error "Missing DAT load file"; fi
 if [[ ! -f "$prod_dir/DATA/loadfile.opt" ]]; then print_error "Missing OPT load file"; fi
 if [[ ! -f "$prod_dir/_manifest.json" ]]; then print_error "Missing manifest JSON"; fi
+if [[ ! -f "$prod_dir/_validation_report.json" ]]; then print_error "Missing validation report"; fi
 
 # Verify volumes (10 docs / 3 = 4 volumes)
 vol1=$(find "$prod_dir/NATIVES" -name "VOL001" -print -quit)
@@ -86,6 +87,9 @@ import sys
 
 root = pathlib.Path(sys.argv[1])
 metadata = json.loads((root / "_manifest.json").read_text()).get("metadata")
+validation = json.loads((root / "_validation_report.json").read_text())
+if validation.get("status") != "passed" or validation.get("errorCount") != 0:
+    raise SystemExit("Production Set validation report did not pass")
 if not isinstance(metadata, dict):
     raise SystemExit("manifest metadata block missing or not an object")
 for key in ("production_id", "bates_number_start", "bates_number_end", "volume_count"):

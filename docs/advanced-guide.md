@@ -472,15 +472,24 @@ Written at the root of Production Sets by `ProductionSetPostValidator`. Records 
 }
 ```
 
-Finding records report issues using eight standard codes:
+Finding records report issues using standard codes:
 - `PathExistence` — Referenced native, image, text, or load file is missing from disk.
-- `BatesConsistency` — Bates number continuity breach, out-of-order sequence, or gap violation.
-- `OptBoundary` — Invalid Opticon document break (`Y`), missing page marker, or page count mismatch.
+- `PathReconciliation` — Image path mismatch between DAT and OPT, non-volume-relative form, or directory traversal segments.
+- `BatesConsistency` — Bates number continuity breach, out-of-order sequence, or sort order misalignment between DAT and OPT.
+- `OptBoundary` — Invalid Opticon document break (`Y`), missing page marker, cross-format document omission, or page count mismatch.
 - `ColumnCount` — DAT row field count does not match the header definition.
-- `UniqueId` — Duplicate Bates number or Control Number detected within the production.
+- `UniqueId` — Duplicate Bates number, Control Number, or OPT image key detected within the production.
 - `InvalidValue` — Field value fails domain validation (e.g. non-numeric size or invalid date).
 - `ManifestSyntax` — Missing or unparseable `_manifest.json` file.
 - `MetadataAzureConstraint` — Production Manifest `metadata` block violates Azure Blob naming constraints, printable ASCII character set, or 8,192-byte combined budget.
+
+#### DAT↔OPT Cross-Format Reconciliation
+
+Production Set post-validation performs an automated reconciliation pass across the produced `loadfile.dat` and `loadfile.opt` load files, mirroring published industry ingestion validation specifications such as [DISCO's load-file ingest validation report table](https://support.csdisco.com/hc/en-us/articles/360033243672-Load-file-ingest-validation-report-messages) and [Logikcull's sort-order alignment requirements](https://docs.revealdata.com/logikcull/docs/logikcull-production-upload-requirements):
+- **Page count reconciliation**: Requires a positive OPT page count on each document-break row, reconciles the count of OPT page rows against that value and the DAT page-count column (when present), and rejects page counts on continuation rows (`OptBoundary`).
+- **Image path reconciliation & volume-relative form**: Requires non-empty image paths in both DAT and OPT under `IMAGES/<Volume>/`. When the DAT `VOLUME` column is present, its value must be non-empty and match the path's Volume; any non-empty OPT `Volume` value must also match, while the OPT `Volume` field may be blank. Rooted paths and directory traversal segments like `..` are reported as `PathReconciliation`. The primary DAT image reference must align with OPT page 1, and continuation keys and image paths must follow the document's page sequence.
+- **Bi-directional cross-reference & sort order**: Verifies that every DAT document exists in OPT and every OPT document exists in DAT (`OptBoundary`), using DAT `BATES_NUMBER` as the primary key and `DOCID` when Bates is empty. It enforces strict document sort-order alignment on that key between the metadata Load File and the image Load File (`BatesConsistency`).
+- **Key uniqueness**: Enforces uniqueness across document IDs, Bates numbers, and OPT image keys (`UniqueId`).
 
 ### `report.json` (Comparison Report)
 
