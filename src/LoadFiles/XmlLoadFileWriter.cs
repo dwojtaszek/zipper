@@ -257,7 +257,7 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
                 if (request.Hash.Mode == Config.HashMode.Simulated)
                 {
                     childRng = Config.HashUtility.CreateSeededRandom(
-                        request, workItem.Index + 1_000_000L + attachmentNumber - 1);
+                        request, workItem.Index + 1_000_000L + ((attachmentNumber - 1) * 1_000_000_000L));
                 }
 
                 if (request.Hash.Mode == Config.HashMode.Actual)

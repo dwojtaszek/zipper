@@ -808,6 +808,65 @@ public class MimeRealismTests
         Assert.Contains("NATIVES/VOL001/DOC00000001_A002.pdf", records[2].Values);
     }
 
+    [Fact]
+    public async Task XmlLoadFileWriter_SimulatedHash_DistinctAttachmentsAcrossDocuments_DoNotCollide()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 2 },
+            Metadata = new MetadataConfig { Seed = 42, WithFamilies = true },
+            Hash = new HashConfig { Mode = HashMode.Simulated, Algorithms = new HashSet<Config.HashAlgorithm> { Config.HashAlgorithm.MD5 } },
+            LoadFile = new LoadFileConfig { Formats = [LoadFileFormat.EdrmXml] },
+        };
+
+        var doc5Attachments = new List<(string filename, byte[] content)>
+        {
+            ("first.pdf", new byte[] { 1 }),
+            ("second.pdf", new byte[] { 2 }),
+        };
+        var doc6Attachments = new List<(string filename, byte[] content)>
+        {
+            ("first.pdf", new byte[] { 3 }),
+        };
+
+        var workItem5 = new FileWorkItem { Index = 5, FileName = "00000005.eml", FilePathInZip = "00000005.eml", FolderName = "f1", FolderNumber = 1 };
+        var fileData5 = new FileData
+        {
+            WorkItem = workItem5,
+            Data = Encoding.ASCII.GetBytes("From: a@b.com\r\n\r\nBody"),
+            AttachmentPayloads = doc5Attachments,
+            AttachmentMetadata = FileAttachmentMetadata.FromPayloads(doc5Attachments, request, workItem5),
+        };
+
+        var workItem6 = new FileWorkItem { Index = 6, FileName = "00000006.eml", FilePathInZip = "00000006.eml", FolderName = "f1", FolderNumber = 1 };
+        var fileData6 = new FileData
+        {
+            WorkItem = workItem6,
+            Data = Encoding.ASCII.GetBytes("From: a@b.com\r\n\r\nBody"),
+            AttachmentPayloads = doc6Attachments,
+            AttachmentMetadata = FileAttachmentMetadata.FromPayloads(doc6Attachments, request, workItem6),
+        };
+
+        var xmlWriter = new global::Zipper.LoadFiles.XmlLoadFileWriter();
+        using var stream = new MemoryStream();
+        await xmlWriter.WriteAsync(stream, request, new[] { fileData5, fileData6 });
+        stream.Position = 0;
+
+        var doc = System.Xml.Linq.XDocument.Load(stream);
+        var doc5Att2 = doc.Descendants("Document").FirstOrDefault(d => (string?)d.Attribute("DocID") == "DOC00000005_A002");
+        var doc6Att1 = doc.Descendants("Document").FirstOrDefault(d => (string?)d.Attribute("DocID") == "DOC00000006_A001");
+
+        Assert.NotNull(doc5Att2);
+        Assert.NotNull(doc6Att1);
+
+        var hash5 = doc5Att2.Descendants("ExternalFile").FirstOrDefault()?.Attribute("Hash")?.Value;
+        var hash6 = doc6Att1.Descendants("ExternalFile").FirstOrDefault()?.Attribute("Hash")?.Value;
+
+        Assert.NotNull(hash5);
+        Assert.NotNull(hash6);
+        Assert.NotEqual(hash5, hash6);
+    }
+
     private static int CountOccurrences(string value, string searched)
     {
         int count = 0;
