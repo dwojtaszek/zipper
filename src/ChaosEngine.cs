@@ -397,4 +397,47 @@ internal class ChaosEngine
 
         return this.applier.GetEncodingAnomaly(lineNumber, nextLineNumber, encoding, this.anomalies);
     }
+
+    /// <summary>
+    /// Applies coordinated cross-format anomalies across DAT and OPT load file line buffers.
+    /// </summary>
+    /// <param name="datLines">The rendered DAT load file lines.</param>
+    /// <param name="optLines">The rendered OPT load file lines.</param>
+    /// <param name="scenarioOrTypes">Chaos scenario name or comma-separated anomaly types.</param>
+    /// <param name="chaosAmount">Optional chaos amount percentage or count.</param>
+    /// <param name="seed">Optional random seed for deterministic reproduction.</param>
+    /// <param name="columnDelimiter">Configured DAT column delimiter.</param>
+    /// <param name="quoteDelimiter">Configured DAT quote delimiter.</param>
+    /// <param name="datFileName">File name for DAT audit references.</param>
+    /// <param name="optFileName">File name for OPT audit references.</param>
+    /// <param name="newlineDelimiter">Configured in-field newline delimiter used when re-rendering a mutated DAT record.</param>
+    /// <returns>Result containing mutated lines and audited anomalies for both files.</returns>
+    public static CrossFormatAnomalyResult ApplyCrossFormat(
+        IReadOnlyList<string> datLines,
+        IReadOnlyList<string> optLines,
+        string? scenarioOrTypes,
+        string? chaosAmount,
+        int? seed = null,
+        string columnDelimiter = "\u0014",
+        string quoteDelimiter = "\u00fe",
+        string datFileName = "loadfile.dat",
+        string optFileName = "loadfile.opt",
+        string newlineDelimiter = "\u00ae")
+    {
+#pragma warning disable S2245 // Pseudo-randomness is safe for mock metadata generation
+        Random random = seed.HasValue ? new Random(seed.Value) : new Random();
+#pragma warning restore S2245
+
+        return CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes,
+            chaosAmount,
+            random,
+            columnDelimiter,
+            quoteDelimiter,
+            datFileName,
+            optFileName,
+            newlineDelimiter);
+    }
 }

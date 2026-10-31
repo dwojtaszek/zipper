@@ -39,7 +39,7 @@ internal static class ProductionSetOrchestrator
         ArgumentNullException.ThrowIfNull(materializer);
         ArgumentNullException.ThrowIfNull(hashComputer);
 
-        if (request.Chaos.ChaosMode && !request.LoadfileOnly)
+        if (request.Chaos.ChaosMode && !request.LoadfileOnly && (request.Chaos.ChaosScenario is null || !ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario)))
         {
             throw new InvalidOperationException("Chaos mode requires loadfile-only mode at the generation layer.");
         }
@@ -593,6 +593,86 @@ internal static class ProductionSetOrchestrator
         IFileMaterializer materializer,
         CancellationToken cancellationToken)
     {
+        var datPath = Path.Combine(dataDir, "loadfile.dat");
+        var optPath = Path.Combine(dataDir, "loadfile.opt");
+
+        if (request.Chaos.ChaosMode && ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario))
+        {
+            var datEncoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
+            var optEncoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.IsEncodingExplicit ? request.LoadFile.Encoding : "ANSI");
+
+            // 1. Render clean DAT and OPT lines, then apply the coordinated anomalies.
+            var result = await CrossFormatLoadFileRenderer.RenderAndApplyAsync(
+                request,
+                request,
+                fileDataList,
+                LoadFiles.LoadFileWriterFactory.CreateWriter,
+                LoadFiles.WriterMode.ProductionSet,
+                Path.GetFileName(datPath),
+                Path.GetFileName(optPath),
+                datEncoding,
+                optEncoding,
+                cancellationToken).ConfigureAwait(false);
+
+            var eol = LoadFiles.LoadFileEmitter.GetEolString(request.Delimiters.EndOfLine);
+
+            // Write DAT
+            var datStream = materializer.OpenWriteStream(datPath);
+            await using (datStream.ConfigureAwait(false))
+            {
+                await LoadFiles.LoadFileEmitter.EmitRenderedLinesAsync(
+                    datStream,
+                    result.DatLines,
+                    datEncoding,
+                    eol,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            var datAuditTarget = Path.Combine(dataDir, "loadfile_properties.json");
+            var datAuditJson = LoadFileAuditWriter.GenerateAuditJson(
+                datPath,
+                request,
+                fileDataList,
+                result.DatAnomalies,
+                LoadFileFormat.Dat,
+                totalRecordsOverride: result.DatLines.Count - 1L);
+            var datAuditStream = materializer.OpenWriteStream(datAuditTarget);
+            await using (datAuditStream.ConfigureAwait(false))
+            {
+                using var sw = new StreamWriter(datAuditStream, new UTF8Encoding(false), leaveOpen: true);
+                await sw.WriteAsync(datAuditJson.AsMemory(), cancellationToken).ConfigureAwait(false);
+            }
+
+            // Write OPT
+            var optStream = materializer.OpenWriteStream(optPath);
+            await using (optStream.ConfigureAwait(false))
+            {
+                await LoadFiles.LoadFileEmitter.EmitRenderedLinesAsync(
+                    optStream,
+                    result.OptLines,
+                    optEncoding,
+                    eol,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            var optAuditTarget = optPath + "_properties.json";
+            var optAuditJson = LoadFileAuditWriter.GenerateAuditJson(
+                optPath,
+                request,
+                fileDataList,
+                result.OptAnomalies,
+                LoadFileFormat.Opt,
+                totalRecordsOverride: result.OptLines.Count);
+            var optAuditStream = materializer.OpenWriteStream(optAuditTarget);
+            await using (optAuditStream.ConfigureAwait(false))
+            {
+                using var sw = new StreamWriter(optAuditStream, new UTF8Encoding(false), leaveOpen: true);
+                await sw.WriteAsync(optAuditJson.AsMemory(), cancellationToken).ConfigureAwait(false);
+            }
+
+            return (datPath, optPath);
+        }
+
         await LoadFiles.LoadFileOrchestrator.EmitAllAsync(
             request,
             fileDataList,
@@ -609,8 +689,6 @@ internal static class ProductionSetOrchestrator
             target => materializer.OpenWriteStream(target),
             cancellationToken).ConfigureAwait(false);
 
-        var datPath = Path.Combine(dataDir, "loadfile.dat");
-        var optPath = Path.Combine(dataDir, "loadfile.opt");
         return (datPath, optPath);
     }
 
@@ -663,7 +741,8 @@ internal static class ProductionSetOrchestrator
             var reportJson = System.Text.Json.JsonSerializer.Serialize(report, ValidationReportSerializerOptions);
             await materializer.WriteTextAsync(reportPath, reportJson, new UTF8Encoding(false), cancellationToken).ConfigureAwait(false);
 
-            if (string.Equals(report.Status, "failed", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(report.Status, "failed", StringComparison.OrdinalIgnoreCase)
+                && !(request.Chaos.ChaosMode && ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario)))
             {
                 throw new Validation.ValidationFailedException($"Production Set validation failed: {report.ErrorCount} error(s) found. See '_validation_report.json' for details.");
             }

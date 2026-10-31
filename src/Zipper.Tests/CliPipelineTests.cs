@@ -538,7 +538,18 @@ public class CliPipelineTests : WorkingDirectoryTestBase
         var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         Assert.Null(result);
-        Assert.Contains("Error: --chaos-mode requires --loadfile-only.", stderr, StringComparison.Ordinal);
+        Assert.Contains("Error: --chaos-mode requires --loadfile-only or --production-set.", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_LoadfileOnlyCrossFormatScenarioWithoutFormats_DefaultsToDatAndOpt()
+    {
+        var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--chaos-mode", "--chaos-scenario", "cross-format-desync" };
+
+        var (result, _, _) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
+
+        Assert.NotNull(result);
+        Assert.Equal(new[] { LoadFileFormat.Dat, LoadFileFormat.Opt }, result!.LoadFile.Formats);
     }
 
     [Fact]

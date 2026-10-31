@@ -277,7 +277,7 @@ REQ-108	unit	ChaosScenarioTests.GetByName_ValidName_ReturnsScenario	Scenario res
 REQ-109	unit	ChaosScenarioTests.ChaosScenario_WithChaosTypes_ReturnsConflictError	--chaos-scenario conflicts with --chaos-types
 REQ-110	unit	ChaosScenarioTests.ChaosScenario_AmountOverride_UsesCustomAmount	--chaos-amount overrides scenario default
 REQ-111	unit	ChaosScenarioTests.ChaosScenario_FormatMismatch_ReturnsError	Scenario required format mismatch
-REQ-112	unit	ChaosScenarioTests.ChaosList_PrintsScenariosAndExitsZero	--chaos-list prints scenarios and exits
+REQ-112	unit	ChaosScenarioTests.ChaosList_PrintsScenariosAndExitsZero	--chaos-list prints scenarios and accurately describes Loadfile-Only and Production Set support
 REQ-112	unit	LoadFileComposerAndEmitterPropertyTests.CodedGenerator_Generate_ShouldBeDeterministicAndMemberOfConfiguredCategories	Property: CodedGenerator is deterministic and generates values from configured categories
 REQ-113	unit	ChaosScenarioTests.GetByName_AllScenarios_MatchesRequirements	Built-in chaos scenarios catalog
 REQ-114	unit	ProductionSetTests.ProductionSet_ValidArgs_ParsesCorrectly	--production-set argument
@@ -714,3 +714,31 @@ REQ-233	unit	ProductionSetPostValidatorTests.Validate_DatImagePath_WithBlankVolu
 REQ-233	unit	ProductionSetPostValidatorTests.Validate_ChaosOptPagecountAnomaly_DetectedByPostValidator	opt-pagecount Chaos anomalies are detected
 REQ-233	e2e	test-production-sets.sh	Generated Production Set has a passed DAT/OPT validation report
 REQ-233	e2e	test-production-sets.bat	Generated Production Set has a passed DAT/OPT validation report
+REQ-234	unit	CrossFormatAnomalyApplierTests.Apply_DesyncPagecount_CorruptsAndProducesReciprocalPeerAudit	Coordinated page-count corruption across DAT and OPT with reciprocal peer audit
+REQ-234	unit	CrossFormatAnomalyApplierTests.Apply_DesyncOrder_SwapsOptDocumentOrderAndProducesReciprocalAudit	Coordinated document sort order corruption across DAT and OPT with reciprocal peer audit
+REQ-234	unit	CrossFormatAnomalyApplierTests.Apply_DesyncPath_MutatesOptVolumeAndProducesReciprocalAudit	Coordinated volume image path corruption across DAT and OPT with reciprocal peer audit
+REQ-234	unit	CrossFormatAnomalyApplierTests.Apply_OrphanAttachment_RemovesParentFromDatAndProducesReciprocalAudit	Coordinated orphaned attachment across DAT and OPT with reciprocal peer audit
+REQ-234	unit	CrossFormatAnomalyApplierTests.Apply_MissingChild_RemovesAttachmentFromDatAndProducesReciprocalAudit	Coordinated missing child attachment across DAT and OPT with reciprocal peer audit
+REQ-234	unit	CrossFormatAnomalyApplierTests.Apply_BrokenParent_CorruptsParentDocIdAndProducesReciprocalAudit	Coordinated broken parent pointer in DAT with reciprocal peer audit
+REQ-234	unit	CrossFormatAnomalyApplierTests.Apply_NamedScenario_WithoutAmount_UsesScenarioDefaultAmount	Cross-format scenario default amount is applied when --chaos-amount is absent
+REQ-234	unit	CrossFormatAnomalyApplierTests.Validator_Dogfooding_CatchesDesyncPagecount	Production Set validator detects coordinated page-count desync
+REQ-234	unit	CrossFormatAnomalyApplierTests.Validator_Dogfooding_CatchesDesyncOrder	Production Set validator detects coordinated sort-order desync
+REQ-234	unit	CrossFormatAnomalyApplierTests.Validator_Dogfooding_CatchesDesyncPath	Production Set validator detects coordinated image-path desync
+REQ-234	unit	CrossFormatAnomalyApplierTests.Validator_Dogfooding_CatchesOrphanAttachment	Production Set validator detects coordinated orphaned attachment
+REQ-234	unit	CrossFormatAnomalyApplierTests.Validator_Dogfooding_CatchesMissingChild	Production Set validator detects coordinated missing child
+REQ-234	unit	CrossFormatAnomalyApplierTests.Validator_Dogfooding_CatchesBrokenParent	Production Set validator detects coordinated broken parent pointer
+REQ-234	unit	CrossFormatAnomalyApplierTests.Apply_DesyncOrder_AuditsMovedOptDocumentLineNumber	OPT order anomaly audit points to the moved record's emitted line
+REQ-234	unit	CrossFormatAnomalyApplierTests.Apply_CombinedDesyncScenario_AuditsFinalPeerLineNumbers	Combined DAT/OPT scenarios audit the final emitted line for each present peer record
+REQ-234	unit	ChaosScenarioTests.ProductionSet_CrossFormatScenario_AuditsScenarioDefaultAmountAndPeerFiles	Production Set cross-format scenarios write reciprocal peer audits and the scenario default amount
+REQ-234	unit	LoadFileEmitterTests.EmitRenderedLinesAsync_ConfiguredEol_WritesPreambleAndRows	Coordinated line buffers are emitted with the configured encoding and Line Ending
+REQ-234	unit	ChaosModuleTests.TryBuild_CrossFormatScenario_WithProductionSet_BuildsConfig	Cross-format scenarios are permitted with Production Set generation
+REQ-234	unit	ChaosModuleTests.TryBuild_NonCrossFormatScenario_WithProductionSet_Fails	Single-format scenarios remain rejected with Production Set generation
+REQ-234	unit	ChaosAndComparisonPropertyTests.CrossFormatAnomalyApplier_Apply_ShouldBeDeterministicAndAuditReciprocalPeers	Property: coordinated cross-format anomaly injection is deterministic and records reciprocal peer references
+REQ-234	unit	CrossFormatAnomalyApplierTests.Apply_DesyncPagecount_OnePageDocumentEmitsSevenColumnOptRow	Added OPT continuation rows retain the seven-column row shape
+REQ-234	unit	CrossFormatAnomalyApplierTests.Apply_CombinedFamilyScenario_AuditsRemovedDatRowsAtFinalGapLine	Removed DAT records map to their final output gap line
+REQ-234	unit	CrossFormatAnomalyApplierTests.Apply_MissingChild_NoExistingFamilyCreatesMissingDatChildAndRetainsItsOptDocument	No-family fallback links the DAT child to its parent, retains the matching OPT document, and audits its final gap line
+REQ-234	unit	CrossFormatAnomalyApplierTests.Apply_BrokenFamilies_WithoutParentColumnAddsColumnOnlyOnce	Family scenarios reuse the added PARENTDOCID column
+REQ-234	unit	CrossFormatAnomalyApplierTests.Apply_OrphanAttachment_ControlNumberColumn_AuditsTheEmittedRecord	Orphan attachment audit RecordID matches the emitted Control Number
+REQ-234	unit	ChaosScenarioTests.LoadfileOnly_CrossFormatScenario_PreservesOtherSelectedFormats	Additional selected Load File Formats are emitted without cross-format anomalies or Audit File collisions
+REQ-234	e2e	test-chaos-anomaly-coverage.sh	Loadfile-Only cross-format scenarios preserve selected CSV output and both DAT/OPT audits; Production Set scenarios remain covered
+REQ-234	e2e	test-chaos-anomaly-coverage.bat	Loadfile-Only cross-format scenarios preserve selected CSV output and both DAT/OPT audits; Production Set scenarios remain covered

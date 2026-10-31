@@ -163,6 +163,8 @@ public class LoadFileAuditWriterTests : TempDirectoryTestBase
         Assert.Equal("Author", anomaly.GetProperty("column").GetString());
         Assert.Equal("mixed-delimiters", anomaly.GetProperty("errorType").GetString());
         Assert.Equal("Mixed delimiters injected", anomaly.GetProperty("description").GetString());
+        Assert.False(anomaly.TryGetProperty("file", out _));
+        Assert.False(anomaly.TryGetProperty("peer", out _));
     }
 
     [Theory]
@@ -282,5 +284,26 @@ public class LoadFileAuditWriterTests : TempDirectoryTestBase
                 File.Delete(expectedPropertiesFile);
             }
         }
+    }
+
+    [Fact]
+    public void GenerateAuditJson_WithTotalRecordsOverrideAndPeerAnomaly_SerializesCorrectly()
+    {
+        var request = new FileGenerationRequest();
+        request.Chaos = request.Chaos with { ChaosMode = true, ChaosScenario = "cross-format-desync" };
+        var anomalies = new List<ChaosAnomaly>
+        {
+            new ChaosAnomaly
+            {
+                File = "loadfile.dat",
+                LineNumber = "2",
+                RecordID = "DOC001",
+                Peer = new ChaosAnomalyPeer { File = "loadfile.opt", LineNumber = "1", RecordID = "DOC001" }
+            }
+        };
+        var json = LoadFileAuditWriter.GenerateAuditJson("loadfile.dat", request, Array.Empty<FileData>(), anomalies, LoadFileFormat.Dat, totalRecordsOverride: 42L);
+        using var doc = JsonDocument.Parse(json);
+        Assert.Equal(42L, doc.RootElement.GetProperty("totalRecords").GetInt64());
+        Assert.True(doc.RootElement.GetProperty("chaosMode").GetProperty("injectedAnomalies")[0].TryGetProperty("peer", out _));
     }
 }

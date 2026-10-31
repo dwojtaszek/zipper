@@ -8,7 +8,7 @@ The diagrams in this file are a **contract**, not just documentation:
 
 - **The load-file pipeline is `composer → serializer → emitter`.** Column decisions live in a **Composer**, line rendering in a **Serializer** (pure — no I/O), and all I/O + chaos in the **Emitter**. Do not reintroduce a "fat writer" that owns more than one of these responsibilities.
 - **EDRM-XML is the only carve-out.** It keeps its own `ILoadFileWriter` because it is a hierarchical document tree, not a flat record. Do not force other formats out of the seam, and do not fold XML into it.
-- **`ILoadFileWriter` is the format-selection seam** the factory returns; the **Chaos Engine** runs in exactly one place for delimited formats (the emitter). EDRM-XML applies its own document-scoped anomalies inside the carve-out writer. Chaos is scoped to Loadfile-Only mode (REQ-094).
+- **`ILoadFileWriter` is the format-selection seam** the factory returns; per-format **Chaos Engine** anomalies run in the emitter. The `cross-format-desync` and `broken-families` scenarios are a coordinated exception: DAT and OPT are rendered to line buffers, passed through `CrossFormatAnomalyApplier`, then written through `LoadFileEmitter`. EDRM-XML applies its own document-scoped anomalies inside the carve-out writer. Single-format chaos remains scoped to Loadfile-Only Mode; coordinated cross-format chaos also supports Production Set mode (REQ-094, REQ-234).
 
 **Any deviation from these invariants — or any change that makes a diagram inaccurate — requires explicit human approval, plus a same-PR update to the affected diagram.** AI agents: stop and ask the maintainer (e.g. via the AskUserQuestion tool) before merging such a change. See the **Architecture** checklist in the PR template. Decision rationale is recorded in [ADR-0006](adr/ADR-0006-three-mode-pipeline.md) and [ADR-0007](adr/ADR-0007-loadfile-composition-seam.md). See also [ADR-0004](adr/ADR-0004-unified-column-generation.md) (unified column value generation via `IColumnValueGenerator`) and [ADR-0005](adr/ADR-0005-email-aggregate.md) (Email value object + `EmailFactory` as sole constructor).
 
@@ -35,9 +35,11 @@ The diagrams in this file are a **contract**, not just documentation:
 
 Source-Driven Generation has exactly one semantic seam: `SourceRecordIntake` (in `src/SourceInput/`). The two adapters — `SourceCsvReader` and `DirectoryTemplateReader` — are thin I/O shells that parse/walk their input and feed raw rows into the intake, which owns all Source Record invariants: path normalization and sanitization (`SourcePathSanitizer`), File Type validation, identity rules (character validity + uniqueness), Source Metadata column mapping, and count rules (cap REQ-207, empty input). The CSV adapter keeps its own raw-row parse bound (it materializes rows before the intake validates them); the intake re-enforces the same cap on accepted records, so both parse-time memory and validated record count are bounded. Adapters hand already-validated, normalized `SourceRecord`s to `Pipeline.Build`/`SourceInputModule`, which only assemble the request and apply cross-config gates (Bates/Production Set interactions). A new Source Record invariant needs exactly one edit.
 
-## Chaos Engine (Loadfile-Only Mode only)
+## Chaos Engine and Cross-Format Anomalies
 
-`ChaosEngine` uses Floyd's algorithm for O(k) exact random sampling of lines to corrupt. Per-format anomaly catalogs live in `ChaosAnomalyTypes.cs` (DAT, OPT, CSV, Concordance, EDRM-XML). Delimited formats apply anomalies in `LoadFileEmitter`; EDRM-XML applies document-scoped anomalies inside the `XmlLoadFileWriter` carve-out. All are tracked in `_properties.json` via `LoadFileAuditWriter`.
+`ChaosEngine` uses Floyd's algorithm for O(k) exact random sampling of lines to corrupt. Per-format anomaly catalogs live in `ChaosAnomalyTypes.cs` (DAT, OPT, CSV, Concordance, EDRM-XML), and single-format anomalies run in Loadfile-Only Mode through `LoadFileEmitter`. EDRM-XML applies document-scoped anomalies inside the `XmlLoadFileWriter` carve-out.
+
+The `cross-format-desync` and `broken-families` scenarios coordinate DAT and OPT in Loadfile-Only Mode or Production Set mode. `CrossFormatLoadFileRenderer` renders both formats through their normal writers into line buffers, `CrossFormatAnomalyApplier` mutates the coordinated view, and `LoadFileEmitter` writes the final lines. This path buffers both rendered Load Files; ordinary generation and single-format chaos retain their streaming behavior. Each Audit File records the peer Load File and line.
 
 ## Three-Mode Pipeline
 
@@ -194,17 +196,19 @@ An advisory Jev architecture seam lint (`tools/typesafe-audit/checks/architectur
 
 ## Load File Composition Seam
 
-The four delimited formats (DAT, OPT, CSV, Concordance) are produced by three deep modules; EDRM-XML is the carve-out. `LoadFileOrchestrator` is the single owner of format dispatch for Standard and Production Set modes — for each requested format it creates the writer, opens the output stream (ZIP entry or disk file), writes, and emits the Audit File. ZipArchiveSink (Standard mode) and ProductionSetGenerator (Production Set mode) both delegate to it; Loadfile-Only Mode keeps its own loop because it applies chaos per format. See the [Architecture Invariants](#architecture-invariants-human-approval-required) — the composer/serializer/emitter shape must not be collapsed back into fat writers without human approval.
+The four delimited formats (DAT, OPT, CSV, Concordance) are produced by three deep modules; EDRM-XML is the carve-out. `LoadFileOrchestrator` owns format dispatch for Standard and regular Production Set output — for each requested format it creates the writer, opens the output stream (ZIP entry or disk file), writes, and emits the Audit File. ZipArchiveSink (Standard mode) and ProductionSetGenerator (Production Set mode) delegate to it. Loadfile-Only Mode keeps its own loop for per-format chaos; coordinated DAT/OPT scenarios use `CrossFormatLoadFileRenderer` and return the final rendered lines to `LoadFileEmitter` for output. See the [Architecture Invariants](#architecture-invariants-human-approval-required) — the composer/serializer/emitter shape must not be collapsed back into fat writers without human approval.
 
 - **Composer** (`ILoadFileComposer`) — column authority: header columns + lazy `LoadFileRecord`s with raw values held as parallel arrays aligned by index (handles modes + column profiles internally).
 - **Serializer** (`ILoadFileSerializer`) — render authority: record/header → one escaped line. Pure (no stream, EOL, or chaos).
-- **Emitter** (`LoadFileEmitter`) — I/O + chaos authority: encoding preamble (BOM), end-of-line, batching, and the single Chaos Engine pipeline. Both paths stream lazily (O(1) auxiliary memory); the chaos path additionally intercepts each line and writes inter-line encoding-anomaly bytes straight after it.
+- **Emitter** (`LoadFileEmitter`) — I/O + per-format chaos authority: encoding preamble (BOM), end-of-line, batching, and the single-format Chaos Engine pipeline. Ordinary paths stream lazily (O(1) auxiliary memory); coordinated DAT/OPT scenarios buffer the rendered lines, mutate them together, then emit them through the Emitter.
 
 ```mermaid
 graph TD
     Req["FileGenerationRequest + processedFiles"]
     Req --> LFO["LoadFileOrchestrator<br/>(format dispatch; stream target via caller)"]
+    Req --> CFR["CrossFormatLoadFileRenderer<br/>(paired DAT + OPT render)"]
     LFO --> Factory["LoadFileWriterFactory.CreateWriter(format, mode)"]
+    CFR --> Factory
     Factory -->|"DAT / OPT / CSV / Concordance"| CW["Composing Writer<br/>(thin ILoadFileWriter)"]
     Factory -->|"EDRM-XML"| XML["XmlLoadFileWriter<br/>(carve-out: hierarchical tree)"]
 
@@ -214,9 +218,13 @@ graph TD
     Ser --> Emit["LoadFileEmitter — I/O + chaos authority<br/>preamble (BOM), EOL, batching"]
 
     Emit -->|"no chaos"| Stream["stream lines<br/>(buffered StreamWriter)"]
-    Emit -->|"chaos (Loadfile-Only)"| ChaosP["stream line → intercept<br/>+ inter-line anomaly bytes"]
+    Emit -->|"single-format chaos<br/>(Loadfile-Only)"| ChaosP["stream line → intercept<br/>+ inter-line anomaly bytes"]
+    Emit -->|"coordinated DAT/OPT"| LineBuffers["rendered DAT + OPT<br/>line buffers"]
+    LineBuffers --> CrossApplier["CrossFormatAnomalyApplier"]
+    CrossApplier --> ReEmit["LoadFileEmitter.EmitRenderedLinesAsync"]
 
     Stream --> Out["Load File (on disk / in ZIP)"]
     ChaosP --> Out
+    ReEmit --> Out
     XML --> Out
 ```

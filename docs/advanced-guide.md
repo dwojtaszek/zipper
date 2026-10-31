@@ -292,7 +292,7 @@ Two modes write no **Archive** at all, so the column there reports the requested
 
 ### Chaos Engine
 
-Inject deliberate structural and encoding anomalies into Load Files for ingestion testing. Requires `--loadfile-only` and one of the `dat`, `opt`, `csv`, `concordance`, or `edrm-xml` formats.
+Inject deliberate structural and encoding anomalies into Load Files for ingestion testing. Single-format scenarios require `--loadfile-only` and a supported Load File Format. The coordinated `cross-format-desync` and `broken-families` scenarios work in Loadfile-Only Mode with both DAT and OPT selected, or in Production Set mode. Additional explicitly selected Load File Formats are generated normally without cross-format anomalies.
 
 Each format has its own anomaly catalog — no format silently inherits the DAT arms. CSV uses RFC 4180 escaping lies (`csv-quote-escape`, `csv-embedded-newline`, `csv-bom`); Concordance uses its own delimiter conventions (`concordance-delimiter`, `concordance-quote-escape`); EDRM-XML gets structural document damage (`xml-unclosed-tag`, `xml-bad-entity`, `xml-encoding-lie`) applied inside the documented `XmlLoadFileWriter` carve-out rather than through the emitter.
 
@@ -329,6 +329,15 @@ zipper --loadfile-only --loadfile-format concordance --count 100000 --output-pat
 # EDRM-XML structural failures (inside the XmlLoadFileWriter carve-out)
 zipper --loadfile-only --loadfile-format edrm-xml --count 10000 --output-path ./xml_failures \
     --chaos-mode --chaos-scenario edrm-xml-structural-failures --seed 42
+
+# Coordinate DAT and OPT anomalies in a Production Set
+zipper --production-set --type tiff --tiff-pages 2-3 --count 1000 --output-path ./cross_format \
+    --bates-prefix TEST --chaos-mode --chaos-scenario cross-format-desync --seed 42
+
+# Exercise broken Document Family relationships
+zipper --production-set --type eml --count 1000 --output-path ./broken_families \
+    --bates-prefix TEST --with-families --attachment-rate 100 \
+    --chaos-mode --chaos-scenario broken-families --seed 42
 ```
 
 List available scenarios: `zipper --chaos-list`
@@ -568,11 +577,11 @@ Written by `--compare-production-manifests` to `--comparison-output`. Records co
 | `--loadfile-only` + `--target-zip-size` | **Conflict**: cannot use both |
 | `--loadfile-only` + `--include-load-file` | **Conflict**: cannot use both |
 | `--col-delim`, `--quote-delim`, etc. | Use `ascii:N` or `char:C` prefix (works in all modes) |
-| `--chaos-mode` | Requires `--loadfile-only` |
-| `--chaos-mode` + `--production-set` | **Conflict**: chaos requires `--loadfile-only` |
+| `--chaos-mode` | Requires `--loadfile-only` or `--production-set` |
+| `--chaos-mode` + `--production-set` | Permitted with cross-format scenarios (`cross-format-desync`, `broken-families`); otherwise requires `--loadfile-only` |
 | `--chaos-amount`, `--chaos-types` | Require `--chaos-mode` |
 | `--chaos-scenario` | Requires `--chaos-mode`; conflicts with `--chaos-types` |
-| `--chaos-scenario` + format | Some scenarios require specific `--loadfile-format` (e.g., `broken-boundaries` requires `opt`, `realistic-import-failures` requires `dat`, `csv-escaping-failures` requires `csv`, `concordance-import-failures` requires `concordance`, `edrm-xml-structural-failures` requires `edrm-xml`) |
+| `--chaos-scenario` + format | Some scenarios require specific `--loadfile-format` (e.g., `broken-boundaries` requires `opt`, `realistic-import-failures` requires `dat`, `csv-escaping-failures` requires `csv`, `concordance-import-failures` requires `concordance`, `edrm-xml-structural-failures` requires `edrm-xml`, while `cross-format-desync` and `broken-families` require `--load-file-formats dat,opt` or `--production-set`) |
 | `--production-set` | Requires `--bates-prefix`; conflicts with `--loadfile-only` |
 | `--redacted-production` | Requires `--production-set`; conflicts with `--loadfile-only`. Redacted text files are only written when `--with-text` is enabled; without it, `REDACTED_TEXT_PATH` is empty in the Load File. |
 | `--withheld-native-policy` | Requires `--redacted-production` |

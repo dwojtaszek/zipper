@@ -41,6 +41,12 @@ function canonicalize_props() {
     jq 'del(.fileName) | del(.generationTime)' "$prop_file"
 }
 
+# Cross-format audits also embed the timestamped peer file names, which differ between runs.
+function canonicalize_cross_format_props() {
+    local prop_file="$1"
+    jq 'del(.fileName) | del(.generationTime) | (.chaosMode.injectedAnomalies[]? |= (del(.file) | (.peer |= del(.file))))' "$prop_file"
+}
+
 # Lookup a field from the scenario-types TSV. Usage: tsv_lookup <scenario> <field_index>
 # field_index: 2=chaos_types, 3=format (1-based)
 function tsv_lookup() {
@@ -443,6 +449,104 @@ while IFS= read -r SCENARIO; do
     PASSED=$((PASSED + 1))
     print_success "B2 Scenario '$SCENARIO' — PASSED (anomalies: $ANOMALY_COUNT)"
 done < "$FIXTURES_DIR/chaos-scenarios.txt"
+
+# ---------------------------------------------------------------------------
+# B4 — coordinated cross-format scenarios (DAT ↔ OPT)
+# ---------------------------------------------------------------------------
+for SCENARIO in cross-format-desync broken-families; do
+    TOTAL=$((TOTAL + 1))
+    SAFE="${SCENARIO//-/_}"
+    OUT_DIR="$TEST_OUTPUT_DIR/cross_format_${SAFE}"
+
+    print_info "B4 Cross-format Scenario: $SCENARIO"
+    zipper --loadfile-only --load-file-formats dat,opt,csv --count 100 \
+        --output-path "$OUT_DIR/run1" \
+        --chaos-mode --chaos-scenario "$SCENARIO" --seed 42
+
+    DAT_FILE=$(find "$OUT_DIR/run1" -name "*.dat" -print -quit)
+    OPT_FILE=$(find "$OUT_DIR/run1" -name "*.opt" -print -quit)
+    CSV_FILE=$(find "$OUT_DIR/run1" -name "*.csv" -print -quit)
+    DAT_PROPS=$(find "$OUT_DIR/run1" -name "*_properties.json" ! -name "*.opt_properties.json" ! -name "*_csv_properties.json" -print -quit)
+    OPT_PROPS=$(find "$OUT_DIR/run1" -name "*.opt_properties.json" -print -quit)
+    CSV_PROPS=$(find "$OUT_DIR/run1" -name "*_csv_properties.json" -print -quit)
+    [[ -z "$DAT_FILE" || -z "$OPT_FILE" || -z "$CSV_FILE" || -z "$DAT_PROPS" || -z "$OPT_PROPS" || -z "$CSV_PROPS" ]] \
+        && print_error "Missing cross-format output or audit files for scenario: $SCENARIO"
+
+    validate_properties_json "$DAT_PROPS"
+    validate_properties_json "$OPT_PROPS"
+
+    for PROPS in "$DAT_PROPS" "$OPT_PROPS"; do
+        ANOMALY_COUNT=$(jq '.chaosMode.totalAnomalies' "$PROPS")
+        [[ "$ANOMALY_COUNT" -le 0 ]] && print_error "No coordinated anomalies for $SCENARIO in $PROPS"
+        jq -e '[.chaosMode.injectedAnomalies[] | select(.file == null or .peer == null or .peer.file == null or .peer.lineNumber == null)] | length == 0' "$PROPS" >/dev/null \
+            || print_error "Missing reciprocal peer audit for $SCENARIO in $PROPS"
+    done
+
+    jq -e '.fileName | endswith(".dat")' "$DAT_PROPS" >/dev/null \
+        || print_error "DAT audit file does not identify the DAT load file for $SCENARIO"
+    jq -e '.fileName | endswith(".opt")' "$OPT_PROPS" >/dev/null \
+        || print_error "OPT audit file does not identify the OPT load file for $SCENARIO"
+    jq -e '(.fileName | endswith(".csv")) and (.chaosMode.enabled == false)' "$CSV_PROPS" >/dev/null \
+        || print_error "Additional CSV output was not generated without cross-format anomalies for $SCENARIO"
+
+    zipper --loadfile-only --load-file-formats dat,opt,csv --count 100 \
+        --output-path "$OUT_DIR/run2" \
+        --chaos-mode --chaos-scenario "$SCENARIO" --seed 42
+    DAT_FILE2=$(find "$OUT_DIR/run2" -name "*.dat" -print -quit)
+    OPT_FILE2=$(find "$OUT_DIR/run2" -name "*.opt" -print -quit)
+    CSV_FILE2=$(find "$OUT_DIR/run2" -name "*.csv" -print -quit)
+    DAT_PROPS2=$(find "$OUT_DIR/run2" -name "*_properties.json" ! -name "*.opt_properties.json" ! -name "*_csv_properties.json" -print -quit)
+    OPT_PROPS2=$(find "$OUT_DIR/run2" -name "*.opt_properties.json" -print -quit)
+    CSV_PROPS2=$(find "$OUT_DIR/run2" -name "*_csv_properties.json" -print -quit)
+    cmp -s "$DAT_FILE" "$DAT_FILE2" || print_error "Determinism failed (DAT differs) for scenario: $SCENARIO"
+    cmp -s "$OPT_FILE" "$OPT_FILE2" || print_error "Determinism failed (OPT differs) for scenario: $SCENARIO"
+    cmp -s "$CSV_FILE" "$CSV_FILE2" || print_error "Determinism failed (additional CSV differs) for scenario: $SCENARIO"
+    [[ "$(canonicalize_cross_format_props "$DAT_PROPS")" != "$(canonicalize_cross_format_props "$DAT_PROPS2")" ]] \
+        && print_error "Determinism failed (DAT audit differs) for scenario: $SCENARIO"
+    [[ "$(canonicalize_cross_format_props "$OPT_PROPS")" != "$(canonicalize_cross_format_props "$OPT_PROPS2")" ]] \
+        && print_error "Determinism failed (OPT audit differs) for scenario: $SCENARIO"
+
+    PASSED=$((PASSED + 1))
+    print_success "B4 Cross-format Scenario '$SCENARIO' — PASSED (audited on both files)"
+done
+
+# ---------------------------------------------------------------------------
+# B5 — coordinated cross-format scenarios in Production Set mode
+# ---------------------------------------------------------------------------
+for SCENARIO in cross-format-desync broken-families; do
+    TOTAL=$((TOTAL + 1))
+    SAFE="${SCENARIO//-/_}"
+    OUT_DIR="$TEST_OUTPUT_DIR/production_set_${SAFE}"
+    PRODUCTION_DIR="$OUT_DIR/$SAFE"
+
+    print_info "B5 Production Set Cross-format Scenario: $SCENARIO"
+    if [[ "$SCENARIO" == "cross-format-desync" ]]; then
+        zipper --production-set --type tiff --tiff-pages 2-3 --count 20 \
+            --output-path "$OUT_DIR" --production-id "$SAFE" --bates-prefix TEST \
+            --chaos-mode --chaos-scenario "$SCENARIO" --seed 42
+    else
+        zipper --production-set --type eml --count 20 \
+            --output-path "$OUT_DIR" --production-id "$SAFE" --bates-prefix TEST \
+            --with-families --attachment-rate 100 \
+            --chaos-mode --chaos-scenario "$SCENARIO" --seed 42
+    fi
+
+    DAT_PROPS="$PRODUCTION_DIR/DATA/loadfile_properties.json"
+    OPT_PROPS="$PRODUCTION_DIR/DATA/loadfile.opt_properties.json"
+    VALIDATION_REPORT="$PRODUCTION_DIR/_validation_report.json"
+    [[ ! -f "$DAT_PROPS" || ! -f "$OPT_PROPS" || ! -f "$VALIDATION_REPORT" ]] \
+        && print_error "Missing Production Set Load File audits or validation report for $SCENARIO"
+
+    jq -e '(.chaosMode.targetAmount == "5%") and (.chaosMode.totalAnomalies > 0) and all(.chaosMode.injectedAnomalies[]; .file == "loadfile.dat" and .peer.file == "loadfile.opt" and (.peer.lineNumber | length) > 0)' "$DAT_PROPS" >/dev/null \
+        || print_error "DAT Production Set audit is missing its scenario amount or OPT peer for $SCENARIO"
+    jq -e '(.chaosMode.targetAmount == "5%") and (.chaosMode.totalAnomalies > 0) and all(.chaosMode.injectedAnomalies[]; .file == "loadfile.opt" and .peer.file == "loadfile.dat" and (.peer.lineNumber | length) > 0)' "$OPT_PROPS" >/dev/null \
+        || print_error "OPT Production Set audit is missing its scenario amount or DAT peer for $SCENARIO"
+    jq -e '.status == "failed" and (.findings | length) > 0' "$VALIDATION_REPORT" >/dev/null \
+        || print_error "Production Set validator did not report the coordinated $SCENARIO anomaly"
+
+    PASSED=$((PASSED + 1))
+    print_success "B5 Production Set scenario '$SCENARIO' — PASSED (both audits and validation report)"
+done
 
 # ---------------------------------------------------------------------------
 # Cleanup & summary

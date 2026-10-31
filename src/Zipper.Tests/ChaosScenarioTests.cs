@@ -71,6 +71,152 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void CrossFormatScenarios_ExistInRegistry()
+    {
+        var desync = ChaosScenarios.GetByName("cross-format-desync");
+        Assert.NotNull(desync);
+        Assert.Null(desync.RequiredFormat);
+        Assert.True(desync.IsCrossFormat);
+
+        var families = ChaosScenarios.GetByName("broken-families");
+        Assert.NotNull(families);
+        Assert.Null(families.RequiredFormat);
+        Assert.True(families.IsCrossFormat);
+    }
+
+    [Fact]
+    public async Task ProductionSet_CrossFormatScenario_AuditsScenarioDefaultAmountAndPeerFiles()
+    {
+        var outputPath = Path.Combine(this.TempDir, $"cross_format_production_{Guid.NewGuid():N}");
+        const string productionId = "cross-format-audit";
+        try
+        {
+            var (exitCode, _, stderr) = await RunWithCapture(
+            [
+                "--production-set", "--count", "20", "--output-path", outputPath,
+                "--production-id", productionId, "--bates-prefix", "TEST",
+                "--chaos-mode", "--chaos-scenario", "cross-format-desync", "--seed", "42",
+            ]);
+
+            Assert.Equal(0, exitCode);
+            Assert.Empty(stderr);
+
+            string dataPath = Path.Combine(outputPath, productionId, "DATA");
+            foreach (string auditFile in new[] { "loadfile_properties.json", "loadfile.opt_properties.json" })
+            {
+                using var audit = JsonDocument.Parse(File.ReadAllText(Path.Combine(dataPath, auditFile)));
+                JsonElement chaosMode = audit.RootElement.GetProperty("chaosMode");
+
+                Assert.Equal("5%", chaosMode.GetProperty("targetAmount").GetString());
+                Assert.True(chaosMode.GetProperty("totalAnomalies").GetInt32() > 0);
+                foreach (JsonElement anomaly in chaosMode.GetProperty("injectedAnomalies").EnumerateArray())
+                {
+                    Assert.True(anomaly.GetProperty("peer").TryGetProperty("file", out _));
+                    Assert.True(anomaly.GetProperty("peer").TryGetProperty("lineNumber", out _));
+                }
+            }
+
+            string datPath = Path.Combine(dataPath, "loadfile.dat");
+            string optPath = Path.Combine(dataPath, "loadfile.opt");
+            using var datAudit = JsonDocument.Parse(File.ReadAllText(Path.Combine(dataPath, "loadfile_properties.json")));
+            using var optAudit = JsonDocument.Parse(File.ReadAllText(Path.Combine(dataPath, "loadfile.opt_properties.json")));
+            Assert.Equal(
+                File.ReadAllLines(datPath).Length - 1,
+                datAudit.RootElement.GetProperty("totalRecords").GetInt64());
+            Assert.Equal(
+                File.ReadAllLines(optPath).Length,
+                optAudit.RootElement.GetProperty("totalRecords").GetInt64());
+
+            JsonElement datAnomaly = Assert.Single(
+                datAudit.RootElement.GetProperty("chaosMode").GetProperty("injectedAnomalies").EnumerateArray());
+            JsonElement optAnomaly = Assert.Single(
+                optAudit.RootElement.GetProperty("chaosMode").GetProperty("injectedAnomalies").EnumerateArray());
+            Assert.Equal(
+                datAnomaly.GetProperty("peer").GetProperty("recordID").GetString(),
+                optAnomaly.GetProperty("recordID").GetString());
+            Assert.Equal(
+                datAnomaly.GetProperty("peer").GetProperty("lineNumber").GetString(),
+                optAnomaly.GetProperty("lineNumber").GetString());
+            Assert.Equal(
+                optAnomaly.GetProperty("peer").GetProperty("recordID").GetString(),
+                datAnomaly.GetProperty("recordID").GetString());
+            Assert.Equal(
+                optAnomaly.GetProperty("peer").GetProperty("lineNumber").GetString(),
+                datAnomaly.GetProperty("lineNumber").GetString());
+        }
+        finally
+        {
+            if (Directory.Exists(outputPath))
+            {
+                Directory.Delete(outputPath, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task LoadfileOnly_CrossFormatScenario_PreservesOtherSelectedFormats()
+    {
+        var outputPath = Path.Combine(this.TempDir, $"cross_format_extra_{Guid.NewGuid():N}");
+        try
+        {
+            var (exitCode, _, stderr) = await RunWithCapture(
+            [
+                "--loadfile-only", "--load-file-formats", "dat,opt,csv",
+                "--count", "20", "--output-path", outputPath,
+                "--chaos-mode", "--chaos-scenario", "cross-format-desync", "--seed", "42",
+            ]);
+
+            Assert.Equal(0, exitCode);
+            Assert.Empty(stderr);
+            Assert.Single(Directory.GetFiles(outputPath, "*.dat"));
+            Assert.Single(Directory.GetFiles(outputPath, "*.opt"));
+            var datFile = Assert.Single(Directory.GetFiles(outputPath, "*.dat"));
+            var optFile = Assert.Single(Directory.GetFiles(outputPath, "*.opt"));
+            var csvFile = Assert.Single(Directory.GetFiles(outputPath, "*.csv"));
+            var propertiesFiles = Directory.GetFiles(outputPath, "*_properties.json");
+            var datProperties = Assert.Single(propertiesFiles, path =>
+                !path.EndsWith(".opt_properties.json", StringComparison.OrdinalIgnoreCase)
+                && !path.EndsWith("_csv_properties.json", StringComparison.OrdinalIgnoreCase));
+            var optProperties = Assert.Single(propertiesFiles, path =>
+                path.EndsWith(".opt_properties.json", StringComparison.OrdinalIgnoreCase));
+            var csvProperties = Assert.Single(propertiesFiles, path =>
+                path.EndsWith("_csv_properties.json", StringComparison.OrdinalIgnoreCase));
+
+            using var datAudit = JsonDocument.Parse(await File.ReadAllTextAsync(datProperties));
+            using var optAudit = JsonDocument.Parse(await File.ReadAllTextAsync(optProperties));
+            using var csvAudit = JsonDocument.Parse(await File.ReadAllTextAsync(csvProperties));
+            Assert.True(datAudit.RootElement.GetProperty("chaosMode").GetProperty("enabled").GetBoolean());
+            Assert.True(optAudit.RootElement.GetProperty("chaosMode").GetProperty("enabled").GetBoolean());
+            Assert.False(csvAudit.RootElement.GetProperty("chaosMode").GetProperty("enabled").GetBoolean());
+            Assert.Equal(
+                (await File.ReadAllLinesAsync(datFile)).Length - 1,
+                datAudit.RootElement.GetProperty("totalRecords").GetInt64());
+            Assert.Equal(
+                (await File.ReadAllLinesAsync(optFile)).Length,
+                optAudit.RootElement.GetProperty("totalRecords").GetInt64());
+
+            JsonElement datAnomaly = Assert.Single(
+                datAudit.RootElement.GetProperty("chaosMode").GetProperty("injectedAnomalies").EnumerateArray());
+            JsonElement optAnomaly = Assert.Single(
+                optAudit.RootElement.GetProperty("chaosMode").GetProperty("injectedAnomalies").EnumerateArray());
+            Assert.Equal(
+                datAnomaly.GetProperty("peer").GetProperty("recordID").GetString(),
+                optAnomaly.GetProperty("recordID").GetString());
+            Assert.Equal(
+                optAnomaly.GetProperty("peer").GetProperty("recordID").GetString(),
+                datAnomaly.GetProperty("recordID").GetString());
+            Assert.True(File.Exists(csvFile));
+        }
+        finally
+        {
+            if (Directory.Exists(outputPath))
+            {
+                Directory.Delete(outputPath, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void BrokenBoundaries_RequiresOptFormat()
     {
         var scenario = ChaosScenarios.GetByName("broken-boundaries");
@@ -171,6 +317,8 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
         Assert.Contains("realistic-import-failures", stdout, StringComparison.Ordinal);
         Assert.Contains("adversarial-values", stdout, StringComparison.Ordinal);
         Assert.Contains("full-chaos", stdout, StringComparison.Ordinal);
+        Assert.Contains("single-format scenarios require --loadfile-only", stdout, StringComparison.Ordinal);
+        Assert.Contains("cross-format scenarios also support --production-set", stdout, StringComparison.Ordinal);
     }
 
     [Fact]

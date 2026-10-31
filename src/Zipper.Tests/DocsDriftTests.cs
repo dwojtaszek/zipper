@@ -32,7 +32,7 @@ public class DocsDriftTests
         var lines = File.ReadAllLines(readmePath);
 
         var loadFileFormatLine = lines
-            .FirstOrDefault(l => l.IndexOf("--load-file-format", StringComparison.Ordinal) >= 0
+            .FirstOrDefault(l => l.TrimStart().StartsWith("| `--load-file-format`", StringComparison.Ordinal)
                               && l.IndexOf("dat", StringComparison.Ordinal) >= 0);
 
         Assert.NotNull(loadFileFormatLine);

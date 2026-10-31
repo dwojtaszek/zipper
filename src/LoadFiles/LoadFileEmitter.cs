@@ -58,6 +58,35 @@ internal static class LoadFileEmitter
         }
     }
 
+    /// <summary>
+    /// Emits already-rendered lines after coordinated cross-format anomaly processing.
+    /// </summary>
+    public static async Task EmitRenderedLinesAsync(
+        Stream stream,
+        IReadOnlyList<string> lines,
+        Encoding encoding,
+        string eol,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        ArgumentNullException.ThrowIfNull(lines);
+        ArgumentNullException.ThrowIfNull(encoding);
+        ArgumentNullException.ThrowIfNull(eol);
+
+        var writer = new StreamWriter(stream, encoding, leaveOpen: true);
+        await using (writer.ConfigureAwait(false))
+        {
+            foreach (var line in lines)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await writer.WriteAsync(line.AsMemory(), cancellationToken).ConfigureAwait(false);
+                await writer.WriteAsync(eol.AsMemory(), cancellationToken).ConfigureAwait(false);
+            }
+
+            await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     private static async Task EmitStreamingAsync(
         Stream stream,
         ILoadFileSerializer serializer,

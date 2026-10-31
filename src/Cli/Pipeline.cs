@@ -88,12 +88,23 @@ public static class Pipeline
             return null;
         }
 
+        var requestedFormats = modules.LoadFile.Formats;
+        if (requestedFormats is null && modules.Chaos.ChaosMode && !string.IsNullOrEmpty(modules.Chaos.ChaosScenario))
+        {
+            var scenario = ChaosScenarios.GetByName(modules.Chaos.ChaosScenario);
+            if (scenario?.IsCrossFormat == true)
+            {
+                requestedFormats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt };
+            }
+        }
+
         if (!modules.Chaos.TryBuild(
             modules.LoadFile.LoadfileOnly,
-            modules.LoadFile.Formats ?? new List<LoadFileFormat> { LoadFileFormat.Dat },
+            production.ProductionSet ? new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt } : (requestedFormats ?? new List<LoadFileFormat> { LoadFileFormat.Dat }),
             out var chaos,
             delimiters,
-            loadFile.Encoding))
+            loadFile.Encoding,
+            production.ProductionSet))
         {
             return null;
         }
@@ -109,6 +120,11 @@ public static class Pipeline
         }
 
         var resolvedLoadFile = ApplyImageTypeLoadFileOverride(loadFile, modules.LoadFile.IsLoadFileFormatExplicit, output, sourceRecords);
+        if (ChaosScenarios.IsCrossFormat(modules.Chaos.ChaosScenario) && !modules.LoadFile.IsLoadFileFormatExplicit)
+        {
+            resolvedLoadFile = resolvedLoadFile with { Formats = new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt } };
+        }
+
         if (modules.Chaos.IsAdversarialValuesScenario && resolvedLoadFile.Formats.Any(format => format != LoadFileFormat.Dat))
         {
             Console.Error.WriteLine("Error: Chaos scenario 'adversarial-values' requires DAT-only output. Image file types default to DAT and OPT; pass --loadfile-format dat explicitly.");

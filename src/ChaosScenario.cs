@@ -10,7 +10,8 @@ internal record ChaosScenarioDefinition(
     string ChaosTypes,
     string DefaultAmount,
     LoadFileFormat? RequiredFormat,
-    bool GenerateAdversarialValues = false);
+    bool GenerateAdversarialValues = false,
+    bool IsCrossFormat = false);
 
 /// <summary>
 /// Registry of built-in Chaos Scenarios for realistic ingestion anomalies
@@ -87,6 +88,20 @@ internal static class ChaosScenarios
             DefaultAmount: "100%",
             RequiredFormat: LoadFileFormat.Dat,
             GenerateAdversarialValues: true),
+        new(
+            Name: "cross-format-desync",
+            Description: "Coordinated DAT and OPT desync: page-count lies, shifted document sort order, and volume path mismatches",
+            ChaosTypes: "desync-pagecount,desync-order,desync-path",
+            DefaultAmount: "5%",
+            RequiredFormat: null,
+            IsCrossFormat: true),
+        new(
+            Name: "broken-families",
+            Description: "Coordinated family consistency anomalies: orphaned attachments, missing child documents, and broken parent pointers",
+            ChaosTypes: "orphan-attachment,missing-child,broken-parent",
+            DefaultAmount: "5%",
+            RequiredFormat: null,
+            IsCrossFormat: true),
     };
 
     private static readonly IReadOnlyList<string> CachedScenarioNames =
@@ -115,6 +130,9 @@ internal static class ChaosScenarios
     internal static bool GeneratesAdversarialValues(string? name) =>
         name is not null && GetByName(name)?.GenerateAdversarialValues == true;
 
+    internal static bool IsCrossFormat(string? name) =>
+        name is not null && GetByName(name)?.IsCrossFormat == true;
+
     internal static IReadOnlyList<string> ResolveTypes(ChaosScenarioDefinition scenario, LoadFileFormat format)
     {
         ArgumentNullException.ThrowIfNull(scenario);
@@ -135,15 +153,15 @@ internal static class ChaosScenarios
 
         foreach (var scenario in ScenariosArray)
         {
-            var format = scenario.RequiredFormat?.ToString() ?? "Any";
+            var format = scenario.IsCrossFormat ? "Cross" : (scenario.RequiredFormat?.ToString() ?? "Any");
             Console.WriteLine($"  {scenario.Name,-28} {format,-8} {scenario.DefaultAmount,-10} {scenario.Description}");
         }
 
         Console.WriteLine();
-        Console.WriteLine("Usage: zipper --loadfile-only --count <N> --output-path <path> --chaos-mode --chaos-scenario <name>");
+        Console.WriteLine("Usage: zipper --chaos-mode --chaos-scenario <name> with --loadfile-only or --production-set (cross-format scenarios only)");
         Console.WriteLine();
         Console.WriteLine("Notes:");
-        Console.WriteLine("  - --chaos-scenario requires --chaos-mode and --loadfile-only");
+        Console.WriteLine("  - --chaos-scenario requires --chaos-mode; single-format scenarios require --loadfile-only, while cross-format scenarios also support --production-set");
         Console.WriteLine("  - --chaos-scenario conflicts with --chaos-types (use one or the other)");
         Console.WriteLine("  - --chaos-amount overrides the scenario's default amount");
         Console.WriteLine("  - 'full-chaos' enables all types for the selected format");

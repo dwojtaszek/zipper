@@ -267,4 +267,69 @@ public class ChaosModuleTests
     {
         Assert.False(new ChaosModule().TryApply("--unknown-flag", "x"));
     }
+
+    [Theory]
+    [InlineData("cross-format-desync")]
+    [InlineData("broken-families")]
+    public void TryBuild_CrossFormatScenario_WithDatAndOpt_BuildsConfig(string scenario)
+    {
+        var spec = new ChaosConfigSpec(Amount: null, Types: null, Scenario: scenario) { Mode = true };
+        Assert.True(TryBuildWithValues(spec, out var config, loadfileOnly: true, formats: new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt }));
+        Assert.Equal(scenario, config.ChaosScenario);
+    }
+
+    [Theory]
+    [InlineData("cross-format-desync")]
+    [InlineData("broken-families")]
+    public void TryBuild_CrossFormatScenario_WithSingleFormat_Fails(string scenario)
+    {
+        var spec = new ChaosConfigSpec(Amount: null, Types: null, Scenario: scenario) { Mode = true };
+        Assert.False(TryBuildWithValues(spec, out _, loadfileOnly: true, formats: new List<LoadFileFormat> { LoadFileFormat.Dat }));
+    }
+
+    [Fact]
+    public void TryBuild_NonCrossFormatScenario_WithProductionSet_Fails()
+    {
+        var module = new ChaosModule();
+        Assert.True(module.TryApply("--chaos-mode", null));
+        Assert.True(module.TryApply("--chaos-scenario", "structured-import-failures"));
+
+        Assert.False(module.TryBuild(
+            loadfileOnly: false,
+            formats: new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt },
+            out _,
+            productionSet: true));
+    }
+
+    [Fact]
+    public void TryBuild_ProductionSetWithChaosModeWithoutScenario_Fails()
+    {
+        var module = new ChaosModule();
+        Assert.True(module.TryApply("--chaos-mode", null));
+
+        Assert.False(module.TryBuild(
+            loadfileOnly: false,
+            formats: new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt },
+            out _,
+            productionSet: true));
+    }
+
+    [Theory]
+    [InlineData("cross-format-desync")]
+    [InlineData("broken-families")]
+    public void TryBuild_CrossFormatScenario_WithProductionSet_BuildsConfig(string scenario)
+    {
+        var module = new ChaosModule();
+        Assert.True(module.TryApply("--chaos-mode", null));
+        Assert.True(module.TryApply("--chaos-scenario", scenario));
+
+        Assert.True(module.TryBuild(
+            loadfileOnly: false,
+            formats: new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt },
+            out var config,
+            productionSet: true));
+
+        Assert.True(config.ChaosMode);
+        Assert.Equal(scenario, config.ChaosScenario);
+    }
 }

@@ -72,6 +72,19 @@ public class LoadFileEmitterTests
     }
 
     [Fact]
+    public async Task EmitRenderedLinesAsync_ConfiguredEol_WritesPreambleAndRows()
+    {
+        using var ms = new MemoryStream();
+        var withBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
+        string[] lines = ["A|B", "x|y"];
+
+        await LoadFileEmitter.EmitRenderedLinesAsync(ms, lines, withBom, "\r\n");
+
+        byte[] expected = withBom.GetPreamble().Concat(withBom.GetBytes("A|B\r\nx|y\r\n")).ToArray();
+        Assert.Equal(expected, ms.ToArray());
+    }
+
+    [Fact]
     public async Task NoChaos_StreamsLargeInputWithoutLoss()
     {
         using var ms = new MemoryStream();
