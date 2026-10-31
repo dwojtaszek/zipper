@@ -455,11 +455,11 @@ internal static class CrossFormatAnomalyApplier
         long lineNumber = 2;
         foreach (var record in records.OriginalOrder)
         {
-            long effectiveLineNumber = Math.Min(lineNumber, maxLineNumber);
-            AddLineNumber(lineNumbers, record.Fields, docIdIndex, effectiveLineNumber);
-            AddLineNumber(lineNumbers, record.Fields, batesIndex, effectiveLineNumber);
             if (records.IsActive(record))
             {
+                long effectiveLineNumber = Math.Min(lineNumber, maxLineNumber);
+                AddLineNumber(lineNumbers, record.Fields, docIdIndex, effectiveLineNumber);
+                AddLineNumber(lineNumbers, record.Fields, batesIndex, effectiveLineNumber);
                 lineNumber++;
             }
         }
@@ -998,7 +998,7 @@ internal static class CrossFormatAnomalyApplier
             targetedRecords.Add(childRec);
 
             var optParent = FindMatchingOptForDat(optDocsByKey, parentRec)
-                ?? optDocs[Math.Min(childRec.ActiveIndex, optDocs.Count - 1)];
+                ?? optDocs[Math.Min(Math.Max(childRec.ActiveIndex, 0), optDocs.Count - 1)];
             string parentIdColumnName = parentIdIndex >= 0 ? headers[parentIdIndex] : "PARENTDOCID";
 
             datAnomalies.Add(new ChaosAnomaly
@@ -1050,10 +1050,9 @@ internal static class CrossFormatAnomalyApplier
         targetRec.ParentId = missingParentId;
         targetRec.Fields[parentIdIndex] = missingParentId;
         targetRec.IsDirty = true;
-        AddFamilyCandidate(targetRec, familyCandidates);
 
         var optPeer = FindMatchingOptForDat(optDocsByKey, targetRec)
-            ?? optDocs[Math.Min(targetRec.ActiveIndex, optDocs.Count - 1)];
+            ?? optDocs[Math.Min(Math.Max(targetRec.ActiveIndex, 0), optDocs.Count - 1)];
 
         datAnomalies.Add(new ChaosAnomaly
         {
@@ -1125,6 +1124,8 @@ internal static class CrossFormatAnomalyApplier
             var optChild = FindMatchingOptForDat(optDocsByKey, childRec);
             if (optChild is null)
             {
+                targetedRecords.Add(childRec);
+                familyCandidateIndex++;
                 return;
             }
 
@@ -1347,6 +1348,7 @@ internal static class CrossFormatAnomalyApplier
                 continue;
             }
 
+            candidateIndex++;
             return candidate;
         }
 
@@ -1362,20 +1364,25 @@ internal static class CrossFormatAnomalyApplier
         }
     }
 
-    private static int EnsureParentIdColumn(int columnIndex, List<string> headers, ActiveDatRecords records)
+    private static int EnsureColumn(
+        int columnIndex,
+        Func<IReadOnlyList<string>, int> findColumn,
+        string columnName,
+        List<string> headers,
+        ActiveDatRecords records)
     {
         if (columnIndex >= 0)
         {
             return columnIndex;
         }
 
-        columnIndex = FindParentIdColumn(headers);
+        columnIndex = findColumn(headers);
         if (columnIndex >= 0)
         {
             return columnIndex;
         }
 
-        headers.Add("PARENTDOCID");
+        headers.Add(columnName);
         foreach (var record in records.OriginalOrder)
         {
             while (record.Fields.Count < headers.Count - 1)
@@ -1389,32 +1396,11 @@ internal static class CrossFormatAnomalyApplier
         return headers.Count - 1;
     }
 
-    private static int EnsureEndAttachColumn(int columnIndex, List<string> headers, ActiveDatRecords records)
-    {
-        if (columnIndex >= 0)
-        {
-            return columnIndex;
-        }
+    private static int EnsureParentIdColumn(int columnIndex, List<string> headers, ActiveDatRecords records) =>
+        EnsureColumn(columnIndex, FindParentIdColumn, "PARENTDOCID", headers, records);
 
-        columnIndex = FindEndAttachColumn(headers);
-        if (columnIndex >= 0)
-        {
-            return columnIndex;
-        }
-
-        headers.Add("ENDATTACH");
-        foreach (var record in records.OriginalOrder)
-        {
-            while (record.Fields.Count < headers.Count - 1)
-            {
-                record.Fields.Add(string.Empty);
-            }
-
-            record.Fields.Add(string.Empty);
-        }
-
-        return headers.Count - 1;
-    }
+    private static int EnsureEndAttachColumn(int columnIndex, List<string> headers, ActiveDatRecords records) =>
+        EnsureColumn(columnIndex, FindEndAttachColumn, "ENDATTACH", headers, records);
 
     private static int FindParentIdColumn(IReadOnlyList<string> headers) =>
         IndexOfAny(headers, "PARENTDOCID", "Parent Doc ID");

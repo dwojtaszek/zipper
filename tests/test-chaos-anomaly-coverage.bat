@@ -186,9 +186,9 @@ for %%F in ("%SCEN_DIR%\run1\*.dat") do set "DAT_FILE=%%~fF"
 for %%F in ("%SCEN_DIR%\run1\*.opt") do set "OPT_FILE=%%~fF"
 for %%F in ("%SCEN_DIR%\run1\*.csv") do set "CSV_FILE=%%~fF"
 for %%F in ("%SCEN_DIR%\run1\*_properties.json") do (
-    echo %%~nxF | findstr /i /e ".opt_properties.json" >nul
+    echo %%~nxF| findstr /i /e /l ".opt_properties.json" >nul
     if errorlevel 1 (
-        echo %%~nxF | findstr /i /e "_csv_properties.json" >nul
+        echo %%~nxF| findstr /i /e /l "_csv_properties.json" >nul
         if errorlevel 1 (set "DAT_PROPS=%%~fF") else (set "CSV_PROPS=%%~fF")
     ) else (
         set "OPT_PROPS=%%~fF"

@@ -301,6 +301,19 @@ public class ChaosModuleTests
             productionSet: true));
     }
 
+    [Fact]
+    public void TryBuild_ProductionSetWithChaosModeWithoutScenario_Fails()
+    {
+        var module = new ChaosModule();
+        Assert.True(module.TryApply("--chaos-mode", null));
+
+        Assert.False(module.TryBuild(
+            loadfileOnly: false,
+            formats: new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt },
+            out _,
+            productionSet: true));
+    }
+
     [Theory]
     [InlineData("cross-format-desync")]
     [InlineData("broken-families")]

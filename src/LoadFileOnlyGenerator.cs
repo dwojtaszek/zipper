@@ -194,8 +194,11 @@ internal static class LoadFileOnlyGenerator
         List<string> createdFiles,
         CancellationToken cancellationToken)
     {
-        var datRequest = EnsureStableOptPageCounts(request, LoadFileFormat.Dat);
-        var optRequest = EnsureStableOptPageCounts(request, LoadFileFormat.Opt);
+        var sharedSeed = request.Metadata.Seed ?? Random.Shared.Next();
+        var seededRequest = request.Clone();
+        seededRequest.Metadata = request.Metadata with { Seed = sharedSeed };
+        var datRequest = EnsureStableOptPageCounts(seededRequest, LoadFileFormat.Dat);
+        var optRequest = EnsureStableOptPageCounts(seededRequest, LoadFileFormat.Opt);
 
         var datPath = Path.Combine(request.Output.OutputPath, $"{baseFileName}.dat");
         var optPath = Path.Combine(request.Output.OutputPath, $"{baseFileName}.opt");
@@ -223,7 +226,7 @@ internal static class LoadFileOnlyGenerator
 
         var eol = LoadFiles.LoadFileEmitter.GetEolString(request.Delimiters.EndOfLine);
 
-        // 4. Write mutated DAT
+        // Write mutated DAT
         var datFileStream = new FileStream(datPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
         createdFiles.Add(datPath);
         await using (datFileStream.ConfigureAwait(false))
@@ -246,7 +249,7 @@ internal static class LoadFileOnlyGenerator
             totalRecordsOverride: result.DatLines.Count - 1L);
         await WriteAuditFileAsync(datPropertiesPath, datAuditJson, createdFiles, cancellationToken).ConfigureAwait(false);
 
-        // 5. Write mutated OPT
+        // Write mutated OPT
         var optFileStream = new FileStream(optPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
         createdFiles.Add(optPath);
         await using (optFileStream.ConfigureAwait(false))

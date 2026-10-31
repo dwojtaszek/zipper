@@ -616,7 +616,7 @@ internal static class ProductionSetOrchestrator
 
             var eol = LoadFiles.LoadFileEmitter.GetEolString(request.Delimiters.EndOfLine);
 
-            // 4. Write DAT
+            // Write DAT
             var datStream = materializer.OpenWriteStream(datPath);
             await using (datStream.ConfigureAwait(false))
             {
@@ -643,7 +643,7 @@ internal static class ProductionSetOrchestrator
                 await sw.WriteAsync(datAuditJson.AsMemory(), cancellationToken).ConfigureAwait(false);
             }
 
-            // 5. Write OPT
+            // Write OPT
             var optStream = materializer.OpenWriteStream(optPath);
             await using (optStream.ConfigureAwait(false))
             {

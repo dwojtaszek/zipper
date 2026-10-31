@@ -542,6 +542,17 @@ public class CliPipelineTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void Build_LoadfileOnlyCrossFormatScenarioWithoutFormats_DefaultsToDatAndOpt()
+    {
+        var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--chaos-mode", "--chaos-scenario", "cross-format-desync" };
+
+        var (result, _, _) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
+
+        Assert.NotNull(result);
+        Assert.Equal(new[] { LoadFileFormat.Dat, LoadFileFormat.Opt }, result!.LoadFile.Formats);
+    }
+
+    [Fact]
     public void ValidateAndParseArguments_ChaosAmount_WithoutChaosMode_ShouldReturnNull()
     {
         var args = new[] { "--loadfile-only", "--count", "10", "--output-path", this.tempDir, "--chaos-amount", "5%" };

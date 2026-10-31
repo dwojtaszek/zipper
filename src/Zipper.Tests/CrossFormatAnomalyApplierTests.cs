@@ -85,6 +85,45 @@ public sealed class CrossFormatAnomalyApplierTests : IDisposable
     }
 
     [Fact]
+    public void Apply_NullArguments_ThrowsArgumentNullException()
+    {
+        var (datLines, optLines) = CreateSampleLines();
+        Assert.Throws<ArgumentNullException>(() => CrossFormatAnomalyApplier.Apply(null!, optLines, "cross-format-desync", "1"));
+        Assert.Throws<ArgumentNullException>(() => CrossFormatAnomalyApplier.Apply(datLines, null!, "cross-format-desync", "1"));
+        Assert.Throws<ArgumentNullException>(() => CrossFormatAnomalyApplier.Apply(datLines, optLines, "cross-format-desync", "1", (Random)null!));
+    }
+
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(1, 0)]
+    [InlineData(1, 2)]
+    [InlineData(3, 0)]
+    public void Apply_EmptyOrHeaderOnlyBuffers_ReturnsUntouchedLinesAndEmptyAnomalies(int datCount, int optCount)
+    {
+        var datLines = Enumerable.Range(0, datCount).Select(i => $"Line{i}").ToList();
+        var optLines = Enumerable.Range(0, optCount).Select(i => $"Opt{i},V,P,Y,,,").ToList();
+        var result = CrossFormatAnomalyApplier.Apply(datLines, optLines, scenarioOrTypes: "cross-format-desync", chaosAmount: "1", seed: 42);
+        Assert.Equal(datLines, result.DatLines);
+        Assert.Equal(optLines, result.OptLines);
+        Assert.Empty(result.Anomalies);
+    }
+
+    [Fact]
+    public void Apply_UnalignedOptKeys_FallsBackToUnprocessedDatRecord()
+    {
+        var datLines = new List<string>
+        {
+            JoinDat("DOCID", "BATES_NUMBER", "IMAGE_PATH", "PAGECOUNT", "VOLUME"),
+            JoinDat("DOC001", "BATES001", @"IMAGES\VOL001\DOC001.tif", "1", "VOL001"),
+        };
+        var optLines = new List<string> { @"MISMATCHED_KEY,VOL001,IMAGES\VOL001\DOC001.tif,Y,,,1" };
+        var result = CrossFormatAnomalyApplier.Apply(datLines, optLines, scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncPagecount, chaosAmount: "1", seed: 42);
+        Assert.NotEmpty(result.Anomalies);
+        Assert.Equal("DOC001", result.DatAnomalies[0].RecordID);
+        Assert.Equal("MISMATCHED_KEY", result.OptAnomalies[0].RecordID);
+    }
+
+    [Fact]
     public void Apply_ZeroAmount_MakesNoChanges()
     {
         var (datLines, optLines) = CreateSampleLines();
