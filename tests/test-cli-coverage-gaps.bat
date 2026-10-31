@@ -214,15 +214,34 @@ if !ZIPPER_EXIT! equ 0 (
 )
 if exist "%ERR_FILE%" del /f /q "%ERR_FILE%"
 
-echo [ INFO ] Test: --mime-realism produces realistic EML output
-call "%ZIPPER_CMD%" --type eml --count 5 --seed 42 --output-path "%TEST_OUTPUT_DIR%\mime-realism-gen" --mime-realism standard > nul 2>&1
-set "ZIPPER_EXIT=!ERRORLEVEL!"
-if !ZIPPER_EXIT! equ 0 (
-    echo [ PASS ] PASS: --mime-realism eml generation succeeded
-    set /a PASSED+=1
-) else (
-    echo [ ERROR ] FAIL: --mime-realism eml generation command failed with exit code !ZIPPER_EXIT!
-    set /a FAILED+=1
+for %%M in (standard full) do (
+    set "MIME_MODE=%%M"
+    set "MIME_OUTPUT=%TEST_OUTPUT_DIR%\mime-realism-!MIME_MODE!"
+    echo [ INFO ] Test: --mime-realism !MIME_MODE! produces parser-readable MIME structures
+    call "%ZIPPER_CMD%" --type eml --count 32 --seed 42 --attachment-rate 100 --output-path "!MIME_OUTPUT!" --mime-realism !MIME_MODE! >nul 2>&1
+    set "ZIPPER_EXIT=!ERRORLEVEL!"
+    if !ZIPPER_EXIT! equ 0 (
+        set "MIME_ZIP="
+        set "MIME_DAT="
+        for %%F in ("!MIME_OUTPUT!\*.zip") do if exist "%%~fF" set "MIME_ZIP=%%~fF"
+        for %%F in ("!MIME_OUTPUT!\*.dat") do if exist "%%~fF" set "MIME_DAT=%%~fF"
+        if defined MIME_ZIP if defined MIME_DAT (
+            python "%~dp0validate_mime_realism.py" !MIME_MODE! "!MIME_ZIP!" "!MIME_DAT!" >nul
+            if errorlevel 1 (
+                echo [ ERROR ] FAIL: --mime-realism !MIME_MODE! failed MIME parser validation
+                set /a FAILED+=1
+            ) else (
+                echo [ PASS ] PASS: --mime-realism !MIME_MODE! passes the standard MIME parser checks
+                set /a PASSED+=1
+            )
+        ) else (
+            echo [ ERROR ] FAIL: --mime-realism !MIME_MODE! archive or DAT file not found
+            set /a FAILED+=1
+        )
+    ) else (
+        echo [ ERROR ] FAIL: --mime-realism !MIME_MODE! generation failed with exit code !ZIPPER_EXIT!
+        set /a FAILED+=1
+    )
 )
 
 REM --- Cleanup ---

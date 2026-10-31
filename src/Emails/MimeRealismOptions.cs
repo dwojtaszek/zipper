@@ -15,7 +15,6 @@ public record MimeRealismOptions
         QuotedPrintableBody = true,
         MultipartAlternative = true,
         MultiAttachment = true,
-        NestedRfc822 = true,
     };
 
     public static readonly MimeRealismOptions Full = new()
@@ -24,9 +23,11 @@ public record MimeRealismOptions
         EncodedWords = true,
         HeaderFolding = true,
         QuotedPrintableBody = true,
+        Base64Body = true,
         MultipartAlternative = true,
         MultiAttachment = true,
         NestedRfc822 = true,
+        DeliberatelyNonRfc = true,
     };
 
     public bool IsEnabled { get; init; }
@@ -47,7 +48,7 @@ public record MimeRealismOptions
 
     public bool DeliberatelyNonRfc { get; init; }
 
-    public int MaxNestingDepth { get; init; } = 1;
+    public int MaxNestingDepth { get; init; } = 2;
 
     public static MimeRealismOptions Parse(string? value)
     {

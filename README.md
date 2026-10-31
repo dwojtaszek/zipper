@@ -45,6 +45,13 @@ Generate deterministic Email reply and forward chains with RFC 5322 threading he
 zipper --type eml --count 10000 --output-path ./threaded_emails --with-threading --seed 42
 ```
 
+#### MIME Realism
+Generate Emails with encoded subjects, alternative body parts, multiple Attachments, and bounded nested Emails:
+```bash
+zipper --type eml --count 1000 --output-path ./mime_realism --mime-realism full --attachment-rate 50 --seed 42
+```
+Use `--mime-realism standard` for RFC-compliant MIME diversity without nested Emails or deliberately non-RFC headers.
+
 #### 3. Generate a Legal Production Set
 Generate a structured e-discovery Production Set with Bates numbering and volume output:
 ```bash

@@ -24,17 +24,22 @@ public class MimeRealismTests
         Assert.True(standard.QuotedPrintableBody);
         Assert.True(standard.MultipartAlternative);
         Assert.True(standard.MultiAttachment);
-        Assert.True(standard.NestedRfc822);
+        Assert.False(standard.Base64Body);
+        Assert.False(standard.NestedRfc822);
         Assert.False(standard.DeliberatelyNonRfc);
+        Assert.Equal(2, standard.MaxNestingDepth);
 
         var full = MimeRealismOptions.Parse("full");
         Assert.True(full.IsEnabled);
         Assert.True(full.EncodedWords);
         Assert.True(full.HeaderFolding);
         Assert.True(full.QuotedPrintableBody);
+        Assert.True(full.Base64Body);
         Assert.True(full.MultipartAlternative);
         Assert.True(full.MultiAttachment);
         Assert.True(full.NestedRfc822);
+        Assert.True(full.DeliberatelyNonRfc);
+        Assert.Equal(2, full.MaxNestingDepth);
 
         var custom = MimeRealismOptions.Parse("encoded-words,nested-rfc822,non-rfc");
         Assert.True(custom.IsEnabled);
@@ -74,6 +79,37 @@ public class MimeRealismTests
 
         var decoded = Rfc2047Helper.Decode(subjectLine);
         Assert.Equal(originalSubject, decoded);
+    }
+
+    [Fact]
+    public void ToEml_WithEncodedWordsAndLongSingleWord_FoldsSubjectHeader()
+    {
+        const string originalSubject = "界界界界界界界界界界界界界界界";
+        var email = new Email
+        {
+            To = "to@example.com",
+            From = "from@example.com",
+            Subject = originalSubject,
+            SentDate = new DateTime(2024, 1, 15, 12, 0, 0, DateTimeKind.Utc),
+            Body = "Test message body.",
+        };
+        var options = new MimeRealismOptions
+        {
+            IsEnabled = true,
+            EncodedWords = true,
+            HeaderFolding = true,
+        };
+
+        string emlText = Encoding.UTF8.GetString(EmailSerializer.ToEml(email, null, seeded: null, options));
+        string[] lines = emlText.Split("\r\n", StringSplitOptions.None);
+        int subjectIndex = Array.FindIndex(lines, line => line.StartsWith("Subject:", StringComparison.Ordinal));
+
+        Assert.True(subjectIndex >= 0, "Expected a Subject header.");
+        Assert.Equal("Subject:", lines[subjectIndex]);
+        Assert.StartsWith(" ", lines[subjectIndex + 1], StringComparison.Ordinal);
+        var subjectLines = lines.Skip(subjectIndex + 1).TakeWhile((line, index) => index == 0 || line.StartsWith(' ')).ToArray();
+        Assert.All(subjectLines, line => Assert.InRange(line.Length, 1, 76));
+        Assert.Equal(originalSubject, Rfc2047Helper.Decode(string.Join("\r\n", subjectLines).TrimStart()));
     }
 
     [Fact]
@@ -140,7 +176,7 @@ public class MimeRealismTests
             From = "from@example.com",
             Subject = "QP Test",
             SentDate = new DateTime(2024, 1, 15, 12, 0, 0, DateTimeKind.Utc),
-            Body = "Line with accents: café, résumé, naïve & special chars = 100%!",
+            Body = "Line with accents: café, résumé, naïve & special chars = 100%! " + new string('x', 100),
         };
 
         var options = new MimeRealismOptions
@@ -154,12 +190,15 @@ public class MimeRealismTests
 
         Assert.Contains("Content-Transfer-Encoding: quoted-printable", emlText, StringComparison.Ordinal);
         Assert.Contains("=3D", emlText, StringComparison.Ordinal); // '=' encoded as =3D
+        string encodedBody = emlText.Split("\r\n\r\n", 2, StringSplitOptions.None)[1];
+        Assert.Contains("=\r\n", encodedBody, StringComparison.Ordinal);
+        Assert.All(encodedBody.Split("\r\n", StringSplitOptions.None), line => Assert.InRange(line.Length, 0, 76));
     }
 
     [Fact]
     public void ToEml_WithBase64Body_EncodesBodyAndSetsHeader()
     {
-        const string bodyText = "Secret message content to be encoded in base64 format.";
+        string bodyText = "Secret message content to be encoded in base64 format. " + new string('x', 100);
         var email = new Email
         {
             To = "to@example.com",
@@ -179,8 +218,39 @@ public class MimeRealismTests
         var emlText = Encoding.UTF8.GetString(emlBytes);
 
         Assert.Contains("Content-Transfer-Encoding: base64", emlText, StringComparison.Ordinal);
-        var expectedBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(bodyText));
+        var expectedBase64 = Convert.ToBase64String(
+            Encoding.UTF8.GetBytes(bodyText),
+            Base64FormattingOptions.InsertLineBreaks);
         Assert.Contains(expectedBase64, emlText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ToEml_WithFullMimeRealism_EmitsBothBodyTransferEncodings()
+    {
+        var email = new Email
+        {
+            To = "to@example.com",
+            From = "from@example.com",
+            Subject = "Full MIME realism",
+            SentDate = new DateTime(2024, 1, 15, 12, 0, 0, DateTimeKind.Utc),
+            Body = "Body with café and enough content to exercise body transfer encodings.",
+        };
+
+        var encodings = new HashSet<string>(StringComparer.Ordinal);
+        for (int seed = 0; seed < 32; seed++)
+        {
+            var eml = Encoding.UTF8.GetString(EmailSerializer.ToEml(email, null, new Random(seed), MimeRealismOptions.Full));
+            foreach (var line in eml.Split("\r\n", StringSplitOptions.None))
+            {
+                if (line.StartsWith("Content-Transfer-Encoding: ", StringComparison.Ordinal))
+                {
+                    encodings.Add(line["Content-Transfer-Encoding: ".Length..]);
+                }
+            }
+        }
+
+        Assert.Contains("quoted-printable", encodings);
+        Assert.Contains("base64", encodings);
     }
 
     [Fact]
@@ -362,6 +432,93 @@ public class MimeRealismTests
     }
 
     [Fact]
+    public void EmlFileGenerator_WithNestedRfc822_EmitsNestedMessagesWithinDepthLimit()
+    {
+        const int maxNestingDepth = 2;
+        const int fileCount = 128;
+        var generator = new EmlFileGenerator();
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = fileCount, Concurrency = 1 },
+            Metadata = new MetadataConfig { Seed = 12345, MimeRealism = "nested-rfc822" },
+            LoadFile = new LoadFileConfig { AttachmentRate = 0 },
+        };
+
+        var nestedPartCounts = new List<int>(fileCount);
+        for (long i = 1; i <= fileCount; i++)
+        {
+            var item = new FileWorkItem { Index = i, FileName = $"{i:D8}.eml", FolderName = "f", FolderNumber = 1 };
+            var eml = Encoding.UTF8.GetString(generator.Generate(item, request).Content);
+            nestedPartCounts.Add(CountOccurrences(eml, "Content-Type: message/rfc822;"));
+        }
+
+        Assert.Contains(nestedPartCounts, count => count > 0);
+        Assert.Contains(nestedPartCounts, count => count == maxNestingDepth);
+        Assert.All(nestedPartCounts, count => Assert.InRange(count, 0, maxNestingDepth));
+    }
+
+    [Fact]
+    public async Task EmlFileGenerator_WithNestedRfc822_UsesSeededReferenceDateForNestedEmails()
+    {
+        const int fileCount = 128;
+        var generator = new EmlFileGenerator();
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = fileCount, Concurrency = 1 },
+            Metadata = new MetadataConfig { Seed = 12345, MimeRealism = "nested-rfc822" },
+            LoadFile = new LoadFileConfig { AttachmentRate = 0 },
+        };
+
+        FileWorkItem? nestedItem = null;
+        byte[]? firstContents = null;
+        for (long i = 1; i <= fileCount; i++)
+        {
+            var item = new FileWorkItem { Index = i, FileName = $"{i:D8}.eml", FolderName = "f", FolderNumber = 1 };
+            var contents = generator.Generate(item, request).Content;
+            if (Encoding.UTF8.GetString(contents).Contains("Content-Type: message/rfc822;", StringComparison.Ordinal))
+            {
+                nestedItem = item;
+                firstContents = contents;
+                break;
+            }
+        }
+
+        Assert.NotNull(nestedItem);
+        Assert.NotNull(firstContents);
+        await Task.Delay(TimeSpan.FromSeconds(1.1));
+
+        var secondContents = generator.Generate(nestedItem, request).Content;
+        Assert.Equal(firstContents, secondContents);
+    }
+
+    [Fact]
+    public void EmlFileGenerator_WithFullMimeRealism_ProducesByteIdenticalOutputForSameSeed()
+    {
+        var generator = new EmlFileGenerator();
+        var request1 = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 5, Concurrency = 1 },
+            Metadata = new MetadataConfig { Seed = 888, MimeRealism = "full" },
+            LoadFile = new LoadFileConfig { AttachmentRate = 100 },
+        };
+        var request2 = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 5, Concurrency = 1 },
+            Metadata = new MetadataConfig { Seed = 888, MimeRealism = "full" },
+            LoadFile = new LoadFileConfig { AttachmentRate = 100 },
+        };
+
+        for (long i = 1; i <= 5; i++)
+        {
+            var item = new FileWorkItem { Index = i, FileName = $"{i:D8}.eml", FolderName = "f", FolderNumber = 1 };
+            var result1 = generator.Generate(item, request1);
+            var result2 = generator.Generate(item, request2);
+
+            Assert.Equal(result1.Content, result2.Content);
+        }
+    }
+
+    [Fact]
     public void EmlFileGenerator_WithoutMimeRealism_MaintainsLegacyGoldenBytes()
     {
         var generator = new EmlFileGenerator();
@@ -377,5 +534,18 @@ public class MimeRealismTests
         Assert.Equal(
             "2577c72e5c61570d9e8e638b109068bed4087e3533bfbc67086421cf899f7c91",
             Convert.ToHexString(SHA256.HashData(result.Content)).ToLowerInvariant());
+    }
+
+    private static int CountOccurrences(string value, string searched)
+    {
+        int count = 0;
+        int index = 0;
+        while ((index = value.IndexOf(searched, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += searched.Length;
+        }
+
+        return count;
     }
 }

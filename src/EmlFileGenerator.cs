@@ -46,21 +46,21 @@ internal sealed class EmlFileGenerator : IFileGenerator
         var picked = new List<EmailAttachment>(EmailAttachmentPicker.Default.PickMultiple(
             workItem.Index, request.LoadFile.AttachmentRate, EmailAttachmentPicker.PlaceholderPool, random, realism.MultiAttachment));
 
-        if (realism.NestedRfc822)
+        if (realism.NestedRfc822 && realism.MaxNestingDepth > 0)
         {
-            bool shouldAddNested = (picked.Count > 0 && random.Next(2) == 0) ||
-                                  (picked.Count == 0 && request.LoadFile.AttachmentRate > 0 && random.Next(100) < request.LoadFile.AttachmentRate / 2);
+            bool shouldAddNested = random.Next(2) == 0;
 
             if (shouldAddNested)
             {
-                var childEmail = EmailFactory.Create((int)workItem.Index + 10000, (int)workItem.Index + 20000, null, random);
-                var childBytes = EmailSerializer.ToEml(childEmail, (EmailAttachment?)null, random, MimeRealismOptions.Disabled);
-                picked.Add(new EmailAttachment
+                var nestedAttachment = CreateNestedRfc822Attachment(workItem.Index, 1, random, realism, email.SentDate);
+                if (realism.MultiAttachment)
                 {
-                    FileName = $"forwarded_{workItem.Index}.eml",
-                    Content = childBytes,
-                    ContentType = "message/rfc822",
-                });
+                    picked.Add(nestedAttachment);
+                }
+                else
+                {
+                    picked.Insert(0, nestedAttachment);
+                }
             }
         }
 
@@ -72,6 +72,37 @@ internal sealed class EmlFileGenerator : IFileGenerator
             Content = bytes,
             Attachment = primary is not null ? (primary.FileName, primary.Content) : null,
             Email = email,
+        };
+    }
+
+    private static EmailAttachment CreateNestedRfc822Attachment(
+        long workItemIndex,
+        int depth,
+        Random random,
+        MimeRealismOptions realism,
+        DateTime referenceDate)
+    {
+        int recipientIndex = (int)workItemIndex + (depth * 10_000);
+        int senderIndex = recipientIndex + 10_000;
+        var nestedEmail = EmailFactory.Create(recipientIndex, senderIndex, null, random, referenceDate);
+        IReadOnlyList<EmailAttachment> nestedAttachments = Array.Empty<EmailAttachment>();
+
+        if (depth < realism.MaxNestingDepth && random.Next(2) == 0)
+        {
+            nestedAttachments = new[]
+            {
+                CreateNestedRfc822Attachment(workItemIndex, depth + 1, random, realism, referenceDate),
+            };
+        }
+
+        var nestedBytes = EmailSerializer.ToEmlWithAttachments(nestedEmail, nestedAttachments, random, realism);
+        return new EmailAttachment
+        {
+            FileName = depth == 1
+                ? $"forwarded_{workItemIndex}.eml"
+                : $"forwarded_{workItemIndex}_{depth}.eml",
+            Content = nestedBytes,
+            ContentType = "message/rfc822",
         };
     }
 }

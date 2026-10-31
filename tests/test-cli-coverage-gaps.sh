@@ -299,22 +299,23 @@ else
 fi
 rm -f "$err_file"
 
-print_info "Test: --mime-realism produces MIME realistic structures in EML"
-if zipper --type eml --count 5 --seed 42 --output-path "$TEST_OUTPUT_DIR/mime-realism-gen" \
-    --mime-realism standard > /dev/null 2>&1; then
-    zip_file=$(find "$TEST_OUTPUT_DIR/mime-realism-gen" -name "*.zip" -print -quit)
-    if [[ -n "$zip_file" ]]; then
-        if unzip -p "$zip_file" "*00000001.eml" | grep -q "MIME-Version: 1.0"; then
-            pass "--mime-realism generates valid EML with MIME structure"
+for mode in standard full; do
+    print_info "Test: --mime-realism $mode produces parser-readable MIME structures"
+    mime_output="$TEST_OUTPUT_DIR/mime-realism-$mode"
+    if zipper --type eml --count 32 --seed 42 --attachment-rate 100 \
+        --output-path "$mime_output" --mime-realism "$mode" > /dev/null 2>&1; then
+        zip_file=$(find "$mime_output" -name "*.zip" -print -quit)
+        dat_file=$(find "$mime_output" -name "*.dat" -print -quit)
+        if [[ -n "$zip_file" && -n "$dat_file" ]] && \
+            python3 "$(dirname "$0")/validate_mime_realism.py" "$mode" "$zip_file" "$dat_file"; then
+            pass "--mime-realism $mode passes the standard MIME parser checks"
         else
-            fail "--mime-realism missing MIME structure in 00000001.eml"
+            fail "--mime-realism $mode failed MIME parser validation"
         fi
     else
-        fail "--mime-realism archive not found"
+        fail "--mime-realism $mode EML generation command failed"
     fi
-else
-    fail "--mime-realism eml generation command failed"
-fi
+done
 
 # --- Summary ---
 

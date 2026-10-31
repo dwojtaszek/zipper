@@ -776,25 +776,29 @@ REQ-235	unit	MetadataModuleTests.TryBuild_WithThreadingWithEml_DoesNotEmitWarnin
 REQ-235	unit	MetadataModuleTests.TryBuild_WithEmailThreadingAlias_EnablesFlag	Specifying --with-email-threading alias enables flag
 REQ-235	e2e	test-cli-coverage-gaps.sh	E2E verification of --with-threading warning without EML and EML thread generation
 REQ-235	e2e	test-cli-coverage-gaps.bat	Windows batch E2E verification of --with-threading warning without EML and EML thread generation
-REQ-236	unit	MimeRealismTests.Parse_PresetLevels_ProducesExpectedFlags	MimeRealismOptions parses preset levels
-REQ-236	unit	MimeRealismTests.Parse_IndividualTokens_ProducesExpectedFlags	MimeRealismOptions parses individual tokens
-REQ-236	unit	MimeRealismTests.TryValidate_ValidTokens_ReturnsTrue	MimeRealismOptions validates valid tokens
-REQ-236	unit	MimeRealismTests.TryValidate_InvalidTokens_ReturnsFalseAndReportsError	MimeRealismOptions rejects invalid tokens
-REQ-236	unit	MimeRealismTests.Rfc2047_NonAsciiSubject_RoundTripDecodesCorrectly	Non-ASCII subject roundtrips through standard RFC 2047 MIME decoder
-REQ-236	unit	MimeRealismTests.Rfc2047_LongSubject_FoldsCorrectly	Long subjects fold to RFC 5322 CRLF whitespace lines
-REQ-236	unit	MimeRealismTests.Rfc2047_NonRfcVariant_EmitsAdjacentWordsWithoutLinearWhitespace	Non-RFC realism variant emits unspaced adjacent encoded-words
-REQ-236	unit	MimeRealismTests.QuotedPrintable_BodyEncoding_EmitsSoftBreaksAndValidLines	Quoted-printable bodies emit soft line breaks and bounded line lengths
-REQ-236	unit	MimeRealismTests.Base64_BodyEncoding_EmitsBase64AndMatchingTransferEncoding	Base64 bodies emit base64 content and matching transfer encoding header
-REQ-236	unit	MimeRealismTests.MultipartAlternative_EmitsTextPlainAndHtmlSubparts	Multipart alternative emails emit text/plain and text/html subparts
-REQ-236	unit	MimeRealismTests.MultipartAlternative_WithAttachments_EmitsMixedContainingAlternative	Multipart alternative emails with attachments emit multipart/mixed enclosing alternative
-REQ-236	unit	MimeRealismTests.MultiAttachment_EmitsMultipleAttachmentParts	Multi-attachment realism mode emits multiple attachment parts
-REQ-236	unit	MimeRealismTests.NestedRfc822_EmitsAttachedEmailPart	Nested RFC 822 realism mode emits attached email parts up to bounded depth
-REQ-236	unit	MimeRealismTests.RealismMode_IsDeterministicForSameSeed	MIME realism generation produces deterministic output for the same seed
-REQ-236	unit	MimeRealismTests.DefaultMode_MatchesGoldenBaselineSha256	Default mode maintains byte-identical SHA-256 output parity
-REQ-236	unit	EmlFileGeneratorDeterminismTests.Generate_WithMimeRealismStandard_EmitsMultipartAndIsDeterministic	EmlFileGenerator emits deterministic multipart realism output
-REQ-236	unit	MetadataModuleTests.TryBuild_MimeRealismWithoutEml_EmitsWarning	Specifying --mime-realism without EML emits warning to standard error
-REQ-236	unit	MetadataModuleTests.TryBuild_MimeRealismWithEml_DoesNotEmitWarningAndEnablesOption	Specifying --mime-realism with EML enables option without warning
-REQ-236	unit	MetadataModuleTests.TryBuild_InvalidMimeRealism_ReturnsFalseAndReportsError	Specifying invalid --mime-realism fails validation with descriptive error
-REQ-236	unit	MetadataModuleTests.TryBuild_MimeRealismAliases_ConfigureOptions	Specifying --email-mime-realism and --with-mime-realism aliases configure options
-REQ-236	e2e	test-cli-coverage-gaps.sh	E2E verification of --mime-realism warning without EML and standard realism generation
-REQ-236	e2e	test-cli-coverage-gaps.bat	Windows batch E2E verification of --mime-realism warning without EML and standard realism generation
+REQ-236	unit	MimeRealismTests.MimeRealismOptions_Parse_HandlesValidTokensAndPresets	MimeRealismOptions parses presets, capabilities, and the default two-level nesting bound
+REQ-236	unit	MimeRealismTests.ToEml_WithEncodedWords_EncodesNonAsciiSubjectAndDecodesRoundTrip	Encoded non-ASCII subjects decode to their original Unicode value
+REQ-236	unit	MimeRealismTests.ToEml_WithHeaderFolding_FoldsLongSubject	Long ASCII subjects fold at RFC 5322 whitespace boundaries
+REQ-236	unit	MimeRealismTests.ToEml_WithEncodedWordsAndLongSingleWord_FoldsSubjectHeader	A single long encoded-word folds after the Subject field name
+REQ-236	unit	MimeRealismTests.ToEml_WithDeliberatelyNonRfc_EmitsNonRfcEncodedWordVariant	Non-RFC realism emits adjacent encoded-words without linear whitespace
+REQ-236	unit	MimeRealismTests.ToEml_WithQuotedPrintableBody_EncodesBodyAndSetsHeader	Quoted-printable body content declares and uses its transfer encoding
+REQ-236	unit	MimeRealismTests.ToEml_WithBase64Body_EncodesBodyAndSetsHeader	Base64 body content declares and uses its transfer encoding
+REQ-236	unit	MimeRealismTests.ToEml_WithFullMimeRealism_EmitsBothBodyTransferEncodings	Full realism deterministically selects quoted-printable and base64 body encodings
+REQ-236	unit	MimeRealismTests.ToEml_WithMultipartAlternative_EmitsTextAndHtmlParts	Multipart alternative emits text/plain and text/html parts
+REQ-236	unit	MimeRealismTests.ToEml_WithMultipartAlternativeAndAttachment_EmitsNestedMultipartMixedAndAlternative	Multipart mixed encloses alternative body parts and attachments
+REQ-236	unit	MimeRealismTests.ToEml_WithMultiAttachment_EmitsMultipleAttachments	Multi-attachment mode emits multiple attachment parts
+REQ-236	unit	MimeRealismTests.ToEml_WithNestedRfc822_EmitsAttachedEmailPart	Nested RFC 822 mode emits attached Email parts
+REQ-236	unit	MimeRealismTests.EmlFileGenerator_WithMimeRealism_ProducesDeterministicOutputForSameSeed	Standard realism generation is byte-deterministic for the same Seed
+REQ-236	unit	MimeRealismTests.EmlFileGenerator_WithNestedRfc822_EmitsNestedMessagesWithinDepthLimit	Generated nested Email parts stay within the two-level depth limit
+REQ-236	unit	MimeRealismTests.EmlFileGenerator_WithNestedRfc822_UsesSeededReferenceDateForNestedEmails	Seeded nested Email output remains byte-identical across clock changes
+REQ-236	unit	MimeRealismTests.EmlFileGenerator_WithFullMimeRealism_ProducesByteIdenticalOutputForSameSeed	Full realism generation is byte-deterministic for the same Seed
+REQ-236	unit	MimeRealismTests.EmlFileGenerator_WithoutMimeRealism_MaintainsLegacyGoldenBytes	Default EML output matches the seeded legacy SHA-256 baseline
+REQ-236	unit	EmailSerializerPropertyTests.ToEml_WithRfc2047Subject_ShouldRoundTripAndKeepEncodedWordsWithinLimit	RFC 2047 subject serialization preserves Unicode and the 75-character encoded-word limit
+REQ-236	unit	MetadataModuleTests.TryBuild_WithMimeRealismWithoutEml_EmitsWarning	Specifying --mime-realism without EML emits warning to standard error
+REQ-236	unit	MetadataModuleTests.TryBuild_WithMimeRealismWithEml_DoesNotEmitWarningAndSetsConfig	Specifying --mime-realism with EML enables the option without warning
+REQ-236	unit	MetadataModuleTests.TryApply_InvalidMimeRealism_ReturnsFalseAndEmitsError	Specifying invalid --mime-realism fails validation with a descriptive error
+REQ-236	unit	MetadataModuleTests.TryApply_MimeRealismWithoutValue_ReturnsFalseAndEmitsError	Specifying --mime-realism without a value fails validation
+REQ-236	unit	MetadataModuleTests.TryBuild_WithEmailMimeRealismAlias_SetsConfig	Specifying --email-mime-realism alias configures MIME realism
+REQ-236	unit	MetadataModuleTests.TryBuild_WithMimeRealismFlag_SetsStandardConfig	Specifying --with-mime-realism alias configures the standard preset
+REQ-236	e2e	test-cli-coverage-gaps.sh	E2E verifies warnings and standard/full output with Python's standard MIME parser
+REQ-236	e2e	test-cli-coverage-gaps.bat	Windows E2E verifies warnings and standard/full output with Python's standard MIME parser

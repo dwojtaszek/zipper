@@ -105,9 +105,7 @@ internal static class EmailSerializer
         bool hasAttachments = effectiveAttachments.Count > 0;
         bool hasAlternative = realism.MultipartAlternative && (!string.IsNullOrEmpty(email.HtmlBody) || email.Body.Length > 0);
 
-        string transferEncoding = realism.Base64Body ? "base64"
-            : realism.QuotedPrintableBody ? "quoted-printable"
-            : "8bit";
+        string transferEncoding = SelectTransferEncoding(realism, seeded);
 
         string topBoundary = (hasAttachments || hasAlternative) ? GenerateBoundary(seeded) : string.Empty;
 
@@ -208,16 +206,18 @@ internal static class EmailSerializer
             char enc = seeded is not null && seeded.Next(10) < 3 ? 'Q' : 'B';
             subjectToEmit = Rfc2047Helper.EncodeSubject(
                 email.Subject,
-                fold: realism.HeaderFolding,
+                fold: false,
                 nonRfc: realism.DeliberatelyNonRfc,
                 preferredEncoding: enc);
         }
-        else if (realism.HeaderFolding && subjectToEmit.Length > 75)
+
+        string subjectHeader = $"Subject: {subjectToEmit}";
+        if (realism.HeaderFolding)
         {
-            subjectToEmit = Rfc2047Helper.FoldHeaderLine("Subject: " + subjectToEmit)["Subject: ".Length..];
+            subjectHeader = Rfc2047Helper.FoldHeaderLine(subjectHeader);
         }
 
-        writer.WriteLine($"Subject: {subjectToEmit}");
+        writer.WriteLine(subjectHeader);
         writer.WriteLine($"Date: {email.SentDate.ToString("ddd, dd MMM yyyy HH:mm:ss zzz", CultureInfo.InvariantCulture)}");
 
         if (!string.IsNullOrEmpty(email.MessageId))
@@ -327,6 +327,22 @@ internal static class EmailSerializer
         {
             writer.WriteLine(body);
         }
+    }
+
+    private static string SelectTransferEncoding(MimeRealismOptions realism, Random? seeded)
+    {
+        if (realism.Base64Body && realism.QuotedPrintableBody)
+        {
+            var random = seeded ?? Random.Shared;
+            return random.Next(2) == 0 ? "quoted-printable" : "base64";
+        }
+
+        if (realism.Base64Body)
+        {
+            return "base64";
+        }
+
+        return realism.QuotedPrintableBody ? "quoted-printable" : "8bit";
     }
 
     private static void WriteSingleAttachmentPart(TextWriter writer, EmailAttachment attachment, string boundary)
