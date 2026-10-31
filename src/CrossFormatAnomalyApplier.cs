@@ -141,7 +141,9 @@ internal static class CrossFormatAnomalyApplier
         string optFileName = "loadfile.opt",
         string newlineDelimiter = "\u00ae")
     {
+#pragma warning disable S2245 // Pseudo-randomness is safe for mock load-file anomaly injection
         var random = seed.HasValue ? new Random(seed.Value) : new Random();
+#pragma warning restore S2245
         return Apply(datLines, optLines, scenarioOrTypes, chaosAmount, random, columnDelimiter, quoteDelimiter, datFileName, optFileName, newlineDelimiter);
     }
 

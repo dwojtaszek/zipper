@@ -194,7 +194,9 @@ internal static class LoadFileOnlyGenerator
         List<string> createdFiles,
         CancellationToken cancellationToken)
     {
+#pragma warning disable S2245 // Pseudo-randomness is safe for mock load-file anomaly injection
         var sharedSeed = request.Metadata.Seed ?? Random.Shared.Next();
+#pragma warning restore S2245
         var seededRequest = request.Clone();
         seededRequest.Metadata = request.Metadata with { Seed = sharedSeed };
         var datRequest = EnsureStableOptPageCounts(seededRequest, LoadFileFormat.Dat);
