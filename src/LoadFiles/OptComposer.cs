@@ -104,7 +104,8 @@ internal sealed class OptComposer : ILoadFileComposer
             int actualPages = expandPages ? Math.Max(1, fileData.PageCount) : 1;
             bool hasAttachment = this.request.Metadata.WithFamilies
                 && string.Equals(recordType, "eml", StringComparison.Ordinal)
-                && fileData.Attachment.HasValue;
+                && fileData.GetAttachmentMetadata().Count > 0;
+            var attachments = hasAttachment ? fileData.GetAttachmentMetadata() : Array.Empty<FileAttachmentMetadata>();
 
             foreach (var entry in GeneratePageEntries(baseBatesNumber, baseImagePath, actualPages))
             {
@@ -113,11 +114,14 @@ internal sealed class OptComposer : ILoadFileComposer
 
             if (hasAttachment)
             {
-                string childBates = $"{baseBatesNumber}_A001";
-                string childImagePath = isProductionSet
-                    ? Path.Combine("IMAGES", volume, $"{childBates}.tif").Replace('/', '\\')
-                    : $"IMAGES\\{childBates}.tif";
-                yield return MakeRecord(childBates, volume, childImagePath, "Y", "1");
+                for (int attachmentIndex = 0; attachmentIndex < attachments.Count; attachmentIndex++)
+                {
+                    string childBates = FamilyPlan.GetChildId(baseBatesNumber, attachmentIndex + 1);
+                    string childImagePath = isProductionSet
+                        ? Path.Combine("IMAGES", volume, $"{childBates}.tif").Replace('/', '\\')
+                        : $"IMAGES\\{childBates}.tif";
+                    yield return MakeRecord(childBates, volume, childImagePath, "Y", "1");
+                }
             }
         }
     }

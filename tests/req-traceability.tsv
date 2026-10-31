@@ -150,6 +150,20 @@ REQ-061	unit	CsvComposingWriterTests.CsvWriter_WithFamilies_IncludesFamilyColumn
 REQ-061	unit	OptComposingWriterTests.WriteAsync_WithFamilies_IncludesFamilyAttachments	OPT writer includes attachment child rows
 REQ-061	unit	LoadFileOnlyGeneratorTests.GenerateAsync_WithFamiliesForSyntheticRows_IncludesChildRecordsAndAuditsThem	Loadfile-Only CSV/Concordance/EDRM-XML family child records are counted and written
 REQ-062	unit	ZipArchiveServiceTests.CreateArchiveAsync_WithEmlFilesAndAttachments_HandlesAttachmentsCorrectly	Email attachments linked as children
+REQ-062	unit	DatComposingWriterTests.DatWriter_WithFamilies_StandardMode_IncludesFamilyColumnsAndRows	Multiple MIME Attachments receive sequential Standard DAT family child records
+REQ-062	unit	DatComposingWriterTests.DatWriter_WithFamilies_ProductionSetMode_DoesNotReplaceNonImageExtension	Multiple MIME Attachments receive sequential Production Set DAT family child records
+REQ-062	unit	CsvComposingWriterTests.CsvWriter_WithFamilies_IncludesFamilyColumnsAndRows	Multiple MIME Attachments receive CSV family child records with the full family range
+REQ-062	unit	ConcordanceComposingWriterTests.ConcordanceWriter_WithFamilies_IncludesFamilyColumnsAndRows	Multiple MIME Attachments receive Concordance family child records
+REQ-062	unit	OptComposingWriterTests.WriteAsync_WithFamilies_IncludesFamilyAttachments	OPT includes one child row per MIME Attachment
+REQ-062	unit	XmlLoadFileWriterTests.XmlLoadFileWriter_WithFamilies_ProducesParentChildDocumentsAndRelationships	EDRM-XML emits one child Document and Relationship per MIME Attachment
+REQ-062	unit	ProductionSetOrchestratorTests.GenerateAsync_WithFamiliesAndEml_GeneratesChildAttachments	Production Set materializes all MIME Attachment child files
+REQ-062	unit	ProductionManifestWriterTests.WriteAsync_WithMultipleFamilyAttachments_CountsNativeAndRedactedChildren	Production Manifest and redaction counts include all family children
+REQ-062	unit	LoadFileAuditWriterTests.GenerateAuditJson_WithMultipleAttachments_CountsEachFamilyChild	Load File audit counts every MIME Attachment child row
+REQ-062	unit	ZipArchiveServiceTests.CreateArchiveAsync_WithEmlAttachmentsAndText_IncludesAttachmentTextFiles	Archive writes a unique Extracted Text sidecar for every MIME Attachment
+REQ-062	e2e	test-cli-coverage-gaps.sh	Standard MIME Attachments are materialized, linked as Document Family children, and receive unique Extracted Text sidecars
+REQ-062	e2e	test-cli-coverage-gaps.bat	Windows verifies standard MIME Attachment family records and unique Extracted Text sidecars
+REQ-062	unit	LoadFileComposerAndEmitterPropertyTests.FamilyPlan_Create_ShouldPreserveParentOrderAndAttachmentBoundsAndDeterminism	Property: family identifiers and Extracted Text paths cover every MIME Attachment
+REQ-062	unit	StreamingAndCliRulesPropertyTests.FileDataSerializer_SerializeAndDeserialize_ShouldRoundTripTheMetadataProjection	Property: disk-backed spool preserves all Attachment filenames and lengths without payload bytes
 REQ-063	unit	CliModuleSetTests.Parse_ColumnProfileArgs_ParsesCorrectly	--column-profile argument
 REQ-063	unit	ProfileDrivenDatComposingWriterTests.WriteAsync_ProducesHeaderFromProfileColumns	Profile-driven DAT generation with --column-profile
 REQ-064	unit	ColumnProfileLoaderTests.Load_WithBuiltInProfileName_ReturnsProfile	Built-in name or file path
@@ -800,5 +814,7 @@ REQ-236	unit	MetadataModuleTests.TryApply_InvalidMimeRealism_ReturnsFalseAndEmit
 REQ-236	unit	MetadataModuleTests.TryApply_MimeRealismWithoutValue_ReturnsFalseAndEmitsError	Specifying --mime-realism without a value fails validation
 REQ-236	unit	MetadataModuleTests.TryBuild_WithEmailMimeRealismAlias_SetsConfig	Specifying --email-mime-realism alias configures MIME realism
 REQ-236	unit	MetadataModuleTests.TryBuild_WithMimeRealismFlag_SetsStandardConfig	Specifying --with-mime-realism alias configures the standard preset
-REQ-236	e2e	test-cli-coverage-gaps.sh	E2E verifies warnings and standard/full output with Python's standard MIME parser
-REQ-236	e2e	test-cli-coverage-gaps.bat	Windows E2E verifies warnings and standard/full output with Python's standard MIME parser
+REQ-236	unit	MimeRealismTests.ToEml_WithHeaderFolding_FoldsLongReferencesHeader	Long References header is folded at continuation boundaries
+REQ-236	unit	MimeRealismTests.EmlFileGenerator_WithNestedRfc822AndFullAttachmentRate_PreservesRateSelectedPlaceholder	Nested MIME realism preserves a rate-selected Attachment when multi-attachment is disabled
+REQ-236	e2e	test-cli-coverage-gaps.sh	E2E verifies warnings, standard/full body fidelity, multi-Attachment family records and text sidecars, and MIME parser output
+REQ-236	e2e	test-cli-coverage-gaps.bat	Windows E2E verifies warnings, standard/full body fidelity, multi-Attachment family records and text sidecars, and MIME parser output

@@ -90,12 +90,15 @@ internal abstract class StandardRowComposer : ILoadFileComposer
             var colMeta = includeCollectionMeta ? SyntheticRowValues.CollectionMetadata(wi, random, now) : default;
 
             var isInclusive = fileData.Email?.IsInclusive ?? threadNode?.IsInclusive;
-            bool hasAttachment = this.request.Metadata.WithFamilies && recordIsEml && fileData.Attachment.HasValue;
+            var attachments = this.request.Metadata.WithFamilies && recordIsEml
+                ? fileData.GetAttachmentMetadata()
+                : Array.Empty<FileAttachmentMetadata>();
+            bool hasAttachment = attachments.Count > 0;
             string parentId = wi.BatesNumberOverride
                 ?? (this.batesSequence is not null
                     ? this.batesSequence.Format(wi.Index - 1).ToString()
                     : wi.ControlNumberOverride ?? $"DOC{wi.Index:D8}");
-            string childId = hasAttachment ? $"{parentId}_A001" : parentId;
+            string childId = hasAttachment ? FamilyPlan.GetChildId(parentId, attachments.Count) : parentId;
 
             var parentCtx = new RowCtx
             {
@@ -115,24 +118,38 @@ internal abstract class StandardRowComposer : ILoadFileComposer
 
             if (hasAttachment)
             {
-                var attach = fileData.Attachment!.Value;
-                var sanitizedFilename = FamilyPlan.SanitizeAttachmentFilename(attach.filename);
-                var attachmentPath = $"{wi.FolderPrefix}{wi.Index}_{sanitizedFilename}";
-                var childCtx = new RowCtx
+                for (int attachmentIndex = 0; attachmentIndex < attachments.Count; attachmentIndex++)
                 {
-                    IdOverride = childId,
-                    ControlOverride = this.batesSequence is null ? childId : $"DOC{wi.Index:D8}_A001",
-                    FilePathOverride = attachmentPath,
-                    FileSizeOverride = fileData.AttachmentLength.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    IsChild = true,
-                    BegAttach = parentId,
-                    EndAttach = childId,
-                    ParentDocId = parentId,
-                    RecordIsEml = recordIsEml,
-                    RecordIsTiff = recordIsTiff,
-                };
-                var childValues = this.orderedKeys.Select(k => this.Resolve(k, wi, fileData, meta, eml, colMeta, childCtx)).ToList();
-                yield return LoadFileRecordBuilder.Build(this.headerColumns, childValues, childId);
+                    var attach = attachments[attachmentIndex];
+                    string attachmentId = FamilyPlan.GetChildId(parentId, attachmentIndex + 1);
+                    var childFileData = fileData with
+                    {
+                        Attachment = (attach.FileName, Array.Empty<byte>()),
+                        AttachmentLength = attach.Length,
+                        Hashes = attach.Hashes,
+                    };
+                    var sanitizedFilename = FamilyPlan.SanitizeAttachmentFilename(attach.FileName);
+                    var attachmentPath = $"{wi.FolderPrefix}{wi.Index}_{sanitizedFilename}";
+                    var childCtx = new RowCtx
+                    {
+                        IdOverride = attachmentId,
+                        ControlOverride = this.batesSequence is null
+                            ? attachmentId
+                            : FamilyPlan.GetChildId($"DOC{wi.Index:D8}", attachmentIndex + 1),
+                        FilePathOverride = attachmentPath,
+                        FileSizeOverride = attach.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                        IsChild = true,
+                        AttachmentNumber = attachmentIndex + 1,
+                        BegAttach = parentId,
+                        EndAttach = childId,
+                        ParentDocId = parentId,
+                        RecordIsEml = recordIsEml,
+                        RecordIsTiff = recordIsTiff,
+                    };
+                    var childValues = this.orderedKeys.Select(
+                        key => this.Resolve(key, wi, childFileData, meta, eml, colMeta, childCtx)).ToList();
+                    yield return LoadFileRecordBuilder.Build(this.headerColumns, childValues, attachmentId);
+                }
             }
         }
     }
@@ -241,7 +258,7 @@ internal abstract class StandardRowComposer : ILoadFileComposer
             "BATES" => ctx.IdOverride ?? this.batesSequence!.Format(wi.Index - 1).ToString(),
             "PAGECOUNT" => ResolvePageCount(ctx, fileData),
             "TEXT" => ctx.IsChild
-                ? $"{wi.FolderPrefix}{wi.Index}_{System.IO.Path.GetFileNameWithoutExtension(FamilyPlan.SanitizeAttachmentFilename(fileData.Attachment!.Value.filename))}.txt"
+                ? FamilyPlan.GetAttachmentTextPath(wi, fileData.Attachment!.Value.filename, ctx.AttachmentNumber)
                 : TextPathHelper.GetTextPath(wi.FilePathInZip),
             "BEGATTACH" => ctx.BegAttach,
             "ENDATTACH" => ctx.EndAttach,
@@ -282,6 +299,8 @@ internal abstract class StandardRowComposer : ILoadFileComposer
         public string? FileSizeOverride { get; init; }
 
         public bool IsChild { get; init; }
+
+        public int AttachmentNumber { get; init; }
 
         public string BegAttach { get; init; } = string.Empty;
 

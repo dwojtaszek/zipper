@@ -37,6 +37,22 @@ internal static class FamilyPlan
         return Path.GetFileName(filename.Replace('\\', '/'));
     }
 
+    public static string GetChildId(string parentId, int attachmentNumber)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(attachmentNumber);
+        return $"{parentId}_A{attachmentNumber:D3}";
+    }
+
+    public static string GetAttachmentTextPath(FileWorkItem workItem, string filename, int attachmentNumber)
+    {
+        ArgumentNullException.ThrowIfNull(workItem);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(attachmentNumber);
+
+        var stem = Path.GetFileNameWithoutExtension(SanitizeAttachmentFilename(filename));
+        var suffix = attachmentNumber > 1 ? $"_A{attachmentNumber:D3}" : string.Empty;
+        return $"{workItem.FolderPrefix}{workItem.Index}_{stem}{suffix}.txt";
+    }
+
     public static long GetSimulatedChildCount(FileGenerationRequest request)
     {
         if (!request.Metadata.WithFamilies || !request.Output.IsEml || request.LoadFile.AttachmentRate <= 0)

@@ -187,17 +187,17 @@ internal static class EmailSerializer
         MimeRealismOptions realism,
         Random? seeded)
     {
-        writer.WriteLine($"From: {email.From}");
-        writer.WriteLine($"To: {email.To}");
+        WriteRealismHeaderLine(writer, $"From: {email.From}", realism);
+        WriteRealismHeaderLine(writer, $"To: {email.To}", realism);
 
         if (!string.IsNullOrEmpty(email.Cc))
         {
-            writer.WriteLine($"Cc: {email.Cc}");
+            WriteRealismHeaderLine(writer, $"Cc: {email.Cc}", realism);
         }
 
         if (!string.IsNullOrEmpty(email.Bcc))
         {
-            writer.WriteLine($"Bcc: {email.Bcc}");
+            WriteRealismHeaderLine(writer, $"Bcc: {email.Bcc}", realism);
         }
 
         string subjectToEmit = email.Subject;
@@ -212,27 +212,25 @@ internal static class EmailSerializer
         }
 
         string subjectHeader = $"Subject: {subjectToEmit}";
-        if (realism.HeaderFolding)
-        {
-            subjectHeader = Rfc2047Helper.FoldHeaderLine(subjectHeader);
-        }
-
-        writer.WriteLine(subjectHeader);
-        writer.WriteLine($"Date: {email.SentDate.ToString("ddd, dd MMM yyyy HH:mm:ss zzz", CultureInfo.InvariantCulture)}");
+        WriteRealismHeaderLine(writer, subjectHeader, realism);
+        WriteRealismHeaderLine(
+            writer,
+            $"Date: {email.SentDate.ToString("ddd, dd MMM yyyy HH:mm:ss zzz", CultureInfo.InvariantCulture)}",
+            realism);
 
         if (!string.IsNullOrEmpty(email.MessageId))
         {
-            writer.WriteLine($"Message-ID: {EnsureAngleBrackets(email.MessageId)}");
+            WriteRealismHeaderLine(writer, $"Message-ID: {EnsureAngleBrackets(email.MessageId)}", realism);
         }
 
         if (!string.IsNullOrEmpty(email.InReplyTo))
         {
-            writer.WriteLine($"In-Reply-To: {EnsureAngleBrackets(email.InReplyTo)}");
+            WriteRealismHeaderLine(writer, $"In-Reply-To: {EnsureAngleBrackets(email.InReplyTo)}", realism);
         }
 
         if (!string.IsNullOrEmpty(email.References))
         {
-            writer.WriteLine($"References: {email.References}");
+            WriteRealismHeaderLine(writer, $"References: {email.References}", realism);
         }
 
         writer.WriteLine("MIME-Version: 1.0");
@@ -245,12 +243,12 @@ internal static class EmailSerializer
 
         if (email.RequestReadReceipt)
         {
-            writer.WriteLine($"Disposition-Notification-To: {email.From}");
+            WriteRealismHeaderLine(writer, $"Disposition-Notification-To: {email.From}", realism);
         }
 
         if (!string.IsNullOrEmpty(email.ReplyTo))
         {
-            writer.WriteLine($"Reply-To: {email.ReplyTo}");
+            WriteRealismHeaderLine(writer, $"Reply-To: {email.ReplyTo}", realism);
         }
 
         if (hasAttachments)
@@ -269,6 +267,13 @@ internal static class EmailSerializer
             writer.WriteLine($"Content-Transfer-Encoding: {transferEncoding}");
             writer.WriteLine();
         }
+    }
+
+    private static void WriteRealismHeaderLine(TextWriter writer, string headerLine, MimeRealismOptions realism)
+    {
+        writer.WriteLine(realism.HeaderFolding
+            ? Rfc2047Helper.FoldHeaderLine(headerLine)
+            : headerLine);
     }
 
     private static void WriteAlternativeBody(

@@ -408,15 +408,39 @@ public sealed class LoadFileComposerAndEmitterPropertyTests
         {
             if (decisions1[i - 1])
             {
+                int attachmentCount = i % 3 + 1;
+                string[] attachmentFilenames = ["attachment.jpg", "attachment.pdf", "attachment.tiff"];
                 var fileData = new FileData
                 {
-                    WorkItem = new FileWorkItem { Index = i, FileName = $"DOC{i:D8}.eml" },
+                    WorkItem = new FileWorkItem { Index = i, FolderName = "folder", FileName = $"DOC{i:D8}.eml" },
                     Attachment = ($"att_{i}.pdf", new byte[] { 1 }),
+                    AttachmentMetadata = Enumerable.Range(1, attachmentCount)
+                        .Select(attachmentIndex =>
+                            new FileAttachmentMetadata(attachmentFilenames[attachmentIndex - 1], attachmentIndex))
+                        .ToArray(),
                 };
                 var (parentId, childId, hasAttachment) = DatComposerShared.GetFamilyIdentifiers(fileData, request, batesSequence: null);
                 Assert.True(hasAttachment);
                 Assert.True(string.CompareOrdinal(parentId, childId) < 0);
-                Assert.Equal($"{parentId}_A001", childId);
+                Assert.Equal(FamilyPlan.GetChildId(parentId, attachmentCount), childId);
+                var childIds = Enumerable.Range(1, attachmentCount)
+                    .Select(attachmentIndex => FamilyPlan.GetChildId(parentId, attachmentIndex))
+                    .ToArray();
+                Assert.Equal(attachmentCount, childIds.Distinct(StringComparer.Ordinal).Count());
+                Assert.Equal($"{parentId}_A001", childIds[0]);
+                Assert.Equal(childId, childIds[^1]);
+                var textPaths = fileData.GetAttachmentMetadata()
+                    .Select((attachment, attachmentIndex) =>
+                        FamilyPlan.GetAttachmentTextPath(fileData.WorkItem, attachment.FileName, attachmentIndex + 1))
+                    .ToArray();
+                Assert.Equal(attachmentCount, textPaths.Distinct(StringComparer.Ordinal).Count());
+                Assert.Equal($"folder/{i}_attachment.txt", textPaths[0]);
+                for (int attachmentIndex = 1; attachmentIndex < attachmentCount; attachmentIndex++)
+                {
+                    Assert.Equal(
+                        $"folder/{i}_attachment_A{attachmentIndex + 1:D3}.txt",
+                        textPaths[attachmentIndex]);
+                }
             }
         }
 

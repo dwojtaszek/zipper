@@ -59,7 +59,7 @@ The application operates in three distinct generation modes:
 - **REQ-008**: The `--type` argument shall be expanded to accept `eml` as a valid file type.
 - **REQ-009**: When `--type eml` is specified, the tool will generate Email Native Files with basic, valid headers (To, From, Subject, Sent-Date) and a simple, repetitive text body.
 - **REQ-010**: The associated `.dat` Load File will contain columns corresponding to the email headers, populated with auto-generated data. For Emails, metadata columns (To, From, Subject, Sent Date, Attachment) are always included regardless of the `--with-metadata` flag, as these are intrinsic to Emails.
-- **REQ-011**: A new optional argument `--attachment-rate <percentage>` will control what percentage of generated Emails have a placeholder Native File (one of `jpg`, `tiff`, or `pdf` drawn from the internal attachment pool) included as a random Attachment. The Attachment uses internal placeholder content (consistent with REQ_E-012) rather than a reference to one of the `--count` generated Native Files, to preserve the streaming, no-intermediate-storage generation design. Defaults to 0.
+- **REQ-011**: A new optional argument `--attachment-rate <percentage>` will control what percentage of generated Emails have at least one placeholder Native File (one of `jpg`, `tiff`, or `pdf` drawn from the internal attachment pool) included as a random Attachment. MIME Realism's `multi-attachment` capability may add more placeholder Attachments to an Email selected by this rate. Attachments use internal placeholder content (consistent with REQ_E-012) rather than references to the `--count` generated Native Files, to preserve the streaming, no-intermediate-storage generation design. Defaults to 0.
 <!-- REQ-012 through REQ-020: Reserved — functional areas covered by legacy REQ_E-008 through REQ_E-028. Skipped to avoid collisions when the modern sequence was introduced. -->
 
 ### FR_E-005: File Distribution Patterns
@@ -405,7 +405,7 @@ Based on the above research, the following requirements apply to the Zipper Load
 
 - **REQ-060**: A new argument `--with-families` shall generate parent-child document relationships.
 - **REQ-061**: When `--with-families` is specified, the Load File shall include `BEGATTACH`, `ENDATTACH`, and `PARENTDOCID` columns (or corresponding relationships). Note: the industry-reference table in Section 8.2 spells this `PARENT_DOCID`, but Zipper emits `PARENTDOCID` (no underscore) to match its built-in column profiles. Family columns/relationships are supported in DAT, CSV, Concordance, and EDRM-XML formats across Standard, Production Set, and Loadfile-Only modes.
-- **REQ-062**: Email Attachments (when using `--attachment-rate`) shall be properly linked as children of their parent Email documents.
+- **REQ-062**: When `--with-families` is specified, every emitted Email Attachment shall be linked as a child of its parent Email document. This includes multiple placeholder Attachments and nested `message/rfc822` Attachments emitted by MIME Realism. Each child shall have a unique sequential family identifier, and Archive/Production Set child files, Load File records or EDRM-XML relationships, audit counts, and Production Manifest counts shall include every child. When `--with-text` is also specified, each Attachment shall have a unique Extracted Text companion path.
 - **REQ-122**: When `--with-families` is specified without `--type eml` or with `--attachment-rate 0`, a soft warning shall be emitted to stderr, but the execution shall not be rejected.
 
 #### FR-014: Column Profile System
@@ -971,8 +971,10 @@ The encoding suite includes the #1283 policy-sensitive Case Key `encoding-local-
     - Long headers exceeding 78 characters shall be folded using CRLF followed by linear whitespace (space or tab) per RFC 5322.
     - When `quoted-printable` or `base64-body` is enabled, the message or part shall declare the matching `Content-Transfer-Encoding` header and encode the body payload accordingly (with quoted-printable lines bounded to ≤ 76 characters and soft line breaks).
     - When `multipart-alternative` is enabled, generated emails shall emit a `multipart/alternative` boundary enclosing both `text/plain` and `text/html` versions of the body.
-    - When `multi-attachment` is enabled and an email has attachments, the email may contain multiple attachments enclosed in `multipart/mixed` boundaries.
-    - When `nested-rfc822` is enabled, attachments may include nested emails formatted as `message/rfc822` parts up to a bounded nesting depth limit (default 2).
+    - When `multi-attachment` is enabled and an email has attachments, the email may contain multiple attachments enclosed in `multipart/mixed` boundaries. The singular Email Metadata `Attachment` column shall identify the first emitted Attachment; `--with-families` exposes each Attachment's individual record.
+    - When `--with-text` is specified, each emitted Attachment shall have a unique Extracted Text companion path.
+    - When `nested-rfc822` is enabled, attachments may include nested emails formatted as `message/rfc822` parts up to a bounded nesting depth limit (default 2). If `multi-attachment` is disabled, a rate-selected placeholder Attachment occupies the single available Attachment slot and shall not be replaced by a nested Email.
+    - When `--with-families` is also specified, every emitted MIME Attachment shall be represented as a Document Family child across supported Load File formats and Production Sets.
     - When `--mime-realism` is specified without `--type eml` (or `eml` participating in `--types`), a warning shall be written to standard error while execution proceeds.
   - When `--mime-realism` is omitted or disabled:
     - `EmailSerializer` and `EmlFileGenerator` shall preserve 100% byte-identical output parity to legacy runs (Critical Rule 6), retaining single-line bare-ASCII headers, `text/plain` 8-bit bodies, and at most one base64 attachment.

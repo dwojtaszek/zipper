@@ -299,6 +299,18 @@ else
 fi
 rm -f "$err_file"
 
+baseline_output="$TEST_OUTPUT_DIR/mime-realism-baseline"
+baseline_zip=""
+if zipper --type eml --count 32 --seed 42 --attachment-rate 100 \
+    --output-path "$baseline_output" > /dev/null 2>&1; then
+    baseline_zip=$(find "$baseline_output" -name "*.zip" -print -quit)
+fi
+if [[ -n "$baseline_zip" ]]; then
+    pass "--mime-realism body-fidelity baseline generated"
+else
+    fail "--mime-realism body-fidelity baseline generation failed"
+fi
+
 for mode in standard full; do
     print_info "Test: --mime-realism $mode produces parser-readable MIME structures"
     mime_output="$TEST_OUTPUT_DIR/mime-realism-$mode"
@@ -306,8 +318,8 @@ for mode in standard full; do
         --output-path "$mime_output" --mime-realism "$mode" > /dev/null 2>&1; then
         zip_file=$(find "$mime_output" -name "*.zip" -print -quit)
         dat_file=$(find "$mime_output" -name "*.dat" -print -quit)
-        if [[ -n "$zip_file" && -n "$dat_file" ]] && \
-            python3 "$(dirname "$0")/validate_mime_realism.py" "$mode" "$zip_file" "$dat_file"; then
+        if [[ -n "$zip_file" && -n "$dat_file" && -n "$baseline_zip" ]] && \
+            python3 "$(dirname "$0")/validate_mime_realism.py" "$mode" "$zip_file" "$dat_file" "$baseline_zip"; then
             pass "--mime-realism $mode passes the standard MIME parser checks"
         else
             fail "--mime-realism $mode failed MIME parser validation"
@@ -316,6 +328,40 @@ for mode in standard full; do
         fail "--mime-realism $mode EML generation command failed"
     fi
 done
+
+print_info "Test: --mime-realism standard emits a Document Family child for every MIME Attachment"
+family_output="$TEST_OUTPUT_DIR/mime-realism-families"
+if zipper --type eml --count 32 --seed 42 --attachment-rate 100 \
+    --with-families --with-text --output-path "$family_output" --mime-realism standard > /dev/null 2>&1; then
+    family_zip=$(find "$family_output" -name "*.zip" -print -quit)
+    family_dat=$(find "$family_output" -name "*.dat" -print -quit)
+    if [[ -n "$family_zip" && -n "$family_dat" && -n "$baseline_zip" ]] && \
+        python3 "$(dirname "$0")/validate_mime_realism.py" \
+            standard "$family_zip" "$family_dat" "$baseline_zip" --families; then
+        pass "--with-families includes every MIME Attachment as a child record"
+    else
+        fail "--with-families failed MIME Attachment child validation"
+    fi
+else
+    fail "--mime-realism standard with --with-families generation failed"
+fi
+
+print_info "Test: --mime-realism full emits family children for nested and placeholder MIME Attachments"
+full_family_output="$TEST_OUTPUT_DIR/mime-realism-full-families"
+if zipper --type eml --count 32 --seed 42 --attachment-rate 100 \
+    --with-families --with-text --output-path "$full_family_output" --mime-realism full > /dev/null 2>&1; then
+    full_family_zip=$(find "$full_family_output" -name "*.zip" -print -quit)
+    full_family_dat=$(find "$full_family_output" -name "*.dat" -print -quit)
+    if [[ -n "$full_family_zip" && -n "$full_family_dat" && -n "$baseline_zip" ]] && \
+        python3 "$(dirname "$0")/validate_mime_realism.py" \
+            full "$full_family_zip" "$full_family_dat" "$baseline_zip" --families; then
+        pass "--mime-realism full includes every nested and placeholder Attachment as a child"
+    else
+        fail "--mime-realism full failed nested MIME Attachment child validation"
+    fi
+else
+    fail "--mime-realism full with --with-families generation failed"
+fi
 
 # --- Summary ---
 

@@ -67,39 +67,49 @@ internal sealed class DatProductionComposer
 
             if (hasAttachment)
             {
-                var attach = fileData.Attachment!.Value;
-                var childExt = Path.GetExtension(FamilyPlan.SanitizeAttachmentFilename(attach.filename));
-                var childBates = childId;
-                var childNativePath = Path.Combine("NATIVES", fileData.WorkItem.FolderName, $"{childBates}{childExt}").Replace('/', '\\');
-                var childTextPath = Path.Combine("TEXT", fileData.WorkItem.FolderName, $"{childBates}.txt").Replace('/', '\\');
-                var childImagePath = Path.Combine("IMAGES", fileData.WorkItem.FolderName, $"{childBates}.tif").Replace('/', '\\');
-
-                var childRedactedImageRelPath = this.request.Production.RedactedProduction
-                    ? Path.Combine("REDACTED", "IMAGES", fileData.WorkItem.FolderName, $"{childBates}.tif").Replace('/', '\\')
-                    : null;
-                var childRedactedTextRelPath = this.request.Production.RedactedProduction && this.request.Output.WithText
-                    ? Path.Combine("REDACTED", "TEXT", fileData.WorkItem.FolderName, $"{childBates}.txt").Replace('/', '\\')
-                    : null;
-
-                yield return DatComposerShared.MakeRecord(
-                    this.headerColumns,
-                    childId,
-                    this.ProductionRowValues(fileData, new DatRowContext
+                var attachments = fileData.GetAttachmentMetadata();
+                for (int attachmentIndex = 0; attachmentIndex < attachments.Count; attachmentIndex++)
+                {
+                    var attach = attachments[attachmentIndex];
+                    string attachmentId = FamilyPlan.GetChildId(parentId, attachmentIndex + 1);
+                    var childFileData = fileData with
                     {
-                        IdOverride = childBates,
-                        NativePathOverride = childNativePath,
-                        TextPathOverride = childTextPath,
-                        ImagePathOverride = childImagePath,
-                        FileSizeOverride = fileData.AttachmentLength.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                        IsChild = true,
-                        BegAttach = parentId,
-                        EndAttach = childId,
-                        ParentDocId = parentId,
-                        RedactedImageRelPathOverride = childRedactedImageRelPath,
-                        RedactedTextRelPathOverride = childRedactedTextRelPath,
-                        NativeWithheldOverride = "NO",
-                        RedactionReasonOverride = fileData.RedactionReason,
-                    }));
+                        Attachment = (attach.FileName, Array.Empty<byte>()),
+                        AttachmentLength = attach.Length,
+                        Hashes = attach.Hashes,
+                    };
+                    var childExt = Path.GetExtension(FamilyPlan.SanitizeAttachmentFilename(attach.FileName));
+                    var childNativePath = Path.Combine("NATIVES", fileData.WorkItem.FolderName, $"{attachmentId}{childExt}").Replace('/', '\\');
+                    var childTextPath = Path.Combine("TEXT", fileData.WorkItem.FolderName, $"{attachmentId}.txt").Replace('/', '\\');
+                    var childImagePath = Path.Combine("IMAGES", fileData.WorkItem.FolderName, $"{attachmentId}.tif").Replace('/', '\\');
+
+                    var childRedactedImageRelPath = this.request.Production.RedactedProduction
+                        ? Path.Combine("REDACTED", "IMAGES", fileData.WorkItem.FolderName, $"{attachmentId}.tif").Replace('/', '\\')
+                        : null;
+                    var childRedactedTextRelPath = this.request.Production.RedactedProduction && this.request.Output.WithText
+                        ? Path.Combine("REDACTED", "TEXT", fileData.WorkItem.FolderName, $"{attachmentId}.txt").Replace('/', '\\')
+                        : null;
+
+                    yield return DatComposerShared.MakeRecord(
+                        this.headerColumns,
+                        attachmentId,
+                        this.ProductionRowValues(childFileData, new DatRowContext
+                        {
+                            IdOverride = attachmentId,
+                            NativePathOverride = childNativePath,
+                            TextPathOverride = childTextPath,
+                            ImagePathOverride = childImagePath,
+                            FileSizeOverride = attach.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                            IsChild = true,
+                            BegAttach = parentId,
+                            EndAttach = childId,
+                            ParentDocId = parentId,
+                            RedactedImageRelPathOverride = childRedactedImageRelPath,
+                            RedactedTextRelPathOverride = childRedactedTextRelPath,
+                            NativeWithheldOverride = "NO",
+                            RedactionReasonOverride = fileData.RedactionReason,
+                        }));
+                }
             }
         }
     }

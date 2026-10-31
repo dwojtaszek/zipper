@@ -130,7 +130,7 @@ internal static class LoadFileAuditWriter
             // Page expansion applies only to TIFF records in a File Type mix.
             var recordIsTiff = string.Equals(f.WorkItem.EffectiveFileType(request), "tiff", StringComparison.Ordinal);
             total += (pageCountEnabled && recordIsTiff ? Math.Max(1, f.PageCount) : 1) +
-                     (withFamilies && f.Attachment.HasValue ? 1 : 0);
+                     (withFamilies ? f.GetAttachmentMetadata().Count : 0);
         }
         return total;
     }
@@ -142,10 +142,7 @@ internal static class LoadFileAuditWriter
         {
             foreach (var f in composedRecords)
             {
-                if (f.Attachment.HasValue)
-                {
-                    total++;
-                }
+                total += f.GetAttachmentMetadata().Count;
             }
         }
         return total;

@@ -51,6 +51,7 @@ Generate Emails with encoded subjects, alternative body parts, multiple Attachme
 zipper --type eml --count 1000 --output-path ./mime_realism --mime-realism full --attachment-rate 50 --seed 42
 ```
 Use `--mime-realism standard` for RFC-compliant MIME diversity without nested Emails or deliberately non-RFC headers.
+When `--with-families` is enabled, every emitted MIME Attachment becomes a child record and, in Production Set mode, a separate child Native File. The singular Email Metadata `Attachment` column continues to show the first Attachment's filename. `--with-text` emits a unique Extracted Text sidecar for each Attachment. With custom `nested-rfc822` tokens, a rate-selected placeholder Attachment is preserved; enable `multi-attachment` to emit it alongside a nested Email.
 
 #### 3. Generate a Legal Production Set
 Generate a structured e-discovery Production Set with Bates numbering and volume output:
@@ -213,7 +214,7 @@ All command-line flags recognized by Zipper:
 | `--date-format` | `yyyy-MM-dd` | format string | Override date format string |
 | `--empty-percentage` | `15` | `0` to `100` | Percentage of empty values for optional fields |
 | `--custodian-count` | `10` | `1` to `1000` | Number of custodians in data pool |
-| `--with-families` | `false` | flag | Generate parent-child attachment relationships |
+| `--with-families` | `false` | flag | Generate one child record for each emitted Email Attachment |
 | `--with-threading` | `false` | flag | Generate RFC 5322 Message-ID, In-Reply-To, and References Email thread chains with thread metadata Columns (alias `--with-email-threading`) |
 | `--mime-realism` | none | `standard`, `full`, or comma-separated tokens (`encoded-words`, `header-folding`, `quoted-printable`, `base64-body`, `multipart-alternative`, `multi-attachment`, `nested-rfc822`, `non-rfc`) | Configure MIME realism emission modes on generated EML emails (aliases `--email-mime-realism`, `--with-mime-realism`) |
 | `--loadfile-only` | `false` | flag | Standalone Load File generation (no Archive) |
@@ -254,7 +255,7 @@ Chaos requires `--loadfile-only` or `--production-set` (for cross-format scenari
 
 `--with-threading` is meaningful when EML participates in the File Type selection; otherwise Zipper warns and continues. It adds RFC 5322 `Message-ID`, `In-Reply-To`, and `References` headers to generated Emails, plus Thread ID, Inclusive, and Thread Parent Columns in DAT, CSV, and Concordance Load Files. The default-off mode preserves legacy EML bytes.
 
-`--mime-realism` is meaningful when EML participates in the File Type selection; otherwise Zipper warns and continues. It configures realistic MIME structures on generated EML files including RFC 2047 encoded-word non-ASCII subjects, header folding, Quoted-Printable/Base64 body encodings, `multipart/alternative` plain/HTML representations, multi-attachment emails, and bounded nested `message/rfc822` emails. The default-off mode preserves legacy EML bytes.
+`--mime-realism` is meaningful when EML participates in the File Type selection; otherwise Zipper warns and continues. It configures realistic MIME structures on generated EML files including RFC 2047 encoded-word non-ASCII subjects, header folding, Quoted-Printable/Base64 body encodings, `multipart/alternative` plain/HTML representations, multi-attachment emails, and bounded nested `message/rfc822` emails. The default-off mode preserves legacy EML bytes. The singular Email Metadata `Attachment` column continues to show the first Attachment's filename. When `--with-families` is enabled, each emitted MIME Attachment is included as its own family child; `--with-text` creates a unique Extracted Text sidecar for each Attachment. With custom `nested-rfc822` tokens and without `multi-attachment`, a placeholder Attachment selected by `--attachment-rate` is kept and no nested Email is added to that message.
 
 ### Standard Load File Columns
 

@@ -468,7 +468,10 @@ public class ParallelFileGenerator
     {
         var generated = fileGenerator.Generate(workItem, request);
         var fileContent = generated.Content;
-        var attachment = generated.Attachment;
+        var attachmentPayloads = generated.GetAttachments();
+        var attachment = generated.Attachment
+            ?? (attachmentPayloads.Count > 0 ? attachmentPayloads[0] : null);
+        var attachmentMetadata = FileAttachmentMetadata.FromPayloads(attachmentPayloads, request, workItem);
         var pageCount = generated.PageCount;
         var email = generated.Email;
 
@@ -530,6 +533,8 @@ public class ParallelFileGenerator
                 Data = data,
                 DataLength = (int)totalSize,
                 Attachment = attachment,
+                AttachmentPayloads = attachmentPayloads,
+                AttachmentMetadata = attachmentMetadata,
                 PageCount = pageCount,
                 Email = email,
                 Hash = hash,
@@ -569,6 +574,8 @@ public class ParallelFileGenerator
                 DataLength = (int)totalSize,
                 MemoryOwner = memoryOwner,
                 Attachment = attachment,
+                AttachmentPayloads = attachmentPayloads,
+                AttachmentMetadata = attachmentMetadata,
                 PageCount = pageCount,
                 Email = email,
                 Hash = finalHash,
@@ -703,7 +710,21 @@ internal record FileData
     /// </summary>
     public int DataLength { get; init; }
 
+    /// <summary>The primary (first) Attachment for existing single-Attachment metadata consumers.</summary>
     public (string filename, byte[] content)? Attachment { get; init; }
+
+    /// <summary>
+    /// Generated Attachment payloads, retained only until Archive emission.
+    /// </summary>
+    public IReadOnlyList<(string filename, byte[] content)> AttachmentPayloads { get; init; }
+        = Array.Empty<(string filename, byte[] content)>();
+
+    /// <summary>
+    /// Attachment filenames, lengths, and optional child hashes used by downstream Document Family writers.
+    /// Payload bytes are intentionally omitted when File Data is spooled.
+    /// </summary>
+    public IReadOnlyList<FileAttachmentMetadata> AttachmentMetadata { get; init; }
+        = Array.Empty<FileAttachmentMetadata>();
 
     private int? attachmentLength;
 
@@ -716,6 +737,32 @@ internal record FileData
     {
         get => this.attachmentLength ?? this.Attachment?.content.Length ?? 0;
         init => this.attachmentLength = value;
+    }
+
+    /// <summary>Returns all Attachment filenames and lengths, falling back to the primary Attachment.</summary>
+    public IReadOnlyList<FileAttachmentMetadata> GetAttachmentMetadata()
+    {
+        if (this.AttachmentMetadata.Count > 0)
+        {
+            return this.AttachmentMetadata;
+        }
+
+        return this.Attachment.HasValue
+            ? new[] { new FileAttachmentMetadata(this.Attachment.Value.filename, this.AttachmentLength) }
+            : Array.Empty<FileAttachmentMetadata>();
+    }
+
+    /// <summary>Returns retained Attachment payloads, falling back to the primary Attachment.</summary>
+    public IReadOnlyList<(string filename, byte[] content)> GetAttachmentPayloads()
+    {
+        if (this.AttachmentPayloads.Count > 0)
+        {
+            return this.AttachmentPayloads;
+        }
+
+        return this.Attachment.HasValue
+            ? new[] { this.Attachment.Value }
+            : Array.Empty<(string filename, byte[] content)>();
     }
 
     public IMemoryOwner<byte>? MemoryOwner { get; init; }
@@ -741,6 +788,67 @@ internal record FileData
     public string? NativePathOverride { get; init; }
 
     public string? RedactionReason { get; init; }
+}
+
+internal readonly record struct FileAttachmentMetadata(
+    string FileName,
+    int Length,
+    IReadOnlyDictionary<Config.HashAlgorithm, string>? Hashes = null)
+{
+    public static FileAttachmentMetadata[] FromPayloads(
+        IReadOnlyList<(string filename, byte[] content)> attachmentPayloads,
+        FileGenerationRequest request,
+        FileWorkItem workItem)
+    {
+        if (attachmentPayloads.Count == 0)
+        {
+            return Array.Empty<FileAttachmentMetadata>();
+        }
+
+        bool calculateHashes = request.Metadata.WithFamilies
+            && (request.Hash.IsEnabled || request.LoadFile.Formats.Contains(LoadFileFormat.EdrmXml));
+        var metadata = new FileAttachmentMetadata[attachmentPayloads.Count];
+        for (int attachmentIndex = 0; attachmentIndex < attachmentPayloads.Count; attachmentIndex++)
+        {
+            var payload = attachmentPayloads[attachmentIndex];
+            IReadOnlyDictionary<Config.HashAlgorithm, string>? hashes = calculateHashes
+                ? CreateHashes(payload.content, request, workItem, attachmentIndex)
+                : null;
+            metadata[attachmentIndex] = new FileAttachmentMetadata(payload.filename, payload.content.Length, hashes);
+        }
+
+        return metadata;
+    }
+
+    private static IReadOnlyDictionary<Config.HashAlgorithm, string> CreateHashes(
+        byte[] content,
+        FileGenerationRequest request,
+        FileWorkItem workItem,
+        int attachmentIndex)
+    {
+        if (request.Hash.IsEnabled)
+        {
+            if (request.Hash.Mode == Config.HashMode.Actual)
+            {
+                return HashComputer.ComputeActualHashes(content, request.Hash);
+            }
+
+            var random = Config.HashUtility.CreateSeededRandom(
+                request, workItem.Index + 1_000_000L + attachmentIndex);
+            var hashes = new Dictionary<Config.HashAlgorithm, string>(request.Hash.Algorithms.Count);
+            foreach (var algorithm in request.Hash.Algorithms)
+            {
+                hashes[algorithm] = Config.HashUtility.GenerateSimulatedHash(algorithm, random);
+            }
+
+            return hashes;
+        }
+
+        return new Dictionary<Config.HashAlgorithm, string>
+        {
+            [Config.HashAlgorithm.MD5] = Config.HashUtility.ComputeHashHex(content, Config.HashAlgorithm.MD5),
+        };
+    }
 }
 
 internal sealed class OrderingWindow

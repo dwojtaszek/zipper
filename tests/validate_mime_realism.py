@@ -21,7 +21,7 @@ def decode_dat_field(value: str) -> str:
     return value.replace(QUOTE + QUOTE, QUOTE)
 
 
-def read_subjects(dat_path: Path) -> dict[str, str]:
+def read_subjects(dat_path: Path) -> tuple[dict[str, str], list[str]]:
     lines = dat_path.read_text(encoding="utf-8-sig").splitlines()
     if not lines:
         raise AssertionError(f"Load File is empty: {dat_path}")
@@ -34,13 +34,15 @@ def read_subjects(dat_path: Path) -> dict[str, str]:
         raise AssertionError(f"Load File is missing File Path or Subject columns: {headers}") from error
 
     subjects: dict[str, str] = {}
+    paths: list[str] = []
     for line_number, line in enumerate(lines[1:], start=2):
         values = [decode_dat_field(value) for value in line.split(DELIMITER)]
         if len(values) <= max(path_index, subject_index):
             raise AssertionError(f"Load File row {line_number} has too few fields")
         path = values[path_index].replace("\\", "/")
         subjects[path] = values[subject_index]
-    return subjects
+        paths.append(path)
+    return subjects, paths
 
 
 def nested_depth(message) -> int:
@@ -84,6 +86,36 @@ def verify_text_payload_lines(parts, path: str) -> None:
             raise AssertionError(f"Encoded text body line exceeded 76 characters in {path}")
         if not isinstance(part.get_content(), str):
             raise AssertionError(f"Text part did not decode to text in {path}")
+
+
+def normalize_body_line_endings(text: str) -> str:
+    # MIME Realism uses canonical CRLF; legacy templates may contain bare LF.
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    # Ignore the single terminal line ending used to delimit the MIME body part.
+    return normalized[:-1] if normalized.endswith("\n") else normalized
+
+
+def verify_body_fidelity(
+    messages: list[tuple[str, bytes]],
+    baseline_messages: list[tuple[str, bytes]],
+    mode: str,
+) -> None:
+    baseline_by_path = dict(baseline_messages)
+    for path, contents in messages:
+        baseline_contents = baseline_by_path.get(path)
+        if baseline_contents is None:
+            raise AssertionError(f"No matching non-realism EML file for {path}")
+
+        message = BytesParser(policy=policy.default).parsebytes(contents)
+        baseline = BytesParser(policy=policy.default).parsebytes(baseline_contents)
+        body = message.get_body(preferencelist=("plain",))
+        baseline_body = baseline.get_body(preferencelist=("plain",))
+        if body is None or baseline_body is None:
+            raise AssertionError(f"Could not find a plain-text body for {path}")
+        if normalize_body_line_endings(body.get_content()) != normalize_body_line_endings(
+            baseline_body.get_content()
+        ):
+            raise AssertionError(f"{mode} changed the decoded plain-text body in {path}")
 
 
 def verify_standard(messages: list[tuple[str, bytes]], subjects: dict[str, str]) -> None:
@@ -143,6 +175,44 @@ def verify_standard(messages: list[tuple[str, bytes]], subjects: dict[str, str])
         raise AssertionError("Standard mode did not emit a message with multiple attachments")
 
 
+def verify_family_children(
+    messages: list[tuple[str, bytes]],
+    subjects: dict[str, str],
+    record_paths: list[str],
+    archive_paths: list[str],
+) -> None:
+    expected_children = 0
+    for path, contents in messages:
+        message = BytesParser(policy=policy.default).parsebytes(contents)
+        top_level_parts = list(message.iter_parts()) if message.is_multipart() else []
+        expected_children += sum(part.get_content_disposition() == "attachment" for part in top_level_parts)
+
+    parent_paths = {path for path in record_paths if subjects.get(path)}
+    record_child_paths = {path for path in record_paths if not subjects.get(path)}
+    if len(record_child_paths) != expected_children:
+        raise AssertionError(
+            f"Document Family contains {len(record_child_paths)} Attachment child records, "
+            f"but the EML files contain {expected_children} MIME Attachments"
+        )
+    archive_child_paths = {
+        path
+        for path in archive_paths
+        if not path.casefold().endswith(".txt") and path not in parent_paths
+    }
+    if archive_child_paths != record_child_paths:
+        raise AssertionError(
+            "Archive Attachment files do not match the Document Family child paths: "
+            f"archive={sorted(archive_child_paths)}, load-file={sorted(record_child_paths)}"
+        )
+    text_sidecars = sum(path.casefold().endswith(".txt") for path in archive_paths)
+    expected_text_sidecars = len(messages) + expected_children
+    if text_sidecars != expected_text_sidecars:
+        raise AssertionError(
+            f"Archive contains {text_sidecars} Extracted Text sidecars, "
+            f"but expected {expected_text_sidecars} for the Email documents and MIME Attachments"
+        )
+
+
 def verify_full(messages: list[tuple[str, bytes]]) -> None:
     nested_depths = []
     alternative_count = 0
@@ -186,9 +256,10 @@ def verify_full(messages: list[tuple[str, bytes]]) -> None:
 
 
 def main() -> int:
-    if len(sys.argv) != 4 or sys.argv[1] not in {"standard", "full"}:
+    if len(sys.argv) not in {5, 6} or sys.argv[1] not in {"standard", "full"}:
         print(
-            "Usage: validate_mime_realism.py <standard|full> <archive.zip> <load-file.dat>",
+            "Usage: validate_mime_realism.py <standard|full> <archive.zip> <load-file.dat> "
+            "<baseline.zip> [--families]",
             file=sys.stderr,
         )
         return 2
@@ -196,24 +267,44 @@ def main() -> int:
     mode = sys.argv[1]
     archive_path = Path(sys.argv[2])
     dat_path = Path(sys.argv[3])
-    subjects = read_subjects(dat_path)
+    baseline_path = Path(sys.argv[4])
+    if len(sys.argv) == 6 and sys.argv[5] != "--families":
+        print("The only supported optional argument is --families.", file=sys.stderr)
+        return 2
+    with_families = len(sys.argv) == 6
+    subjects, record_paths = read_subjects(dat_path)
 
     with zipfile.ZipFile(archive_path) as archive:
+        archive_paths = archive.namelist()
         messages = [
             (name, archive.read(name))
-            for name in archive.namelist()
+            for name in archive_paths
+            if name.casefold().endswith(".eml") and subjects.get(name)
+        ]
+    with zipfile.ZipFile(baseline_path) as baseline_archive:
+        baseline_messages = [
+            (name, baseline_archive.read(name))
+            for name in baseline_archive.namelist()
             if name.casefold().endswith(".eml")
         ]
 
     if not messages:
         raise AssertionError(f"Archive contains no EML files: {archive_path}")
 
+    verify_body_fidelity(messages, baseline_messages, mode)
     if mode == "standard":
         verify_standard(messages, subjects)
+        if with_families:
+            verify_family_children(messages, subjects, record_paths, archive_paths)
     else:
         verify_full(messages)
+        if with_families:
+            verify_family_children(messages, subjects, record_paths, archive_paths)
 
-    print(f"Validated {len(messages)} {mode} EML files with Python's standard MIME parser.")
+    print(
+        f"Validated {len(messages)} {mode} EML files with Python's standard MIME parser"
+        f"{' and their Document Family Attachments' if with_families else ''}."
+    )
     return 0
 
 

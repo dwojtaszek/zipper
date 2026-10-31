@@ -29,6 +29,9 @@ internal sealed class EmlFileGenerator : IFileGenerator
             {
                 Content = bytes,
                 Attachment = attachmentInfo != null ? (attachmentInfo.FileName, attachmentInfo.Content) : null,
+                Attachments = attachmentInfo is not null
+                    ? new[] { (attachmentInfo.FileName, attachmentInfo.Content) }
+                    : Array.Empty<(string filename, byte[] content)>(),
                 Email = email,
             };
         }
@@ -50,7 +53,7 @@ internal sealed class EmlFileGenerator : IFileGenerator
         {
             bool shouldAddNested = random.Next(2) == 0;
 
-            if (shouldAddNested)
+            if (shouldAddNested && (realism.MultiAttachment || picked.Count == 0))
             {
                 var nestedAttachment = CreateNestedRfc822Attachment(workItem.Index, 1, random, realism, email.SentDate);
                 if (realism.MultiAttachment)
@@ -71,6 +74,7 @@ internal sealed class EmlFileGenerator : IFileGenerator
         {
             Content = bytes,
             Attachment = primary is not null ? (primary.FileName, primary.Content) : null,
+            Attachments = picked.Select(attachment => (attachment.FileName, attachment.Content)).ToArray(),
             Email = email,
         };
     }

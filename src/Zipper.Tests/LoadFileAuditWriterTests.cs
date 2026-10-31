@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Xunit;
+using Zipper.Config;
 
 namespace Zipper.Tests;
 
@@ -69,6 +70,39 @@ public class LoadFileAuditWriterTests : TempDirectoryTestBase
 
         long childCount = Zipper.LoadFiles.FamilyPlan.GetSimulatedChildCount(request);
         Assert.Equal(10 + childCount, root.GetProperty("totalRecords").GetInt64());
+    }
+
+    [Fact]
+    public void GenerateAuditJson_WithMultipleAttachments_CountsEachFamilyChild()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileCount = 1, FileType = "eml" },
+            Metadata = new MetadataConfig { WithFamilies = true },
+        };
+        var fileData = new[]
+        {
+            new FileData
+            {
+                WorkItem = new FileWorkItem { Index = 1, FileType = "eml" },
+                Attachment = ("attachment.jpg", new byte[] { 1, 2, 3 }),
+                AttachmentMetadata =
+                [
+                    new FileAttachmentMetadata("attachment.jpg", 3),
+                    new FileAttachmentMetadata("attachment.pdf", 4),
+                ],
+            },
+        };
+
+        var datJson = LoadFileAuditWriter.GenerateAuditJson(
+            "test.dat", request, fileData, format: LoadFileFormat.Dat);
+        var optJson = LoadFileAuditWriter.GenerateAuditJson(
+            "test.opt", request, fileData, format: LoadFileFormat.Opt);
+
+        using var datDoc = JsonDocument.Parse(datJson);
+        using var optDoc = JsonDocument.Parse(optJson);
+        Assert.Equal(3, datDoc.RootElement.GetProperty("totalRecords").GetInt64());
+        Assert.Equal(3, optDoc.RootElement.GetProperty("totalRecords").GetInt64());
     }
 
     [Fact]

@@ -1229,6 +1229,7 @@ public class DatComposingWriterTests : TempDirectoryTestBase
     {
         var request = this.CreateTestRequest("eml");
         request.Metadata = request.Metadata with { WithFamilies = true };
+        request.Output = request.Output with { WithText = true };
 
         var fileData = new List<FileData>
         {
@@ -1238,9 +1239,15 @@ public class DatComposingWriterTests : TempDirectoryTestBase
                 {
                     Index = 1,
                     FolderNumber = 1,
+                    FolderName = "folder_001",
                     FilePathInZip = "folder_001/00000001.eml"
                 },
-                Attachment = ("attachment.pdf", new byte[] { 1, 2, 3 }),
+                Attachment = ("attachment.jpg", new byte[] { 1, 2, 3 }),
+                AttachmentMetadata =
+                [
+                    new FileAttachmentMetadata("attachment.jpg", 3),
+                    new FileAttachmentMetadata("attachment.pdf", 4),
+                ],
                 DataLength = 100
             }
         };
@@ -1256,18 +1263,21 @@ public class DatComposingWriterTests : TempDirectoryTestBase
         var content = await File.ReadAllTextAsync(outputPath);
         var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
-        Assert.Equal(3, lines.Length);
+        Assert.Equal(4, lines.Length);
         Assert.Contains("BEGATTACH", lines[0], StringComparison.Ordinal);
         Assert.Contains("ENDATTACH", lines[0], StringComparison.Ordinal);
         Assert.Contains("PARENTDOCID", lines[0], StringComparison.Ordinal);
 
         var parentLine = lines[1];
         Assert.Contains("DOC00000001", parentLine, StringComparison.Ordinal);
-        Assert.Contains("DOC00000001_A001", parentLine, StringComparison.Ordinal);
+        Assert.Contains("DOC00000001_A002", parentLine, StringComparison.Ordinal);
 
-        var childLine = lines[2];
-        Assert.Contains("DOC00000001_A001", childLine, StringComparison.Ordinal);
-        Assert.Contains("DOC00000001", childLine, StringComparison.Ordinal);
+        Assert.Contains("DOC00000001_A001", lines[2], StringComparison.Ordinal);
+        Assert.Contains("DOC00000001", lines[2], StringComparison.Ordinal);
+        Assert.Contains("folder_001/1_attachment.txt", lines[2], StringComparison.Ordinal);
+        Assert.Contains("DOC00000001_A002", lines[3], StringComparison.Ordinal);
+        Assert.Contains("DOC00000001", lines[3], StringComparison.Ordinal);
+        Assert.Contains("folder_001/1_attachment_A002.txt", lines[3], StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1301,6 +1311,11 @@ public class DatComposingWriterTests : TempDirectoryTestBase
                     FilePathInZip = "NATIVES\\VOL001\\TEST00000001.eml"
                 },
                 Attachment = ("attachment.pdf", new byte[] { 1, 2, 3 }),
+                AttachmentMetadata =
+                [
+                    new FileAttachmentMetadata("attachment.pdf", 3),
+                    new FileAttachmentMetadata("photo.jpg", 4),
+                ],
                 DataLength = 100
             }
         };
@@ -1313,16 +1328,18 @@ public class DatComposingWriterTests : TempDirectoryTestBase
         var content = Encoding.UTF8.GetString(stream.ToArray());
         var lines = content.Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
 
-        Assert.Equal(3, lines.Length);
+        Assert.Equal(4, lines.Length);
         Assert.Contains("BEGATTACH", lines[0], StringComparison.Ordinal);
         Assert.Contains("ENDATTACH", lines[0], StringComparison.Ordinal);
         Assert.Contains("PARENTDOCID", lines[0], StringComparison.Ordinal);
 
         Assert.Contains("TEST00000001", lines[1], StringComparison.Ordinal);
-        Assert.Contains("TEST00000001_A001", lines[1], StringComparison.Ordinal);
+        Assert.Contains("TEST00000001_A002", lines[1], StringComparison.Ordinal);
 
         Assert.Contains("TEST00000001_A001", lines[2], StringComparison.Ordinal);
         Assert.Contains("TEST00000001", lines[2], StringComparison.Ordinal);
+        Assert.Contains("TEST00000001_A002", lines[3], StringComparison.Ordinal);
+        Assert.Contains("TEST00000001", lines[3], StringComparison.Ordinal);
     }
 
     [Fact]

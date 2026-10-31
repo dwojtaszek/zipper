@@ -214,6 +214,21 @@ if !ZIPPER_EXIT! equ 0 (
 )
 if exist "%ERR_FILE%" del /f /q "%ERR_FILE%"
 
+set "MIME_BASELINE_OUTPUT=%TEST_OUTPUT_DIR%\mime-realism-baseline"
+set "MIME_BASELINE_ZIP="
+call "%ZIPPER_CMD%" --type eml --count 32 --seed 42 --attachment-rate 100 --output-path "!MIME_BASELINE_OUTPUT!" >nul 2>&1
+set "ZIPPER_EXIT=!ERRORLEVEL!"
+if !ZIPPER_EXIT! equ 0 (
+    for %%F in ("!MIME_BASELINE_OUTPUT!\*.zip") do if exist "%%~fF" set "MIME_BASELINE_ZIP=%%~fF"
+)
+if defined MIME_BASELINE_ZIP (
+    echo [ PASS ] PASS: --mime-realism body-fidelity baseline generated
+    set /a PASSED+=1
+) else (
+    echo [ ERROR ] FAIL: --mime-realism body-fidelity baseline generation failed
+    set /a FAILED+=1
+)
+
 for %%M in (standard full) do (
     set "MIME_MODE=%%M"
     set "MIME_OUTPUT=%TEST_OUTPUT_DIR%\mime-realism-!MIME_MODE!"
@@ -226,7 +241,7 @@ for %%M in (standard full) do (
         for %%F in ("!MIME_OUTPUT!\*.zip") do if exist "%%~fF" set "MIME_ZIP=%%~fF"
         for %%F in ("!MIME_OUTPUT!\*.dat") do if exist "%%~fF" set "MIME_DAT=%%~fF"
         if defined MIME_ZIP if defined MIME_DAT (
-            python "%~dp0validate_mime_realism.py" !MIME_MODE! "!MIME_ZIP!" "!MIME_DAT!" >nul
+            python "%~dp0validate_mime_realism.py" !MIME_MODE! "!MIME_ZIP!" "!MIME_DAT!" "!MIME_BASELINE_ZIP!" >nul
             if errorlevel 1 (
                 echo [ ERROR ] FAIL: --mime-realism !MIME_MODE! failed MIME parser validation
                 set /a FAILED+=1
@@ -242,6 +257,60 @@ for %%M in (standard full) do (
         echo [ ERROR ] FAIL: --mime-realism !MIME_MODE! generation failed with exit code !ZIPPER_EXIT!
         set /a FAILED+=1
     )
+)
+
+set "MIME_FAMILY_OUTPUT=%TEST_OUTPUT_DIR%\mime-realism-families"
+echo [ INFO ] Test: --mime-realism standard emits a Document Family child for every MIME Attachment
+call "%ZIPPER_CMD%" --type eml --count 32 --seed 42 --attachment-rate 100 --with-families --with-text --output-path "!MIME_FAMILY_OUTPUT!" --mime-realism standard >nul 2>&1
+set "ZIPPER_EXIT=!ERRORLEVEL!"
+if !ZIPPER_EXIT! equ 0 (
+    set "MIME_FAMILY_ZIP="
+    set "MIME_FAMILY_DAT="
+    for %%F in ("!MIME_FAMILY_OUTPUT!\*.zip") do if exist "%%~fF" set "MIME_FAMILY_ZIP=%%~fF"
+    for %%F in ("!MIME_FAMILY_OUTPUT!\*.dat") do if exist "%%~fF" set "MIME_FAMILY_DAT=%%~fF"
+    if defined MIME_FAMILY_ZIP if defined MIME_FAMILY_DAT if defined MIME_BASELINE_ZIP (
+        python "%~dp0validate_mime_realism.py" standard "!MIME_FAMILY_ZIP!" "!MIME_FAMILY_DAT!" "!MIME_BASELINE_ZIP!" --families >nul
+        if errorlevel 1 (
+            echo [ ERROR ] FAIL: --with-families failed MIME Attachment child validation
+            set /a FAILED+=1
+        ) else (
+            echo [ PASS ] PASS: --with-families includes every MIME Attachment as a child record
+            set /a PASSED+=1
+        )
+    ) else (
+        echo [ ERROR ] FAIL: --with-families archive, DAT file, or baseline not found
+        set /a FAILED+=1
+    )
+) else (
+    echo [ ERROR ] FAIL: --mime-realism standard with --with-families generation failed with exit code !ZIPPER_EXIT!
+    set /a FAILED+=1
+)
+
+set "MIME_FULL_FAMILY_OUTPUT=%TEST_OUTPUT_DIR%\mime-realism-full-families"
+echo [ INFO ] Test: --mime-realism full emits family children for nested and placeholder MIME Attachments
+call "%ZIPPER_CMD%" --type eml --count 32 --seed 42 --attachment-rate 100 --with-families --with-text --output-path "!MIME_FULL_FAMILY_OUTPUT!" --mime-realism full >nul 2>&1
+set "ZIPPER_EXIT=!ERRORLEVEL!"
+if !ZIPPER_EXIT! equ 0 (
+    set "MIME_FULL_FAMILY_ZIP="
+    set "MIME_FULL_FAMILY_DAT="
+    for %%F in ("!MIME_FULL_FAMILY_OUTPUT!\*.zip") do if exist "%%~fF" set "MIME_FULL_FAMILY_ZIP=%%~fF"
+    for %%F in ("!MIME_FULL_FAMILY_OUTPUT!\*.dat") do if exist "%%~fF" set "MIME_FULL_FAMILY_DAT=%%~fF"
+    if defined MIME_FULL_FAMILY_ZIP if defined MIME_FULL_FAMILY_DAT if defined MIME_BASELINE_ZIP (
+        python "%~dp0validate_mime_realism.py" full "!MIME_FULL_FAMILY_ZIP!" "!MIME_FULL_FAMILY_DAT!" "!MIME_BASELINE_ZIP!" --families >nul
+        if errorlevel 1 (
+            echo [ ERROR ] FAIL: --mime-realism full failed nested MIME Attachment child validation
+            set /a FAILED+=1
+        ) else (
+            echo [ PASS ] PASS: --mime-realism full includes every nested and placeholder Attachment as a child
+            set /a PASSED+=1
+        )
+    ) else (
+        echo [ ERROR ] FAIL: --mime-realism full family archive, DAT file, or baseline not found
+        set /a FAILED+=1
+    )
+) else (
+    echo [ ERROR ] FAIL: --mime-realism full with --with-families generation failed with exit code !ZIPPER_EXIT!
+    set /a FAILED+=1
 )
 
 REM --- Cleanup ---

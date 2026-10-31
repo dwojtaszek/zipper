@@ -100,14 +100,18 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    bool hasAttachment = request.Metadata.WithFamilies
+                    var attachments = request.Metadata.WithFamilies
                         && string.Equals(fileData.WorkItem.EffectiveFileType(request), "eml", StringComparison.Ordinal)
-                        && fileData.Attachment.HasValue;
+                        ? fileData.GetAttachmentMetadata()
+                        : Array.Empty<FileAttachmentMetadata>();
+                    bool hasAttachment = attachments.Count > 0;
                     string parentId = fileData.WorkItem.BatesNumberOverride
                         ?? (batesSequence is not null
                             ? batesSequence.Format(fileData.WorkItem.Index - 1).ToString()
                             : fileData.WorkItem.ControlNumberOverride ?? $"DOC{fileData.WorkItem.Index:D8}");
-                    string childId = hasAttachment ? $"{parentId}_A001" : parentId;
+                    string lastChildId = hasAttachment
+                        ? FamilyPlan.GetChildId(parentId, attachments.Count)
+                        : parentId;
 
                     var meta = request.Metadata.ShouldIncludeMetadataColumns(request.Output) ? SyntheticRowValues.Metadata(fileData.WorkItem, fileData, random, now) : default;
                     var eml = request.Metadata.ShouldIncludeEmlColumns(request.Output) ? SyntheticRowValues.Eml(fileData.WorkItem, fileData, random, now) : default;
@@ -119,7 +123,9 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
                         batesSequence,
                         isChild: false,
                         parentId: parentId,
-                        childId: childId,
+                        childId: lastChildId,
+                        familyEndId: lastChildId,
+                        attachmentNumber: 0,
                         parentDocId: string.Empty,
                         actualAttachment: null,
                         meta,
@@ -128,21 +134,39 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
 
                     if (hasAttachment)
                     {
-                        relationships.Add((parentId, childId));
+                        var payloads = fileData.GetAttachmentPayloads();
+                        for (int attachmentIndex = 0; attachmentIndex < attachments.Count; attachmentIndex++)
+                        {
+                            var attachment = attachments[attachmentIndex];
+                            string childId = FamilyPlan.GetChildId(parentId, attachmentIndex + 1);
+                            var childAttachment = (
+                                attachment.FileName,
+                                attachmentIndex < payloads.Count ? payloads[attachmentIndex].content : Array.Empty<byte>());
+                            var childFileData = fileData with
+                            {
+                                Attachment = childAttachment,
+                                AttachmentLength = attachment.Length,
+                                AttachmentMetadata = [attachment],
+                                Hashes = attachment.Hashes,
+                            };
+                            relationships.Add((parentId, childId));
 
-                        var childElement = CreateDocumentElement(
-                            fileData.WorkItem,
-                            fileData,
-                            request,
-                            batesSequence,
-                            isChild: true,
-                            parentId: parentId,
-                            childId: childId,
-                            parentDocId: parentId,
-                            actualAttachment: fileData.Attachment,
-                            meta,
-                            eml);
-                        await childElement.WriteToAsync(writer, cancellationToken).ConfigureAwait(false);
+                            var childElement = CreateDocumentElement(
+                                fileData.WorkItem,
+                                childFileData,
+                                request,
+                                batesSequence,
+                                isChild: true,
+                                parentId: parentId,
+                                childId: childId,
+                                familyEndId: lastChildId,
+                                attachmentNumber: attachmentIndex + 1,
+                                parentDocId: parentId,
+                                actualAttachment: childAttachment,
+                                meta,
+                                eml);
+                            await childElement.WriteToAsync(writer, cancellationToken).ConfigureAwait(false);
+                        }
                     }
                 }
 
@@ -193,6 +217,8 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
         bool isChild,
         string parentId,
         string childId,
+        string familyEndId,
+        int attachmentNumber,
         string parentDocId,
         (string filename, byte[] content)? actualAttachment,
         (string Custodian, string DateSent, string Author, string FileSize) meta,
@@ -207,27 +233,40 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
         {
             var attach = actualAttachment!.Value;
             var sanitizedFilename = FamilyPlan.SanitizeAttachmentFilename(attach.filename);
-            var childNativePath = $"{workItem.FolderPrefix}{workItem.Index}_{sanitizedFilename}".Replace('\\', '/');
-            var childTextPath = $"{workItem.FolderPrefix}{workItem.Index}_{Path.GetFileNameWithoutExtension(sanitizedFilename)}.txt".Replace('\\', '/');
+            var childNativePath = request.Production.ProductionSet
+                ? Path.Combine(
+                    Path.GetDirectoryName(workItem.FilePathInZip) ?? string.Empty,
+                    $"{childId}{Path.GetExtension(sanitizedFilename)}").Replace('\\', '/')
+                : $"{workItem.FolderPrefix}{workItem.Index}_{sanitizedFilename}".Replace('\\', '/');
+            var childTextPath = FamilyPlan.GetAttachmentTextPath(workItem, attach.filename, attachmentNumber).Replace('\\', '/');
 
             // Resolve child hashes
             string childHash = string.Empty;
             var childHashes = new Dictionary<Config.HashAlgorithm, string>();
             if (request.Hash.IsEnabled)
             {
+                Random? childRng = null;
+                if (request.Hash.Mode == Config.HashMode.Simulated)
+                {
+                    childRng = Config.HashUtility.CreateSeededRandom(
+                        request, workItem.Index + 1_000_000L + attachmentNumber - 1);
+                }
+
                 if (request.Hash.Mode == Config.HashMode.Actual)
                 {
                     foreach (var algo in request.Hash.Algorithms)
                     {
-                        childHashes[algo] = Config.HashUtility.ComputeHashHex(attach.content, algo);
+                        childHashes[algo] = ResolveAttachmentHash(fileData, attach, algo);
                     }
                 }
                 else // Simulated
                 {
-                    var childRng = Config.HashUtility.CreateSeededRandom(request, workItem.Index + 1000000);
                     foreach (var algo in request.Hash.Algorithms)
                     {
-                        childHashes[algo] = Config.HashUtility.GenerateSimulatedHash(algo, childRng);
+                        childHashes[algo] = fileData.Hashes is not null
+                            && fileData.Hashes.TryGetValue(algo, out var hash)
+                            ? hash
+                            : Config.HashUtility.GenerateSimulatedHash(algo, childRng!);
                     }
                 }
                 childHash = childHashes.TryGetValue(Config.HashAlgorithm.MD5, out var md5)
@@ -236,9 +275,7 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
             }
             else
             {
-#pragma warning disable S4790
-                childHash = Convert.ToHexString(System.Security.Cryptography.MD5.HashData(attach.content)).ToLowerInvariant();
-#pragma warning restore S4790
+                childHash = ResolveAttachmentHash(fileData, attach, Config.HashAlgorithm.MD5);
             }
 
             var childNativeExternalFile = new XElement(
@@ -402,7 +439,7 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
         if (request.Output.WithText)
         {
             var textPath = isChild
-                ? $"{workItem.FolderPrefix}{workItem.Index}_{Path.GetFileNameWithoutExtension(FamilyPlan.SanitizeAttachmentFilename(actualAttachment!.Value.filename))}.txt"
+                ? FamilyPlan.GetAttachmentTextPath(workItem, actualAttachment!.Value.filename, attachmentNumber)
                 : GenerateTextPath(request, workItem);
             AddTag(tagsElement, "ExtractedTextPath", textPath, namingConvention);
         }
@@ -410,7 +447,7 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
         if (request.Metadata.WithFamilies)
         {
             AddTag(tagsElement, "BEGATTACH", parentId, namingConvention);
-            AddTag(tagsElement, "ENDATTACH", childId, namingConvention);
+            AddTag(tagsElement, "ENDATTACH", familyEndId, namingConvention);
             AddTag(tagsElement, "PARENTDOCID", parentDocId, namingConvention);
         }
 
@@ -420,6 +457,25 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
         }
 
         return docElement;
+    }
+
+    private static string ResolveAttachmentHash(
+        FileData fileData,
+        (string filename, byte[] content) attachment,
+        Config.HashAlgorithm algorithm)
+    {
+        if (fileData.Hashes is not null && fileData.Hashes.TryGetValue(algorithm, out var hash))
+        {
+            return hash;
+        }
+
+        if (attachment.content.Length != fileData.AttachmentLength)
+        {
+            throw new InvalidOperationException(
+                $"Cannot compute the {algorithm} hash for Attachment '{attachment.filename}' after its payload was spooled.");
+        }
+
+        return Config.HashUtility.ComputeHashHex(attachment.content, algorithm);
     }
 
     private static string GenerateTextPath(FileGenerationRequest request, FileWorkItem workItem)

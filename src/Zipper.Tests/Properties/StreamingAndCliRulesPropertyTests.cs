@@ -167,7 +167,7 @@ public sealed class StreamingAndCliRulesPropertyTests
 
     /// <summary>
     /// The disk-backed spool keeps the metadata projection of every File Data record: the
-    /// work item identity, lengths, hashes, attachment filename plus length, email header
+    /// work item identity, lengths, hashes, Attachment filenames and lengths, email header
     /// fields, identity overrides, and source metadata all survive the round-trip, while the
     /// heavy payload bytes are intentionally dropped.
     /// </summary>
@@ -226,9 +226,11 @@ public sealed class StreamingAndCliRulesPropertyTests
             Assert.NotNull(restored.Attachment);
             Assert.Equal(original.Attachment.Value.filename, restored.Attachment.Value.filename);
             Assert.Equal(original.AttachmentLength, restored.AttachmentLength);
+            Assert.Equal(original.GetAttachmentMetadata(), restored.GetAttachmentMetadata());
 
-            // The attachment payload is deliberately not spooled to disk.
+            // Attachment payloads are deliberately not spooled to disk.
             Assert.Empty(restored.Attachment.Value.content);
+            Assert.Empty(restored.AttachmentPayloads);
         }
 
         if (original.Email is null)
@@ -305,6 +307,7 @@ public sealed class StreamingAndCliRulesPropertyTests
             Assert.Equal(expected[i].WorkItem.FilePathInZip, first[i].WorkItem.FilePathInZip);
             Assert.Equal(expected[i].DataLength, first[i].DataLength);
             Assert.Equal(expected[i].PageCount, first[i].PageCount);
+            Assert.Equal(expected[i].GetAttachmentMetadata(), first[i].GetAttachmentMetadata());
             if (expected[i].Email is not null)
             {
                 Assert.NotNull(first[i].Email);
@@ -583,6 +586,16 @@ public sealed class StreamingAndCliRulesPropertyTests
         var attachment = input.HasAttachment
             ? ((string, byte[])?)(input.AttachmentFilename, new byte[input.AttachmentLength])
             : null;
+        IReadOnlyList<(string filename, byte[] content)> attachmentPayloads = attachment is { } primary
+            ? new[]
+            {
+                primary,
+                ($"{input.AttachmentFilename}.second", new byte[input.AttachmentLength + 1]),
+            }
+            : Array.Empty<(string filename, byte[] content)>();
+        var attachmentMetadata = attachmentPayloads
+            .Select(payload => new FileAttachmentMetadata(payload.filename, payload.content.Length))
+            .ToArray();
 
         var email = input.HasEmail
             ? new Email
@@ -632,6 +645,8 @@ public sealed class StreamingAndCliRulesPropertyTests
             Hash = input.Hash,
             Hashes = hashes,
             Attachment = attachment,
+            AttachmentPayloads = attachmentPayloads,
+            AttachmentMetadata = attachmentMetadata,
             AttachmentLength = input.HasAttachment ? input.AttachmentLength : 0,
             Email = email,
         };

@@ -8,6 +8,7 @@ namespace Zipper.Emails;
 internal static class QuotedPrintableHelper
 {
     private const int MaxLineLength = 76;
+    private const string HexDigits = "0123456789ABCDEF";
 
     /// <summary>
     /// Encodes a UTF-8 text into Quoted-Printable representation with soft line breaks.
@@ -34,38 +35,52 @@ internal static class QuotedPrintableHelper
                 byte b = lineBytes[i];
                 bool isLastByte = (i == lineBytes.Length - 1);
 
-                string token;
+                char tokenCharacter = default;
+                bool encodeByte;
                 // Safe ASCII: printable characters except '='
                 if (b is >= 33 and <= 126 and not 61)
                 {
-                    token = ((char)b).ToString();
+                    tokenCharacter = (char)b;
+                    encodeByte = false;
                 }
                 else if (b is 32 or 9) // Space or Tab
                 {
                     if (isLastByte)
                     {
                         // Trailing whitespace at end of line must be encoded
-                        token = b == 32 ? "=20" : "=09";
+                        encodeByte = true;
                     }
                     else
                     {
-                        token = ((char)b).ToString();
+                        tokenCharacter = (char)b;
+                        encodeByte = false;
                     }
                 }
                 else
                 {
-                    token = $"={b:X2}";
+                    encodeByte = true;
                 }
 
+                int tokenLength = encodeByte ? 3 : 1;
                 // If adding token would exceed MaxLineLength (allowing 1 char for soft break '='), insert soft break
-                if (currentLineLength + token.Length > MaxLineLength - 1)
+                if (currentLineLength + tokenLength > MaxLineLength - 1)
                 {
                     sb.Append("=\r\n");
                     currentLineLength = 0;
                 }
 
-                sb.Append(token);
-                currentLineLength += token.Length;
+                if (encodeByte)
+                {
+                    sb.Append('=');
+                    sb.Append(HexDigits[b >> 4]);
+                    sb.Append(HexDigits[b & 0x0F]);
+                }
+                else
+                {
+                    sb.Append(tokenCharacter);
+                }
+
+                currentLineLength += tokenLength;
             }
 
             if (lineIndex < lines.Length - 1)

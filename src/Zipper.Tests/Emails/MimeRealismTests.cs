@@ -141,6 +141,39 @@ public class MimeRealismTests
     }
 
     [Fact]
+    public void ToEml_WithHeaderFolding_FoldsLongReferencesHeader()
+    {
+        const string references =
+            "<root.000000000000000000000000@example.test> <reply.000000000000000000000000@example.test>";
+        var email = new Email
+        {
+            To = "to@example.com",
+            From = "from@example.com",
+            Subject = "Thread reply",
+            SentDate = new DateTime(2024, 1, 15, 12, 0, 0, DateTimeKind.Utc),
+            Body = "Test message body.",
+            References = references,
+        };
+        var options = new MimeRealismOptions
+        {
+            IsEnabled = true,
+            HeaderFolding = true,
+        };
+
+        string emlText = Encoding.UTF8.GetString(EmailSerializer.ToEml(email, null, seeded: null, options));
+        string[] lines = emlText.Split("\r\n", StringSplitOptions.None);
+        int referencesIndex = Array.FindIndex(lines, line => line.StartsWith("References:", StringComparison.Ordinal));
+
+        Assert.True(referencesIndex >= 0, "Expected a References header.");
+        Assert.All(
+            lines.Skip(referencesIndex).TakeWhile((line, index) => index == 0 || line.StartsWith(' ')),
+            line => Assert.InRange(line.Length, 1, 76));
+        Assert.Equal($"References: {references}", Rfc2047Helper.UnfoldHeader(emlText)
+            .Split("\r\n", StringSplitOptions.None)
+            .First(line => line.StartsWith("References:", StringComparison.Ordinal)));
+    }
+
+    [Fact]
     public void ToEml_WithDeliberatelyNonRfc_EmitsNonRfcEncodedWordVariant()
     {
         var nonAsciiSubject = "Aviso urgente sobre la facturación electrónica del periodo";
@@ -455,6 +488,28 @@ public class MimeRealismTests
         Assert.Contains(nestedPartCounts, count => count > 0);
         Assert.Contains(nestedPartCounts, count => count == maxNestingDepth);
         Assert.All(nestedPartCounts, count => Assert.InRange(count, 0, maxNestingDepth));
+    }
+
+    [Fact]
+    public void EmlFileGenerator_WithNestedRfc822AndFullAttachmentRate_PreservesRateSelectedPlaceholder()
+    {
+        var generator = new EmlFileGenerator();
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 32, Concurrency = 1 },
+            Metadata = new MetadataConfig { Seed = 12345, MimeRealism = "nested-rfc822" },
+            LoadFile = new LoadFileConfig { AttachmentRate = 100 },
+        };
+
+        for (long i = 1; i <= 32; i++)
+        {
+            var item = new FileWorkItem { Index = i, FileName = $"{i:D8}.eml", FolderName = "f", FolderNumber = 1 };
+            var result = generator.Generate(item, request);
+            string eml = Encoding.UTF8.GetString(result.Content);
+
+            Assert.NotNull(result.Attachment);
+            Assert.DoesNotContain("Content-Type: message/rfc822;", eml, StringComparison.Ordinal);
+        }
     }
 
     [Fact]
