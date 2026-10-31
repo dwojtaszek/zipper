@@ -261,6 +261,16 @@ internal static class CrossFormatAnomalyApplier
             .ToList();
         int familyCandidateIndex = 0;
         var candidateTypes = ResolveCandidateTypes(scenarioOrTypes);
+        if (candidateTypes.Count == 0)
+        {
+            return new CrossFormatAnomalyResult
+            {
+                DatLines = datLines,
+                OptLines = optLines,
+                DatAnomalies = Array.Empty<ChaosAnomaly>(),
+                OptAnomalies = Array.Empty<ChaosAnomaly>(),
+            };
+        }
         var scenario = string.IsNullOrEmpty(scenarioOrTypes) ? null : ChaosScenarios.GetByName(scenarioOrTypes);
         string? resolvedAmount = string.IsNullOrEmpty(chaosAmount) ? scenario?.DefaultAmount : chaosAmount;
         int totalDatDocs = datRecords.Count;
@@ -584,7 +594,7 @@ internal static class CrossFormatAnomalyApplier
             .Where(s => ChaosAnomalyTypes.CrossFormat.All.Contains(s, StringComparer.OrdinalIgnoreCase))
             .ToList();
 
-        return split.Count > 0 ? split : ChaosAnomalyTypes.CrossFormat.All;
+        return split;
     }
 
     private static (OptDocEntry OptDoc, DatRecordEntry DatDoc)? FindRandomUnprocessedOptDocument(

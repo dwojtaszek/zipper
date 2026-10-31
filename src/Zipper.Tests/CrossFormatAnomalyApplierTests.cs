@@ -889,6 +889,52 @@ public sealed class CrossFormatAnomalyApplierTests : IDisposable
         Assert.Null(exception);
     }
 
+    [Fact]
+    public void Apply_NonCrossFormatScenario_InjectsNoAnomaliesAndPreservesLines()
+    {
+        var (datLines, optLines) = CreateSampleLines();
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: "mixed-delimiters",
+            chaosAmount: "1",
+            random: new FirstIndexRandom());
+
+        Assert.Empty(result.Anomalies);
+        Assert.Equal(datLines, result.DatLines);
+        Assert.Equal(optLines, result.OptLines);
+    }
+
+    [Fact]
+    public void Apply_UnknownOrNonCrossFormatTypes_InjectsNoAnomalies()
+    {
+        var (datLines, optLines) = CreateSampleLines();
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: "unknown-type,another-non-cross-type",
+            chaosAmount: "1",
+            random: new FirstIndexRandom());
+
+        Assert.Empty(result.Anomalies);
+        Assert.Equal(datLines, result.DatLines);
+        Assert.Equal(optLines, result.OptLines);
+    }
+
+    [Fact]
+    public void Apply_NullOrEmptyScenarioOrTypes_StillDefaultsToAllCrossFormatTypes()
+    {
+        var (datLines, optLines) = CreateSampleLines();
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: null,
+            chaosAmount: "1",
+            random: new FirstIndexRandom());
+
+        Assert.NotEmpty(result.Anomalies);
+    }
+
     private static FileGenerationRequest CreateRequest()
     {
         return new FileGenerationRequest
