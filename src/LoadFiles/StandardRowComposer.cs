@@ -131,7 +131,11 @@ internal abstract class StandardRowComposer : ILoadFileComposer
                         AttachmentLength = attach.Length,
                         Hashes = attach.Hashes,
                     };
-                    var attachmentPath = FamilyPlan.GetAttachmentPath(wi, attach.FileName, attachmentNumber, isDuplicate);
+                    var attachmentPath = this.request.Production.ProductionSet
+                        ? Path.Combine(
+                            Path.GetDirectoryName(wi.FilePathInZip) ?? string.Empty,
+                            $"{attachmentId}{Path.GetExtension(FamilyPlan.SanitizeAttachmentFilename(attach.FileName))}").Replace('\\', '/')
+                        : FamilyPlan.GetAttachmentPath(wi, attach.FileName, attachmentNumber, isDuplicate);
                     var childCtx = new RowCtx
                     {
                         IdOverride = attachmentId,

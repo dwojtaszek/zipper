@@ -242,7 +242,11 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
                     Path.GetDirectoryName(workItem.FilePathInZip) ?? string.Empty,
                     $"{childId}{Path.GetExtension(sanitizedFilename)}").Replace('\\', '/')
                 : FamilyPlan.GetAttachmentPath(workItem, attach.filename, attachmentNumber, isDuplicate).Replace('\\', '/');
-            var childTextPath = FamilyPlan.GetAttachmentTextPath(workItem, attach.filename, attachmentNumber).Replace('\\', '/');
+            var childTextPath = request.Production.ProductionSet
+                ? Path.Combine(
+                    (Path.GetDirectoryName(workItem.FilePathInZip) ?? string.Empty).Replace("NATIVES", "TEXT", StringComparison.OrdinalIgnoreCase),
+                    $"{childId}.txt").Replace('\\', '/')
+                : FamilyPlan.GetAttachmentTextPath(workItem, attach.filename, attachmentNumber).Replace('\\', '/');
 
             // Resolve child hashes
             string childHash = string.Empty;

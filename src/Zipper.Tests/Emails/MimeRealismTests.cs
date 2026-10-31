@@ -763,6 +763,51 @@ public class MimeRealismTests
         Assert.Contains("1_report_A002.pdf", xmlContent);
     }
 
+    [Fact]
+    public async Task StandardRowComposer_And_XmlLoadFileWriter_InProductionSetMode_AlignChildNativePaths()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 1, WithText = true },
+            Metadata = new MetadataConfig { Seed = 42, WithFamilies = true },
+            Production = new ProductionConfig { ProductionSet = true },
+            LoadFile = new LoadFileConfig { Formats = [LoadFileFormat.EdrmXml] },
+        };
+
+        var attachments = new List<(string filename, byte[] content)>
+        {
+            ("first.pdf", new byte[] { 1, 2 }),
+            ("second.pdf", new byte[] { 3, 4 }),
+        };
+
+        var workItem = new FileWorkItem { Index = 1, FileName = "DOC00000001.eml", FilePathInZip = "NATIVES/VOL001/DOC00000001.eml", FolderName = "VOL001", FolderNumber = 1, BatesNumberOverride = "DOC00000001" };
+        var fileData = new FileData
+        {
+            WorkItem = workItem,
+            Data = Encoding.ASCII.GetBytes("From: a@b.com\r\nSubject: Test\r\n\r\nBody"),
+            AttachmentPayloads = attachments,
+            AttachmentMetadata = FileAttachmentMetadata.FromPayloads(attachments, request, workItem),
+        };
+
+        // XML
+        var xmlWriter = new global::Zipper.LoadFiles.XmlLoadFileWriter();
+        using var stream = new MemoryStream();
+        await xmlWriter.WriteAsync(stream, request, new[] { fileData });
+        var xmlContent = Encoding.UTF8.GetString(stream.ToArray());
+
+        Assert.Contains("NATIVES/VOL001/DOC00000001_A001.pdf", xmlContent);
+        Assert.Contains("NATIVES/VOL001/DOC00000001_A002.pdf", xmlContent);
+        Assert.Contains("TEXT/VOL001/DOC00000001_A001.txt", xmlContent);
+        Assert.Contains("TEXT/VOL001/DOC00000001_A002.txt", xmlContent);
+
+        // CSV (StandardRowComposer)
+        var csvComposer = new global::Zipper.LoadFiles.CsvComposer(request);
+        var records = csvComposer.Compose(new[] { fileData }).ToList();
+        Assert.Equal(3, records.Count);
+        Assert.Contains("NATIVES/VOL001/DOC00000001_A001.pdf", records[1].Values);
+        Assert.Contains("NATIVES/VOL001/DOC00000001_A002.pdf", records[2].Values);
+    }
+
     private static int CountOccurrences(string value, string searched)
     {
         int count = 0;
