@@ -43,6 +43,8 @@ internal sealed record CrossFormatAnomalyResult
 /// </summary>
 internal static class CrossFormatAnomalyApplier
 {
+    private const string FirstPageSuffix = "_001";
+
     private sealed record DatRecordEntry(
         long LineNumber,
         List<string> Fields,
@@ -606,7 +608,7 @@ internal static class CrossFormatAnomalyApplier
             int index = (start + offset) % optDocs.Count;
             var optDoc = optDocs[index];
             DatRecordEntry? datDoc;
-            if (datRecordsByKey.TryGetValue(optDoc.DocKey, out var mappedRecord))
+            if (FindMatchingDatRecord(datRecordsByKey, optDoc.DocKey) is { } mappedRecord)
             {
                 if (!datRecords.IsActive(mappedRecord))
                 {
@@ -662,7 +664,7 @@ internal static class CrossFormatAnomalyApplier
         IReadOnlyDictionary<string, DatRecordEntry> datRecordsByKey,
         ActiveDatRecords datRecords)
     {
-        if (datRecordsByKey.TryGetValue(optDoc.DocKey, out var mappedRecord))
+        if (FindMatchingDatRecord(datRecordsByKey, optDoc.DocKey) is { } mappedRecord)
         {
             return datRecords.IsActive(mappedRecord) ? mappedRecord : null;
         }
@@ -1455,7 +1457,38 @@ internal static class CrossFormatAnomalyApplier
 
     private static OptDocEntry? FindMatchingOpt(IReadOnlyDictionary<string, OptDocEntry> documentsByKey, string datKey)
     {
-        return documentsByKey.TryGetValue(datKey, out var document) ? document : null;
+        if (string.IsNullOrEmpty(datKey))
+        {
+            return null;
+        }
+
+        if (documentsByKey.TryGetValue(datKey, out var document))
+        {
+            return document;
+        }
+
+        return documentsByKey.TryGetValue($"{datKey}{FirstPageSuffix}", out document) ? document : null;
+    }
+
+    private static DatRecordEntry? FindMatchingDatRecord(
+        IReadOnlyDictionary<string, DatRecordEntry> datRecordsByKey,
+        string optDocKey)
+    {
+        if (string.IsNullOrEmpty(optDocKey))
+        {
+            return null;
+        }
+
+        if (datRecordsByKey.TryGetValue(optDocKey, out var datDocument))
+        {
+            return datDocument;
+        }
+
+        return optDocKey.EndsWith(FirstPageSuffix, StringComparison.OrdinalIgnoreCase)
+            && optDocKey.Length > FirstPageSuffix.Length
+            && datRecordsByKey.TryGetValue(optDocKey[..^FirstPageSuffix.Length], out datDocument)
+                ? datDocument
+                : null;
     }
 
     private static OptDocEntry? FindMatchingOptForDat(

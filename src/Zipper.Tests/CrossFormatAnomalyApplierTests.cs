@@ -215,6 +215,75 @@ public sealed class CrossFormatAnomalyApplierTests : IDisposable
     }
 
     [Fact]
+    public void Apply_DesyncPagecount_MultipageOptKeyEnding001_PairsWithBaseDatRecordAndProducesAccurateAudit()
+    {
+        var datLines = new List<string>
+        {
+            JoinDat("DOCID", "BATES_NUMBER", "IMAGE_PATH", "PAGECOUNT", "VOLUME"),
+            JoinDat("DOC00000001", "TEST00000001", "IMAGES\\VOL001\\DOC00000001_001.tif", "2", "VOL001"),
+            JoinDat("DOC00000002", "TEST00000002", "IMAGES\\VOL001\\DOC00000002.tif", "1", "VOL001"),
+        };
+        var optLines = new List<string>
+        {
+            "TEST00000001_001,VOL001,IMAGES\\VOL001\\DOC00000001_001.tif,Y,,,2",
+            "TEST00000001_002,VOL001,IMAGES\\VOL001\\DOC00000001_002.tif,,,,",
+            "TEST00000002,VOL001,IMAGES\\VOL001\\DOC00000002.tif,Y,,,1",
+        };
+
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncPagecount,
+            chaosAmount: "1",
+            random: new FirstIndexRandom());
+
+        var datAnomaly = Assert.Single(result.Anomalies, a => a.File == "loadfile.dat");
+        var optAnomaly = Assert.Single(result.Anomalies, a => a.File == "loadfile.opt");
+
+        // The multipage OPT document break TEST00000001_001 must pair with DOC00000001, not the random second doc
+        Assert.Equal("DOC00000001", datAnomaly.RecordID);
+        Assert.Equal("TEST00000001_001", optAnomaly.RecordID);
+        Assert.NotNull(datAnomaly.Peer);
+        Assert.Equal("TEST00000001_001", datAnomaly.Peer.RecordID);
+        Assert.NotNull(optAnomaly.Peer);
+        Assert.Equal("DOC00000001", optAnomaly.Peer.RecordID);
+    }
+
+    [Fact]
+    public void Apply_DesyncPath_MultipageOptKeyEnding001_PairsWithMatchingDatRecord()
+    {
+        var datLines = new List<string>
+        {
+            JoinDat("DOCID", "BATES_NUMBER", "IMAGE_PATH", "PAGECOUNT", "VOLUME"),
+            JoinDat("DOC00000001", "TEST00000001", "IMAGES\\VOL001\\DOC00000001_001.tif", "2", "VOL001"),
+            JoinDat("DOC00000002", "TEST00000002", "IMAGES\\VOL001\\DOC00000002.tif", "1", "VOL001"),
+        };
+        var optLines = new List<string>
+        {
+            "TEST00000001_001,VOL001,IMAGES\\VOL001\\DOC00000001_001.tif,Y,,,2",
+            "TEST00000001_002,VOL001,IMAGES\\VOL001\\DOC00000001_002.tif,,,,",
+            "TEST00000002,VOL001,IMAGES\\VOL001\\DOC00000002.tif,Y,,,1",
+        };
+
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncPath,
+            chaosAmount: "1",
+            random: new FirstIndexRandom());
+
+        var datAnomaly = Assert.Single(result.Anomalies, a => a.File == "loadfile.dat");
+        var optAnomaly = Assert.Single(result.Anomalies, a => a.File == "loadfile.opt");
+
+        Assert.Equal("DOC00000001", datAnomaly.RecordID);
+        Assert.Equal("TEST00000001_001", optAnomaly.RecordID);
+        Assert.NotNull(datAnomaly.Peer);
+        Assert.Equal("TEST00000001_001", datAnomaly.Peer.RecordID);
+        Assert.NotNull(optAnomaly.Peer);
+        Assert.Equal("DOC00000001", optAnomaly.Peer.RecordID);
+    }
+
+    [Fact]
     public void Apply_DesyncOrder_SwapsOptDocumentOrderAndProducesReciprocalAudit()
     {
         var (datLines, optLines) = CreateSampleLines();

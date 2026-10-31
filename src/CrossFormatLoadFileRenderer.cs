@@ -46,7 +46,8 @@ internal static class CrossFormatLoadFileRenderer
         Encoding encoding,
         CancellationToken cancellationToken)
     {
-        using var stream = new LineBufferingStream(encoding);
+        var eol = LoadFileEmitter.GetEolString(request.Delimiters?.EndOfLine!);
+        using var stream = new LineBufferingStream(encoding, eol);
         var writer = createWriter(format, writerMode);
         await writer.WriteAsync(stream, request, records, null, cancellationToken).ConfigureAwait(false);
         return stream.Complete();
@@ -60,18 +61,20 @@ internal static class CrossFormatLoadFileRenderer
         private readonly char[] decodedCharacters;
         private readonly List<string> lines = [];
         private readonly StringBuilder currentLine = new();
+        private readonly string eol;
         private int pendingPreambleLength;
         private bool preambleResolved;
-        private bool previousCharacterWasCarriageReturn;
+        private bool pendingCarriageReturn;
         private bool completed;
 
-        public LineBufferingStream(Encoding encoding)
+        public LineBufferingStream(Encoding encoding, string? eol = null)
         {
             this.decoder = encoding.GetDecoder();
             this.preamble = encoding.GetPreamble();
             this.pendingPreamble = new byte[this.preamble.Length];
             this.preambleResolved = this.preamble.Length == 0;
             this.decodedCharacters = new char[encoding.GetMaxCharCount(4096)];
+            this.eol = string.IsNullOrEmpty(eol) ? "\r\n" : eol;
         }
 
         public override bool CanRead => false;
@@ -102,6 +105,12 @@ internal static class CrossFormatLoadFileRenderer
             }
 
             this.Decode(ReadOnlySpan<byte>.Empty, flush: true);
+            if (this.pendingCarriageReturn)
+            {
+                this.currentLine.Append('\r');
+                this.pendingCarriageReturn = false;
+            }
+
             if (this.currentLine.Length > 0)
             {
                 this.lines.Add(this.currentLine.ToString());
@@ -208,29 +217,53 @@ internal static class CrossFormatLoadFileRenderer
         {
             foreach (char character in characters)
             {
-                if (this.previousCharacterWasCarriageReturn)
+                if (this.eol == "\n")
                 {
-                    this.previousCharacterWasCarriageReturn = false;
                     if (character == '\n')
                     {
-                        continue;
+                        this.lines.Add(this.currentLine.ToString());
+                        this.currentLine.Clear();
+                    }
+                    else
+                    {
+                        this.currentLine.Append(character);
                     }
                 }
-
-                if (character == '\r')
+                else if (this.eol == "\r")
                 {
-                    this.lines.Add(this.currentLine.ToString());
-                    this.currentLine.Clear();
-                    this.previousCharacterWasCarriageReturn = true;
-                }
-                else if (character == '\n')
-                {
-                    this.lines.Add(this.currentLine.ToString());
-                    this.currentLine.Clear();
+                    if (character == '\r')
+                    {
+                        this.lines.Add(this.currentLine.ToString());
+                        this.currentLine.Clear();
+                    }
+                    else
+                    {
+                        this.currentLine.Append(character);
+                    }
                 }
                 else
                 {
-                    this.currentLine.Append(character);
+                    if (this.pendingCarriageReturn)
+                    {
+                        this.pendingCarriageReturn = false;
+                        if (character == '\n')
+                        {
+                            this.lines.Add(this.currentLine.ToString());
+                            this.currentLine.Clear();
+                            continue;
+                        }
+
+                        this.currentLine.Append('\r');
+                    }
+
+                    if (character == '\r')
+                    {
+                        this.pendingCarriageReturn = true;
+                    }
+                    else
+                    {
+                        this.currentLine.Append(character);
+                    }
                 }
             }
         }
