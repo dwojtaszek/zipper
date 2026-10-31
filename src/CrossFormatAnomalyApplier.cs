@@ -414,24 +414,26 @@ internal static class CrossFormatAnomalyApplier
 
         if (datAnomalies.Count > 0 || optAnomalies.Count > 0)
         {
-            var datLineNumbers = BuildDatLineNumbers(datRecords, docIdIdx, batesIdx);
-            var optLineNumbers = BuildOptLineNumbers(optDocs);
+            long maxDatLineNumber = Math.Max(2L, (long)outDatLines.Count);
+            long maxOptLineNumber = Math.Max(1L, (long)outOptLines.Count);
+            var datLineNumbers = BuildDatLineNumbers(datRecords, docIdIdx, batesIdx, maxDatLineNumber);
+            var optLineNumbers = BuildOptLineNumbers(optDocs, maxOptLineNumber);
             UpdateAnomalyLineNumbers(
                 datAnomalies,
                 datFileName,
                 optFileName,
                 datLineNumbers,
                 optLineNumbers,
-                outDatLines.Count + 1L,
-                outOptLines.Count + 1L);
+                maxDatLineNumber,
+                maxOptLineNumber);
             UpdateAnomalyLineNumbers(
                 optAnomalies,
                 datFileName,
                 optFileName,
                 datLineNumbers,
                 optLineNumbers,
-                outDatLines.Count + 1L,
-                outOptLines.Count + 1L);
+                maxDatLineNumber,
+                maxOptLineNumber);
         }
 
         return new CrossFormatAnomalyResult
@@ -446,14 +448,16 @@ internal static class CrossFormatAnomalyApplier
     private static Dictionary<string, long> BuildDatLineNumbers(
         ActiveDatRecords records,
         int docIdIndex,
-        int batesIndex)
+        int batesIndex,
+        long maxLineNumber)
     {
         var lineNumbers = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
         long lineNumber = 2;
         foreach (var record in records.OriginalOrder)
         {
-            AddLineNumber(lineNumbers, record.Fields, docIdIndex, lineNumber);
-            AddLineNumber(lineNumbers, record.Fields, batesIndex, lineNumber);
+            long effectiveLineNumber = Math.Min(lineNumber, maxLineNumber);
+            AddLineNumber(lineNumbers, record.Fields, docIdIndex, effectiveLineNumber);
+            AddLineNumber(lineNumbers, record.Fields, batesIndex, effectiveLineNumber);
             if (records.IsActive(record))
             {
                 lineNumber++;
@@ -463,7 +467,7 @@ internal static class CrossFormatAnomalyApplier
         return lineNumbers;
     }
 
-    private static Dictionary<string, long> BuildOptLineNumbers(IReadOnlyList<OptDocEntry> documents)
+    private static Dictionary<string, long> BuildOptLineNumbers(IReadOnlyList<OptDocEntry> documents, long maxLineNumber)
     {
         var lineNumbers = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
         long lineNumber = 1;
@@ -473,7 +477,8 @@ internal static class CrossFormatAnomalyApplier
             {
                 if (row.Fields.Length > 0 && !string.IsNullOrEmpty(row.Fields[0]))
                 {
-                    lineNumbers.TryAdd(row.Fields[0].Trim(), lineNumber);
+                    long effectiveLineNumber = Math.Min(lineNumber, maxLineNumber);
+                    lineNumbers.TryAdd(row.Fields[0].Trim(), effectiveLineNumber);
                 }
 
                 lineNumber++;
@@ -1175,8 +1180,8 @@ internal static class CrossFormatAnomalyApplier
             return;
         }
 
-        var optChild = FindMatchingOptForDat(optDocsByKey, childRecord);
-        if (optChild is null)
+        var fallbackOptChild = FindMatchingOptForDat(optDocsByKey, childRecord);
+        if (fallbackOptChild is null)
         {
             return;
         }
@@ -1207,8 +1212,8 @@ internal static class CrossFormatAnomalyApplier
             Peer = new ChaosAnomalyPeer
             {
                 File = optFileName,
-                LineNumber = optChild.BreakLineNumber.ToString(CultureInfo.InvariantCulture),
-                RecordID = optChild.DocKey,
+                LineNumber = fallbackOptChild.BreakLineNumber.ToString(CultureInfo.InvariantCulture),
+                RecordID = fallbackOptChild.DocKey,
                 Column = "DocBreak",
             },
         });
@@ -1216,11 +1221,11 @@ internal static class CrossFormatAnomalyApplier
         optAnomalies.Add(new ChaosAnomaly
         {
             File = optFileName,
-            LineNumber = optChild.BreakLineNumber.ToString(CultureInfo.InvariantCulture),
-            RecordID = optChild.DocKey,
+            LineNumber = fallbackOptChild.BreakLineNumber.ToString(CultureInfo.InvariantCulture),
+            RecordID = fallbackOptChild.DocKey,
             Column = "DocBreak",
             ErrorType = "missing-child",
-            Description = $"OPT child '{optChild.DocKey}' remains present while its DAT record '{childRecord.DocId}' is missing.",
+            Description = $"OPT child '{fallbackOptChild.DocKey}' remains present while its DAT record '{childRecord.DocId}' is missing.",
             Peer = new ChaosAnomalyPeer
             {
                 File = datFileName,
