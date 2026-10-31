@@ -591,6 +591,124 @@ public class MimeRealismTests
             Convert.ToHexString(SHA256.HashData(result.Content)).ToLowerInvariant());
     }
 
+    [Fact]
+    public void DatProductionComposer_WithMultipleAttachments_SetsEndAttachToFinalChildForParentAndAllChildren()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 1 },
+            Metadata = new MetadataConfig { Seed = 42, WithFamilies = true },
+            Production = new ProductionConfig { ProductionSet = true },
+        };
+
+        var attachments = new List<(string filename, byte[] content)>
+        {
+            ("first.pdf", new byte[] { 1, 2 }),
+            ("second.docx", new byte[] { 3, 4 }),
+        };
+
+        var workItem = new FileWorkItem { Index = 1, FileName = "00000001.eml", FolderName = "f1", FolderNumber = 1 };
+        var fileData = new FileData
+        {
+            WorkItem = workItem,
+            AttachmentPayloads = attachments,
+            AttachmentMetadata = FileAttachmentMetadata.FromPayloads(attachments, request, workItem),
+        };
+
+        var composer = new global::Zipper.LoadFiles.DatComposer(request, global::Zipper.LoadFiles.WriterMode.ProductionSet);
+        var records = composer.Compose(new[] { fileData }).ToList();
+
+        Assert.Equal(3, records.Count);
+        var headers = composer.HeaderColumns.ToList();
+        int begAttachIdx = headers.IndexOf("BEGATTACH");
+        int endAttachIdx = headers.IndexOf("ENDATTACH");
+
+        Assert.True(begAttachIdx >= 0);
+        Assert.True(endAttachIdx >= 0);
+
+        string expectedBeg = "DOC00000001";
+        string expectedEnd = "DOC00000001_A002";
+
+        // Parent
+        Assert.Equal(expectedBeg, records[0].Values[begAttachIdx]);
+        Assert.Equal(expectedEnd, records[0].Values[endAttachIdx]);
+
+        // Child 1
+        Assert.Equal(expectedBeg, records[1].Values[begAttachIdx]);
+        Assert.Equal(expectedEnd, records[1].Values[endAttachIdx]);
+
+        // Child 2
+        Assert.Equal(expectedBeg, records[2].Values[begAttachIdx]);
+        Assert.Equal(expectedEnd, records[2].Values[endAttachIdx]);
+    }
+
+    [Fact]
+    public async Task ZipArchiveSink_WithDuplicateAttachmentFilenames_EmitsDistinctArchivePaths()
+    {
+        var tempZip = Path.GetTempFileName() + ".zip";
+        var tempDat = Path.GetTempFileName() + ".dat";
+        try
+        {
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig { FileType = "eml", FileCount = 1, Concurrency = 1, WithText = true },
+                Metadata = new MetadataConfig { Seed = 42, WithFamilies = true },
+                LoadFile = new LoadFileConfig(),
+            };
+
+            var attachments = new List<(string filename, byte[] content)>
+            {
+                ("report.pdf", new byte[] { 1, 2 }),
+                ("report.pdf", new byte[] { 3, 4 }),
+            };
+
+            var workItem = new FileWorkItem { Index = 1, FileName = "00000001.eml", FilePathInZip = "00000001.eml", FolderName = "f1", FolderNumber = 1 };
+            var fileData = new FileData
+            {
+                WorkItem = workItem,
+                Data = Encoding.ASCII.GetBytes("From: a@b.com\r\nSubject: Test\r\n\r\nBody"),
+                AttachmentPayloads = attachments,
+                AttachmentMetadata = FileAttachmentMetadata.FromPayloads(attachments, request, workItem),
+            };
+
+            var channel = System.Threading.Channels.Channel.CreateUnbounded<FileData>();
+            await channel.Writer.WriteAsync(fileData);
+            channel.Writer.Complete();
+
+            var sink = new ZipArchiveSink();
+            await sink.CreateArchiveAsync(tempZip, "test.dat", tempDat, request, channel.Reader);
+
+            using var archive = System.IO.Compression.ZipFile.OpenRead(tempZip);
+            var entryNames = archive.Entries.Select(e => e.FullName).ToList();
+
+            Assert.Contains("f1/1_report.pdf", entryNames);
+            Assert.Contains("f1/1_report_A002.pdf", entryNames);
+            Assert.Contains("f1/1_report.txt", entryNames);
+            Assert.Contains("f1/1_report_A002.txt", entryNames);
+
+            // Also verify StandardRowComposer output matches these paths
+            var composer = new global::Zipper.LoadFiles.DatComposer(request, global::Zipper.LoadFiles.WriterMode.Standard);
+            var records = composer.Compose(new[] { fileData }).ToList();
+            Assert.Equal(3, records.Count);
+            var headers = composer.HeaderColumns.ToList();
+            int fileCol = headers.IndexOf("File Path");
+            Assert.Equal("f1/1_report.pdf", records[1].Values[fileCol]);
+            Assert.Equal("f1/1_report_A002.pdf", records[2].Values[fileCol]);
+        }
+        finally
+        {
+            if (File.Exists(tempZip))
+            {
+                File.Delete(tempZip);
+            }
+
+            if (File.Exists(tempDat))
+            {
+                File.Delete(tempDat);
+            }
+        }
+    }
+
     private static int CountOccurrences(string value, string searched)
     {
         int count = 0;

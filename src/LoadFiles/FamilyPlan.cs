@@ -43,6 +43,51 @@ internal static class FamilyPlan
         return $"{parentId}_A{attachmentNumber:D3}";
     }
 
+    /// <summary>
+    /// Resolves the archive/relative file path for an email attachment. When duplicate attachment
+    /// filenames exist on the same email, includes the attachment number suffix to avoid entry collisions.
+    /// </summary>
+    public static string GetAttachmentPath(FileWorkItem workItem, string filename, int attachmentNumber, bool isDuplicate = false)
+    {
+        ArgumentNullException.ThrowIfNull(workItem);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(attachmentNumber);
+
+        var sanitized = SanitizeAttachmentFilename(filename);
+        if (!isDuplicate)
+        {
+            return $"{workItem.FolderPrefix}{workItem.Index}_{sanitized}";
+        }
+
+        var stem = Path.GetFileNameWithoutExtension(sanitized);
+        var ext = Path.GetExtension(sanitized);
+        return $"{workItem.FolderPrefix}{workItem.Index}_{stem}_A{attachmentNumber:D3}{ext}";
+    }
+
+    /// <summary>
+    /// Determines whether the attachment filename at <paramref name="attachmentIndex"/> was already
+    /// seen earlier in the list of attachment filenames for the same email.
+    /// </summary>
+    public static bool IsDuplicateAttachmentName(IReadOnlyList<string> attachmentFilenames, int attachmentIndex)
+    {
+        ArgumentNullException.ThrowIfNull(attachmentFilenames);
+        ArgumentOutOfRangeException.ThrowIfNegative(attachmentIndex);
+        if (attachmentIndex >= attachmentFilenames.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(attachmentIndex));
+        }
+
+        var current = SanitizeAttachmentFilename(attachmentFilenames[attachmentIndex]);
+        for (int i = 0; i < attachmentIndex; i++)
+        {
+            if (string.Equals(SanitizeAttachmentFilename(attachmentFilenames[i]), current, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public static string GetAttachmentTextPath(FileWorkItem workItem, string filename, int attachmentNumber)
     {
         ArgumentNullException.ThrowIfNull(workItem);

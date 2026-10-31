@@ -199,10 +199,14 @@ internal class ZipArchiveSink : IArchiveSink
             }
 
             var attachments = fileData.GetAttachmentPayloads();
-            foreach (var attachment in attachments)
+            var attachmentNames = attachments.Select(a => a.filename).ToList();
+            for (int attachmentIndex = 0; attachmentIndex < attachments.Count; attachmentIndex++)
             {
+                var attachment = attachments[attachmentIndex];
+                int attachmentNumber = attachmentIndex + 1;
+                bool isDuplicate = FamilyPlan.IsDuplicateAttachmentName(attachmentNames, attachmentIndex);
                 WriteAttachmentToArchive(
-                    context.Archive, fileData, attachment, context.UsedEntryPaths, context.CompressionLevel);
+                    context.Archive, fileData, attachment, attachmentNumber, isDuplicate, context.UsedEntryPaths, context.CompressionLevel);
             }
 
             if (context.Request.Output.WithText)
@@ -263,11 +267,12 @@ internal class ZipArchiveSink : IArchiveSink
         ZipArchive archive,
         FileData fileData,
         (string filename, byte[] content) attachment,
+        int attachmentNumber,
+        bool isDuplicate,
         HashSet<string> usedEntryPaths,
         CompressionLevel compressionLevel)
     {
-        var sanitizedFilename = Path.GetFileName(attachment.filename.Replace('\\', '/'));
-        var rawEntryPath = $"{fileData.WorkItem.FolderPrefix}{fileData.WorkItem.Index}_{sanitizedFilename}";
+        var rawEntryPath = FamilyPlan.GetAttachmentPath(fileData.WorkItem, attachment.filename, attachmentNumber, isDuplicate);
         var attachmentEntry = CreateTrackedEntry(archive, rawEntryPath, usedEntryPaths, compressionLevel);
         using var attachmentStream = attachmentEntry.Open();
         attachmentStream.Write(attachment.content);

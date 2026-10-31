@@ -118,18 +118,20 @@ internal abstract class StandardRowComposer : ILoadFileComposer
 
             if (hasAttachment)
             {
+                var attachmentNames = attachments.Select(a => a.FileName).ToList();
                 for (int attachmentIndex = 0; attachmentIndex < attachments.Count; attachmentIndex++)
                 {
                     var attach = attachments[attachmentIndex];
-                    string attachmentId = FamilyPlan.GetChildId(parentId, attachmentIndex + 1);
+                    int attachmentNumber = attachmentIndex + 1;
+                    bool isDuplicate = FamilyPlan.IsDuplicateAttachmentName(attachmentNames, attachmentIndex);
+                    string attachmentId = FamilyPlan.GetChildId(parentId, attachmentNumber);
                     var childFileData = fileData with
                     {
                         Attachment = (attach.FileName, Array.Empty<byte>()),
                         AttachmentLength = attach.Length,
                         Hashes = attach.Hashes,
                     };
-                    var sanitizedFilename = FamilyPlan.SanitizeAttachmentFilename(attach.FileName);
-                    var attachmentPath = $"{wi.FolderPrefix}{wi.Index}_{sanitizedFilename}";
+                    var attachmentPath = FamilyPlan.GetAttachmentPath(wi, attach.FileName, attachmentNumber, isDuplicate);
                     var childCtx = new RowCtx
                     {
                         IdOverride = attachmentId,

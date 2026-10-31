@@ -59,15 +59,18 @@ internal sealed class DatProductionComposer
         {
             var (parentId, childId, hasAttachment) = DatComposerShared.GetFamilyIdentifiers(
                 fileData, this.request, this.batesSequence);
+            var attachments = hasAttachment ? fileData.GetAttachmentMetadata() : Array.Empty<FileAttachmentMetadata>();
+            string endAttach = attachments.Count > 0
+                ? FamilyPlan.GetChildId(parentId, attachments.Count)
+                : childId;
 
             yield return DatComposerShared.MakeRecord(
                 this.headerColumns,
                 parentId,
-                this.ProductionRowValues(fileData, new DatRowContext { IdOverride = parentId, BegAttach = parentId, EndAttach = childId, ParentDocId = string.Empty }));
+                this.ProductionRowValues(fileData, new DatRowContext { IdOverride = parentId, BegAttach = parentId, EndAttach = endAttach, ParentDocId = string.Empty }));
 
             if (hasAttachment)
             {
-                var attachments = fileData.GetAttachmentMetadata();
                 for (int attachmentIndex = 0; attachmentIndex < attachments.Count; attachmentIndex++)
                 {
                     var attach = attachments[attachmentIndex];
@@ -102,7 +105,7 @@ internal sealed class DatProductionComposer
                             FileSizeOverride = attach.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
                             IsChild = true,
                             BegAttach = parentId,
-                            EndAttach = childId,
+                            EndAttach = endAttach,
                             ParentDocId = parentId,
                             RedactedImageRelPathOverride = childRedactedImageRelPath,
                             RedactedTextRelPathOverride = childRedactedTextRelPath,

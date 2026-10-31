@@ -122,18 +122,20 @@ internal sealed class DatStandardComposer
             if (hasAttachment)
             {
                 var attachments = fileData.GetAttachmentMetadata();
+                var attachmentNames = attachments.Select(a => a.FileName).ToList();
                 for (int attachmentIndex = 0; attachmentIndex < attachments.Count; attachmentIndex++)
                 {
                     var attach = attachments[attachmentIndex];
-                    string attachmentId = FamilyPlan.GetChildId(parentId, attachmentIndex + 1);
+                    int attachmentNumber = attachmentIndex + 1;
+                    bool isDuplicate = FamilyPlan.IsDuplicateAttachmentName(attachmentNames, attachmentIndex);
+                    string attachmentId = FamilyPlan.GetChildId(parentId, attachmentNumber);
                     var childFileData = fileData with
                     {
                         Attachment = (attach.FileName, Array.Empty<byte>()),
                         AttachmentLength = attach.Length,
                         Hashes = attach.Hashes,
                     };
-                    var sanitizedFilename = FamilyPlan.SanitizeAttachmentFilename(attach.FileName);
-                    var attachmentPath = $"{fileData.WorkItem.FolderPrefix}{fileData.WorkItem.Index}_{sanitizedFilename}";
+                    var attachmentPath = FamilyPlan.GetAttachmentPath(fileData.WorkItem, attach.FileName, attachmentNumber, isDuplicate);
                     yield return DatComposerShared.MakeRecord(
                         this.headerColumns,
                         attachmentId,
