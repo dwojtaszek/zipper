@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Zipper;
 
 /// <summary>
@@ -34,6 +36,7 @@ internal record ChaosAnomaly
     /// <summary>
     /// Gets or sets the optional file name where the anomaly was injected (e.g., "loadfile.dat").
     /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? File { get; init; }
 
     /// <summary>
@@ -66,5 +69,6 @@ internal record ChaosAnomaly
     /// Gets or sets an optional peer reference identifying the corresponding coordinated anomaly
     /// in the companion load file.
     /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public ChaosAnomalyPeer? Peer { get; init; }
 }

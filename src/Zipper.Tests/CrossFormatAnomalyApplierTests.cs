@@ -963,6 +963,63 @@ public sealed class CrossFormatAnomalyApplierTests : IDisposable
         Assert.Equal(optLines, result.OptLines);
     }
 
+    [Fact]
+    public void Apply_DesyncPath_PathWithoutVolSegment_ProducesCleanVolumePathAcrossPlatforms()
+    {
+        var datLines = new List<string>
+        {
+            JoinDat("DOCID", "BATES_NUMBER", "IMAGE_PATH", "PAGECOUNT", "VOLUME"),
+            JoinDat("DOC00000001", "TEST00000001", "IMAGES\\001\\DOC00000001.tif", "1", "001"),
+        };
+        var optLines = new List<string>
+        {
+            "TEST00000001,001,IMAGES\\001\\DOC00000001.tif,Y,,,1",
+        };
+
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncPath,
+            chaosAmount: "1",
+            random: new FirstIndexRandom());
+
+        Assert.NotEmpty(result.OptAnomalies);
+        var modifiedRow = result.OptLines[0];
+        Assert.Contains("VOL999", modifiedRow, StringComparison.Ordinal);
+        // Verify path does not duplicate directory prefixes (e.g. IMAGES\VOL999\IMAGES\001\DOC00000001.tif)
+        Assert.DoesNotContain("IMAGES\\VOL999\\IMAGES", modifiedRow, StringComparison.Ordinal);
+        Assert.DoesNotContain("IMAGES/VOL999/IMAGES", modifiedRow, StringComparison.Ordinal);
+        Assert.EndsWith("DOC00000001.tif,Y,,,1", modifiedRow, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Apply_EmptyQuoteDelimiter_RewrittenRowsDoNotContainNulCharacters()
+    {
+        var datLines = new List<string>
+        {
+            "DOCID\u0014BATES_NUMBER\u0014PARENTDOCID\u0014IMAGE_PATH\u0014PAGECOUNT\u0014VOLUME",
+            "DOC00000001\u0014TEST00000001\u0014\u0014IMAGES\\VOL001\\DOC00000001.tif\u00141\u0014VOL001",
+        };
+        var optLines = new List<string>
+        {
+            "TEST00000001,VOL001,IMAGES\\VOL001\\DOC00000001.tif,Y,,,1",
+        };
+
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.BrokenParent,
+            chaosAmount: "1",
+            random: new FirstIndexRandom(),
+            columnDelimiter: "\u0014",
+            quoteDelimiter: string.Empty);
+
+        Assert.NotEmpty(result.DatAnomalies);
+        Assert.All(result.DatLines, line => Assert.DoesNotContain('\0', line));
+        Assert.Contains("INVALID_PARENT_PTR", result.DatLines[1], StringComparison.Ordinal);
+        Assert.DoesNotContain("\0", result.DatLines[1], StringComparison.Ordinal);
+    }
+
     private static FileGenerationRequest CreateRequest()
     {
         return new FileGenerationRequest

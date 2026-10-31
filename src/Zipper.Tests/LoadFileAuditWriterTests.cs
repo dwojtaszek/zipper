@@ -163,6 +163,8 @@ public class LoadFileAuditWriterTests : TempDirectoryTestBase
         Assert.Equal("Author", anomaly.GetProperty("column").GetString());
         Assert.Equal("mixed-delimiters", anomaly.GetProperty("errorType").GetString());
         Assert.Equal("Mixed delimiters injected", anomaly.GetProperty("description").GetString());
+        Assert.False(anomaly.TryGetProperty("file", out _));
+        Assert.False(anomaly.TryGetProperty("peer", out _));
     }
 
     [Theory]

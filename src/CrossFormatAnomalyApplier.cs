@@ -1546,7 +1546,7 @@ internal static class CrossFormatAnomalyApplier
 
         if (!replaced)
         {
-            return $"IMAGES{sep}{newVolume}{sep}{Path.GetFileName(path)}";
+            return $"IMAGES{sep}{newVolume}{sep}{parts[^1]}";
         }
 
         return string.Join(sep.ToString(), parts);

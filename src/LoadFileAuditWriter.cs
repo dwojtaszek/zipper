@@ -335,6 +335,7 @@ internal static class LoadFileAuditWriter
 
     private record AuditAnomalyEntry
     {
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? File { get; init; }
 
         public string LineNumber { get; init; } = string.Empty;
@@ -347,6 +348,7 @@ internal static class LoadFileAuditWriter
 
         public string Description { get; init; } = string.Empty;
 
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public AuditPeerEntry? Peer { get; init; }
     }
 
