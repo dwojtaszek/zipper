@@ -1,3 +1,4 @@
+using System.Globalization;
 using Xunit;
 using Zipper.Config;
 using Zipper.Emails;
@@ -27,6 +28,7 @@ public class EmailThreadPlanTests
         Assert.EndsWith(">", node.MessageId, StringComparison.Ordinal);
         Assert.Null(node.InReplyTo);
         Assert.Null(node.References);
+        Assert.True(node.IsInclusive, "The only emitted message is a leaf in the generated corpus.");
         Assert.NotEmpty(node.Subject);
         Assert.NotEmpty(node.Body);
     }
@@ -69,6 +71,100 @@ public class EmailThreadPlanTests
     }
 
     [Fact]
+    public void GetNode_MultiMessageThread_SentDatesIncreaseInMessageOrder()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 100 },
+            Metadata = new MetadataConfig { WithThreading = true, Seed = 42 },
+        };
+
+        var plan = EmailThreadPlan.GetOrCreate(request);
+        var nodes = Enumerable.Range(1, 100)
+            .Select(index => plan.GetNode(index))
+            .GroupBy(node => node.RootIndex);
+
+        foreach (var thread in nodes)
+        {
+            var messages = thread.OrderBy(node => node.Index).ToList();
+            for (int i = 1; i < messages.Count; i++)
+            {
+                Assert.True(
+                    messages[i].SentDate > messages[i - 1].SentDate,
+                    $"Message {messages[i].Index} must be later than message {messages[i - 1].Index} in its thread.");
+            }
+        }
+    }
+
+    [Fact]
+    public void GetNode_SourceRecords_ThreadsOnlyEmailFileTypes()
+    {
+        var sourceRecords = new[]
+        {
+            new Zipper.SourceInput.SourceRecord { RelativePath = "one.pdf", FileType = "pdf" },
+            new Zipper.SourceInput.SourceRecord { RelativePath = "two.eml", FileType = "eml" },
+            new Zipper.SourceInput.SourceRecord { RelativePath = "three.pdf", FileType = "pdf" },
+            new Zipper.SourceInput.SourceRecord { RelativePath = "four.eml", FileType = "eml" },
+            new Zipper.SourceInput.SourceRecord { RelativePath = "five.eml", FileType = "eml" },
+        };
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileType = "pdf",
+                FileCount = sourceRecords.Length,
+                SourceFileTypes = ["eml", "pdf"],
+            },
+            Metadata = new MetadataConfig { WithThreading = true, Seed = 42 },
+            SourceRecords = sourceRecords,
+        };
+
+        var plan = EmailThreadPlan.GetOrCreate(request);
+        var emailNodes = new[] { plan.GetNode(2), plan.GetNode(4), plan.GetNode(5) };
+        var messageIds = emailNodes.Select(node => node.MessageId).ToHashSet(StringComparer.Ordinal);
+
+        Assert.All(emailNodes, node =>
+        {
+            if (node.InReplyTo is not null)
+            {
+                Assert.Contains(node.InReplyTo, messageIds);
+                Assert.All(node.References!.Split(' '), reference => Assert.Contains(reference, messageIds));
+            }
+        });
+    }
+
+    [Fact]
+    public void GetNode_LargeCorpus_PlansOnlyRequestedBatch()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 10_000_000 },
+            Metadata = new MetadataConfig { WithThreading = true, Seed = 42 },
+        };
+
+        var node = EmailThreadPlan.GetOrCreate(request).GetNode(10_000_000);
+
+        Assert.Equal(10_000_000, node.Index);
+    }
+
+    [Fact]
+    public void GetOrCreate_ClonedRequestWithNewSeed_CreatesAnIndependentPlan()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 2 },
+            Metadata = new MetadataConfig { WithThreading = true, Seed = 42 },
+        };
+        var originalMessageId = EmailThreadPlan.GetOrCreate(request).GetNode(1).MessageId;
+        var clone = request.Clone();
+        clone.Metadata = clone.Metadata with { Seed = 123 };
+
+        var clonedMessageId = EmailThreadPlan.GetOrCreate(clone).GetNode(1).MessageId;
+
+        Assert.NotEqual(originalMessageId, clonedMessageId);
+    }
+
+    [Fact]
     public void GetNode_Inclusiveness_LeavesAreInclusiveAndParentsAreNot()
     {
         var request = new FileGenerationRequest
@@ -83,16 +179,6 @@ public class EmailThreadPlanTests
         for (long i = 1; i <= 30; i++)
         {
             nodes.Add(plan.GetNode(i));
-        }
-
-        // To ensure we evaluate complete threads without partial thread cutoffs at the end of the range,
-        // fetch the remaining nodes belonging to the last root thread.
-        long lastRoot = nodes.Last().RootIndex;
-        long next = 31;
-        while (plan.GetNode(next).RootIndex == lastRoot)
-        {
-            nodes.Add(plan.GetNode(next));
-            next++;
         }
 
         var parentIndices = nodes.Where(n => n.ParentIndex.HasValue).Select(n => n.ParentIndex!.Value).ToHashSet();
@@ -140,6 +226,73 @@ public class EmailThreadPlanTests
             Assert.Equal(node1.IsInclusive, node2.IsInclusive);
             Assert.Equal(node1.Subject, node2.Subject);
             Assert.Equal(node1.SentDate, node2.SentDate);
+        }
+    }
+
+    [Fact]
+    public void GetNode_Determinism_IsIndependentOfCurrentCulture()
+    {
+        var originalCulture = CultureInfo.CurrentCulture;
+        var frenchCulture = (CultureInfo)CultureInfo.InvariantCulture.Clone();
+        frenchCulture.DateTimeFormat.AbbreviatedDayNames = ["dim", "lun", "mar", "mer", "jeu", "ven", "sam"];
+        frenchCulture.DateTimeFormat.AbbreviatedMonthNames = ["janv", "févr", "mars", "avr", "mai", "juin", "juil", "août", "sept", "oct", "nov", "déc", ""];
+
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+            var englishNodes = GenerateThreadNodes();
+
+            CultureInfo.CurrentCulture = frenchCulture;
+            var frenchNodes = GenerateThreadNodes();
+
+            Assert.Equal(englishNodes.Select(node => node.Body), frenchNodes.Select(node => node.Body));
+            Assert.Equal(englishNodes.Select(node => node.Subject), frenchNodes.Select(node => node.Subject));
+            Assert.Equal(englishNodes.Select(node => node.SentDate), frenchNodes.Select(node => node.SentDate));
+            Assert.Contains(englishNodes, node => node.Subject.StartsWith("FW: ", StringComparison.Ordinal));
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = originalCulture;
+        }
+
+        static EmailThreadNode[] GenerateThreadNodes()
+        {
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig { FileType = "eml", FileCount = 20 },
+                Metadata = new MetadataConfig { WithThreading = true, Seed = 42 },
+            };
+            var plan = EmailThreadPlan.GetOrCreate(request);
+            return Enumerable.Range(1, 20).Select(index => plan.GetNode(index)).ToArray();
+        }
+    }
+
+    [Fact]
+    public void GetNode_ConcurrentRequests_PreserveDeterministicThreadGraph()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 500 },
+            Metadata = new MetadataConfig { WithThreading = true, Seed = 12345 },
+        };
+        var plan = EmailThreadPlan.GetOrCreate(request);
+        var messageIds = new string[500];
+
+        Parallel.For(0, 5_000, requestIndex =>
+        {
+            int fileIndex = (requestIndex * 37 % messageIds.Length) + 1;
+            messageIds[fileIndex - 1] = plan.GetNode(fileIndex).MessageId;
+        });
+
+        var expectedPlan = EmailThreadPlan.GetOrCreate(new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 500 },
+            Metadata = new MetadataConfig { WithThreading = true, Seed = 12345 },
+        });
+
+        for (int index = 0; index < messageIds.Length; index++)
+        {
+            Assert.Equal(expectedPlan.GetNode(index + 1).MessageId, messageIds[index]);
         }
     }
 

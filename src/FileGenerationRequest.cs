@@ -40,8 +40,8 @@ public class FileGenerationRequest
     /// <summary>Gets the validated Source Record paths retained for path-pointer collision checks.</summary>
     internal IReadOnlySet<string>? SourcePaths { get; set; }
 
-    /// <summary>Cached synthetic email thread plan shared by file generation and load file composers.</summary>
-    internal Emails.EmailThreadPlan? ThreadPlan { get; set; }
+    /// <summary>Cached synthetic Email thread plan shared by File Generation and Load File composers.</summary>
+    internal Emails.EmailThreadPlan? ThreadPlan;
 
     public FileGenerationRequest Clone()
     {
@@ -64,7 +64,6 @@ public class FileGenerationRequest
             AdversarialValueColumnName = this.AdversarialValueColumnName,
             SourceRecords = this.SourceRecords,
             SourcePaths = this.SourcePaths,
-            ThreadPlan = this.ThreadPlan,
         };
     }
 }

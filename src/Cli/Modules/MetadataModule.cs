@@ -103,14 +103,12 @@ public sealed class MetadataModule : CliModule
             return false;
         }
 
-        // Source-driven rows are not read yet at validation time, so the eml-participation
-        // warning is skipped for source input and applied per record during generation.
         if (_withFamilies && !hasSourceInput && (!includesEml || _attachmentRate <= 0))
         {
             Console.Error.WriteLine("Warning: --with-families is only meaningful when --type eml (or eml participates in --types) and --attachment-rate > 0 are specified.");
         }
 
-        if (_withThreading && !hasSourceInput && !includesEml)
+        if (_withThreading && !includesEml)
         {
             Console.Error.WriteLine("Warning: --with-threading is only meaningful when --type eml (or eml participates in --types) is specified.");
         }

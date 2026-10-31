@@ -140,6 +140,16 @@ public class MetadataModuleTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void TryBuild_WithThreadingWithoutEmlInSourceRecords_EmitsWarning()
+    {
+        var (isValid, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(
+            () => TryBuild(false, true, new[] { "--with-threading" }, out _));
+
+        Assert.True(isValid);
+        Assert.Contains("Warning: --with-threading is only meaningful when --type eml (or eml participates in --types) is specified.", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TryBuild_WithThreadingWithEml_DoesNotEmitWarningAndEnablesFlag()
     {
         var (config, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(

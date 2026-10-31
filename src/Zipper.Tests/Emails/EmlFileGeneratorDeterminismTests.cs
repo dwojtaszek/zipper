@@ -98,7 +98,7 @@ public class EmlFileGeneratorDeterminismTests
     }
 
     [Fact]
-    public void Generate_WithoutThreading_PreservesParityWithoutMessageId()
+    public void Generate_WithoutThreading_MatchesLegacyGoldenBytes()
     {
         var generator = new EmlFileGenerator();
         var request = new FileGenerationRequest
@@ -113,6 +113,10 @@ public class EmlFileGeneratorDeterminismTests
         Assert.DoesNotContain("Message-ID:", emlText, StringComparison.Ordinal);
         Assert.DoesNotContain("In-Reply-To:", emlText, StringComparison.Ordinal);
         Assert.DoesNotContain("References:", emlText, StringComparison.Ordinal);
+        // Golden SHA-256 of the seeded EML generated from origin/main before threading support.
+        Assert.Equal(
+            "2577c72e5c61570d9e8e638b109068bed4087e3533bfbc67086421cf899f7c91",
+            Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(result.Content)).ToLowerInvariant());
     }
 
     [Fact]
@@ -150,6 +154,73 @@ public class EmlFileGeneratorDeterminismTests
         }
 
         Assert.True(foundReply, "At least one reply should be present in a 10-email threaded corpus.");
+    }
+
+    [Fact]
+    public void Generate_WithThreadingInFileTypeMix_ReferencesOnlyGeneratedEmails()
+    {
+        var ratios = new[]
+        {
+            new FileTypeRatio { Type = "pdf", Weight = 1 },
+            new FileTypeRatio { Type = "eml", Weight = 9 },
+        };
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileType = "pdf",
+                FileCount = 10,
+                FileTypeRatios = ratios,
+                FileTypePlan = new FileTypePlan(ratios, 10),
+            },
+            Metadata = new MetadataConfig { Seed = 42, WithThreading = true },
+        };
+        var generator = new EmlFileGenerator();
+        var messages = Enumerable.Range(1, 10)
+            .Where(index => request.Output.ResolveFileType(index) == "eml")
+            .Select(index => System.Text.Encoding.UTF8.GetString(generator.Generate(
+                new FileWorkItem
+                {
+                    Index = index,
+                    FileType = "eml",
+                    FileName = $"{index:D8}.eml",
+                    FolderName = "f",
+                    FolderNumber = 1,
+                },
+                request).Content))
+            .ToList();
+        var messageIds = messages.Select(text => GetHeader(text, "Message-ID")).ToHashSet(StringComparer.Ordinal);
+
+        Assert.Equal(messages.Count, messageIds.Count);
+        Assert.All(messageIds, messageId => Assert.Matches(@"^<[^<>\s@]+@[^<>\s@]+>$", messageId));
+        var messagesById = messages.ToDictionary(text => GetHeader(text, "Message-ID"), StringComparer.Ordinal);
+        Assert.All(messages, text =>
+        {
+            var inReplyTo = GetHeader(text, "In-Reply-To");
+            if (inReplyTo.Length == 0)
+            {
+                Assert.Empty(GetHeader(text, "References"));
+                return;
+            }
+
+            Assert.Contains(inReplyTo, messageIds);
+            var references = GetHeader(text, "References").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            Assert.Equal(inReplyTo, references[^1]);
+            Assert.All(references, reference => Assert.Contains(reference, messageIds));
+
+            var parentReferences = GetHeader(messagesById[inReplyTo], "References");
+            var expectedReferences = parentReferences.Length == 0
+                ? inReplyTo
+                : $"{parentReferences} {inReplyTo}";
+            Assert.Equal(expectedReferences, GetHeader(text, "References"));
+        });
+
+        static string GetHeader(string message, string header)
+        {
+            var line = message.Split("\r\n", StringSplitOptions.RemoveEmptyEntries)
+                .SingleOrDefault(value => value.StartsWith($"{header}: ", StringComparison.Ordinal));
+            return line is null ? string.Empty : line[(header.Length + 2)..];
+        }
     }
 
     [Fact]

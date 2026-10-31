@@ -64,6 +64,9 @@ internal abstract class StandardRowComposer : ILoadFileComposer
             var recordType = wi.EffectiveFileType(this.request);
             var recordIsEml = string.Equals(recordType, "eml", StringComparison.Ordinal);
             var recordIsTiff = string.Equals(recordType, "tiff", StringComparison.Ordinal);
+            var threadNode = this.request.Metadata.WithThreading && recordIsEml && fileData.Email?.ThreadId is null
+                ? Emails.EmailThreadPlan.GetOrCreate(this.request).GetNode(wi.Index)
+                : null;
 
             // Draw order must stay metadata-then-email to match historical output.
             // In a File Type mix, Email values are drawn only for Email records (blank elsewhere).
@@ -71,6 +74,7 @@ internal abstract class StandardRowComposer : ILoadFileComposer
             var eml = includeEml && recordIsEml ? SyntheticRowValues.Eml(wi, fileData, random, now) : default;
             var colMeta = includeCollectionMeta ? SyntheticRowValues.CollectionMetadata(wi, random, now) : default;
 
+            var isInclusive = fileData.Email?.IsInclusive ?? threadNode?.IsInclusive;
             bool hasAttachment = this.request.Metadata.WithFamilies && recordIsEml && fileData.Attachment.HasValue;
             string parentId = wi.BatesNumberOverride
                 ?? (this.batesSequence is not null
@@ -86,6 +90,9 @@ internal abstract class StandardRowComposer : ILoadFileComposer
                 ParentDocId = string.Empty,
                 RecordIsEml = recordIsEml,
                 RecordIsTiff = recordIsTiff,
+                ThreadId = fileData.Email?.ThreadId ?? threadNode?.ThreadDocId ?? string.Empty,
+                Inclusive = isInclusive.HasValue ? (isInclusive.Value ? "Y" : "N") : string.Empty,
+                ThreadParentId = fileData.Email?.ThreadParentId ?? threadNode?.ThreadParentDocId ?? string.Empty,
             };
 
             var values = this.orderedKeys.Select(k => this.Resolve(k, wi, fileData, meta, eml, colMeta, parentCtx)).ToList();
@@ -224,9 +231,9 @@ internal abstract class StandardRowComposer : ILoadFileComposer
             "BEGATTACH" => ctx.BegAttach,
             "ENDATTACH" => ctx.EndAttach,
             "PARENTDOCID" => ctx.ParentDocId,
-            "THREADID" => ctx.IsChild || !ctx.RecordIsEml ? string.Empty : fileData.Email?.ThreadId ?? string.Empty,
-            "INCLUSIVE" => ctx.IsChild || !ctx.RecordIsEml ? string.Empty : (fileData.Email?.IsInclusive == true ? "Y" : (fileData.Email?.IsInclusive == false ? "N" : string.Empty)),
-            "THREADPARENT" => ctx.IsChild || !ctx.RecordIsEml ? string.Empty : fileData.Email?.ThreadParentId ?? string.Empty,
+            "THREADID" => ctx.IsChild || !ctx.RecordIsEml ? string.Empty : ctx.ThreadId,
+            "INCLUSIVE" => ctx.IsChild || !ctx.RecordIsEml ? string.Empty : ctx.Inclusive,
+            "THREADPARENT" => ctx.IsChild || !ctx.RecordIsEml ? string.Empty : ctx.ThreadParentId,
             "MD5HASH" => ResolveHashFromFileData(fileData, Config.HashAlgorithm.MD5),
             "SHA1HASH" => ResolveHashFromFileData(fileData, Config.HashAlgorithm.SHA1),
             "SHA256HASH" => ResolveHashFromFileData(fileData, Config.HashAlgorithm.SHA256),
@@ -266,6 +273,12 @@ internal abstract class StandardRowComposer : ILoadFileComposer
         public string EndAttach { get; init; } = string.Empty;
 
         public string ParentDocId { get; init; } = string.Empty;
+
+        public string ThreadId { get; init; } = string.Empty;
+
+        public string Inclusive { get; init; } = string.Empty;
+
+        public string ThreadParentId { get; init; } = string.Empty;
 
         /// <summary>Whether the parent record's File Type is eml (Email Metadata values; defaults true for legacy single-type constructions).</summary>
         public bool RecordIsEml { get; init; } = true;

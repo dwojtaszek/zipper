@@ -126,6 +126,43 @@ public class ThreadMetadataColumnTests
         Assert.Contains("THREAD PARENT", headers);
     }
 
+    [Theory]
+    [InlineData("csv")]
+    [InlineData("concordance")]
+    public void StandardRowComposer_WithThreadingAndSyntheticEmailRows_PopulatesThreadMetadata(string format)
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 20 },
+            Metadata = new MetadataConfig { Seed = 42, WithThreading = true },
+        };
+        ILoadFileComposer composer = format == "csv"
+            ? new CsvComposer(request)
+            : new ConcordanceComposer(request);
+        var files = Enumerable.Range(1, 20)
+            .Select(index => new FileData
+            {
+                WorkItem = new FileWorkItem
+                {
+                    Index = index,
+                    FileType = "eml",
+                    FilePathInZip = $"folder/{index:D8}.eml",
+                },
+            })
+            .ToList();
+        var records = composer.Compose(files).ToList();
+        var headers = composer.HeaderColumns;
+        int threadIdIdx = headers.ToList().IndexOf(format == "csv" ? "THREAD ID" : "THREAD_ID");
+        int inclusiveIdx = headers.ToList().IndexOf("INCLUSIVE");
+        int threadParentIdx = headers.ToList().IndexOf(format == "csv" ? "THREAD PARENT" : "THREAD_PARENT");
+
+        Assert.Equal(20, records.Count);
+        Assert.All(records, record => Assert.NotEmpty(record.Values[threadIdIdx]));
+        Assert.Equal(string.Empty, records[0].Values[threadParentIdx]);
+        Assert.Contains(records, record => !string.IsNullOrEmpty(record.Values[threadParentIdx]));
+        Assert.All(records, record => Assert.Contains(record.Values[inclusiveIdx], new[] { "Y", "N" }));
+    }
+
     [Fact]
     public void ConcordanceComposer_WithThreading_EmitsConcordanceHeaders()
     {
@@ -141,6 +178,36 @@ public class ThreadMetadataColumnTests
         Assert.Contains("THREAD_ID", headers);
         Assert.Contains("INCLUSIVE", headers);
         Assert.Contains("THREAD_PARENT", headers);
+    }
+
+    [Fact]
+    public void DatStandardComposer_WithThreadingAndSourceEmailRows_PopulatesOnlyEmailMetadata()
+    {
+        var request = CreateMixedSourceRequest();
+        var composer = new DatComposer(request, WriterMode.Standard);
+        var records = composer.Compose(BuildMixedSourceFileData(request)).ToList();
+        var headers = composer.HeaderColumns;
+        int threadIdIdx = headers.ToList().IndexOf("Thread ID");
+
+        Assert.NotEmpty(records[0].Values[threadIdIdx]);
+        Assert.Equal(string.Empty, records[1].Values[threadIdIdx]);
+        Assert.NotEmpty(records[2].Values[threadIdIdx]);
+        Assert.Equal(string.Empty, records[3].Values[threadIdIdx]);
+    }
+
+    [Fact]
+    public void StandardRowComposer_WithThreadingAndSourceEmailRows_PopulatesOnlyEmailMetadata()
+    {
+        var request = CreateMixedSourceRequest();
+        var composer = new CsvComposer(request);
+        var records = composer.Compose(BuildMixedSourceFileData(request)).ToList();
+        var headers = composer.HeaderColumns;
+        int threadIdIdx = headers.ToList().IndexOf("THREAD ID");
+
+        Assert.NotEmpty(records[0].Values[threadIdIdx]);
+        Assert.Equal(string.Empty, records[1].Values[threadIdIdx]);
+        Assert.NotEmpty(records[2].Values[threadIdIdx]);
+        Assert.Equal(string.Empty, records[3].Values[threadIdIdx]);
     }
 
     [Fact]
@@ -167,6 +234,27 @@ public class ThreadMetadataColumnTests
     }
 
     [Fact]
+    public void DatLoadfileOnlyComposer_WithThreadingWithoutEml_LeavesThreadValuesEmpty()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "pdf", FileCount = 2 },
+            Metadata = new MetadataConfig { Seed = 42, WithThreading = true },
+            LoadfileOnly = true,
+        };
+
+        var composer = new DatComposer(request, WriterMode.LoadfileOnly);
+        var headers = composer.HeaderColumns;
+        var records = composer.Compose(Array.Empty<FileData>()).ToList();
+
+        foreach (string column in new[] { "Thread ID", "Inclusive", "Thread Parent" })
+        {
+            int columnIndex = headers.ToList().IndexOf(column);
+            Assert.All(records, record => Assert.Equal(string.Empty, record.Values[columnIndex]));
+        }
+    }
+
+    [Fact]
     public void DatProductionComposer_WithThreading_EmitsThreadColumns()
     {
         var request = new FileGenerationRequest
@@ -182,5 +270,37 @@ public class ThreadMetadataColumnTests
         Assert.Contains("Thread ID", headers);
         Assert.Contains("Inclusive", headers);
         Assert.Contains("Thread Parent", headers);
+    }
+
+    private static FileGenerationRequest CreateMixedSourceRequest()
+    {
+        var sourceRecords = new[]
+        {
+            new Zipper.SourceInput.SourceRecord { RelativePath = "one.eml", FileType = "eml" },
+            new Zipper.SourceInput.SourceRecord { RelativePath = "two.pdf", FileType = "pdf" },
+            new Zipper.SourceInput.SourceRecord { RelativePath = "three.eml", FileType = "eml" },
+            new Zipper.SourceInput.SourceRecord { RelativePath = "four.pdf", FileType = "pdf" },
+        };
+        return new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileType = "eml",
+                FileCount = sourceRecords.Length,
+                SourceFileTypes = ["eml", "pdf"],
+            },
+            Metadata = new MetadataConfig { Seed = 42, WithThreading = true },
+            SourceRecords = sourceRecords,
+        };
+    }
+
+    private static List<FileData> BuildMixedSourceFileData(FileGenerationRequest request)
+    {
+        return request.SourceRecords!
+            .Select((sourceRecord, index) => new FileData
+            {
+                WorkItem = sourceRecord.ToWorkItem(index + 1),
+            })
+            .ToList();
     }
 }

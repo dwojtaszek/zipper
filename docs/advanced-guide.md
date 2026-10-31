@@ -564,6 +564,7 @@ Written by `--compare-production-manifests` to `--comparison-output`. Records co
 | `--source-path-mode` | Requires `--production-set` and source input (`--input-csv` / `--directory-template`) |
 | `--attachment-rate` | Only meaningful when `--type eml` (Email File Type) or when `eml` participates in `--types` |
 | `--with-families` | Only meaningful when `--type eml` (or `eml` participates in `--types`) and `--attachment-rate > 0` (emits a soft warning to stderr otherwise) |
+| `--with-threading` | Only meaningful when `--type eml` (or `eml` participates in `--types`); otherwise emits a warning and continues. Adds RFC 5322 threading headers to generated Emails and thread metadata Columns to DAT, CSV, and Concordance Load Files. |
 | `--tiff-pages` | Only meaningful when `--type tiff` or when `tiff` participates in `--types`. In Loadfile-Only mode with `--type tiff`, controls page counts in companion OPT and profile-driven DAT `PAGECOUNT` columns. |
 | `--bates-start`, `--bates-digits` | Only meaningful when `--bates-prefix` is specified |
 | `--date-format`, `--empty-percentage`, `--custodian-count` | Only meaningful when `--column-profile` is specified |

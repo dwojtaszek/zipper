@@ -745,18 +745,33 @@ REQ-234	e2e	test-chaos-anomaly-coverage.bat	Loadfile-Only cross-format scenarios
 REQ-235	unit	EmailSerializerTests.ToEml_WithMessageId_EmitsMessageIdHeader	EmailSerializer emits RFC 5322 Message-ID header enclosed in angle brackets
 REQ-235	unit	EmailSerializerTests.ToEml_WithInReplyToAndReferences_EmitsThreadHeaders	EmailSerializer emits In-Reply-To and References headers
 REQ-235	unit	EmailSerializerTests.ToEml_MultiLevelReferencesChain_EmitsAllAncestors	EmailSerializer emits full References ancestry chain
-REQ-235	unit	EmailThreadPlanTests.GetNode_RootMessage_HasNoInReplyToOrReferences	Thread root messages omit In-Reply-To and References headers
-REQ-235	unit	EmailThreadPlanTests.GetNode_ChildMessage_HasInReplyToAndReferences	Child messages set In-Reply-To and cumulative References headers
+REQ-235	unit	EmailSerializerPropertyTests.ToEml_WithThreadHeaders_ShouldPreserveAncestorOrder	EmailSerializer preserves RFC 5322 thread header values and ancestry order
+REQ-235	unit	EmailThreadPlanTests.GetNode_SingleMessageThread_HasValidRootAttributes	Thread root messages omit In-Reply-To and References headers and are inclusive when the corpus has one Email
+REQ-235	unit	EmailThreadPlanTests.GetNode_MultiMessageThread_RepliesFormValidAncestryChain	Child messages set In-Reply-To and cumulative References headers
+REQ-235	unit	EmailThreadPlanTests.GetNode_MultiMessageThread_SentDatesIncreaseInMessageOrder	Email dates increase in emitted order within each thread
+REQ-235	unit	EmailThreadPlanTests.GetNode_SourceRecords_ThreadsOnlyEmailFileTypes	Source Records of other File Types are not included as thread parents
+REQ-235	unit	EmailThreadPlanTests.GetNode_LargeCorpus_PlansOnlyRequestedBatch	Thread planning remains bounded for a 10-million-Email corpus
+REQ-235	unit	EmailThreadPlanTests.GetOrCreate_ClonedRequestWithNewSeed_CreatesAnIndependentPlan	Cloned requests derive thread metadata from their own seed
 REQ-235	unit	EmailThreadPlanTests.GetNode_Inclusiveness_LeavesAreInclusiveAndParentsAreNot	Leaf emails in thread have IsInclusive set to true
 REQ-235	unit	EmailThreadPlanTests.GetNode_Determinism_IdenticalSeedProducesIdenticalThreadGraph	Identical random seed produces identical thread conversation graphs
-REQ-235	unit	EmlFileGeneratorDeterminismTests.Generate_WithThreadingFalse_MatchesLegacyGoldenParity	Omitting --with-threading preserves 100% byte-identical output parity to legacy runs
-REQ-235	unit	EmlFileGeneratorDeterminismTests.Generate_WithThreadingTrue_EmitsMessageIdAndReferences	Enabling --with-threading emits valid Message-ID and References headers
-REQ-235	unit	ThreadMetadataColumnTests.DatStandardComposer_WithThreading_EmitsThreadColumns	Standard DAT composer emits Thread ID, Inclusive, and Thread Parent columns
+REQ-235	unit	EmailThreadPlanTests.GetNode_Determinism_IsIndependentOfCurrentCulture	Seeded Email Threading output is independent of current culture
+REQ-235	unit	EmailThreadPlanTests.GetNode_ConcurrentRequests_PreserveDeterministicThreadGraph	Concurrent and evicted-batch lookups preserve deterministic Email thread nodes
+REQ-235	unit	EmlFileGeneratorDeterminismTests.Generate_WithoutThreading_MatchesLegacyGoldenBytes	Omitting --with-threading preserves byte-identical output to the origin/main golden baseline
+REQ-235	unit	EmlFileGeneratorDeterminismTests.Generate_WithThreading_EmitsRfc5322MessageIdAndAncestryHeaders	Enabling --with-threading emits Message-ID and ancestry headers
+REQ-235	unit	EmlFileGeneratorDeterminismTests.Generate_WithThreadingInFileTypeMix_ReferencesOnlyGeneratedEmails	Mixed File Type runs reference only generated Emails
+REQ-235	unit	EmlFileGeneratorDeterminismTests.Generate_WithThreading_ProducesByteIdenticalOutputForSameSeed	Identical seeds produce byte-identical threaded EML files
+REQ-235	unit	ThreadMetadataColumnTests.DatStandardComposer_WithThreading_IncludesThreadColumnsAndValues	Standard DAT composer emits Thread ID, Inclusive, and Thread Parent columns
 REQ-235	unit	ThreadMetadataColumnTests.DatStandardComposer_WithThreadingAndFamilies_ChildAttachmentRowsHaveEmptyThreadFields	Attachment family child rows emit empty strings for thread columns
 REQ-235	unit	ThreadMetadataColumnTests.CsvComposer_WithThreading_EmitsUppercaseHeaders	CSV composer emits THREAD ID, INCLUSIVE, and THREAD PARENT columns
 REQ-235	unit	ThreadMetadataColumnTests.ConcordanceComposer_WithThreading_EmitsConcordanceHeaders	Concordance composer emits THREAD_ID, INCLUSIVE, and THREAD_PARENT columns
+REQ-235	unit	ThreadMetadataColumnTests.StandardRowComposer_WithThreadingAndSyntheticEmailRows_PopulatesThreadMetadata	Loadfile-Only CSV and Concordance rows include synthetic Email thread metadata
+REQ-235	unit	ThreadMetadataColumnTests.StandardRowComposer_WithThreadingAndSourceEmailRows_PopulatesOnlyEmailMetadata	Source-Driven CSV rows include thread metadata only for Email records
+REQ-235	unit	ThreadMetadataColumnTests.DatStandardComposer_WithThreadingAndSourceEmailRows_PopulatesOnlyEmailMetadata	Source-Driven DAT rows include thread metadata only for Email records
 REQ-235	unit	ThreadMetadataColumnTests.DatLoadfileOnlyComposer_WithThreading_EmitsThreadColumns	Loadfile-only DAT composer emits thread columns
+REQ-235	unit	ThreadMetadataColumnTests.DatLoadfileOnlyComposer_WithThreadingWithoutEml_LeavesThreadValuesEmpty	Non-Email Loadfile-Only DAT records do not receive thread metadata
+REQ-235	unit	ProfileDrivenDatComposingWriterTests.ComposeProfile_WithThreading_PreservesProfileEmailValues	Email Threading does not modify legacy Email Metadata in custom DAT profiles
 REQ-235	unit	MetadataModuleTests.TryBuild_WithThreadingWithoutEml_EmitsWarning	Specifying --with-threading without EML emits warning to standard error
+REQ-235	unit	MetadataModuleTests.TryBuild_WithThreadingWithoutEmlInSourceRecords_EmitsWarning	Source-Driven Generation without EML emits the threading warning
 REQ-235	unit	MetadataModuleTests.TryBuild_WithThreadingWithEml_DoesNotEmitWarningAndEnablesFlag	Specifying --with-threading with EML enables flag without warning
 REQ-235	unit	MetadataModuleTests.TryBuild_WithEmailThreadingAlias_EnablesFlag	Specifying --with-email-threading alias enables flag
 REQ-235	e2e	test-cli-coverage-gaps.sh	E2E verification of --with-threading warning without EML and EML thread generation

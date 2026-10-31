@@ -1,7 +1,10 @@
+using System.Collections.Concurrent;
+using System.Globalization;
+
 namespace Zipper.Emails;
 
 /// <summary>
-/// Represents a planned node in a deterministic email conversation thread tree.
+/// Represents a planned node in a deterministic Email conversation thread tree.
 /// </summary>
 internal sealed class EmailThreadNode
 {
@@ -29,8 +32,6 @@ internal sealed class EmailThreadNode
 
     public string? Cc { get; init; }
 
-    public required EmailCategory Category { get; init; }
-
     public required string Subject { get; init; }
 
     public required string Body { get; init; }
@@ -45,70 +46,104 @@ internal sealed class EmailThreadNode
 }
 
 /// <summary>
-/// Pre-plans and manages deterministic email conversation threads for an archive or corpus.
+/// Plans deterministic Email conversation batches on demand for an Archive or corpus.
 /// </summary>
 internal sealed class EmailThreadPlan
 {
-    private static readonly object SyncRoot = new();
+    private const int ThreadBatchLength = 5;
+    private const int MaxCachedBatches = 32;
 
-    private readonly object planLock = new();
-    private readonly FileGenerationRequest request;
     private readonly long seedVal;
     private readonly BatesSequence? batesSequence;
-    private readonly Random rng;
-    private readonly Dictionary<long, EmailThreadNode> nodesByIndex = new();
-
-    private long nextIndexToPlan = 1;
-    private int nextThreadId = 1;
+    private readonly long emailCount;
+    private readonly long firstEmailFileIndex = 1;
+    private readonly int[]? sourceEmailFileIndices;
+    private readonly DateTime referenceDate;
+    private readonly ConcurrentDictionary<long, IReadOnlyList<EmailThreadNode>> batchCache = new();
+    private readonly ConcurrentQueue<long> batchCacheOrder = new();
 
     public EmailThreadPlan(FileGenerationRequest request)
     {
-        this.request = request;
+        ArgumentNullException.ThrowIfNull(request);
         this.seedVal = request.Metadata.Seed ?? 42L;
         this.batesSequence = request.Bates != null ? BatesSequence.FromConfig(request.Bates) : null;
-        // Seed the thread planner generator deterministically from the request seed.
-#pragma warning disable S2245
-        this.rng = new Random(unchecked((int)(this.seedVal * 397 + 1013)));
-#pragma warning restore S2245
+        this.referenceDate = request.Metadata.Seed.HasValue
+            ? new DateTime(2024, 1, 15, 12, 0, 0, DateTimeKind.Utc)
+            : DateTime.UtcNow;
 
-        long initialCount = Math.Max(request.Output.FileCount, 1);
-        this.PlanUpTo(initialCount);
+        if (request.SourceRecords is not null)
+        {
+            var emailFileIndices = new List<int>();
+            for (int i = 0; i < request.SourceRecords.Count; i++)
+            {
+                if (string.Equals(request.SourceRecords[i].FileType, "eml", StringComparison.OrdinalIgnoreCase))
+                {
+                    emailFileIndices.Add(i + 1);
+                }
+            }
+
+            if (emailFileIndices.Count == request.SourceRecords.Count)
+            {
+                this.emailCount = Math.Max(1, request.Output.FileCount);
+            }
+            else if (emailFileIndices.Count > 0)
+            {
+                this.sourceEmailFileIndices = emailFileIndices.ToArray();
+                this.emailCount = emailFileIndices.Count;
+            }
+            else
+            {
+                this.emailCount = Math.Max(1, request.Output.FileCount);
+            }
+        }
+        else if (request.Output.FileTypePlan is not null)
+        {
+            long precedingFileCount = 0;
+            foreach (var type in request.Output.FileTypePlan.Types)
+            {
+                long typeCount = request.Output.FileTypePlan.GetTypeCount(type);
+                if (string.Equals(type, "eml", StringComparison.OrdinalIgnoreCase))
+                {
+                    this.firstEmailFileIndex = precedingFileCount + 1;
+                    this.emailCount = typeCount;
+                    break;
+                }
+
+                precedingFileCount += typeCount;
+            }
+
+            if (this.emailCount == 0)
+            {
+                this.firstEmailFileIndex = 1;
+                this.emailCount = Math.Max(1, request.Output.FileCount);
+            }
+        }
+        else
+        {
+            this.emailCount = Math.Max(1, request.Output.FileCount);
+        }
     }
 
     public static EmailThreadPlan GetOrCreate(FileGenerationRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-
-        if (request.ThreadPlan is not null)
-        {
-            return request.ThreadPlan;
-        }
-
-        lock (SyncRoot)
-        {
-            if (request.ThreadPlan is not null)
-            {
-                return request.ThreadPlan;
-            }
-
-            var plan = new EmailThreadPlan(request);
-            request.ThreadPlan = plan;
-            return plan;
-        }
+        return System.Threading.LazyInitializer.EnsureInitialized(
+            ref request.ThreadPlan,
+            () => new EmailThreadPlan(request));
     }
 
     public EmailThreadNode GetNode(long index)
     {
-        lock (this.planLock)
+        long emailOrdinal = this.GetEmailOrdinal(index);
+        if (emailOrdinal < 1 || emailOrdinal > this.emailCount)
         {
-            if (!this.nodesByIndex.TryGetValue(index, out var node))
-            {
-                this.PlanUpTo(index);
-                node = this.nodesByIndex[index];
-            }
-
-            return node;
+            throw new ArgumentOutOfRangeException(nameof(index));
         }
+
+        long batchStartOrdinal = ((emailOrdinal - 1) / ThreadBatchLength * ThreadBatchLength) + 1;
+        int batchLength = (int)Math.Min(ThreadBatchLength, this.emailCount - batchStartOrdinal + 1);
+        var batch = this.GetOrCreateBatch(batchStartOrdinal, batchLength);
+        return batch[checked((int)(emailOrdinal - batchStartOrdinal))];
     }
 
     public Email CreateEmail(EmailThreadNode node)
@@ -135,18 +170,20 @@ internal sealed class EmailThreadPlan
         };
     }
 
-    private void PlanUpTo(long targetIndex)
+    private IReadOnlyList<EmailThreadNode> PlanBatch(long startEmailOrdinal, int batchLength)
     {
-        var referenceDate = this.request.Metadata.Seed.HasValue
-            ? new DateTime(2024, 1, 15, 12, 0, 0, DateTimeKind.Utc)
-            : DateTime.UtcNow;
-
-        while (this.nextIndexToPlan <= targetIndex)
+#pragma warning disable S2245
+        var random = new Random(unchecked((int)(this.seedVal * 397 + startEmailOrdinal * 1013)));
+#pragma warning restore S2245
+        var batchNodes = new List<EmailThreadNode>(batchLength);
+        int plannedCount = 0;
+        while (plannedCount < batchLength)
         {
-            int threadId = this.nextThreadId++;
-            long startIdx = this.nextIndexToPlan;
+            long threadStartOrdinal = startEmailOrdinal + plannedCount;
+            int threadId = checked((int)threadStartOrdinal);
+            long startIdx = this.GetFileIndex(threadStartOrdinal);
 
-            int roll = this.rng.Next(100);
+            int roll = random.Next(100);
             int length = roll switch
             {
                 < 25 => 1,
@@ -155,21 +192,22 @@ internal sealed class EmailThreadPlan
                 < 95 => 4,
                 _ => 5,
             };
+            length = Math.Min(length, batchLength - plannedCount);
 
-            var category = EmailFactory.GetRandomCategory(this.rng);
+            var category = EmailFactory.GetRandomCategory(random);
             var templates = EmailFactory.GetTemplatesForCategory(category);
-            var baseTemplate = templates[this.rng.Next(templates.Count)];
+            var baseTemplate = templates[random.Next(templates.Count)];
 
             int rootSenderIndex = (int)startIdx;
             int rootRecipientIndex = (int)startIdx;
 
-            string rootSubject = EmailFactory.GenerateSubject(baseTemplate.Subject, rootRecipientIndex, rootSenderIndex, this.rng, referenceDate);
-            string rootBody = EmailFactory.GenerateBody(baseTemplate.Body, rootRecipientIndex, rootSenderIndex, this.rng, referenceDate);
-            DateTime rootSentDate = EmailFactory.GenerateSentDate(category, this.rng, referenceDate);
-            string? rootCc = EmailFactory.GenerateCcAddresses(category, rootRecipientIndex, this.rng);
-            bool rootIsHighPriority = EmailFactory.ShouldBeHighPriority(category, this.rng);
-            bool rootRequestReadReceipt = EmailFactory.ShouldRequestReadReceipt(category, this.rng);
-            string? rootReplyTo = EmailFactory.GenerateReplyToAddress(rootSenderIndex, category, this.rng);
+            string rootSubject = EmailFactory.GenerateSubject(baseTemplate.Subject, rootRecipientIndex, rootSenderIndex, random, this.referenceDate);
+            string rootBody = EmailFactory.GenerateBody(baseTemplate.Body, rootRecipientIndex, rootSenderIndex, random, this.referenceDate);
+            DateTime rootSentDate = EmailFactory.GenerateSentDate(category, random, this.referenceDate);
+            string? rootCc = EmailFactory.GenerateCcAddresses(category, rootRecipientIndex, random);
+            bool rootIsHighPriority = EmailFactory.ShouldBeHighPriority(category, random);
+            bool rootRequestReadReceipt = EmailFactory.ShouldRequestReadReceipt(category, random);
+            string? rootReplyTo = EmailFactory.GenerateReplyToAddress(rootSenderIndex, category, random);
 
             string rootDocId = this.FormatDocId(startIdx);
             string rootMsgId = FormatMessageId(startIdx, threadId, rootSenderIndex);
@@ -188,7 +226,6 @@ internal sealed class EmailThreadPlan
                 SenderIndex = rootSenderIndex,
                 RecipientIndex = rootRecipientIndex,
                 Cc = rootCc,
-                Category = category,
                 Subject = rootSubject,
                 Body = rootBody,
                 SentDate = rootSentDate,
@@ -201,18 +238,18 @@ internal sealed class EmailThreadPlan
 
             for (int m = 1; m < length; m++)
             {
-                long currentIndex = startIdx + m;
+                long currentIndex = this.GetFileIndex(threadStartOrdinal + m);
 
-                int parentOffset = m == 1 ? 0 : (this.rng.Next(100) < 75 ? (m - 1) : this.rng.Next(0, m));
+                int parentOffset = m == 1 ? 0 : (random.Next(100) < 75 ? (m - 1) : random.Next(0, m));
                 var parent = threadNodes[parentOffset];
 
-                bool isForward = this.rng.Next(100) < 15;
+                bool isForward = random.Next(100) < 15;
                 int senderIdx = parent.RecipientIndex;
                 int recipientIdx = isForward ? (int)currentIndex + 10 : parent.SenderIndex;
 
                 string subject = isForward ? $"FW: {rootSubject}" : $"Re: {rootSubject}";
-                string body = isForward ? BuildForwardBody(parent, this.rng) : BuildReplyBody(parent, this.rng);
-                DateTime sentDate = parent.SentDate.AddMinutes(this.rng.Next(15, 1440));
+                string body = isForward ? BuildForwardBody(parent, random) : BuildReplyBody(parent, random);
+                DateTime sentDate = threadNodes[^1].SentDate.AddMinutes(random.Next(15, 1440));
 
                 string childMsgId = FormatMessageId(currentIndex, threadId, senderIdx);
                 string inReplyTo = parent.MessageId;
@@ -233,14 +270,13 @@ internal sealed class EmailThreadPlan
                     IsInclusive = true,
                     SenderIndex = senderIdx,
                     RecipientIndex = recipientIdx,
-                    Cc = EmailFactory.GenerateCcAddresses(category, recipientIdx, this.rng),
-                    Category = category,
+                    Cc = EmailFactory.GenerateCcAddresses(category, recipientIdx, random),
                     Subject = subject,
                     Body = body,
                     SentDate = sentDate,
-                    IsHighPriority = EmailFactory.ShouldBeHighPriority(category, this.rng),
-                    RequestReadReceipt = EmailFactory.ShouldRequestReadReceipt(category, this.rng),
-                    ReplyTo = EmailFactory.GenerateReplyToAddress(senderIdx, category, this.rng),
+                    IsHighPriority = EmailFactory.ShouldBeHighPriority(category, random),
+                    RequestReadReceipt = EmailFactory.ShouldRequestReadReceipt(category, random),
+                    ReplyTo = EmailFactory.GenerateReplyToAddress(senderIdx, category, random),
                 };
 
                 threadNodes.Add(childNode);
@@ -250,11 +286,72 @@ internal sealed class EmailThreadPlan
             foreach (var node in threadNodes)
             {
                 node.IsInclusive = !parentIndices.Contains(node.Index);
-                this.nodesByIndex[node.Index] = node;
+                batchNodes.Add(node);
             }
 
-            this.nextIndexToPlan = startIdx + length;
+            plannedCount += length;
         }
+
+        return batchNodes;
+    }
+
+    private long GetEmailOrdinal(long fileIndex)
+    {
+        if (this.sourceEmailFileIndices is not null)
+        {
+            if (fileIndex > int.MaxValue)
+            {
+                throw new ArgumentOutOfRangeException(nameof(fileIndex));
+            }
+
+            int ordinal = Array.BinarySearch(this.sourceEmailFileIndices, (int)fileIndex);
+            if (ordinal < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(fileIndex), "The requested Source Record is not an Email.");
+            }
+
+            return ordinal + 1L;
+        }
+
+        if (fileIndex < this.firstEmailFileIndex
+            || fileIndex > int.MaxValue
+            || fileIndex - this.firstEmailFileIndex >= this.emailCount)
+        {
+            throw new ArgumentOutOfRangeException(nameof(fileIndex), "The requested File Type is not an Email.");
+        }
+
+        return fileIndex - this.firstEmailFileIndex + 1;
+    }
+
+    private long GetFileIndex(long emailOrdinal)
+    {
+        if (this.sourceEmailFileIndices is not null)
+        {
+            return this.sourceEmailFileIndices[checked((int)(emailOrdinal - 1))];
+        }
+
+        return this.firstEmailFileIndex + emailOrdinal - 1;
+    }
+
+    private IReadOnlyList<EmailThreadNode> GetOrCreateBatch(long batchStartOrdinal, int batchLength)
+    {
+        if (this.batchCache.TryGetValue(batchStartOrdinal, out var cached))
+        {
+            return cached;
+        }
+
+        var planned = this.PlanBatch(batchStartOrdinal, batchLength);
+        var batch = this.batchCache.GetOrAdd(batchStartOrdinal, planned);
+        if (ReferenceEquals(batch, planned))
+        {
+            this.batchCacheOrder.Enqueue(batchStartOrdinal);
+            while (this.batchCache.Count > MaxCachedBatches && this.batchCacheOrder.TryDequeue(out long expiredStartOrdinal))
+            {
+                this.batchCache.TryRemove(expiredStartOrdinal, out _);
+            }
+        }
+
+        return batch;
     }
 
     private string FormatDocId(long index)
@@ -284,7 +381,8 @@ internal sealed class EmailThreadPlan
         var snippet = replySnippets[random.Next(replySnippets.Length)];
         var firstLine = parent.Body.Split('\n')[0].Trim();
         var senderAddress = EmailFactory.GenerateEmailAddress(parent.SenderIndex, "sender");
-        return $"{snippet}\r\n\r\nOn {parent.SentDate:ddd, dd MMM yyyy HH:mm:ss zzz}, {senderAddress} wrote:\r\n> {firstLine}";
+        var sentDate = parent.SentDate.ToString("ddd, dd MMM yyyy HH:mm:ss zzz", CultureInfo.InvariantCulture);
+        return $"{snippet}\r\n\r\nOn {sentDate}, {senderAddress} wrote:\r\n> {firstLine}";
     }
 
     private static string BuildForwardBody(EmailThreadNode parent, Random random)
@@ -299,6 +397,7 @@ internal sealed class EmailThreadPlan
         var snippet = fwdSnippets[random.Next(fwdSnippets.Length)];
         var senderAddress = EmailFactory.GenerateEmailAddress(parent.SenderIndex, "sender");
         var recipientAddress = EmailFactory.GenerateEmailAddress(parent.RecipientIndex, "recipient");
-        return $"{snippet}\r\n\r\n---------- Forwarded message ---------\r\nFrom: {senderAddress}\r\nDate: {parent.SentDate:ddd, dd MMM yyyy HH:mm:ss zzz}\r\nSubject: {parent.Subject}\r\nTo: {recipientAddress}\r\n\r\n{parent.Body}";
+        var sentDate = parent.SentDate.ToString("ddd, dd MMM yyyy HH:mm:ss zzz", CultureInfo.InvariantCulture);
+        return $"{snippet}\r\n\r\n---------- Forwarded message ---------\r\nFrom: {senderAddress}\r\nDate: {sentDate}\r\nSubject: {parent.Subject}\r\nTo: {recipientAddress}\r\n\r\n{parent.Body}";
     }
 }

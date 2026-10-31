@@ -177,14 +177,6 @@ internal sealed class DatStandardComposer
                     ? TiffMultiPageGenerator.GetPageCount(this.request.Tiff.PageRange, this.request.Metadata.Seed, i)
                     : rowRandom.Next(1, 11),
                 Hashes = hashConfig.Mode == Config.HashMode.Simulated ? GenerateSimulatedHashes(workItem) : null,
-                Email = this.request.Metadata.WithThreading
-                    ? new Emails.Email
-                    {
-                        ThreadId = Emails.EmailThreadPlan.GetOrCreate(this.request).GetNode(i).ThreadDocId,
-                        IsInclusive = Emails.EmailThreadPlan.GetOrCreate(this.request).GetNode(i).IsInclusive,
-                        ThreadParentId = Emails.EmailThreadPlan.GetOrCreate(this.request).GetNode(i).ThreadParentDocId,
-                    }
-                    : null,
             };
 
             bool hasAttachment = FamilyPlan.HasAttachment(this.request, i);
@@ -284,6 +276,9 @@ internal sealed class DatStandardComposer
         var recordType = wi.EffectiveFileType(this.request);
         var recordIsEml = string.Equals(recordType, "eml", StringComparison.Ordinal);
         var recordIsTiff = string.Equals(recordType, "tiff", StringComparison.Ordinal);
+        var threadNode = this.request.Metadata.WithThreading && recordIsEml && !ctx.IsChild && fileData.Email?.ThreadId is null
+            ? Emails.EmailThreadPlan.GetOrCreate(this.request).GetNode(wi.Index)
+            : null;
 
         var v = new List<string>(this.headerColumns.Count)
         {
@@ -378,9 +373,10 @@ internal sealed class DatStandardComposer
         if (this.request.Metadata.WithThreading)
         {
             var isEml = recordIsEml && !ctx.IsChild;
-            var threadId = isEml ? fileData.Email?.ThreadId ?? string.Empty : string.Empty;
-            var inclusive = isEml ? (fileData.Email?.IsInclusive == true ? "Y" : (fileData.Email?.IsInclusive == false ? "N" : string.Empty)) : string.Empty;
-            var threadParent = isEml ? fileData.Email?.ThreadParentId ?? string.Empty : string.Empty;
+            var threadId = isEml ? fileData.Email?.ThreadId ?? threadNode?.ThreadDocId ?? string.Empty : string.Empty;
+            var isInclusive = fileData.Email?.IsInclusive ?? threadNode?.IsInclusive;
+            var inclusive = isEml && isInclusive.HasValue ? (isInclusive.Value ? "Y" : "N") : string.Empty;
+            var threadParent = isEml ? fileData.Email?.ThreadParentId ?? threadNode?.ThreadParentDocId ?? string.Empty : string.Empty;
 
             v.Add(threadId);
             v.Add(inclusive);

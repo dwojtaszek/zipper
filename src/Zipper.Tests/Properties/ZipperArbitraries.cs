@@ -157,6 +157,12 @@ public readonly record struct DelimitedRecordPropertyInput(
     string[] Values);
 
 /// <summary>
+/// Bounded seed and Email index for RFC 5322 threading header serialization properties.
+/// </summary>
+[StructLayout(LayoutKind.Auto)]
+public readonly record struct EmailThreadHeadersPropertyInput(int Seed, int RootIndex);
+
+/// <summary>
 /// Bounded input for path validation and sanitization property tests.
 /// </summary>
 [StructLayout(LayoutKind.Auto)]
@@ -404,6 +410,16 @@ public static class ZipperArbitraries
                 rawValues);
 
         return Arb.From(gen, ShrinkDelimitedRecordInput);
+    }
+
+    public static Arbitrary<EmailThreadHeadersPropertyInput> EmailThreadHeadersPropertyInputArb()
+    {
+        var gen =
+            from seed in Gen.Choose(0, 100_000)
+            from rootIndex in Gen.Choose(1, 100_000)
+            select new EmailThreadHeadersPropertyInput(seed, rootIndex);
+
+        return Arb.From(gen);
     }
 
     public static Arbitrary<PathSegmentPropertyInput> PathSegmentPropertyInputArb()
