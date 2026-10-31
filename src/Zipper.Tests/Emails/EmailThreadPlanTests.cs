@@ -318,4 +318,30 @@ public class EmailThreadPlanTests
 
         Assert.NotEqual(node1.MessageId, node2.MessageId);
     }
+
+    [Fact]
+    public void GetNode_WithSourceRecordOverrides_UsesControlNumberOrBatesForThreadDocId()
+    {
+        var records = new List<Zipper.SourceInput.SourceRecord>
+        {
+            new() { RelativePath = "eml1.eml", FileType = "eml", ControlNumber = "CUSTOM-ROOT" },
+            new() { RelativePath = "eml2.eml", FileType = "eml", ControlNumber = "CUSTOM-CHILD" },
+        };
+
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 2 },
+            Metadata = new MetadataConfig { WithThreading = true, Seed = 42 },
+            SourceRecords = records,
+        };
+
+        var plan = EmailThreadPlan.GetOrCreate(request);
+        var node1 = plan.GetNode(1);
+        var node2 = plan.GetNode(2);
+
+        Assert.Equal("CUSTOM-ROOT", node1.ThreadDocId);
+        Assert.Equal("CUSTOM-ROOT", node2.ThreadDocId);
+        Assert.Equal(1, node2.ParentIndex);
+        Assert.Equal("CUSTOM-ROOT", node2.ThreadParentDocId);
+    }
 }

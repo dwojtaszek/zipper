@@ -168,7 +168,9 @@ echo [ INFO ] Test: --with-threading produces thread columns in DAT
 %ZIPPER_CMD% --type eml --count 5 --seed 42 --output-path "%TEST_OUTPUT_DIR%\threading-gen" --with-threading >nul 2>&1
 set ZIPPER_EXIT=!ERRORLEVEL!
 if !ZIPPER_EXIT! equ 0 (
+    set THREAD_DAT_FOUND=0
     for /r "%TEST_OUTPUT_DIR%\threading-gen" %%F in (*.dat) do (
+        set THREAD_DAT_FOUND=1
         findstr /i /c:"Thread ID" "%%F" >nul 2>&1
         if not errorlevel 1 (
             echo [ INFO ] PASS: --with-threading populates thread columns in DAT
@@ -177,6 +179,10 @@ if !ZIPPER_EXIT! equ 0 (
             echo [ ERROR ] FAIL: --with-threading missing thread columns in DAT
             set /a FAILED+=1
         )
+    )
+    if !THREAD_DAT_FOUND! equ 0 (
+        echo [ ERROR ] FAIL: --with-threading produced no DAT file
+        set /a FAILED+=1
     )
 ) else (
     echo [ ERROR ] FAIL: --with-threading eml generation command failed with exit code !ZIPPER_EXIT!

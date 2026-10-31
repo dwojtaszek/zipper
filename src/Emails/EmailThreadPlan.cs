@@ -53,6 +53,7 @@ internal sealed class EmailThreadPlan
     private const int ThreadBatchLength = 5;
     private const int MaxCachedBatches = 32;
 
+    private readonly FileGenerationRequest request;
     private readonly long seedVal;
     private readonly BatesSequence? batesSequence;
     private readonly long emailCount;
@@ -65,6 +66,7 @@ internal sealed class EmailThreadPlan
     public EmailThreadPlan(FileGenerationRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        this.request = request;
         this.seedVal = request.Metadata.Seed ?? 42L;
         this.batesSequence = request.Bates != null ? BatesSequence.FromConfig(request.Bates) : null;
         this.referenceDate = request.Metadata.Seed.HasValue
@@ -356,6 +358,25 @@ internal sealed class EmailThreadPlan
 
     private string FormatDocId(long index)
     {
+        if (this.request.SourceRecords is not null && index >= 1 && index <= this.request.SourceRecords.Count)
+        {
+            var record = this.request.SourceRecords[(int)(index - 1)];
+            if (!string.IsNullOrEmpty(record.BatesNumber))
+            {
+                return record.BatesNumber;
+            }
+
+            if (this.batesSequence is not null)
+            {
+                return this.batesSequence.Format(index - 1).ToString();
+            }
+
+            if (!string.IsNullOrEmpty(record.ControlNumber))
+            {
+                return record.ControlNumber;
+            }
+        }
+
         return this.batesSequence is not null
             ? this.batesSequence.Format(index - 1).ToString()
             : $"DOC{index:D8}";
