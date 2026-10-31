@@ -709,6 +709,60 @@ public class MimeRealismTests
         }
     }
 
+    [Fact]
+    public void Rfc2047Helper_EncodeSubject_LongAsciiWithoutSpaces_DoesNotStartWithBareLineFeed()
+    {
+        var longAscii = new string('a', 80);
+        var encoded = Rfc2047Helper.EncodeSubject(longAscii, fold: true);
+
+        Assert.False(encoded.StartsWith('\n'));
+        Assert.False(encoded.StartsWith("\r\n", StringComparison.Ordinal));
+        Assert.Contains(longAscii, encoded);
+    }
+
+    [Fact]
+    public void QuotedPrintableHelper_Encode_SpacePrecedingSoftBreak_IsEncodedAsHex()
+    {
+        var input = new string('a', 74) + " hello";
+        var encoded = QuotedPrintableHelper.Encode(input);
+
+        Assert.DoesNotContain(" =\r\n", encoded);
+    }
+
+    [Fact]
+    public async Task XmlLoadFileWriter_WithDuplicateAttachmentFilenames_EmitsDistinctChildNativePaths()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 1 },
+            Metadata = new MetadataConfig { Seed = 42, WithFamilies = true },
+            LoadFile = new LoadFileConfig { Formats = [LoadFileFormat.EdrmXml] },
+        };
+
+        var attachments = new List<(string filename, byte[] content)>
+        {
+            ("report.pdf", new byte[] { 1, 2 }),
+            ("report.pdf", new byte[] { 3, 4 }),
+        };
+
+        var workItem = new FileWorkItem { Index = 1, FileName = "00000001.eml", FilePathInZip = "00000001.eml", FolderName = "f1", FolderNumber = 1 };
+        var fileData = new FileData
+        {
+            WorkItem = workItem,
+            Data = Encoding.ASCII.GetBytes("From: a@b.com\r\nSubject: Test\r\n\r\nBody"),
+            AttachmentPayloads = attachments,
+            AttachmentMetadata = FileAttachmentMetadata.FromPayloads(attachments, request, workItem),
+        };
+
+        var writer = new global::Zipper.LoadFiles.XmlLoadFileWriter();
+        using var stream = new MemoryStream();
+        await writer.WriteAsync(stream, request, new[] { fileData });
+
+        var xmlContent = Encoding.UTF8.GetString(stream.ToArray());
+        Assert.Contains("1_report.pdf", xmlContent);
+        Assert.Contains("1_report_A002.pdf", xmlContent);
+    }
+
     private static int CountOccurrences(string value, string searched)
     {
         int count = 0;

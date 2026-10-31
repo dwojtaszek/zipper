@@ -45,9 +45,9 @@ internal static class QuotedPrintableHelper
                 }
                 else if (b is 32 or 9) // Space or Tab
                 {
-                    if (isLastByte)
+                    if (isLastByte || currentLineLength + 1 >= MaxLineLength - 1)
                     {
-                        // Trailing whitespace at end of line must be encoded
+                        // Trailing whitespace at end of line or right before a soft break must be encoded per RFC 2045
                         encodeByte = true;
                     }
                     else

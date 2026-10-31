@@ -135,8 +135,10 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
                     if (hasAttachment)
                     {
                         var payloads = fileData.GetAttachmentPayloads();
+                        var attachmentNames = attachments.Select(a => a.FileName).ToList();
                         for (int attachmentIndex = 0; attachmentIndex < attachments.Count; attachmentIndex++)
                         {
+                            bool isDuplicate = FamilyPlan.IsDuplicateAttachmentName(attachmentNames, attachmentIndex);
                             var attachment = attachments[attachmentIndex];
                             string childId = FamilyPlan.GetChildId(parentId, attachmentIndex + 1);
                             var childAttachment = (
@@ -163,8 +165,9 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
                                 attachmentNumber: attachmentIndex + 1,
                                 parentDocId: parentId,
                                 actualAttachment: childAttachment,
-                                meta,
-                                eml);
+                                meta: meta,
+                                eml: eml,
+                                isDuplicate: isDuplicate);
                             await childElement.WriteToAsync(writer, cancellationToken).ConfigureAwait(false);
                         }
                     }
@@ -222,7 +225,8 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
         string parentDocId,
         (string filename, byte[] content)? actualAttachment,
         (string Custodian, string DateSent, string Author, string FileSize) meta,
-        (string To, string From, string Cc, string Subject, string SentDate, string Attachment) eml)
+        (string To, string From, string Cc, string Subject, string SentDate, string Attachment) eml,
+        bool isDuplicate = false)
     {
         var namingConvention = request.Metadata.ColumnProfile?.FieldNamingConvention;
         var docElement = new XElement("Document", new XAttribute("DocID", isChild ? childId : parentId));
@@ -237,7 +241,7 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
                 ? Path.Combine(
                     Path.GetDirectoryName(workItem.FilePathInZip) ?? string.Empty,
                     $"{childId}{Path.GetExtension(sanitizedFilename)}").Replace('\\', '/')
-                : $"{workItem.FolderPrefix}{workItem.Index}_{sanitizedFilename}".Replace('\\', '/');
+                : FamilyPlan.GetAttachmentPath(workItem, attach.filename, attachmentNumber, isDuplicate).Replace('\\', '/');
             var childTextPath = FamilyPlan.GetAttachmentTextPath(workItem, attach.filename, attachmentNumber).Replace('\\', '/');
 
             // Resolve child hashes

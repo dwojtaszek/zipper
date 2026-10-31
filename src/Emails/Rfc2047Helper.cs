@@ -60,9 +60,17 @@ internal static class Rfc2047Helper
 
         if (!ContainsNonAscii(subject))
         {
-            return fold && subject.Length > 75
-                ? FoldHeaderLine("Subject: " + subject)["Subject: ".Length..]
-                : subject;
+            if (!fold || subject.Length <= 75)
+            {
+                return subject;
+            }
+
+            var folded = FoldHeaderLine("Subject: " + subject);
+            return folded.StartsWith("Subject: ", StringComparison.Ordinal)
+                ? folded["Subject: ".Length..]
+                : folded.StartsWith("Subject:\r\n ", StringComparison.Ordinal)
+                    ? folded["Subject:\r\n ".Length..]
+                    : subject;
         }
 
         char enc = char.ToUpperInvariant(preferredEncoding) == 'Q' ? 'Q' : 'B';

@@ -203,7 +203,7 @@ internal static class EmailSerializer
         string subjectToEmit = email.Subject;
         if (realism.EncodedWords)
         {
-            char enc = seeded is not null && seeded.Next(10) < 3 ? 'Q' : 'B';
+            char enc = (seeded ?? Random.Shared).Next(10) < 3 ? 'Q' : 'B';
             subjectToEmit = Rfc2047Helper.EncodeSubject(
                 email.Subject,
                 fold: false,
@@ -298,7 +298,7 @@ internal static class EmailSerializer
         WriteBodyContent(writer, email.Body, "text/plain; charset=utf-8", transferEncoding);
         writer.WriteLine();
 
-        var html = email.HtmlBody ?? $"<html><body><p>{System.Net.WebUtility.HtmlEncode(email.Body).Replace("\n", "<br/>\n")}</p></body></html>";
+        var html = email.HtmlBody ?? $"<html><body><p>{System.Net.WebUtility.HtmlEncode(email.Body).Replace("\r\n", "\n").Replace("\n", "<br/>\n")}</p></body></html>";
         writer.WriteLine($"--{altBoundary}");
         WriteBodyContent(writer, html, "text/html; charset=utf-8", transferEncoding);
         writer.WriteLine();

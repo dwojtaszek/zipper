@@ -90,7 +90,7 @@ internal static class EmailFactory
         string? htmlBody = email.HtmlBody;
         if (realism.MultipartAlternative && string.IsNullOrEmpty(htmlBody))
         {
-            htmlBody = $"<html><body><p>{System.Net.WebUtility.HtmlEncode(email.Body).Replace("\n", "<br/>\n")}</p></body></html>";
+            htmlBody = $"<html><body><p>{System.Net.WebUtility.HtmlEncode(email.Body).Replace("\r\n", "\n").Replace("\n", "<br/>\n")}</p></body></html>";
         }
 
         return email with
