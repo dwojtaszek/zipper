@@ -305,6 +305,13 @@ public sealed class StreamingAndCliRulesPropertyTests
             Assert.Equal(expected[i].WorkItem.FilePathInZip, first[i].WorkItem.FilePathInZip);
             Assert.Equal(expected[i].DataLength, first[i].DataLength);
             Assert.Equal(expected[i].PageCount, first[i].PageCount);
+            if (expected[i].Email is not null)
+            {
+                Assert.NotNull(first[i].Email);
+                Assert.Equal(expected[i].Email!.MessageId, first[i].Email!.MessageId);
+                Assert.Equal(expected[i].Email!.ThreadId, first[i].Email!.ThreadId);
+                Assert.Equal(expected[i].Email!.IsInclusive, first[i].Email!.IsInclusive);
+            }
 
             // Re-reading the spool yields the same projection.
             Assert.Equal(first[i].WorkItem.Index, second[i].WorkItem.Index);
@@ -585,6 +592,12 @@ public sealed class StreamingAndCliRulesPropertyTests
                 Subject = input.EmailSubject,
                 SentDate = new DateTime(input.SentDateTicks, DateTimeKind.Utc),
                 Cc = input.HasCc ? input.CcAddress : null,
+                MessageId = input.HasThreading ? (input.MessageId.Length > 0 ? input.MessageId : null) : null,
+                InReplyTo = input.HasThreading && input.HasThreadAncestry ? (input.InReplyTo.Length > 0 ? input.InReplyTo : null) : null,
+                References = input.HasThreading && input.HasThreadAncestry ? (input.References.Length > 0 ? input.References : null) : null,
+                ThreadId = input.HasThreading ? (input.ThreadId.Length > 0 ? input.ThreadId : null) : null,
+                IsInclusive = input.HasThreading ? input.IsInclusive : null,
+                ThreadParentId = input.HasThreading && input.HasThreadAncestry ? (input.ThreadParentId.Length > 0 ? input.ThreadParentId : null) : null,
             }
             : null;
 

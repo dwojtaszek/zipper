@@ -55,7 +55,31 @@ internal static class EmailFactory
 
         var plan = EmailThreadPlan.GetOrCreate(request);
         var node = plan.GetNode(item.Index);
-        return plan.CreateEmail(node);
+        return Create(node);
+    }
+
+    internal static Email Create(EmailThreadNode node)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+
+        return new Email
+        {
+            To = GenerateEmailAddress(node.RecipientIndex, "recipient"),
+            From = GenerateEmailAddress(node.SenderIndex, "sender"),
+            Subject = node.Subject,
+            Body = node.Body,
+            SentDate = node.SentDate,
+            Cc = node.Cc,
+            IsHighPriority = node.IsHighPriority,
+            RequestReadReceipt = node.RequestReadReceipt,
+            ReplyTo = node.ReplyTo,
+            MessageId = node.MessageId,
+            InReplyTo = node.InReplyTo,
+            References = node.References,
+            ThreadId = node.ThreadDocId,
+            IsInclusive = node.IsInclusive,
+            ThreadParentId = node.ThreadParentDocId,
+        };
     }
 
     internal static Email Create(int recipientIndex, int senderIndex, EmailCategory? category, Random random)

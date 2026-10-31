@@ -150,26 +150,7 @@ internal sealed class EmailThreadPlan
 
     public Email CreateEmail(EmailThreadNode node)
     {
-        ArgumentNullException.ThrowIfNull(node);
-
-        return new Email
-        {
-            To = EmailFactory.GenerateEmailAddress(node.RecipientIndex, "recipient"),
-            From = EmailFactory.GenerateEmailAddress(node.SenderIndex, "sender"),
-            Subject = node.Subject,
-            Body = node.Body,
-            SentDate = node.SentDate,
-            Cc = node.Cc,
-            IsHighPriority = node.IsHighPriority,
-            RequestReadReceipt = node.RequestReadReceipt,
-            ReplyTo = node.ReplyTo,
-            MessageId = node.MessageId,
-            InReplyTo = node.InReplyTo,
-            References = node.References,
-            ThreadId = node.ThreadDocId,
-            IsInclusive = node.IsInclusive,
-            ThreadParentId = node.ThreadParentDocId,
-        };
+        return EmailFactory.Create(node);
     }
 
     private IReadOnlyList<EmailThreadNode> PlanBatch(long startEmailOrdinal, int batchLength)

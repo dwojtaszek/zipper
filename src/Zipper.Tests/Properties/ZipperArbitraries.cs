@@ -256,6 +256,14 @@ public readonly record struct FileDataPropertyInput(
     string CcAddress,
     string ControlNumberOverride,
     string BatesNumberOverride,
+    bool HasThreading,
+    bool HasThreadAncestry,
+    string MessageId,
+    string InReplyTo,
+    string References,
+    string ThreadId,
+    bool IsInclusive,
+    string ThreadParentId,
     bool HasSourceMetadata,
     string[] MetadataKeys,
     string[] MetadataValues,
@@ -715,6 +723,14 @@ public static class ZipperArbitraries
             from ccAddress in textGen
             from controlNumberOverride in Gen.Elements(string.Empty, "DOC00000001")
             from batesNumberOverride in Gen.Elements(string.Empty, "BATES00000001")
+            from hasThreading in Gen.Elements(true, false)
+            from hasThreadAncestry in Gen.Elements(true, false)
+            from messageId in Gen.Elements(string.Empty, "<msg.42.00000001.0001@example.com>", "<msg.abc@test.org>")
+            from inReplyTo in Gen.Elements(string.Empty, "<msg.42.00000001.0001@example.com>")
+            from references in Gen.Elements(string.Empty, "<root@test.org> <parent@test.org>")
+            from threadId in Gen.Elements(string.Empty, "DOC00000001", "CUSTOM-THREAD-ID")
+            from isInclusive in Gen.Elements(true, false)
+            from threadParentId in Gen.Elements(string.Empty, "DOC00000001")
             from hasSourceMetadata in Gen.Elements(true, false)
             from metadataKeyDraw in Gen.ArrayOf(Gen.Elements("custodian", "author", "date-sent"))
             let metadataKeys = metadataKeyDraw.Distinct(StringComparer.Ordinal).OrderBy(key => key, StringComparer.Ordinal).ToArray()
@@ -745,6 +761,14 @@ public static class ZipperArbitraries
                 ccAddress,
                 controlNumberOverride,
                 batesNumberOverride,
+                hasThreading,
+                hasThreadAncestry,
+                messageId,
+                inReplyTo,
+                references,
+                threadId,
+                isInclusive,
+                threadParentId,
                 hasSourceMetadata,
                 metadataKeys,
                 metadataValues,
@@ -1147,6 +1171,11 @@ public static class ZipperArbitraries
         if (input.HasEmail)
         {
             yield return input with { HasEmail = false };
+        }
+
+        if (input.HasThreading)
+        {
+            yield return input with { HasThreading = false };
         }
 
         if (input.HasHashes)
