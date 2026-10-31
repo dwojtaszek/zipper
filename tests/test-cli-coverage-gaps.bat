@@ -173,8 +173,14 @@ if !ZIPPER_EXIT! equ 0 (
         set THREAD_DAT_FOUND=1
         findstr /i /c:"Thread ID" "%%F" >nul 2>&1
         if not errorlevel 1 (
-            echo [ INFO ] PASS: --with-threading populates thread columns in DAT
-            set /a PASSED+=1
+            findstr /i /c:"DOC00000001" "%%F" >nul 2>&1
+            if not errorlevel 1 (
+                echo [ INFO ] PASS: --with-threading populates thread columns in DAT
+                set /a PASSED+=1
+            ) else (
+                echo [ ERROR ] FAIL: --with-threading thread columns empty in DAT
+                set /a FAILED+=1
+            )
         ) else (
             echo [ ERROR ] FAIL: --with-threading missing thread columns in DAT
             set /a FAILED+=1

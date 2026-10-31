@@ -266,7 +266,7 @@ print_info "Test: --with-threading produces Message-ID in EML and thread columns
 if zipper --type eml --count 5 --seed 42 --output-path "$TEST_OUTPUT_DIR/threading-gen" \
     --with-threading > /dev/null 2>&1; then
     dat_file=$(find "$TEST_OUTPUT_DIR/threading-gen" -name "*.dat" -print -quit)
-    if [[ -n "$dat_file" ]] && grep -q "Thread ID" "$dat_file" && grep -q "Inclusive" "$dat_file" && grep -q "Thread Parent" "$dat_file"; then
+    if [[ -n "$dat_file" ]] && grep -q "Thread ID" "$dat_file" && grep -q "Inclusive" "$dat_file" && grep -q "Thread Parent" "$dat_file" && grep -q "DOC00000001" "$dat_file"; then
         pass "--with-threading populates thread columns in DAT"
     else
         fail "--with-threading missing thread columns in DAT"
