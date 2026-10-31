@@ -37,14 +37,15 @@ internal static class DatComposerShared
     internal static (string ParentId, string ChildId, bool HasAttachment) GetFamilyIdentifiers(
         FileData fileData, FileGenerationRequest request, BatesSequence? batesSequence)
     {
+        var attachmentCount = fileData.GetAttachmentMetadata().Count;
         bool hasAttachment = request.Metadata.WithFamilies
             && string.Equals(fileData.WorkItem.EffectiveFileType(request), "eml", StringComparison.Ordinal)
-            && fileData.Attachment.HasValue;
+            && attachmentCount > 0;
         string parentId = fileData.WorkItem.BatesNumberOverride
             ?? (batesSequence is not null
                 ? batesSequence.Format(fileData.WorkItem.Index - 1).ToString()
                 : fileData.WorkItem.ControlNumberOverride ?? $"DOC{fileData.WorkItem.Index:D8}");
-        string childId = hasAttachment ? $"{parentId}_A001" : parentId;
+        string childId = hasAttachment ? FamilyPlan.GetChildId(parentId, attachmentCount) : parentId;
         return (parentId, childId, hasAttachment);
     }
 

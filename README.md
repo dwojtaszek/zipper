@@ -45,6 +45,14 @@ Generate deterministic Email reply and forward chains with RFC 5322 threading he
 zipper --type eml --count 10000 --output-path ./threaded_emails --with-threading --seed 42
 ```
 
+#### MIME Realism
+Generate Emails with encoded subjects, alternative body parts, multiple Attachments, and bounded nested Emails:
+```bash
+zipper --type eml --count 1000 --output-path ./mime_realism --mime-realism full --attachment-rate 50 --seed 42
+```
+Use `--mime-realism standard` for RFC-compliant MIME diversity without nested Emails or deliberately non-RFC headers.
+When `--with-families` is enabled, every emitted MIME Attachment becomes a child record and, in Production Set mode, a separate child Native File. The singular Email Metadata `Attachment` column continues to show the first Attachment's filename. `--with-text` emits a unique Extracted Text sidecar for each Attachment. With custom `nested-rfc822` tokens, a rate-selected placeholder Attachment is preserved; enable `multi-attachment` to emit it alongside a nested Email.
+
 #### 3. Generate a Legal Production Set
 Generate a structured e-discovery Production Set with Bates numbering and volume output:
 ```bash
@@ -163,7 +171,7 @@ zipper --type pdf --count 1000 --output-path ./stored_archive --compression stor
   - **Standard Mode**: Zip Archive + Load File
   - **Production Set Mode**: Volume-structured output (`DATA/`, `IMAGES/`, `NATIVES/`, `TEXT/`, `_manifest.json`). The **Production Manifest** carries an Azure-safe **Production Metadata** block (`metadata`, with `production_id`, `bates_number_start`, `bates_number_end`, and `volume_count`) whose values are normalized (lossy) derivatives of the manifest's own fields and are mapped onto `x-ms-meta-<key>` headers by upload clients. Every value character is tab (0x09) or printable ASCII (0x20–0x7E); CR (0x0D) and LF (0x0A) become a space, tab is preserved, and every other disallowed character (including other C0 controls, DEL 0x7F, and non-ASCII characters) becomes `_`. The combined key/value budget of 8,192 bytes is guaranteed by construction because the CLI rejects any parsed `--bates-prefix` element longer than 200 UTF-8 bytes and any `--production-id` element longer than 250 UTF-8 bytes after rolling Production ID derivation, and the Production Manifest writer refuses to serialize a **Production Metadata** block that exceeds the budget; the comma-joined flag value itself may be longer when every element is within its cap (the worst-case derived Production Metadata block is 759 bytes); post-generation validation rejects values outside the allowed set. The root `_validation_report.json` also cross-checks DAT/OPT document references, order, page counts, and volume-relative image paths (REQ-233).
   - **Loadfile-Only Mode**: Standalone Load File + `_properties.json` audit file
-- **Advanced Capabilities**: Email attachment simulation (`--attachment-rate`), family relationships (`--with-families`), Email Threading (`--with-threading`), redacted production sets (`--redacted-production`), and Chaos Engine anomaly injection or parser-valid `adversarial-values` generation (`--chaos-mode`).
+- **Advanced Capabilities**: Email attachment simulation (`--attachment-rate`), family relationships (`--with-families`), Email Threading (`--with-threading`), MIME realism emission modes (`--mime-realism`), redacted production sets (`--redacted-production`), and Chaos Engine anomaly injection or parser-valid `adversarial-values` generation (`--chaos-mode`).
 - **Output Safety & Preservation**: Collision-resistant base naming with incremental suffixes (`_1`, `_2`, …) and atomic creation (`FileMode.CreateNew`) prevent overwriting existing Archives or Load Files. In Standard mode, entry path collisions across Native Files, generated Attachments, Extracted Text, and included Load Files/Audit Files fail descriptively rather than silently dropping or renaming records. Production Set mode rejects existing output directories and zip archives upfront before generation, and cleanup routines delete only artifacts created during the failed run.
 
 ---
@@ -206,8 +214,9 @@ All command-line flags recognized by Zipper:
 | `--date-format` | `yyyy-MM-dd` | format string | Override date format string |
 | `--empty-percentage` | `15` | `0` to `100` | Percentage of empty values for optional fields |
 | `--custodian-count` | `10` | `1` to `1000` | Number of custodians in data pool |
-| `--with-families` | `false` | flag | Generate parent-child attachment relationships |
+| `--with-families` | `false` | flag | Generate one child record for each emitted Email Attachment |
 | `--with-threading` | `false` | flag | Generate RFC 5322 Message-ID, In-Reply-To, and References Email thread chains with thread metadata Columns (alias `--with-email-threading`) |
+| `--mime-realism` | none | `standard`, `full`, or comma-separated tokens (`encoded-words`, `header-folding`, `quoted-printable`, `base64-body`, `multipart-alternative`, `multi-attachment`, `nested-rfc822`, `non-rfc`) | Configure MIME realism emission modes on generated EML emails (aliases `--email-mime-realism`, `--with-mime-realism`) |
 | `--loadfile-only` | `false` | flag | Standalone Load File generation (no Archive) |
 | `--eol` | `CRLF` | `CRLF`, `LF`, `CR` | Line ending format for Load Files |
 | `--col-delim` | ASCII 20 | `ascii:N` or `char:C` | Column delimiter (strict-prefix format) |
@@ -245,6 +254,8 @@ All command-line flags recognized by Zipper:
 Chaos requires `--loadfile-only` or `--production-set` (for cross-format scenarios `cross-format-desync` and `broken-families`); `--chaos-scenario` conflicts with `--chaos-types`. Only the DAT `adversarial-values` scenario accepts `--count 0`, which writes a header-only Load File plus two trailing empty rows. It requires DAT-only output, bypasses anomaly injection, and remains parser-valid. For TIFF or JPG generation, specify `--loadfile-format dat` because those File Types normally add OPT output implicitly. For positive counts, `--chaos-amount` controls which records receive the adversarial values; the first selected record contains the escaped delimiters, `Ã¾` lookalike, and a 32,768-character value. The five documented platform import-failure DAT types are opt-in, and `realistic-import-failures` requires DAT. Each format has its own anomaly catalog: CSV, Concordance, and EDRM-XML no longer inherit the DAT arms; cross-format scenarios (`cross-format-desync`, `broken-families`) span DAT and OPT with reciprocal audit tracking. Additional explicitly selected Load File Formats are generated normally without cross-format anomalies. `full-chaos` enables every anomaly type for the selected format. To run a cross-format scenario outside a Production Set, pass both formats explicitly with `--load-file-formats dat,opt`.
 
 `--with-threading` is meaningful when EML participates in the File Type selection; otherwise Zipper warns and continues. It adds RFC 5322 `Message-ID`, `In-Reply-To`, and `References` headers to generated Emails, plus Thread ID, Inclusive, and Thread Parent Columns in DAT, CSV, and Concordance Load Files. The default-off mode preserves legacy EML bytes.
+
+`--mime-realism` is meaningful when EML participates in the File Type selection; otherwise Zipper warns and continues. It configures realistic MIME structures on generated EML files including RFC 2047 encoded-word non-ASCII subjects, header folding, Quoted-Printable/Base64 body encodings, `multipart/alternative` plain/HTML representations, multi-attachment emails, and bounded nested `message/rfc822` emails. The default-off mode preserves legacy EML bytes. The singular Email Metadata `Attachment` column continues to show the first Attachment's filename. When `--with-families` is enabled, each emitted MIME Attachment is included as its own family child; `--with-text` creates a unique Extracted Text sidecar for each Attachment. With custom `nested-rfc822` tokens and without `multi-attachment`, a placeholder Attachment selected by `--attachment-rate` is kept and no nested Email is added to that message.
 
 ### Standard Load File Columns
 

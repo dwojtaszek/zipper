@@ -359,6 +359,7 @@ public class CsvComposingWriterTests : TempDirectoryTestBase
     {
         var request = this.CreateTestRequest("eml");
         request.Metadata = request.Metadata with { WithFamilies = true };
+        request.Output = request.Output with { WithText = true };
 
         var files = new List<FileData>
         {
@@ -368,10 +369,16 @@ public class CsvComposingWriterTests : TempDirectoryTestBase
                 {
                     Index = 1,
                     FolderNumber = 1,
+                    FolderName = "folder",
                     FileName = "doc1.eml",
                     FilePathInZip = "folder/doc1.eml",
                 },
-                Attachment = ("attachment.pdf", new byte[] { 1, 2, 3 }),
+                Attachment = ("attachment.jpg", new byte[] { 1, 2, 3 }),
+                AttachmentMetadata =
+                [
+                    new FileAttachmentMetadata("attachment.jpg", 3),
+                    new FileAttachmentMetadata("attachment.pdf", 4),
+                ],
                 DataLength = 100,
             },
             new FileData
@@ -380,6 +387,7 @@ public class CsvComposingWriterTests : TempDirectoryTestBase
                 {
                     Index = 2,
                     FolderNumber = 1,
+                    FolderName = "folder",
                     FileName = "doc2.eml",
                     FilePathInZip = "folder/doc2.eml",
                 },
@@ -390,8 +398,8 @@ public class CsvComposingWriterTests : TempDirectoryTestBase
         var content = await this.CaptureCsvOutput(request, files);
         var lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
 
-        // Cardinality: 1 header + 2 parent records + 1 attachment record = 4 rows
-        Assert.Equal(4, lines.Length);
+        // Cardinality: 1 header + 2 parent records + 2 Attachment child records = 5 rows
+        Assert.Equal(5, lines.Length);
 
         var headers = DelimitedTestParser.ParseLine(lines[0], ',', '"');
         Assert.Contains("CONTROL NUMBER", headers);
@@ -403,21 +411,29 @@ public class CsvComposingWriterTests : TempDirectoryTestBase
 
         var parent1 = DelimitedTestParser.ParseRecord(headers, lines[1], ',', '"');
         var child1 = DelimitedTestParser.ParseRecord(headers, lines[2], ',', '"');
-        var parent2 = DelimitedTestParser.ParseRecord(headers, lines[3], ',', '"');
+        var child2 = DelimitedTestParser.ParseRecord(headers, lines[3], ',', '"');
+        var parent2 = DelimitedTestParser.ParseRecord(headers, lines[4], ',', '"');
 
         // Parent 1 (with attachment)
         Assert.Equal("DOC00000001", parent1["CONTROL NUMBER"]);
         Assert.Equal("DOC00000001", parent1["BEGATTACH"]);
-        Assert.Equal("DOC00000001_A001", parent1["ENDATTACH"]);
+        Assert.Equal("DOC00000001_A002", parent1["ENDATTACH"]);
         Assert.Empty(parent1["PARENTDOCID"]);
 
         // Child 1 (attachment of Parent 1)
         Assert.Equal("DOC00000001_A001", child1["CONTROL NUMBER"]);
         Assert.Equal("DOC00000001", child1["BEGATTACH"]);
-        Assert.Equal("DOC00000001_A001", child1["ENDATTACH"]);
+        Assert.Equal("DOC00000001_A002", child1["ENDATTACH"]);
         Assert.Equal("DOC00000001", child1["PARENTDOCID"]);
         // Child must not self-parent: PARENTDOCID points to parent, not child's own Control Number
         Assert.NotEqual(child1["CONTROL NUMBER"], child1["PARENTDOCID"]);
+
+        Assert.Equal("DOC00000001_A002", child2["CONTROL NUMBER"]);
+        Assert.Equal("DOC00000001", child2["BEGATTACH"]);
+        Assert.Equal("DOC00000001_A002", child2["ENDATTACH"]);
+        Assert.Equal("DOC00000001", child2["PARENTDOCID"]);
+        Assert.Equal("folder/1_attachment.txt", child1["EXTRACTED TEXT"]);
+        Assert.Equal("folder/1_attachment_A002.txt", child2["EXTRACTED TEXT"]);
 
         // Parent 2 (without attachment: no child record, no spurious parent/child links)
         Assert.Equal("DOC00000002", parent2["CONTROL NUMBER"]);

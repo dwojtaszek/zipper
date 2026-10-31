@@ -45,17 +45,59 @@ internal static class EmailFactory
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(seeded);
 
+        Email email;
         if (!request.Metadata.WithThreading)
         {
             var referenceDate = request.Metadata.Seed.HasValue
                 ? new DateTime(2024, 1, 15, 12, 0, 0, DateTimeKind.Utc)
                 : DateTime.UtcNow;
-            return Create((int)item.Index, (int)item.Index, category: null, seeded, referenceDate);
+            email = Create((int)item.Index, (int)item.Index, category: null, seeded, referenceDate);
+        }
+        else
+        {
+            var plan = EmailThreadPlan.GetOrCreate(request);
+            var node = plan.GetNode(item.Index);
+            email = Create(node);
         }
 
-        var plan = EmailThreadPlan.GetOrCreate(request);
-        var node = plan.GetNode(item.Index);
-        return Create(node);
+        var realism = request.Metadata.GetMimeRealismOptions();
+        if (realism.IsEnabled)
+        {
+            email = ApplyRealism(email, realism, seeded);
+        }
+
+        return email;
+    }
+
+    private static readonly string[] NonAsciiPhrases = new[]
+    {
+        " — Projektprüfung",
+        " — Résumé & Café",
+        " — Confirmación y año",
+        " — 報告書確認",
+        " — Отчет о проекте",
+    };
+
+    private static Email ApplyRealism(Email email, MimeRealismOptions realism, Random seeded)
+    {
+        var subject = email.Subject;
+        if (realism.EncodedWords && !Rfc2047Helper.ContainsNonAscii(subject) && seeded.Next(2) == 0)
+        {
+            var phrase = NonAsciiPhrases[seeded.Next(NonAsciiPhrases.Length)];
+            subject += phrase;
+        }
+
+        string? htmlBody = email.HtmlBody;
+        if (realism.MultipartAlternative && string.IsNullOrEmpty(htmlBody))
+        {
+            htmlBody = $"<html><body><p>{System.Net.WebUtility.HtmlEncode(email.Body).Replace("\r\n", "\n").Replace("\n", "<br/>\n")}</p></body></html>";
+        }
+
+        return email with
+        {
+            Subject = subject,
+            HtmlBody = htmlBody,
+        };
     }
 
     internal static Email Create(EmailThreadNode node)

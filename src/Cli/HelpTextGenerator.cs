@@ -107,6 +107,7 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine("  --custodian-count <n>    Override custodian count (max: 1000)");
         Console.Error.WriteLine("  --with-families          Generate parent-child document relationships");
         Console.Error.WriteLine("  --with-threading         Add RFC 5322 Message-ID, In-Reply-To, and References headers plus thread metadata Columns");
+        Console.Error.WriteLine("  --mime-realism <level>   Enable MIME realism emission modes (standard, full, or comma-separated tokens)");
         Console.Error.WriteLine();
         Console.Error.WriteLine("Archive Test Options:");
         Console.Error.WriteLine("  --archive-test-suite <s>  Generate Archive Test Fixture pairs for one suite:");

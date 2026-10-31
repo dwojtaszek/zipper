@@ -114,6 +114,113 @@ public class ProductionManifestWriterTests
     }
 
     [Fact]
+    public async Task WriteAsync_WithMultipleFamilyAttachments_CountsNativeAndRedactedChildren()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileCount = 1, FileType = "eml" },
+            Metadata = new MetadataConfig { WithFamilies = true },
+            Production = new ProductionConfig { RedactedProduction = true },
+        };
+        var fileData = new[]
+        {
+            new FileData
+            {
+                WorkItem = new FileWorkItem { Index = 1, FileType = "eml", FilePathInZip = "NATIVES/VOL001/DOC00000001.eml" },
+                Attachment = ("attachment.jpg", new byte[] { 1, 2, 3 }),
+                AttachmentMetadata =
+                [
+                    new FileAttachmentMetadata("attachment.jpg", 3),
+                    new FileAttachmentMetadata("attachment.pdf", 4),
+                ],
+                RedactedImageRelPath = "REDACTED/IMAGES/VOL001/DOC00000001.tif",
+                RedactionReason = "Privileged",
+            },
+        };
+
+        try
+        {
+            string path = await ProductionManifestWriter.WriteAsync(
+                tempDir,
+                request,
+                "DOC00000001",
+                "DOC00000001",
+                1,
+                TimeSpan.Zero,
+                fileDataList: fileData);
+
+            using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(path));
+            var root = doc.RootElement;
+            Assert.Equal(3, root.GetProperty("nativeFileCount").GetInt64());
+            Assert.Equal(1, root.GetProperty("parentNativeFileCount").GetInt64());
+            Assert.Equal(2, root.GetProperty("attachmentNativeFileCount").GetInt64());
+            Assert.Equal(3, root.GetProperty("redactedFileCount").GetInt64());
+            Assert.Equal(3, root.GetProperty("redactionReasons").GetProperty("Privileged").GetInt64());
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task WriteAsync_WithoutFamilies_DoesNotCountEmbeddedAttachmentsAsRedactedChildren()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"zipper_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileCount = 1, FileType = "eml" },
+            Metadata = new MetadataConfig { WithFamilies = false },
+            Production = new ProductionConfig { RedactedProduction = true },
+        };
+        var fileData = new[]
+        {
+            new FileData
+            {
+                WorkItem = new FileWorkItem { Index = 1, FileType = "eml", FilePathInZip = "NATIVES/VOL001/DOC00000001.eml" },
+                AttachmentMetadata =
+                [
+                    new FileAttachmentMetadata("attachment.jpg", 3),
+                    new FileAttachmentMetadata("attachment.pdf", 4),
+                ],
+                RedactedImageRelPath = "REDACTED/IMAGES/VOL001/DOC00000001.tif",
+                RedactionReason = "Privileged",
+            },
+        };
+
+        try
+        {
+            string path = await ProductionManifestWriter.WriteAsync(
+                tempDir,
+                request,
+                "DOC00000001",
+                "DOC00000001",
+                1,
+                TimeSpan.Zero,
+                fileDataList: fileData);
+
+            using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(path));
+            var root = doc.RootElement;
+            Assert.Equal(1, root.GetProperty("nativeFileCount").GetInt64());
+            Assert.Equal(1, root.GetProperty("redactedFileCount").GetInt64());
+            Assert.Equal(1, root.GetProperty("redactionReasons").GetProperty("Privileged").GetInt64());
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir))
+            {
+                Directory.Delete(tempDir, true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task WriteAsync_WithEmptyDelimiters_FormatsCorrectly()
     {
         // Arrange

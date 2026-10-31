@@ -47,7 +47,9 @@ internal static class ProductionManifestWriter
         long attachmentCount = 0;
         if (request.Metadata.WithFamilies && request.Output.HasFileType("eml"))
         {
-            attachmentCount = fileDataList.Count(f => f.Attachment.HasValue);
+            attachmentCount = fileDataList
+                .Where(f => string.Equals(f.WorkItem.EffectiveFileType(request), "eml", StringComparison.Ordinal))
+                .Sum(f => (long)f.GetAttachmentMetadata().Count);
         }
         long totalNativeCount = parentCount + attachmentCount;
 
@@ -125,16 +127,18 @@ internal static class ProductionManifestWriter
             {
                 if (f.RedactionReason is not null)
                 {
-                    // Each parent with an attachment has one redacted child (in redacted mode)
-                    long increment = f.Attachment.HasValue ? 2 : 1;
+                    long perFileAttachmentCount = request.Metadata.WithFamilies
+                        && string.Equals(f.WorkItem.EffectiveFileType(request), "eml", StringComparison.Ordinal)
+                        ? f.GetAttachmentMetadata().Count
+                        : 0;
+                    long increment = 1 + perFileAttachmentCount;
                     reasonCounts.TryGetValue(f.RedactionReason, out var count);
                     reasonCounts[f.RedactionReason] = count + increment;
                 }
             }
 
-            // Children are also redacted: one child per parent with attachment
-            int childCount = fileDataList.Count(f => f.Attachment.HasValue);
-            redactedCount += childCount;
+            // Materialized family children are also redacted.
+            redactedCount += attachmentCount;
 
             manifest.RedactedFileCount = redactedCount;
             manifest.WithheldNativeFileCount = withheldCount > 0 ? withheldCount : null;

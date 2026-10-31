@@ -13,9 +13,30 @@ internal record GeneratedFileContent
     public byte[] Content { get; init; } = Array.Empty<byte>();
 
     /// <summary>
-    /// Optional attachment filename and content (EML only).
+    /// The primary (first) Attachment, retained for single-Attachment metadata consumers.
     /// </summary>
     public (string filename, byte[] content)? Attachment { get; init; }
+
+    /// <summary>
+    /// All attachment filename/content pairs emitted into the generated EML.
+    /// </summary>
+    public IReadOnlyList<(string filename, byte[] content)> Attachments { get; init; }
+        = Array.Empty<(string filename, byte[] content)>();
+
+    /// <summary>
+    /// Returns all generated Attachments, falling back to the primary Attachment for existing generators.
+    /// </summary>
+    public IReadOnlyList<(string filename, byte[] content)> GetAttachments()
+    {
+        if (this.Attachments.Count > 0)
+        {
+            return this.Attachments;
+        }
+
+        return this.Attachment.HasValue
+            ? new[] { this.Attachment.Value }
+            : Array.Empty<(string filename, byte[] content)>();
+    }
 
     /// <summary>
     /// Email template used to generate EML content, propagated to FileData for load file metadata consistency.

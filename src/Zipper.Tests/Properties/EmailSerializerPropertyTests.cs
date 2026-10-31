@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using FsCheck.Xunit;
 using Xunit;
 using Zipper.Emails;
@@ -42,5 +43,91 @@ public sealed class EmailSerializerPropertyTests
         ];
 
         Assert.Equal(expectedThreadHeaders, actualThreadHeaders);
+    }
+
+    [Property]
+    public void ToEml_WithRfc2047Subject_ShouldRoundTripAndKeepEncodedWordsWithinLimit(Rfc2047SubjectPropertyInput input)
+    {
+        var email = new Email
+        {
+            To = "to@example.com",
+            From = "from@example.com",
+            Subject = input.Subject,
+            SentDate = new DateTime(2024, 1, 15, 12, 0, 0, DateTimeKind.Utc),
+            Body = "RFC 2047 property test.",
+        };
+        var options = new MimeRealismOptions
+        {
+            IsEnabled = true,
+            EncodedWords = true,
+            HeaderFolding = input.Fold,
+        };
+
+        string message = Encoding.UTF8.GetString(EmailSerializer.ToEml(email, null, new Random(input.Seed), options));
+        string subjectHeader = GetSubjectHeader(message);
+        string unfoldedSubject = Rfc2047Helper.UnfoldHeader(subjectHeader);
+        var encodedWords = Regex.Matches(
+            unfoldedSubject,
+            @"=\?[^?]+\?[BbQq]\?[^?]*\?=",
+            RegexOptions.None,
+            TimeSpan.FromSeconds(1));
+
+        Assert.Equal(input.Subject, Rfc2047Helper.Decode(subjectHeader));
+        Assert.NotEmpty(encodedWords);
+        Assert.All(encodedWords, word => Assert.InRange(word.Length, 1, 75));
+    }
+
+    [Property]
+    public void MimeRealismOptions_Parse_NonRfcTokens_AlwaysImpliesEncodedWords(bool includePrefix, bool includeSuffix, int seed)
+    {
+        var tokens = new List<string>();
+        if (includePrefix)
+        {
+            tokens.Add((seed & 1) == 0 ? "qp" : "header-folding");
+        }
+        tokens.Add((seed & 2) == 0 ? "non-rfc" : "deliberately-non-rfc");
+        if (includeSuffix)
+        {
+            tokens.Add((seed & 4) == 0 ? "multipart" : "nested");
+        }
+
+        string input = string.Join(",", tokens);
+        var parsed = MimeRealismOptions.Parse(input);
+
+        Assert.True(parsed.IsEnabled);
+        Assert.True(parsed.DeliberatelyNonRfc);
+        Assert.True(parsed.EncodedWords, "Non-RFC token must always imply encoded words emission.");
+    }
+
+    [Property]
+    public void MimeRealismOptions_TryValidate_CommaOnlyOrEmptyEntries_ShouldFail(int commaSeed)
+    {
+        int count = (int)(Math.Abs((long)commaSeed) % 20) + 1;
+        string commaOnly = new(',', count);
+        Assert.False(MimeRealismOptions.TryValidate(commaOnly, out var error1));
+        Assert.NotNull(error1);
+
+        bool isParsedEnabled = MimeRealismOptions.Parse(commaOnly).IsEnabled;
+        Assert.False(isParsedEnabled);
+
+        string trailingComma = "qp" + commaOnly;
+        Assert.False(MimeRealismOptions.TryValidate(trailingComma, out var error2));
+        Assert.NotNull(error2);
+    }
+
+    private static string GetSubjectHeader(string message)
+    {
+        string[] lines = message[..message.IndexOf("\r\n\r\n", StringComparison.Ordinal)]
+            .Split("\r\n", StringSplitOptions.None);
+        int subjectIndex = Array.FindIndex(lines, line => line.StartsWith("Subject:", StringComparison.Ordinal));
+        Assert.True(subjectIndex >= 0, "Expected a Subject header.");
+
+        var value = new StringBuilder(lines[subjectIndex]["Subject:".Length..].TrimStart());
+        for (int i = subjectIndex + 1; i < lines.Length && lines[i].StartsWith(' '); i++)
+        {
+            value.Append("\r\n").Append(lines[i]);
+        }
+
+        return value.ToString().TrimStart();
     }
 }

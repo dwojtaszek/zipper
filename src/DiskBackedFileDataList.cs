@@ -84,11 +84,11 @@ internal sealed class DiskBackedFileDataList : IReadOnlyList<FileData>, IDisposa
 
 /// <summary>
 /// Serializes metadata-only projections of <see cref="FileData"/> for temporary disk-backed spooling.
-/// Heavy payload byte arrays (Native file content, Attachment file content, and Email Body) are
+/// Heavy payload byte arrays (Native file content, Attachment content, and Email Body) are
 /// intentionally omitted to minimize memory consumption and spooling disk I/O.
 /// Downstream consumers (load file composers, audit writers, manifest writers) consume only
-/// metadata properties (<see cref="FileData.DataLength"/>, <see cref="FileData.AttachmentLength"/>,
-/// Attachment filename, and Email address/subject/date fields).
+/// metadata properties (<see cref="FileData.DataLength"/>), Attachment filenames, lengths and
+/// requested hashes, and Email address/subject/date fields.
 /// </summary>
 internal static class FileDataSerializer
 {
@@ -119,11 +119,22 @@ internal static class FileDataSerializer
             writer.Write(false);
         }
 
-        writer.Write(data.Attachment.HasValue);
-        if (data.Attachment.HasValue)
+        var attachmentMetadata = data.GetAttachmentMetadata();
+        writer.Write(attachmentMetadata.Count);
+        foreach (var attachment in attachmentMetadata)
         {
-            writer.Write(data.Attachment.Value.filename ?? string.Empty);
-            writer.Write(data.AttachmentLength);
+            writer.Write(attachment.FileName ?? string.Empty);
+            writer.Write(attachment.Length);
+            writer.Write(attachment.Hashes is not null);
+            if (attachment.Hashes is not null)
+            {
+                writer.Write(attachment.Hashes.Count);
+                foreach (var (algorithm, hash) in attachment.Hashes)
+                {
+                    writer.Write((int)algorithm);
+                    writer.Write(hash);
+                }
+            }
         }
 
         writer.Write(data.Email is not null);
@@ -222,14 +233,33 @@ internal static class FileDataSerializer
             hashes = dict;
         }
 
-        (string filename, byte[] content)? attachment = null;
-        int attachmentLength = 0;
-        if (reader.ReadBoolean())
+        var attachmentCount = reader.ReadInt32();
+        var attachmentMetadata = attachmentCount == 0
+            ? Array.Empty<FileAttachmentMetadata>()
+            : new FileAttachmentMetadata[attachmentCount];
+        for (int i = 0; i < attachmentCount; i++)
         {
             var attFilename = reader.ReadString();
-            attachmentLength = reader.ReadInt32();
-            attachment = (attFilename, Array.Empty<byte>());
+            int attachmentLength = reader.ReadInt32();
+            IReadOnlyDictionary<Config.HashAlgorithm, string>? attachmentHashes = null;
+            if (reader.ReadBoolean())
+            {
+                var hashCount = reader.ReadInt32();
+                var attHashesDict = new Dictionary<Config.HashAlgorithm, string>(hashCount);
+                for (int hashIndex = 0; hashIndex < hashCount; hashIndex++)
+                {
+                    var algorithm = (Config.HashAlgorithm)reader.ReadInt32();
+                    attHashesDict[algorithm] = reader.ReadString();
+                }
+
+                attachmentHashes = attHashesDict;
+            }
+
+            attachmentMetadata[i] = new FileAttachmentMetadata(attFilename, attachmentLength, attachmentHashes);
         }
+        (string filename, byte[] content)? attachment = attachmentMetadata.Length > 0
+            ? (attachmentMetadata[0].FileName, Array.Empty<byte>())
+            : null;
 
         Email? email = null;
         if (reader.ReadBoolean())
@@ -331,7 +361,8 @@ internal static class FileDataSerializer
             Hash = hash,
             Hashes = hashes,
             Attachment = attachment,
-            AttachmentLength = attachmentLength,
+            AttachmentLength = attachmentMetadata.Length > 0 ? attachmentMetadata[0].Length : 0,
+            AttachmentMetadata = attachmentMetadata,
             Email = email
         };
     }

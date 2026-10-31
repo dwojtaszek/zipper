@@ -12,7 +12,7 @@ public class ProductionSetOrchestratorTests
         var materializer = new FakeMaterializer();
         var request = CreateRequest(count: 1, fileType: "pdf", outputPath: Path.GetTempPath());
 
-        var result = await ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer());
+        await ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer());
 
         Assert.NotEmpty(materializer.CreatedDirectories);
         Assert.Contains(materializer.CreatedDirectories, p => p.EndsWith("DATA", System.StringComparison.Ordinal));
@@ -39,7 +39,7 @@ public class ProductionSetOrchestratorTests
         var request = CreateRequest(count: 1, fileType: "pdf", outputPath: Path.GetTempPath());
         request.Output = request.Output with { WithText = true };
         request.Production = request.Production with { RedactedProduction = true };
-        var result = await ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer());
+        await ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer());
 
         Assert.Contains(materializer.CreatedDirectories, p => p.Contains("REDACTED", System.StringComparison.Ordinal));
         var redactedImage = Assert.Single(materializer.WrittenBytes, w => w.path.Contains("REDACTED", System.StringComparison.Ordinal) && w.path.EndsWith(".tif", System.StringComparison.Ordinal));
@@ -170,14 +170,26 @@ public class ProductionSetOrchestratorTests
     {
         var materializer = new FakeMaterializer();
         var request = CreateRequest(count: 1, fileType: "eml", outputPath: Path.GetTempPath());
-        request.Metadata = request.Metadata with { WithFamilies = true, Seed = 42 };
+        request.Metadata = request.Metadata with { WithFamilies = true, MimeRealism = "standard", Seed = 42 };
         request.LoadFile = request.LoadFile with { AttachmentRate = 100 };
 
-        var result = await ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer());
+        await ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer());
 
-        Assert.NotEmpty(materializer.Attachments);
+        var fileData = Assert.Single(materializer.FileDataItems);
+        int attachmentCount = fileData.GetAttachmentMetadata().Count;
+        Assert.True(attachmentCount > 1);
+        Assert.Equal(attachmentCount, materializer.Attachments.Count);
+        Assert.Equal(attachmentCount, fileData.GetAttachmentPayloads().Count);
         Assert.Contains(materializer.WrittenTexts, w => w.path.Contains("_A001.txt", StringComparison.Ordinal));
+        Assert.Contains(materializer.WrittenTexts, w => w.path.Contains("_A002.txt", StringComparison.Ordinal));
         Assert.Contains(materializer.WrittenBytes, w => w.path.Contains("_A001.tif", StringComparison.Ordinal));
+        Assert.Contains(materializer.WrittenBytes, w => w.path.Contains("_A002.tif", StringComparison.Ordinal));
+
+        for (int attachmentIndex = 1; attachmentIndex <= attachmentCount; attachmentIndex++)
+        {
+            string childId = $"_A{attachmentIndex:D3}";
+            Assert.Contains(materializer.Attachments, attachment => attachment.path.Contains(childId, StringComparison.Ordinal));
+        }
     }
 
     [Fact]

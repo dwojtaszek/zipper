@@ -25,6 +25,11 @@ internal interface IEmailAttachmentPicker
     /// <param name="seeded">Seeded random source for deterministic output.</param>
     /// <returns>An <see cref="EmailAttachment"/> for the chosen file, or null.</returns>
     EmailAttachment? Pick(long nativeFileIndex, double attachmentRate, IReadOnlyList<NativeFileReference> pool, Random seeded);
+
+    /// <summary>
+    /// Picks attachments from the pool. If multiAttachment is enabled, can pick up to 3 attachments.
+    /// </summary>
+    IReadOnlyList<EmailAttachment> PickMultiple(long nativeFileIndex, double attachmentRate, IReadOnlyList<NativeFileReference> pool, Random seeded, bool multiAttachment = false);
 }
 
 /// <summary>
@@ -84,5 +89,52 @@ internal sealed class EmailAttachmentPicker : IEmailAttachmentPicker
             Content = chosen.Content,
             ContentType = chosen.ContentType,
         };
+    }
+
+    /// <inheritdoc/>
+    public IReadOnlyList<EmailAttachment> PickMultiple(
+        long nativeFileIndex,
+        double attachmentRate,
+        IReadOnlyList<NativeFileReference> pool,
+        Random seeded,
+        bool multiAttachment = false)
+    {
+        var first = Pick(nativeFileIndex, attachmentRate, pool, seeded);
+        if (first is null)
+        {
+            return Array.Empty<EmailAttachment>();
+        }
+
+        if (!multiAttachment)
+        {
+            return new[] { first };
+        }
+
+        var results = new List<EmailAttachment> { first };
+        int extraCount = seeded.Next(1, 3);
+        var candidates = new List<NativeFileReference>(pool.Count);
+        foreach (var r in pool)
+        {
+            if (r.Index != nativeFileIndex && !string.Equals(r.FileName, first.FileName, StringComparison.OrdinalIgnoreCase))
+            {
+                candidates.Add(r);
+            }
+        }
+
+        while (candidates.Count > 0 && extraCount > 0)
+        {
+            int idx = seeded.Next(candidates.Count);
+            var chosen = candidates[idx];
+            candidates.RemoveAt(idx);
+            results.Add(new EmailAttachment
+            {
+                FileName = chosen.FileName,
+                Content = chosen.Content,
+                ContentType = chosen.ContentType,
+            });
+            extraCount--;
+        }
+
+        return results;
     }
 }

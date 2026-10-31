@@ -171,6 +171,69 @@ public class MetadataModuleTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void TryBuild_WithMimeRealismWithoutEml_EmitsWarning()
+    {
+        var (isValid, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(
+            () => TryBuild(false, false, new[] { "--mime-realism", "standard" }, out _));
+
+        Assert.True(isValid);
+        Assert.Contains("Warning: --mime-realism is only meaningful when --type eml (or eml participates in --types) is specified.", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryBuild_WithMimeRealismWithEml_DoesNotEmitWarningAndSetsConfig()
+    {
+        var (config, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(
+            () => TryBuild(true, false, new[] { "--mime-realism", "standard" }, out var cfg) ? cfg : null);
+
+        Assert.NotNull(config);
+        Assert.Equal("standard", config.MimeRealism);
+        Assert.DoesNotContain("Warning: --mime-realism", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryBuild_WithEmailMimeRealismAlias_SetsConfig()
+    {
+        var (config, _, _) = ConsoleOutputCapture.RunWithCapturedOutput(
+            () => TryBuild(true, false, new[] { "--email-mime-realism", "full" }, out var cfg) ? cfg : null);
+
+        Assert.NotNull(config);
+        Assert.Equal("full", config.MimeRealism);
+    }
+
+    [Fact]
+    public void TryBuild_WithMimeRealismFlag_SetsStandardConfig()
+    {
+        var (config, _, _) = ConsoleOutputCapture.RunWithCapturedOutput(
+            () => TryBuild(true, false, new[] { "--with-mime-realism" }, out var cfg) ? cfg : null);
+
+        Assert.NotNull(config);
+        Assert.Equal("standard", config.MimeRealism);
+    }
+
+    [Fact]
+    public void TryApply_InvalidMimeRealism_ReturnsFalseAndEmitsError()
+    {
+        var module = new MetadataModule();
+        var (success, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(
+            () => module.TryApply("--mime-realism", "invalid-mode-xyz"));
+
+        Assert.False(success);
+        Assert.Contains("Error: Invalid realism mode token: 'invalid-mode-xyz'", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryApply_MimeRealismWithoutValue_ReturnsFalseAndEmitsError()
+    {
+        var module = new MetadataModule();
+        var (success, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(
+            () => module.TryApply("--mime-realism", null));
+
+        Assert.False(success);
+        Assert.Contains("Error: --mime-realism requires a value.", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TryBuild_ProfileWithParentTraversal_ReturnsFalse()
     {
         Assert.False(TryBuild(false, false, new[] { "--column-profile", "../outside-profile.json" }, out _));

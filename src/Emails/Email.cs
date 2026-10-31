@@ -36,4 +36,8 @@ public record Email
     public bool? IsInclusive { get; init; }
 
     public string? ThreadParentId { get; init; }
+
+    public string? HtmlBody { get; init; }
+
+    public IReadOnlyList<EmailAttachment>? Attachments { get; init; }
 }

@@ -480,6 +480,14 @@ public class ZipArchiveServiceTests : TempDirectoryTestBase
         {
             testFiles.Add(this.CreateTestEmlFileData(i));
         }
+        testFiles[0] = testFiles[0] with
+        {
+            AttachmentPayloads =
+            [
+                testFiles[0].Attachment!.Value,
+                ("attachment1.jpg", System.Text.Encoding.UTF8.GetBytes("Second attachment content")),
+            ],
+        };
 
         var channel = Channel.CreateUnbounded<FileData>();
         var writer = channel.Writer;
@@ -494,9 +502,9 @@ public class ZipArchiveServiceTests : TempDirectoryTestBase
         await new ZipArchiveSink().CreateArchiveAsync(zipPath, "load.dat", loadPath, request, channel.Reader);
 
         // Assert
-        ZipAssert.AssertValidZip(zipPath, 8, archive =>
+        ZipAssert.AssertValidZip(zipPath, 10, archive =>
         {
-            // Should have: 2 EML files + 2 EML text files + 2 attachments + 2 attachment text files = 8 total
+            // Should have: 2 EML files + 2 EML text files + 3 Attachments + 3 Attachment text files = 10 total
             var emlEntries = archive.Entries.Where(e => e.FullName.EndsWith(".eml", StringComparison.Ordinal)).ToList();
             var emlTextEntries = archive.Entries.Where(e => e.FullName.EndsWith(".txt", StringComparison.Ordinal) && !e.FullName.Contains("attachment", StringComparison.Ordinal)).ToList();
             var attachmentEntries = archive.Entries.Where(e => e.FullName.Contains("attachment", StringComparison.Ordinal) && !e.FullName.EndsWith(".txt", StringComparison.Ordinal)).ToList();
@@ -504,8 +512,10 @@ public class ZipArchiveServiceTests : TempDirectoryTestBase
 
             Assert.Equal(2, emlEntries.Count);
             Assert.Equal(2, emlTextEntries.Count);
-            Assert.Equal(2, attachmentEntries.Count);
-            Assert.Equal(2, attachmentTextEntries.Count);
+            Assert.Equal(3, attachmentEntries.Count);
+            Assert.Equal(3, attachmentTextEntries.Count);
+            Assert.Contains(attachmentTextEntries, entry => entry.FullName.EndsWith("attachment1.txt", StringComparison.Ordinal));
+            Assert.Contains(attachmentTextEntries, entry => entry.FullName.EndsWith("attachment1_A002.txt", StringComparison.Ordinal));
         });
     }
 

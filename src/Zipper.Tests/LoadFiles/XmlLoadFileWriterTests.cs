@@ -478,10 +478,21 @@ public class XmlLoadFileWriterTests : TempDirectoryTestBase
                 {
                     Index = 1,
                     FolderNumber = 1,
+                    FolderName = "folder",
                     FileName = "doc1.eml",
                     FilePathInZip = "folder/doc1.eml"
                 },
                 Attachment = ("attachment.pdf", new byte[] { 1, 2, 3 }),
+                AttachmentPayloads =
+                [
+                    ("attachment.pdf", new byte[] { 1, 2, 3 }),
+                    ("attachment.jpg", new byte[] { 4, 5, 6, 7 }),
+                ],
+                AttachmentMetadata =
+                [
+                    new FileAttachmentMetadata("attachment.pdf", 3),
+                    new FileAttachmentMetadata("attachment.jpg", 4),
+                ],
                 DataLength = 100
             }
         };
@@ -497,33 +508,48 @@ public class XmlLoadFileWriterTests : TempDirectoryTestBase
 
         var documents = root.Element("Batch")?.Elements("Document").ToList();
         Assert.NotNull(documents);
-        Assert.Equal(2, documents.Count);
+        Assert.Equal(3, documents.Count);
 
         var parentDoc = documents[0];
         Assert.Equal("DOC00000001", parentDoc.Attribute("DocID")?.Value);
 
         var childDoc = documents[1];
         Assert.Equal("DOC00000001_A001", childDoc.Attribute("DocID")?.Value);
+        var secondChildDoc = documents[2];
+        Assert.Equal("DOC00000001_A002", secondChildDoc.Attribute("DocID")?.Value);
 
         // Check tags for parent and child
         var parentTags = parentDoc.Element("Tags")?.Elements("Tag").ToDictionary(t => t.Attribute("TagName")?.Value ?? "", t => t.Attribute("TagValue")?.Value ?? "");
         Assert.NotNull(parentTags);
         Assert.Equal("DOC00000001", parentTags["BEGATTACH"]);
-        Assert.Equal("DOC00000001_A001", parentTags["ENDATTACH"]);
+        Assert.Equal("DOC00000001_A002", parentTags["ENDATTACH"]);
         Assert.Equal("", parentTags["PARENTDOCID"]);
 
         var childTags = childDoc.Element("Tags")?.Elements("Tag").ToDictionary(t => t.Attribute("TagName")?.Value ?? "", t => t.Attribute("TagValue")?.Value ?? "");
         Assert.NotNull(childTags);
         Assert.Equal("DOC00000001", childTags["BEGATTACH"]);
-        Assert.Equal("DOC00000001_A001", childTags["ENDATTACH"]);
+        Assert.Equal("DOC00000001_A002", childTags["ENDATTACH"]);
         Assert.Equal("DOC00000001", childTags["PARENTDOCID"]);
 
+        var secondChildTags = secondChildDoc.Element("Tags")?.Elements("Tag").ToDictionary(t => t.Attribute("TagName")?.Value ?? "", t => t.Attribute("TagValue")?.Value ?? "");
+        Assert.NotNull(secondChildTags);
+        Assert.Equal("DOC00000001", secondChildTags["BEGATTACH"]);
+        Assert.Equal("DOC00000001_A002", secondChildTags["ENDATTACH"]);
+        Assert.Equal("DOC00000001", secondChildTags["PARENTDOCID"]);
+        Assert.Equal("folder/1_attachment.txt", childTags["ExtractedTextPath"]);
+        Assert.Equal("folder/1_attachment_A002.txt", secondChildTags["ExtractedTextPath"]);
+
         // Check Relationships section
-        var relationship = root.Element("Batch")?.Element("Relationships")?.Element("Relationship");
-        Assert.NotNull(relationship);
-        Assert.Equal("Attachment", relationship.Attribute("Type")?.Value);
-        Assert.Equal("DOC00000001", relationship.Attribute("ParentDocID")?.Value);
-        Assert.Equal("DOC00000001_A001", relationship.Attribute("ChildDocID")?.Value);
+        var relationships = root.Element("Batch")?.Element("Relationships")?.Elements("Relationship").ToList();
+        Assert.NotNull(relationships);
+        Assert.Equal(2, relationships.Count);
+        Assert.All(relationships, relationship =>
+        {
+            Assert.Equal("Attachment", relationship.Attribute("Type")?.Value);
+            Assert.Equal("DOC00000001", relationship.Attribute("ParentDocID")?.Value);
+        });
+        Assert.Equal("DOC00000001_A001", relationships[0].Attribute("ChildDocID")?.Value);
+        Assert.Equal("DOC00000001_A002", relationships[1].Attribute("ChildDocID")?.Value);
     }
 
     [Fact]

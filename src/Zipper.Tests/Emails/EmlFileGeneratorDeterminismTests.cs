@@ -247,4 +247,65 @@ public class EmlFileGeneratorDeterminismTests
             Assert.Equal(res1.Content, res2.Content);
         }
     }
+
+    [Fact]
+    public void Generate_WithMimeRealism_ProducesByteIdenticalOutputForSameSeed()
+    {
+        var generator = new EmlFileGenerator();
+        var request1 = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 5, Concurrency = 1 },
+            Metadata = new MetadataConfig { Seed = 888, MimeRealism = "standard" },
+            LoadFile = new LoadFileConfig { AttachmentRate = 100 },
+        };
+        var request2 = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 5, Concurrency = 1 },
+            Metadata = new MetadataConfig { Seed = 888, MimeRealism = "standard" },
+            LoadFile = new LoadFileConfig { AttachmentRate = 100 },
+        };
+
+        for (long i = 1; i <= 5; i++)
+        {
+            var item = new FileWorkItem { Index = i, FileName = $"{i:D8}.eml", FolderName = "f", FolderNumber = 1 };
+            var res1 = generator.Generate(item, request1);
+            var res2 = generator.Generate(item, request2);
+
+            Assert.Equal(res1.Content, res2.Content);
+        }
+    }
+
+    [Fact]
+    public void Generate_WithMimeRealism_EmitsRealismHeadersAndParts()
+    {
+        var generator = new EmlFileGenerator();
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 10, Concurrency = 1 },
+            Metadata = new MetadataConfig { Seed = 42, MimeRealism = "standard" },
+            LoadFile = new LoadFileConfig { AttachmentRate = 100 },
+        };
+
+        bool foundAlternative = false;
+        bool foundMixed = false;
+        for (long i = 1; i <= 10; i++)
+        {
+            var item = new FileWorkItem { Index = i, FileName = $"{i:D8}.eml", FolderName = "f", FolderNumber = 1 };
+            var res = generator.Generate(item, request);
+            var text = System.Text.Encoding.UTF8.GetString(res.Content);
+
+            if (text.Contains("multipart/alternative", StringComparison.Ordinal))
+            {
+                foundAlternative = true;
+            }
+
+            if (text.Contains("multipart/mixed", StringComparison.Ordinal))
+            {
+                foundMixed = true;
+            }
+        }
+
+        Assert.True(foundMixed, "At least one multipart/mixed message should be emitted with attachmentRate 100.");
+        Assert.True(foundAlternative, "At least one multipart/alternative message should be emitted with realism standard.");
+    }
 }

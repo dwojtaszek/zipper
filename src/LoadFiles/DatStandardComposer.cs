@@ -121,23 +121,40 @@ internal sealed class DatStandardComposer
 
             if (hasAttachment)
             {
-                var attach = fileData.Attachment!.Value;
-                var sanitizedFilename = FamilyPlan.SanitizeAttachmentFilename(attach.filename);
-                var attachmentPath = $"{fileData.WorkItem.FolderPrefix}{fileData.WorkItem.Index}_{sanitizedFilename}";
-                yield return DatComposerShared.MakeRecord(
-                    this.headerColumns,
-                    childId,
-                    this.StandardRowValues(fileData, profileValues, new DatRowContext
+                var attachments = fileData.GetAttachmentMetadata();
+                var attachmentNames = attachments.Select(a => a.FileName).ToList();
+                for (int attachmentIndex = 0; attachmentIndex < attachments.Count; attachmentIndex++)
+                {
+                    var attach = attachments[attachmentIndex];
+                    int attachmentNumber = attachmentIndex + 1;
+                    bool isDuplicate = FamilyPlan.IsDuplicateAttachmentName(attachmentNames, attachmentIndex);
+                    string attachmentId = FamilyPlan.GetChildId(parentId, attachmentNumber);
+                    var childFileData = fileData with
                     {
-                        IdOverride = childId,
-                        ControlOverride = this.batesSequence is null ? childId : $"DOC{fileData.WorkItem.Index:D8}_A001",
-                        FilePathOverride = attachmentPath,
-                        FileSizeOverride = fileData.AttachmentLength.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                        IsChild = true,
-                        BegAttach = parentId,
-                        EndAttach = childId,
-                        ParentDocId = parentId,
-                    }));
+                        Attachment = (attach.FileName, Array.Empty<byte>()),
+                        AttachmentLength = attach.Length,
+                        Hashes = attach.Hashes,
+                    };
+                    var attachmentPath = FamilyPlan.GetAttachmentPath(fileData.WorkItem, attach.FileName, attachmentNumber, isDuplicate);
+                    yield return DatComposerShared.MakeRecord(
+                        this.headerColumns,
+                        attachmentId,
+                        this.StandardRowValues(childFileData, profileValues, new DatRowContext
+                        {
+                            IdOverride = attachmentId,
+                            ControlOverride = this.batesSequence is null
+                                ? attachmentId
+                                : FamilyPlan.GetChildId($"DOC{fileData.WorkItem.Index:D8}", attachmentIndex + 1),
+                            FilePathOverride = attachmentPath,
+                            TextPathOverride = FamilyPlan.GetAttachmentTextPath(
+                                fileData.WorkItem, attach.FileName, attachmentIndex + 1),
+                            FileSizeOverride = attach.Length.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                            IsChild = true,
+                            BegAttach = parentId,
+                            EndAttach = childId,
+                            ParentDocId = parentId,
+                        }));
+                }
             }
         }
     }
@@ -402,6 +419,11 @@ internal sealed class DatStandardComposer
 
     private string StandardTextPath(FileData fileData, DatRowContext ctx)
     {
+        if (ctx.TextPathOverride is not null)
+        {
+            return ctx.TextPathOverride;
+        }
+
         var wi = fileData.WorkItem;
         if (ctx.IsChild)
         {

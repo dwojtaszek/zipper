@@ -72,6 +72,42 @@ public class DiskBackedFileDataListTests
     }
 
     [Fact]
+    public void RoundTrip_PreservesMultipleAttachmentMetadataWithoutPayloads()
+    {
+        using var list = new DiskBackedFileDataList();
+        var originalData = new FileData
+        {
+            WorkItem = new FileWorkItem { Index = 1 },
+            Attachment = ("attachment.jpg", new byte[] { 1, 2, 3 }),
+            AttachmentLength = 3,
+            AttachmentPayloads =
+            [
+                ("attachment.jpg", new byte[] { 1, 2, 3 }),
+                ("attachment.pdf", new byte[] { 4, 5, 6, 7 }),
+            ],
+            AttachmentMetadata =
+            [
+                new FileAttachmentMetadata("attachment.jpg", 3),
+                new FileAttachmentMetadata("attachment.pdf", 4),
+            ],
+        };
+
+        list.Add(originalData);
+        var deserialized = Assert.Single(list.ToList());
+
+        Assert.Equal(
+            new[]
+            {
+                new FileAttachmentMetadata("attachment.jpg", 3),
+                new FileAttachmentMetadata("attachment.pdf", 4),
+            },
+            deserialized.GetAttachmentMetadata());
+        Assert.Empty(deserialized.AttachmentPayloads);
+        Assert.Empty(deserialized.Attachment!.Value.content);
+        Assert.Equal(3, deserialized.AttachmentLength);
+    }
+
+    [Fact]
     public void RoundTrip_PreservesEmailCc_WhenPresentSingleRecipient()
     {
         using var list = new DiskBackedFileDataList();

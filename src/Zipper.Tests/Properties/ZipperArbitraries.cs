@@ -163,6 +163,12 @@ public readonly record struct DelimitedRecordPropertyInput(
 public readonly record struct EmailThreadHeadersPropertyInput(int Seed, int RootIndex);
 
 /// <summary>
+/// Bounded Unicode subject, seed, and folding switch for RFC 2047 serializer properties.
+/// </summary>
+[StructLayout(LayoutKind.Auto)]
+public readonly record struct Rfc2047SubjectPropertyInput(string Subject, int Seed, bool Fold);
+
+/// <summary>
 /// Bounded input for path validation and sanitization property tests.
 /// </summary>
 [StructLayout(LayoutKind.Auto)]
@@ -426,6 +432,19 @@ public static class ZipperArbitraries
             from seed in Gen.Choose(0, 100_000)
             from rootIndex in Gen.Choose(1, 100_000)
             select new EmailThreadHeadersPropertyInput(seed, rootIndex);
+
+        return Arb.From(gen);
+    }
+
+    public static Arbitrary<Rfc2047SubjectPropertyInput> Rfc2047SubjectPropertyInputArb()
+    {
+        string[] fragments = [" ", "A", "z", "é", "ñ", "ø", "漢字", "😀", "ß", "™"];
+        var gen =
+            from length in Gen.Choose(0, 80)
+            from parts in Gen.ArrayOf(Gen.Elements(fragments), length)
+            from seed in Gen.Choose(0, 100_000)
+            from fold in Gen.Elements(false, true)
+            select new Rfc2047SubjectPropertyInput($"é{string.Concat(parts)}", seed, fold);
 
         return Arb.From(gen);
     }

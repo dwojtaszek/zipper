@@ -407,6 +407,8 @@ internal static class ProductionSetOrchestrator
         };
         var generated = fileGenerators[plan.FileType].Generate(workItem, request);
         var nativeContent = generated.Content;
+        var attachments = generated.GetAttachments();
+        var attachmentMetadata = FileAttachmentMetadata.FromPayloads(attachments, request, workItem);
 
         await materializer.WriteBytesAsync(Path.Combine(productionPath, plan.NativeRelPath), nativeContent, cancellationToken).ConfigureAwait(false);
 
@@ -434,6 +436,8 @@ internal static class ProductionSetOrchestrator
             WorkItem = workItem,
             DataLength = nativeContent.Length,
             Attachment = generated.Attachment,
+            AttachmentPayloads = attachments,
+            AttachmentMetadata = attachmentMetadata,
             PageCount = generated.PageCount,
             Email = generated.Email,
             Hash = fileDataHash,
@@ -449,16 +453,20 @@ internal static class ProductionSetOrchestrator
             RedactionReason = redactionReason,
         };
 
-        if (request.Metadata.WithFamilies && string.Equals(plan.FileType, "eml", StringComparison.Ordinal) && generated.Attachment.HasValue)
+        if (request.Metadata.WithFamilies && string.Equals(plan.FileType, "eml", StringComparison.Ordinal))
         {
-            await WriteChildAttachmentFilesAsync(
-                productionPath,
-                request,
-                plan,
-                generated.Attachment.Value,
-                encoding,
-                materializer,
-                cancellationToken).ConfigureAwait(false);
+            for (int attachmentIndex = 0; attachmentIndex < attachments.Count; attachmentIndex++)
+            {
+                await WriteChildAttachmentFilesAsync(
+                    productionPath,
+                    request,
+                    plan,
+                    attachments[attachmentIndex],
+                    attachmentIndex + 1,
+                    encoding,
+                    materializer,
+                    cancellationToken).ConfigureAwait(false);
+            }
         }
 
         return fileData;
@@ -553,11 +561,12 @@ internal static class ProductionSetOrchestrator
         FileGenerationRequest request,
         ProductionNativeFilePlan plan,
         (string filename, byte[] content) attach,
+        int attachmentNumber,
         Encoding encoding,
         IFileMaterializer materializer,
         CancellationToken cancellationToken)
     {
-        var childBates = $"{plan.BatesNumber}_A001";
+        var childBates = LoadFiles.FamilyPlan.GetChildId(plan.BatesNumber, attachmentNumber);
         var childExt = Path.GetExtension(attach.filename) ?? string.Empty;
 
         var childNativeRelPath = Path.Combine("NATIVES", plan.VolumeName, $"{childBates}{childExt}");

@@ -198,14 +198,29 @@ internal class ZipArchiveSink : IArchiveSink
                 WriteExtractedTextToArchive(context.Archive, fileData, context.Request, textContent, context.UsedEntryPaths, context.CompressionLevel);
             }
 
-            if (fileData.Attachment.HasValue)
+            var attachments = fileData.GetAttachmentPayloads();
+            var attachmentNames = attachments.Select(a => a.filename).ToList();
+            for (int attachmentIndex = 0; attachmentIndex < attachments.Count; attachmentIndex++)
             {
-                WriteAttachmentToArchive(context.Archive, fileData, context.UsedEntryPaths, context.CompressionLevel);
+                var attachment = attachments[attachmentIndex];
+                int attachmentNumber = attachmentIndex + 1;
+                bool isDuplicate = FamilyPlan.IsDuplicateAttachmentName(attachmentNames, attachmentIndex);
+                WriteAttachmentToArchive(
+                    context.Archive, fileData, attachment, attachmentNumber, isDuplicate, context.UsedEntryPaths, context.CompressionLevel);
             }
 
-            if (fileData.Attachment.HasValue && context.Request.Output.WithText)
+            if (context.Request.Output.WithText)
             {
-                WriteAttachmentTextToArchive(context.Archive, fileData, context.UsedEntryPaths, context.CompressionLevel);
+                for (int attachmentIndex = 0; attachmentIndex < attachments.Count; attachmentIndex++)
+                {
+                    WriteAttachmentTextToArchive(
+                        context.Archive,
+                        fileData,
+                        attachments[attachmentIndex],
+                        attachmentIndex + 1,
+                        context.UsedEntryPaths,
+                        context.CompressionLevel);
+                }
             }
         }
         finally
@@ -248,33 +263,33 @@ internal class ZipArchiveSink : IArchiveSink
     /// <summary>
     /// Writes an Attachment to the Archive. Fails if the entry path already exists.
     /// </summary>
-    private static void WriteAttachmentToArchive(ZipArchive archive, FileData fileData, HashSet<string> usedEntryPaths, CompressionLevel compressionLevel)
+    private static void WriteAttachmentToArchive(
+        ZipArchive archive,
+        FileData fileData,
+        (string filename, byte[] content) attachment,
+        int attachmentNumber,
+        bool isDuplicate,
+        HashSet<string> usedEntryPaths,
+        CompressionLevel compressionLevel)
     {
-        if (!fileData.Attachment.HasValue)
-        {
-            return;
-        }
-
-        var sanitizedFilename = Path.GetFileName(fileData.Attachment.Value.filename.Replace('\\', '/'));
-        var rawEntryPath = $"{fileData.WorkItem.FolderPrefix}{fileData.WorkItem.Index}_{sanitizedFilename}";
+        var rawEntryPath = FamilyPlan.GetAttachmentPath(fileData.WorkItem, attachment.filename, attachmentNumber, isDuplicate);
         var attachmentEntry = CreateTrackedEntry(archive, rawEntryPath, usedEntryPaths, compressionLevel);
         using var attachmentStream = attachmentEntry.Open();
-        attachmentStream.Write(fileData.Attachment.Value.content);
+        attachmentStream.Write(attachment.content);
     }
 
     /// <summary>
     /// Writes the extracted text for an Attachment to the Archive. Fails if the entry path already exists.
     /// </summary>
-    private static void WriteAttachmentTextToArchive(ZipArchive archive, FileData fileData, HashSet<string> usedEntryPaths, CompressionLevel compressionLevel)
+    private static void WriteAttachmentTextToArchive(
+        ZipArchive archive,
+        FileData fileData,
+        (string filename, byte[] content) attachment,
+        int attachmentNumber,
+        HashSet<string> usedEntryPaths,
+        CompressionLevel compressionLevel)
     {
-        if (!fileData.Attachment.HasValue)
-        {
-            return;
-        }
-
-        var sanitizedFilename = Path.GetFileName(fileData.Attachment.Value.filename.Replace('\\', '/'));
-        var attachmentTextFileName = $"{Path.GetFileNameWithoutExtension(sanitizedFilename)}.txt";
-        var rawEntryPath = $"{fileData.WorkItem.FolderPrefix}{fileData.WorkItem.Index}_{attachmentTextFileName}";
+        var rawEntryPath = FamilyPlan.GetAttachmentTextPath(fileData.WorkItem, attachment.filename, attachmentNumber);
         var attachmentTextEntry = CreateTrackedEntry(archive, rawEntryPath, usedEntryPaths, compressionLevel);
         using var attachmentTextStream = attachmentTextEntry.Open();
         attachmentTextStream.Write(PlaceholderFiles.ExtractedText);

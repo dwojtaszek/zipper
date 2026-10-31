@@ -101,6 +101,11 @@ public class OptComposingWriterTests : TempDirectoryTestBase
                     FilePathInZip = "NATIVES\\001\\doc1.eml"
                 },
                 Attachment = ("attachment.pdf", new byte[] { 1, 2, 3 }),
+                AttachmentMetadata =
+                [
+                    new FileAttachmentMetadata("attachment.pdf", 3),
+                    new FileAttachmentMetadata("photo.jpg", 4),
+                ],
                 PageCount = 1
             }
         };
@@ -112,8 +117,9 @@ public class OptComposingWriterTests : TempDirectoryTestBase
         var content = Encoding.UTF8.GetString(stream.ToArray());
         var lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
 
-        Assert.Equal(2, lines.Length);
+        Assert.Equal(3, lines.Length);
         Assert.StartsWith("DOC00000001,VOL001,IMAGES\\DOC00000001.tif,Y", lines[0], StringComparison.Ordinal);
         Assert.StartsWith("DOC00000001_A001,VOL001,IMAGES\\DOC00000001_A001.tif,Y", lines[1], StringComparison.Ordinal);
+        Assert.StartsWith("DOC00000001_A002,VOL001,IMAGES\\DOC00000001_A002.tif,Y", lines[2], StringComparison.Ordinal);
     }
 }
