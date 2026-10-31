@@ -710,6 +710,64 @@ public class MimeRealismTests
     }
 
     [Fact]
+    public async Task ZipArchiveSink_WithAttachmentsSharingStemDifferentExtensions_EmitsDistinctTextAndNativePaths()
+    {
+        var tempZip = Path.GetTempFileName() + ".zip";
+        var tempDat = Path.GetTempFileName() + ".dat";
+        try
+        {
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig { FileType = "eml", FileCount = 1, WithText = true },
+                Metadata = new MetadataConfig { Seed = 42, WithFamilies = true },
+                LoadFile = new LoadFileConfig { Formats = [LoadFileFormat.Dat] },
+            };
+
+            var attachments = new List<(string filename, byte[] content)>
+            {
+                ("report.pdf", new byte[] { 1, 2, 3 }),
+                ("report.docx", new byte[] { 4, 5, 6 }),
+            };
+
+            var workItem = new FileWorkItem { Index = 1, FileName = "00000001.eml", FilePathInZip = "00000001.eml", FolderName = "f1", FolderNumber = 1 };
+            var fileData = new FileData
+            {
+                WorkItem = workItem,
+                Data = Encoding.ASCII.GetBytes("From: a@b.com\r\nSubject: Test\r\n\r\nBody"),
+                AttachmentPayloads = attachments,
+                AttachmentMetadata = FileAttachmentMetadata.FromPayloads(attachments, request, workItem),
+            };
+
+            var channel = System.Threading.Channels.Channel.CreateUnbounded<FileData>();
+            await channel.Writer.WriteAsync(fileData);
+            channel.Writer.Complete();
+
+            var sink = new ZipArchiveSink();
+            await sink.CreateArchiveAsync(tempZip, "test.dat", tempDat, request, channel.Reader);
+
+            using var archive = System.IO.Compression.ZipFile.OpenRead(tempZip);
+            var entryNames = archive.Entries.Select(e => e.FullName).ToList();
+
+            Assert.Contains("f1/1_report.pdf", entryNames);
+            Assert.Contains("f1/1_report.docx", entryNames);
+            Assert.Contains("f1/1_report.txt", entryNames);
+            Assert.Contains("f1/1_report_A002.txt", entryNames);
+        }
+        finally
+        {
+            if (File.Exists(tempZip))
+            {
+                File.Delete(tempZip);
+            }
+
+            if (File.Exists(tempDat))
+            {
+                File.Delete(tempDat);
+            }
+        }
+    }
+
+    [Fact]
     public void Rfc2047Helper_EncodeSubject_LongAsciiWithoutSpaces_DoesNotStartWithBareLineFeed()
     {
         var longAscii = new string('a', 80);
