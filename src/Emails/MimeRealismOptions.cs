@@ -74,6 +74,11 @@ public record MimeRealismOptions
         }
 
         var tokens = trimmed.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (tokens.Length == 0)
+        {
+            return Disabled;
+        }
+
         bool encodedWords = false;
         bool headerFolding = false;
         bool qpBody = false;
@@ -167,9 +172,22 @@ public record MimeRealismOptions
             "non-rfc", "deliberately-non-rfc",
         };
 
-        var tokens = trimmed.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        foreach (var token in tokens)
+        var rawTokens = trimmed.Split(',');
+        if (rawTokens.Length == 0 || rawTokens.All(string.IsNullOrWhiteSpace))
         {
+            errorMessage = "Realism mode token list cannot be empty.";
+            return false;
+        }
+
+        foreach (var raw in rawTokens)
+        {
+            var token = raw.Trim();
+            if (string.IsNullOrEmpty(token))
+            {
+                errorMessage = "Realism mode token list cannot contain empty tokens.";
+                return false;
+            }
+
             if (!validTokens.Contains(token))
             {
                 errorMessage = $"Invalid realism mode token: '{token}'. Valid values: none, standard, full, or comma-separated tokens: {string.Join(", ", validTokens)}";

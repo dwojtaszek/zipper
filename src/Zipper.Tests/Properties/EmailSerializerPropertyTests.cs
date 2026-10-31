@@ -99,6 +99,22 @@ public sealed class EmailSerializerPropertyTests
         Assert.True(parsed.EncodedWords, "Non-RFC token must always imply encoded words emission.");
     }
 
+    [Property]
+    public void MimeRealismOptions_TryValidate_CommaOnlyOrEmptyEntries_ShouldFail(int commaSeed)
+    {
+        int count = (int)(Math.Abs((long)commaSeed) % 20) + 1;
+        string commaOnly = new(',', count);
+        Assert.False(MimeRealismOptions.TryValidate(commaOnly, out var error1));
+        Assert.NotNull(error1);
+
+        bool isParsedEnabled = MimeRealismOptions.Parse(commaOnly).IsEnabled;
+        Assert.False(isParsedEnabled);
+
+        string trailingComma = "qp" + commaOnly;
+        Assert.False(MimeRealismOptions.TryValidate(trailingComma, out var error2));
+        Assert.NotNull(error2);
+    }
+
     private static string GetSubjectHeader(string message)
     {
         string[] lines = message[..message.IndexOf("\r\n\r\n", StringComparison.Ordinal)]

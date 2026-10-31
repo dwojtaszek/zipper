@@ -50,6 +50,24 @@ public class MimeRealismTests
     }
 
     [Fact]
+    public void MimeRealismOptions_TryValidate_EmptyTokenLists_ReturnsFalse()
+    {
+        Assert.False(MimeRealismOptions.TryValidate(",", out var error1));
+        Assert.NotNull(error1);
+
+        Assert.False(MimeRealismOptions.TryValidate(",,,", out var error2));
+        Assert.NotNull(error2);
+
+        Assert.False(MimeRealismOptions.TryValidate("qp,", out var error3));
+        Assert.NotNull(error3);
+
+        Assert.False(MimeRealismOptions.TryValidate(",qp", out var error4));
+        Assert.NotNull(error4);
+
+        Assert.False(MimeRealismOptions.Parse(",").IsEnabled);
+    }
+
+    [Fact]
     public void ToEml_WithEncodedWords_EncodesNonAsciiSubjectAndDecodesRoundTrip()
     {
         const string originalSubject = "Projektprüfung & Résumé: ñoño";
