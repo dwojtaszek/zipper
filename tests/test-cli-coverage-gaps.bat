@@ -197,7 +197,7 @@ if !ZIPPER_EXIT! equ 0 (
 
 echo [ INFO ] Test: --mime-realism warning emitted for non-eml type
 set "ERR_FILE=%TEMP%\zipper_realism_err_%RANDOM%.txt"
-call "%ZIPPER_CMD%" --type pdf --count 5 --output-path "%TEST_OUTPUT_DIR%\mime-realism-warn1" --mime-realism standard 2> "%ERR_FILE%"
+%ZIPPER_CMD% --type pdf --count 5 --output-path "%TEST_OUTPUT_DIR%\mime-realism-warn1" --mime-realism standard 2> "%ERR_FILE%"
 set "ZIPPER_EXIT=!ERRORLEVEL!"
 if !ZIPPER_EXIT! equ 0 (
     findstr /c:"Warning: --mime-realism is only meaningful when --type eml (or eml participates in --types) is specified." "%ERR_FILE%" > nul 2>&1
@@ -216,7 +216,7 @@ if exist "%ERR_FILE%" del /f /q "%ERR_FILE%"
 
 set "MIME_BASELINE_OUTPUT=%TEST_OUTPUT_DIR%\mime-realism-baseline"
 set "MIME_BASELINE_ZIP="
-call "%ZIPPER_CMD%" --type eml --count 32 --seed 42 --attachment-rate 100 --output-path "!MIME_BASELINE_OUTPUT!" >nul 2>&1
+%ZIPPER_CMD% --type eml --count 32 --seed 42 --attachment-rate 100 --output-path "!MIME_BASELINE_OUTPUT!" >nul 2>&1
 set "ZIPPER_EXIT=!ERRORLEVEL!"
 if !ZIPPER_EXIT! equ 0 (
     for %%F in ("!MIME_BASELINE_OUTPUT!\*.zip") do if exist "%%~fF" set "MIME_BASELINE_ZIP=%%~fF"
@@ -233,7 +233,7 @@ for %%M in (standard full) do (
     set "MIME_MODE=%%M"
     set "MIME_OUTPUT=%TEST_OUTPUT_DIR%\mime-realism-!MIME_MODE!"
     echo [ INFO ] Test: --mime-realism !MIME_MODE! produces parser-readable MIME structures
-    call "%ZIPPER_CMD%" --type eml --count 32 --seed 42 --attachment-rate 100 --output-path "!MIME_OUTPUT!" --mime-realism !MIME_MODE! >nul 2>&1
+    %ZIPPER_CMD% --type eml --count 32 --seed 42 --attachment-rate 100 --output-path "!MIME_OUTPUT!" --mime-realism !MIME_MODE! >nul 2>&1
     set "ZIPPER_EXIT=!ERRORLEVEL!"
     if !ZIPPER_EXIT! equ 0 (
         set "MIME_ZIP="
@@ -261,7 +261,7 @@ for %%M in (standard full) do (
 
 set "MIME_FAMILY_OUTPUT=%TEST_OUTPUT_DIR%\mime-realism-families"
 echo [ INFO ] Test: --mime-realism standard emits a Document Family child for every MIME Attachment
-call "%ZIPPER_CMD%" --type eml --count 32 --seed 42 --attachment-rate 100 --with-families --with-text --output-path "!MIME_FAMILY_OUTPUT!" --mime-realism standard >nul 2>&1
+%ZIPPER_CMD% --type eml --count 32 --seed 42 --attachment-rate 100 --with-families --with-text --output-path "!MIME_FAMILY_OUTPUT!" --mime-realism standard >nul 2>&1
 set "ZIPPER_EXIT=!ERRORLEVEL!"
 if !ZIPPER_EXIT! equ 0 (
     set "MIME_FAMILY_ZIP="
@@ -288,7 +288,7 @@ if !ZIPPER_EXIT! equ 0 (
 
 set "MIME_FULL_FAMILY_OUTPUT=%TEST_OUTPUT_DIR%\mime-realism-full-families"
 echo [ INFO ] Test: --mime-realism full emits family children for nested and placeholder MIME Attachments
-call "%ZIPPER_CMD%" --type eml --count 32 --seed 42 --attachment-rate 100 --with-families --with-text --output-path "!MIME_FULL_FAMILY_OUTPUT!" --mime-realism full >nul 2>&1
+%ZIPPER_CMD% --type eml --count 32 --seed 42 --attachment-rate 100 --with-families --with-text --output-path "!MIME_FULL_FAMILY_OUTPUT!" --mime-realism full >nul 2>&1
 set "ZIPPER_EXIT=!ERRORLEVEL!"
 if !ZIPPER_EXIT! equ 0 (
     set "MIME_FULL_FAMILY_ZIP="
