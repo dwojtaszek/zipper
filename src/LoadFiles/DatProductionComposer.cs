@@ -43,6 +43,11 @@ internal sealed class DatProductionComposer
             headers.AddRange(new[] { "BEGATTACH", "ENDATTACH", "PARENTDOCID" });
         }
 
+        if (request.Metadata.WithThreading)
+        {
+            headers.AddRange(new[] { "Thread ID", "Inclusive", "Thread Parent" });
+        }
+
         return headers.Select(h => DatComposerShared.ApplyConvention(h, namingConvention)).ToList();
     }
 
@@ -180,6 +185,18 @@ internal sealed class DatProductionComposer
             v.Add(ctx.BegAttach);
             v.Add(ctx.EndAttach);
             v.Add(ctx.ParentDocId);
+        }
+
+        if (this.request.Metadata.WithThreading)
+        {
+            var isEml = string.Equals(wi.EffectiveFileType(this.request), "eml", StringComparison.Ordinal) && !ctx.IsChild;
+            var threadId = isEml ? fileData.Email?.ThreadId ?? string.Empty : string.Empty;
+            var inclusive = isEml ? (fileData.Email?.IsInclusive == true ? "Y" : (fileData.Email?.IsInclusive == false ? "N" : string.Empty)) : string.Empty;
+            var threadParent = isEml ? fileData.Email?.ThreadParentId ?? string.Empty : string.Empty;
+
+            v.Add(threadId);
+            v.Add(inclusive);
+            v.Add(threadParent);
         }
 
         return v;

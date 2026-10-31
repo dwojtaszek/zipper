@@ -85,6 +85,11 @@ internal sealed class DatStandardComposer
             cols.AddRange(new[] { "BEGATTACH", "ENDATTACH", "PARENTDOCID" });
         }
 
+        if (request.Metadata.WithThreading)
+        {
+            cols.AddRange(new[] { "Thread ID", "Inclusive", "Thread Parent" });
+        }
+
         return cols.Select(c => DatComposerShared.ApplyConvention(c, namingConvention)).ToList();
     }
 
@@ -172,6 +177,14 @@ internal sealed class DatStandardComposer
                     ? TiffMultiPageGenerator.GetPageCount(this.request.Tiff.PageRange, this.request.Metadata.Seed, i)
                     : rowRandom.Next(1, 11),
                 Hashes = hashConfig.Mode == Config.HashMode.Simulated ? GenerateSimulatedHashes(workItem) : null,
+                Email = this.request.Metadata.WithThreading
+                    ? new Emails.Email
+                    {
+                        ThreadId = Emails.EmailThreadPlan.GetOrCreate(this.request).GetNode(i).ThreadDocId,
+                        IsInclusive = Emails.EmailThreadPlan.GetOrCreate(this.request).GetNode(i).IsInclusive,
+                        ThreadParentId = Emails.EmailThreadPlan.GetOrCreate(this.request).GetNode(i).ThreadParentDocId,
+                    }
+                    : null,
             };
 
             bool hasAttachment = FamilyPlan.HasAttachment(this.request, i);
@@ -360,6 +373,18 @@ internal sealed class DatStandardComposer
             v.Add(ctx.BegAttach);
             v.Add(ctx.EndAttach);
             v.Add(ctx.ParentDocId);
+        }
+
+        if (this.request.Metadata.WithThreading)
+        {
+            var isEml = recordIsEml && !ctx.IsChild;
+            var threadId = isEml ? fileData.Email?.ThreadId ?? string.Empty : string.Empty;
+            var inclusive = isEml ? (fileData.Email?.IsInclusive == true ? "Y" : (fileData.Email?.IsInclusive == false ? "N" : string.Empty)) : string.Empty;
+            var threadParent = isEml ? fileData.Email?.ThreadParentId ?? string.Empty : string.Empty;
+
+            v.Add(threadId);
+            v.Add(inclusive);
+            v.Add(threadParent);
         }
 
         return v;

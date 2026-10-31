@@ -64,6 +64,22 @@ internal static class EmailSerializer
 
         writer.WriteLine($"Subject: {email.Subject}");
         writer.WriteLine($"Date: {email.SentDate.ToString("ddd, dd MMM yyyy HH:mm:ss zzz", CultureInfo.InvariantCulture)}");
+
+        if (!string.IsNullOrEmpty(email.MessageId))
+        {
+            writer.WriteLine($"Message-ID: {EnsureAngleBrackets(email.MessageId)}");
+        }
+
+        if (!string.IsNullOrEmpty(email.InReplyTo))
+        {
+            writer.WriteLine($"In-Reply-To: {EnsureAngleBrackets(email.InReplyTo)}");
+        }
+
+        if (!string.IsNullOrEmpty(email.References))
+        {
+            writer.WriteLine($"References: {email.References}");
+        }
+
         writer.WriteLine("MIME-Version: 1.0");
 
         if (email.IsHighPriority)
@@ -195,5 +211,20 @@ internal static class EmailSerializer
 
         var extension = System.IO.Path.GetExtension(attachment.FileName);
         return ContentTypeHelper.GetContentTypeForExtension(extension);
+    }
+
+    private static string EnsureAngleBrackets(string id)
+    {
+        if (string.IsNullOrEmpty(id))
+        {
+            return id;
+        }
+
+        if (id.StartsWith('<') && id.EndsWith('>'))
+        {
+            return id;
+        }
+
+        return $"<{id}>";
     }
 }

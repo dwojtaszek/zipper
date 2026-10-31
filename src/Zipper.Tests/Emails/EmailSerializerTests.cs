@@ -676,4 +676,112 @@ public class EmailSerializerTests
         Assert.Contains("To: test@example.com", content, StringComparison.Ordinal);
         Assert.Contains("multipart/mixed", content, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void ToEml_WithoutThreadingHeaders_PreservesParityWithoutMessageIdOrThreadHeaders()
+    {
+        var email = new Email
+        {
+            To = "to@example.com",
+            From = "from@example.com",
+            Subject = "No Threading",
+            SentDate = new DateTime(2024, 1, 15, 12, 0, 0, DateTimeKind.Utc),
+            Body = "Test message.",
+        };
+
+        var result = EmailSerializer.ToEml(email, null);
+        var content = Encoding.UTF8.GetString(result);
+
+        Assert.DoesNotContain("Message-ID:", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("In-Reply-To:", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("References:", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ToEml_WithMessageId_EmitsMessageIdHeader()
+    {
+        var email = new Email
+        {
+            To = "to@example.com",
+            From = "from@example.com",
+            Subject = "Root Thread Email",
+            SentDate = new DateTime(2024, 1, 15, 12, 0, 0, DateTimeKind.Utc),
+            Body = "Initial thread message.",
+            MessageId = "<msg.00000001@example.com>",
+        };
+
+        var result = EmailSerializer.ToEml(email, null);
+        var content = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("Message-ID: <msg.00000001@example.com>\r\n", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("In-Reply-To:", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("References:", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ToEml_WithMessageIdMissingAngleBrackets_AddsAngleBrackets()
+    {
+        var email = new Email
+        {
+            To = "to@example.com",
+            From = "from@example.com",
+            Subject = "Missing Brackets",
+            SentDate = new DateTime(2024, 1, 15, 12, 0, 0, DateTimeKind.Utc),
+            Body = "Message ID without brackets.",
+            MessageId = "msg.00000001@example.com",
+            InReplyTo = "parent.00000001@example.com",
+        };
+
+        var result = EmailSerializer.ToEml(email, null);
+        var content = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("Message-ID: <msg.00000001@example.com>\r\n", content, StringComparison.Ordinal);
+        Assert.Contains("In-Reply-To: <parent.00000001@example.com>\r\n", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ToEml_WithInReplyToAndReferences_EmitsThreadHeaders()
+    {
+        var email = new Email
+        {
+            To = "to@example.com",
+            From = "from@example.com",
+            Subject = "Re: Root Thread Email",
+            SentDate = new DateTime(2024, 1, 15, 14, 0, 0, DateTimeKind.Utc),
+            Body = "Reply message.",
+            MessageId = "<msg.00000002@example.com>",
+            InReplyTo = "<msg.00000001@example.com>",
+            References = "<msg.00000001@example.com>",
+        };
+
+        var result = EmailSerializer.ToEml(email, null);
+        var content = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("Message-ID: <msg.00000002@example.com>\r\n", content, StringComparison.Ordinal);
+        Assert.Contains("In-Reply-To: <msg.00000001@example.com>\r\n", content, StringComparison.Ordinal);
+        Assert.Contains("References: <msg.00000001@example.com>\r\n", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ToEml_MultiLevelReferencesChain_EmitsAllAncestors()
+    {
+        var email = new Email
+        {
+            To = "to@example.com",
+            From = "from@example.com",
+            Subject = "Re: Root Thread Email",
+            SentDate = new DateTime(2024, 1, 15, 16, 0, 0, DateTimeKind.Utc),
+            Body = "Second reply message.",
+            MessageId = "<msg.00000003@example.com>",
+            InReplyTo = "<msg.00000002@example.com>",
+            References = "<msg.00000001@example.com> <msg.00000002@example.com>",
+        };
+
+        var result = EmailSerializer.ToEml(email, null);
+        var content = Encoding.UTF8.GetString(result);
+
+        Assert.Contains("Message-ID: <msg.00000003@example.com>\r\n", content, StringComparison.Ordinal);
+        Assert.Contains("In-Reply-To: <msg.00000002@example.com>\r\n", content, StringComparison.Ordinal);
+        Assert.Contains("References: <msg.00000001@example.com> <msg.00000002@example.com>\r\n", content, StringComparison.Ordinal);
+    }
 }

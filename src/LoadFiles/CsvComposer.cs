@@ -41,6 +41,9 @@ internal sealed class CsvComposer : StandardRowComposer
         "BATES" => "Bates Number",
         "PAGECOUNT" => "Page Count",
         "TEXT" => "Extracted Text",
+        "THREADID" => "Thread ID",
+        "INCLUSIVE" => "Inclusive",
+        "THREADPARENT" => "Thread Parent",
         _ => columnKey,
     };
 }

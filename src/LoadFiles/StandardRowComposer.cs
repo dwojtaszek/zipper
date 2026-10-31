@@ -170,6 +170,11 @@ internal abstract class StandardRowComposer : ILoadFileComposer
             keys.AddRange(new[] { "BEGATTACH", "ENDATTACH", "PARENTDOCID" });
         }
 
+        if (this.request.Metadata.WithThreading)
+        {
+            keys.AddRange(new[] { "THREADID", "INCLUSIVE", "THREADPARENT" });
+        }
+
         if (this.request.Hash.IsEnabled)
         {
             keys.AddRange(GetHashColumnKeys(this.request));
@@ -219,6 +224,9 @@ internal abstract class StandardRowComposer : ILoadFileComposer
             "BEGATTACH" => ctx.BegAttach,
             "ENDATTACH" => ctx.EndAttach,
             "PARENTDOCID" => ctx.ParentDocId,
+            "THREADID" => ctx.IsChild || !ctx.RecordIsEml ? string.Empty : fileData.Email?.ThreadId ?? string.Empty,
+            "INCLUSIVE" => ctx.IsChild || !ctx.RecordIsEml ? string.Empty : (fileData.Email?.IsInclusive == true ? "Y" : (fileData.Email?.IsInclusive == false ? "N" : string.Empty)),
+            "THREADPARENT" => ctx.IsChild || !ctx.RecordIsEml ? string.Empty : fileData.Email?.ThreadParentId ?? string.Empty,
             "MD5HASH" => ResolveHashFromFileData(fileData, Config.HashAlgorithm.MD5),
             "SHA1HASH" => ResolveHashFromFileData(fileData, Config.HashAlgorithm.SHA1),
             "SHA256HASH" => ResolveHashFromFileData(fileData, Config.HashAlgorithm.SHA256),

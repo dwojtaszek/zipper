@@ -248,6 +248,43 @@ else
 fi
 rm -f "$err_file"
 
+print_info "Test: --with-threading warning emitted for non-eml type"
+err_file=$(mktemp)
+if zipper --type pdf --count 5 --output-path "$TEST_OUTPUT_DIR/threading-warn1" \
+    --with-threading 2> "$err_file"; then
+    if grep -q "Warning: --with-threading is only meaningful when --type eml (or eml participates in --types) is specified." "$err_file"; then
+        pass "--with-threading warning emitted for non-eml type"
+    else
+        fail "--with-threading warning NOT emitted for non-eml type"
+    fi
+else
+    fail "--with-threading non-eml type command failed"
+fi
+rm -f "$err_file"
+
+print_info "Test: --with-threading produces Message-ID in EML and thread columns in DAT"
+if zipper --type eml --count 5 --seed 42 --output-path "$TEST_OUTPUT_DIR/threading-gen" \
+    --with-threading > /dev/null 2>&1; then
+    dat_file=$(find "$TEST_OUTPUT_DIR/threading-gen" -name "*.dat" -print -quit)
+    if [[ -n "$dat_file" ]] && grep -q "Thread ID" "$dat_file" && grep -q "Inclusive" "$dat_file" && grep -q "Thread Parent" "$dat_file"; then
+        pass "--with-threading populates thread columns in DAT"
+    else
+        fail "--with-threading missing thread columns in DAT"
+    fi
+    zip_file=$(find "$TEST_OUTPUT_DIR/threading-gen" -name "*.zip" -print -quit)
+    if [[ -n "$zip_file" ]]; then
+        if unzip -p "$zip_file" "*00000001.eml" | grep -q "Message-ID:"; then
+            pass "--with-threading emits Message-ID header in EML native"
+        else
+            fail "--with-threading missing Message-ID in 00000001.eml"
+        fi
+    else
+        fail "--with-threading archive not found"
+    fi
+else
+    fail "--with-threading eml generation command failed"
+fi
+
 # --- Summary ---
 
 echo ""

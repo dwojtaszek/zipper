@@ -44,10 +44,18 @@ internal static class EmailFactory
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(seeded);
-        var referenceDate = request.Metadata.Seed.HasValue
-            ? new DateTime(2024, 1, 15, 12, 0, 0, DateTimeKind.Utc)
-            : DateTime.UtcNow;
-        return Create((int)item.Index, (int)item.Index, category: null, seeded, referenceDate);
+
+        if (!request.Metadata.WithThreading)
+        {
+            var referenceDate = request.Metadata.Seed.HasValue
+                ? new DateTime(2024, 1, 15, 12, 0, 0, DateTimeKind.Utc)
+                : DateTime.UtcNow;
+            return Create((int)item.Index, (int)item.Index, category: null, seeded, referenceDate);
+        }
+
+        var plan = EmailThreadPlan.GetOrCreate(request);
+        var node = plan.GetNode(item.Index);
+        return plan.CreateEmail(node);
     }
 
     internal static Email Create(int recipientIndex, int senderIndex, EmailCategory? category, Random random)
@@ -129,13 +137,15 @@ internal static class EmailFactory
         return $"{type.ToLowerInvariant()}{index:D3}@{domain}";
     }
 
-    private static EmailCategory GetRandomCategory(Random random)
+    internal static string GetDomainForIndex(int index) => EmailDomains[index % EmailDomains.Length];
+
+    internal static EmailCategory GetRandomCategory(Random random)
     {
         var categories = Enum.GetValues<EmailCategory>();
         return categories[random.Next(categories.Length)];
     }
 
-    private static List<EmailTemplateBase> GetTemplatesForCategory(EmailCategory category)
+    internal static List<EmailTemplateBase> GetTemplatesForCategory(EmailCategory category)
     {
         return category switch
         {
@@ -266,17 +276,17 @@ internal static class EmailFactory
         return sb.ToString();
     }
 
-    private static string GenerateSubject(string baseSubject, int recipientIndex, int senderIndex, Random random, DateTime referenceDate)
+    internal static string GenerateSubject(string baseSubject, int recipientIndex, int senderIndex, Random random, DateTime referenceDate)
     {
         return ApplyReplacements(baseSubject, BuildReplacements(recipientIndex, senderIndex, random, referenceDate));
     }
 
-    private static string GenerateBody(string baseBody, int recipientIndex, int senderIndex, Random random, DateTime referenceDate)
+    internal static string GenerateBody(string baseBody, int recipientIndex, int senderIndex, Random random, DateTime referenceDate)
     {
         return ApplyReplacements(baseBody, BuildReplacements(recipientIndex, senderIndex, random, referenceDate));
     }
 
-    private static DateTime GenerateSentDate(EmailCategory category, Random random, DateTime referenceDate)
+    internal static DateTime GenerateSentDate(EmailCategory category, Random random, DateTime referenceDate)
     {
         var baseDaysAgo = category switch
         {
@@ -298,7 +308,7 @@ internal static class EmailFactory
         return referenceDate.AddDays(-baseDaysAgo).AddHours(random.Next(-23, 24)).AddMinutes(random.Next(-59, 60));
     }
 
-    private static string? GenerateCcAddresses(EmailCategory category, int recipientIndex, Random random)
+    internal static string? GenerateCcAddresses(EmailCategory category, int recipientIndex, Random random)
     {
         if (random.NextDouble() > GetCcProbability(category))
         {
@@ -315,7 +325,7 @@ internal static class EmailFactory
         return string.Join(", ", ccAddresses);
     }
 
-    private static bool ShouldBeHighPriority(EmailCategory category, Random random)
+    internal static bool ShouldBeHighPriority(EmailCategory category, Random random)
     {
         return category switch
         {
@@ -327,7 +337,7 @@ internal static class EmailFactory
         };
     }
 
-    private static bool ShouldRequestReadReceipt(EmailCategory category, Random random)
+    internal static bool ShouldRequestReadReceipt(EmailCategory category, Random random)
     {
         return category switch
         {
@@ -338,7 +348,7 @@ internal static class EmailFactory
         };
     }
 
-    private static string? GenerateReplyToAddress(int senderIndex, EmailCategory category, Random random)
+    internal static string? GenerateReplyToAddress(int senderIndex, EmailCategory category, Random random)
     {
         if (random.NextDouble() > GetReplyToProbability(category))
         {

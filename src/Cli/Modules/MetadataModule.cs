@@ -10,6 +10,7 @@ public sealed class MetadataModule : CliModule
     private bool _withMetadata;
     private bool _withCollectionMetadata;
     private bool _withFamilies;
+    private bool _withThreading;
     private string? _columnProfile;
     private int? _seed;
     private string? _dateFormat;
@@ -19,12 +20,12 @@ public sealed class MetadataModule : CliModule
 
     public override IReadOnlyCollection<string> OwnedFlags { get; } = new[]
     {
-        "--with-metadata", "--with-collection-metadata", "--with-families",
+        "--with-metadata", "--with-collection-metadata", "--with-families", "--with-threading", "--with-email-threading",
         "--column-profile", "--seed", "--date-format", "--empty-percentage", "--custodian-count",
         "--attachment-rate",
     };
 
-    public override bool TakesValue(string flag) => flag is not "--with-metadata" and not "--with-collection-metadata" and not "--with-families";
+    public override bool TakesValue(string flag) => flag is not "--with-metadata" and not "--with-collection-metadata" and not "--with-families" and not "--with-threading" and not "--with-email-threading";
 
     public override bool TryApply(string flag, string? value)
     {
@@ -33,6 +34,8 @@ public sealed class MetadataModule : CliModule
             case "--with-metadata": _withMetadata = true; return true;
             case "--with-collection-metadata": _withCollectionMetadata = true; return true;
             case "--with-families": _withFamilies = true; return true;
+            case "--with-threading":
+            case "--with-email-threading": _withThreading = true; return true;
             case "--column-profile": _columnProfile = value; return true;
             case "--date-format": _dateFormat = value; return true;
             case "--seed":
@@ -67,6 +70,7 @@ public sealed class MetadataModule : CliModule
     public bool WithMetadata => _withMetadata;
     public bool WithCollectionMetadata => _withCollectionMetadata;
     public bool WithFamilies => _withFamilies;
+    public bool WithThreading => _withThreading;
     public int AttachmentRate => _attachmentRate;
     public string? ColumnProfile => _columnProfile;
     public int? Seed => _seed;
@@ -104,6 +108,11 @@ public sealed class MetadataModule : CliModule
         if (_withFamilies && !hasSourceInput && (!includesEml || _attachmentRate <= 0))
         {
             Console.Error.WriteLine("Warning: --with-families is only meaningful when --type eml (or eml participates in --types) and --attachment-rate > 0 are specified.");
+        }
+
+        if (_withThreading && !hasSourceInput && !includesEml)
+        {
+            Console.Error.WriteLine("Warning: --with-threading is only meaningful when --type eml (or eml participates in --types) is specified.");
         }
 
         if (HasColumnProfile && !ColumnProfileLoader.IsBuiltInProfile(_columnProfile!))
@@ -164,6 +173,7 @@ public sealed class MetadataModule : CliModule
             CustodianCountOverride = _custodianCount,
             WithFamilies = _withFamilies,
             WithCollectionMetadata = _withCollectionMetadata,
+            WithThreading = _withThreading,
         };
         return true;
     }

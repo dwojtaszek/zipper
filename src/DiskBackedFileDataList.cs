@@ -138,6 +138,42 @@ internal static class FileDataSerializer
             {
                 writer.Write(data.Email.Cc);
             }
+
+            writer.Write(data.Email.MessageId is not null);
+            if (data.Email.MessageId is not null)
+            {
+                writer.Write(data.Email.MessageId);
+            }
+
+            writer.Write(data.Email.InReplyTo is not null);
+            if (data.Email.InReplyTo is not null)
+            {
+                writer.Write(data.Email.InReplyTo);
+            }
+
+            writer.Write(data.Email.References is not null);
+            if (data.Email.References is not null)
+            {
+                writer.Write(data.Email.References);
+            }
+
+            writer.Write(data.Email.ThreadId is not null);
+            if (data.Email.ThreadId is not null)
+            {
+                writer.Write(data.Email.ThreadId);
+            }
+
+            writer.Write(data.Email.IsInclusive.HasValue);
+            if (data.Email.IsInclusive.HasValue)
+            {
+                writer.Write(data.Email.IsInclusive.Value);
+            }
+
+            writer.Write(data.Email.ThreadParentId is not null);
+            if (data.Email.ThreadParentId is not null)
+            {
+                writer.Write(data.Email.ThreadParentId);
+            }
         }
 
         writer.Write(data.WorkItem.ControlNumberOverride ?? string.Empty);
@@ -208,6 +244,42 @@ internal static class FileDataSerializer
                 cc = reader.ReadString();
             }
 
+            string? messageId = null;
+            if (reader.ReadBoolean())
+            {
+                messageId = reader.ReadString();
+            }
+
+            string? inReplyTo = null;
+            if (reader.ReadBoolean())
+            {
+                inReplyTo = reader.ReadString();
+            }
+
+            string? references = null;
+            if (reader.ReadBoolean())
+            {
+                references = reader.ReadString();
+            }
+
+            string? threadId = null;
+            if (reader.ReadBoolean())
+            {
+                threadId = reader.ReadString();
+            }
+
+            bool? isInclusive = null;
+            if (reader.ReadBoolean())
+            {
+                isInclusive = reader.ReadBoolean();
+            }
+
+            string? threadParentId = null;
+            if (reader.ReadBoolean())
+            {
+                threadParentId = reader.ReadString();
+            }
+
             email = new Email
             {
                 To = to,
@@ -215,6 +287,12 @@ internal static class FileDataSerializer
                 Subject = subject,
                 SentDate = new DateTime(sentDateTicks, DateTimeKind.Utc),
                 Cc = cc,
+                MessageId = messageId,
+                InReplyTo = inReplyTo,
+                References = references,
+                ThreadId = threadId,
+                IsInclusive = isInclusive,
+                ThreadParentId = threadParentId,
             };
         }
 

@@ -20,6 +20,8 @@ public record MetadataConfig
 
     public bool WithCollectionMetadata { get; init; }
 
+    public bool WithThreading { get; init; }
+
     internal bool ShouldIncludeEmlColumns(OutputConfig output) => output.HasFileType("eml");
 
     internal bool ShouldIncludeMetadataColumns(OutputConfig output) => this.WithMetadata || output.HasFileType("eml");

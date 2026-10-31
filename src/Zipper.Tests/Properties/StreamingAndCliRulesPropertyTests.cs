@@ -244,6 +244,12 @@ public sealed class StreamingAndCliRulesPropertyTests
             Assert.Equal(original.Email.SentDate.Ticks, restored.Email.SentDate.Ticks);
             Assert.Equal(DateTimeKind.Utc, restored.Email.SentDate.Kind);
             Assert.Equal(original.Email.Cc, restored.Email.Cc);
+            Assert.Equal(original.Email.MessageId, restored.Email.MessageId);
+            Assert.Equal(original.Email.InReplyTo, restored.Email.InReplyTo);
+            Assert.Equal(original.Email.References, restored.Email.References);
+            Assert.Equal(original.Email.ThreadId, restored.Email.ThreadId);
+            Assert.Equal(original.Email.IsInclusive, restored.Email.IsInclusive);
+            Assert.Equal(original.Email.ThreadParentId, restored.Email.ThreadParentId);
         }
 
         if (original.WorkItem.SourceMetadata is null)

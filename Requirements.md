@@ -941,4 +941,22 @@ The encoding suite includes the #1283 policy-sensitive Case Key `encoding-local-
 - **REQ-223**: Specifying an unrecognized compression method shall fail validation with a non-zero exit code reporting the invalid method and listing supported values (`store, deflate, deflate64, bzip2`). Specifying `deflate64` or `bzip2` prior to codec support shall report that the method is not yet supported.
 - **REQ-224**: When `--target-zip-size` is combined with `--compression store`, size pre-checks and padding calculations shall use an uncompressed ratio (1.0) rather than the default 50% compression ratio.
 
+## 24. Email Threading Generation
+
+### FR-031: Email Threading (`--with-threading`)
+
+- **REQ-235**: An opt-in email threading mode (`--with-threading`, alias `--with-email-threading`) shall generate RFC 5322 `Message-ID`, `In-Reply-To`, and `References` ancestry chains across generated emails, deterministic per seed, and expose thread metadata columns in DAT, CSV, and Concordance load files:
+  - When `--with-threading` is enabled:
+    - Every generated EML shall carry a unique RFC 5322 `Message-ID` enclosed in angle brackets.
+    - Root emails shall have no `In-Reply-To` or `References` header.
+    - Reply and forward child emails shall emit an `In-Reply-To` header containing their immediate parent's `Message-ID`, and a `References` header containing the ordered space-delimited list of all ancestor `Message-ID` values ending with the immediate parent.
+    - Thread conversation graphs shall be generated deterministically according to the random seed, with chronological `Date` progression, contextual subjects (`Re:` and `FW:` prefixes), and leaf identification (`Inclusive` = `Y` for leaf emails, `N` for non-leaf emails).
+    - Load files shall include thread metadata columns: `Thread ID`, `Inclusive`, and `Thread Parent` in DAT (or `THREAD ID`, `INCLUSIVE`, and `THREAD PARENT` in CSV; `THREAD_ID`, `INCLUSIVE`, and `THREAD_PARENT` in Concordance).
+    - In DAT and Concordance load files with parent-child attachment families (`--with-families`), child attachment rows shall emit empty strings for thread metadata columns.
+    - When `--with-threading` is specified without `--type eml` (or `eml` participating in `--types`), a warning shall be written to standard error while execution proceeds.
+  - When `--with-threading` is omitted or false:
+    - `EmailSerializer` shall not emit `Message-ID`, `In-Reply-To`, or `References` headers, maintaining 100% byte-identical output parity to legacy runs (Critical Rule 6).
+    - Load files shall omit the thread metadata columns.
+
+
 
