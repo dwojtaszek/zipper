@@ -469,7 +469,7 @@ internal sealed class XmlLoadFileWriter : ILoadFileWriter
             return hash;
         }
 
-        if (attachment.content.Length != fileData.AttachmentLength)
+        if (attachment.content.Length == 0 && fileData.AttachmentLength > 0)
         {
             throw new InvalidOperationException(
                 $"Cannot compute the {algorithm} hash for Attachment '{attachment.filename}' after its payload was spooled.");

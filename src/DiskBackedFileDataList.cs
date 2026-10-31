@@ -245,14 +245,14 @@ internal static class FileDataSerializer
             if (reader.ReadBoolean())
             {
                 var hashCount = reader.ReadInt32();
-                var hashes = new Dictionary<Config.HashAlgorithm, string>(hashCount);
+                var attHashesDict = new Dictionary<Config.HashAlgorithm, string>(hashCount);
                 for (int hashIndex = 0; hashIndex < hashCount; hashIndex++)
                 {
                     var algorithm = (Config.HashAlgorithm)reader.ReadInt32();
-                    hashes[algorithm] = reader.ReadString();
+                    attHashesDict[algorithm] = reader.ReadString();
                 }
 
-                attachmentHashes = hashes;
+                attachmentHashes = attHashesDict;
             }
 
             attachmentMetadata[i] = new FileAttachmentMetadata(attFilename, attachmentLength, attachmentHashes);
