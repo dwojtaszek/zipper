@@ -831,6 +831,7 @@ internal static class CrossFormatAnomalyApplier
             var candidateDat2 = FindDatForOptDocument(candidateDoc2, candidateIndex + 1, datRecordsByKey, datRecords);
             if (candidateDat1 is null
                 || candidateDat2 is null
+                || ReferenceEquals(candidateDat1, candidateDat2)
                 || targetedRecords.Contains(candidateDat1)
                 || targetedRecords.Contains(candidateDat2))
             {

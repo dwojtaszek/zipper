@@ -936,6 +936,33 @@ public sealed class CrossFormatAnomalyApplierTests : IDisposable
         Assert.NotEmpty(result.Anomalies);
     }
 
+    [Fact]
+    public void Apply_DesyncOrder_CandidatePairResolvingToSameDatRecord_IsSkipped()
+    {
+        var datLines = new List<string>
+        {
+            JoinDat("DOCID", "BATES_NUMBER", "PARENTDOCID", "IMAGE_PATH", "PAGECOUNT", "VOLUME"),
+            JoinDat("DOC00000001", "TEST00000001", "", "IMAGES\\VOL001\\DOC00000001.tif", "1", "VOL001"),
+        };
+        // 2 OPT rows with keys not present in DAT; both fallback-clamp to DOC00000001
+        var optLines = new List<string>
+        {
+            "UNMAPPED_A,VOL001,IMAGES\\VOL001\\A.tif,Y,,,1",
+            "UNMAPPED_B,VOL001,IMAGES\\VOL001\\B.tif,Y,,,1",
+        };
+
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncOrder,
+            chaosAmount: "1",
+            random: new FirstIndexRandom());
+
+        // Because both OPT documents resolve to the same DAT record (DOC00000001), desync-order must be skipped
+        Assert.Empty(result.Anomalies);
+        Assert.Equal(optLines, result.OptLines);
+    }
+
     private static FileGenerationRequest CreateRequest()
     {
         return new FileGenerationRequest
