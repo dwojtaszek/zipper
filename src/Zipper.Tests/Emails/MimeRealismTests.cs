@@ -105,11 +105,11 @@ public class MimeRealismTests
         int subjectIndex = Array.FindIndex(lines, line => line.StartsWith("Subject:", StringComparison.Ordinal));
 
         Assert.True(subjectIndex >= 0, "Expected a Subject header.");
-        Assert.Equal("Subject:", lines[subjectIndex]);
-        Assert.StartsWith(" ", lines[subjectIndex + 1], StringComparison.Ordinal);
-        var subjectLines = lines.Skip(subjectIndex + 1).TakeWhile((line, index) => index == 0 || line.StartsWith(' ')).ToArray();
+        var subjectLines = lines.Skip(subjectIndex).TakeWhile((line, index) => index == 0 || line.StartsWith(' ')).ToArray();
+        Assert.True(subjectLines.Length >= 2, "Expected folded subject header.");
         Assert.All(subjectLines, line => Assert.InRange(line.Length, 1, 76));
-        Assert.Equal(originalSubject, Rfc2047Helper.Decode(string.Join("\r\n", subjectLines).TrimStart()));
+        var fullSubject = string.Join("\r\n", subjectLines);
+        Assert.Equal(originalSubject, Rfc2047Helper.Decode(Rfc2047Helper.UnfoldHeader(fullSubject)["Subject:".Length..].Trim()));
     }
 
     [Fact]

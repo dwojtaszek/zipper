@@ -834,7 +834,7 @@ internal readonly record struct FileAttachmentMetadata(
             }
 
             var random = Config.HashUtility.CreateSeededRandom(
-                request, workItem.Index + 1_000_000L + attachmentIndex);
+                request, workItem.Index + 1_000_000L + (attachmentIndex * 1_000_000_000L));
             var hashes = new Dictionary<Config.HashAlgorithm, string>(request.Hash.Algorithms.Count);
             foreach (var algorithm in request.Hash.Algorithms)
             {
