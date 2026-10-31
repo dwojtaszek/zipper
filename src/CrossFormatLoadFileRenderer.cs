@@ -46,18 +46,193 @@ internal static class CrossFormatLoadFileRenderer
         Encoding encoding,
         CancellationToken cancellationToken)
     {
-        using var stream = new MemoryStream();
+        using var stream = new LineBufferingStream(encoding);
         var writer = createWriter(format, writerMode);
         await writer.WriteAsync(stream, request, records, null, cancellationToken).ConfigureAwait(false);
-        stream.Position = 0;
+        return stream.Complete();
+    }
 
-        using var reader = new StreamReader(stream, encoding);
-        var lines = new List<string>();
-        while (await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { } line)
+    private sealed class LineBufferingStream : Stream
+    {
+        private readonly Decoder decoder;
+        private readonly byte[] preamble;
+        private readonly byte[] pendingPreamble;
+        private readonly char[] decodedCharacters;
+        private readonly List<string> lines = [];
+        private readonly StringBuilder currentLine = new();
+        private int pendingPreambleLength;
+        private bool preambleResolved;
+        private bool previousCharacterWasCarriageReturn;
+        private bool completed;
+
+        public LineBufferingStream(Encoding encoding)
         {
-            lines.Add(line);
+            this.decoder = encoding.GetDecoder();
+            this.preamble = encoding.GetPreamble();
+            this.pendingPreamble = new byte[this.preamble.Length];
+            this.preambleResolved = this.preamble.Length == 0;
+            this.decodedCharacters = new char[encoding.GetMaxCharCount(4096)];
         }
 
-        return lines;
+        public override bool CanRead => false;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => true;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public List<string> Complete()
+        {
+            if (this.completed)
+            {
+                return this.lines;
+            }
+
+            if (!this.preambleResolved && this.pendingPreambleLength > 0)
+            {
+                this.preambleResolved = true;
+                this.Decode(this.pendingPreamble.AsSpan(0, this.pendingPreambleLength), flush: false);
+            }
+
+            this.Decode(ReadOnlySpan<byte>.Empty, flush: true);
+            if (this.currentLine.Length > 0)
+            {
+                this.lines.Add(this.currentLine.ToString());
+            }
+
+            this.completed = true;
+            return this.lines;
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override Task FlushAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            ArgumentNullException.ThrowIfNull(buffer);
+            this.ProcessBytes(buffer.AsSpan(offset, count));
+        }
+
+        public override void Write(ReadOnlySpan<byte> buffer) => this.ProcessBytes(buffer);
+
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            this.Write(buffer, offset, count);
+            return Task.CompletedTask;
+        }
+
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            this.ProcessBytes(buffer.Span);
+            return ValueTask.CompletedTask;
+        }
+
+        private void ProcessBytes(ReadOnlySpan<byte> bytes)
+        {
+            if (!this.preambleResolved)
+            {
+                while (!bytes.IsEmpty && !this.preambleResolved)
+                {
+                    byte nextByte = bytes[0];
+                    bytes = bytes[1..];
+                    int preambleIndex = this.pendingPreambleLength++;
+                    this.pendingPreamble[preambleIndex] = nextByte;
+
+                    if (nextByte != this.preamble[preambleIndex])
+                    {
+                        this.preambleResolved = true;
+                        this.Decode(this.pendingPreamble.AsSpan(0, this.pendingPreambleLength), flush: false);
+                    }
+                    else if (this.pendingPreambleLength == this.preamble.Length)
+                    {
+                        this.preambleResolved = true;
+                    }
+                }
+            }
+
+            if (this.preambleResolved && !bytes.IsEmpty)
+            {
+                this.Decode(bytes, flush: false);
+            }
+        }
+
+        private void Decode(ReadOnlySpan<byte> bytes, bool flush)
+        {
+            while (true)
+            {
+                this.decoder.Convert(
+                    bytes,
+                    this.decodedCharacters,
+                    flush,
+                    out int bytesUsed,
+                    out int charactersUsed,
+                    out bool completed);
+                this.AppendCharacters(this.decodedCharacters.AsSpan(0, charactersUsed));
+                bytes = bytes[bytesUsed..];
+
+                if (completed)
+                {
+                    return;
+                }
+
+                if (bytesUsed == 0 && charactersUsed == 0)
+                {
+                    throw new InvalidOperationException("The Load File encoding decoder could not make progress.");
+                }
+            }
+        }
+
+        private void AppendCharacters(ReadOnlySpan<char> characters)
+        {
+            foreach (char character in characters)
+            {
+                if (this.previousCharacterWasCarriageReturn)
+                {
+                    this.previousCharacterWasCarriageReturn = false;
+                    if (character == '\n')
+                    {
+                        continue;
+                    }
+                }
+
+                if (character == '\r')
+                {
+                    this.lines.Add(this.currentLine.ToString());
+                    this.currentLine.Clear();
+                    this.previousCharacterWasCarriageReturn = true;
+                }
+                else if (character == '\n')
+                {
+                    this.lines.Add(this.currentLine.ToString());
+                    this.currentLine.Clear();
+                }
+                else
+                {
+                    this.currentLine.Append(character);
+                }
+            }
+        }
     }
 }

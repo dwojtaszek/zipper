@@ -97,6 +97,8 @@ call :assert_chaos_scenario "edrm-xml-structural-failures" "edrm-xml" "xml-unclo
 
 call :assert_cross_format "cross-format-desync"
 call :assert_cross_format "broken-families"
+call :assert_production_set_cross_format "cross-format-desync" "tiff" "--tiff-pages 2-3"
+call :assert_production_set_cross_format "broken-families" "eml" "--with-families --attachment-rate 100"
 
 call :adversarial_values
 
@@ -168,7 +170,7 @@ goto :eof
 :assert_cross_format
 set "SCEN=%~1"
 set "SCEN_DIR=%TEST_OUTPUT_DIR%\cross_format_%SCEN%"
-%ZIPPER_CMD% --loadfile-only --load-file-formats dat,opt --count 100 --output-path "%SCEN_DIR%\run1" --chaos-mode --chaos-scenario "%SCEN%" --seed 42 >nul 2>&1
+%ZIPPER_CMD% --loadfile-only --load-file-formats dat,opt,csv --count 100 --output-path "%SCEN_DIR%\run1" --chaos-mode --chaos-scenario "%SCEN%" --seed 42 >nul 2>&1
 if errorlevel 1 (
     echo [ ERROR ] FAIL: %SCEN% cross-format scenario rejected
     set /a FAILED+=1
@@ -176,32 +178,47 @@ if errorlevel 1 (
 )
 set "DAT_FILE="
 set "OPT_FILE="
+set "CSV_FILE="
 set "DAT_PROPS="
 set "OPT_PROPS="
+set "CSV_PROPS="
 for %%F in ("%SCEN_DIR%\run1\*.dat") do set "DAT_FILE=%%~fF"
 for %%F in ("%SCEN_DIR%\run1\*.opt") do set "OPT_FILE=%%~fF"
+for %%F in ("%SCEN_DIR%\run1\*.csv") do set "CSV_FILE=%%~fF"
 for %%F in ("%SCEN_DIR%\run1\*_properties.json") do (
     echo %%~nxF | findstr /i /e ".opt_properties.json" >nul
-    if errorlevel 1 (set "DAT_PROPS=%%~fF") else (set "OPT_PROPS=%%~fF")
+    if errorlevel 1 (
+        echo %%~nxF | findstr /i /e "_csv_properties.json" >nul
+        if errorlevel 1 (set "DAT_PROPS=%%~fF") else (set "CSV_PROPS=%%~fF")
+    ) else (
+        set "OPT_PROPS=%%~fF"
+    )
 )
 if not defined DAT_FILE goto :cross_format_failed
 if not defined OPT_FILE goto :cross_format_failed
+if not defined CSV_FILE goto :cross_format_failed
 if not defined DAT_PROPS goto :cross_format_failed
 if not defined OPT_PROPS goto :cross_format_failed
-powershell -NoProfile -Command "$d=Get-Content -Raw '%DAT_PROPS%' | ConvertFrom-Json; $o=Get-Content -Raw '%OPT_PROPS%' | ConvertFrom-Json; $dOk=$d.fileName -like '*.dat' -and $d.chaosMode.totalAnomalies -gt 0; $oOk=$o.fileName -like '*.opt' -and $o.chaosMode.totalAnomalies -gt 0; $peers=@($d.chaosMode.injectedAnomalies + $o.chaosMode.injectedAnomalies | Where-Object { -not $_.file -or -not $_.peer -or -not $_.peer.file -or -not $_.peer.lineNumber }); if ($dOk -and $oOk -and $peers.Count -eq 0) { exit 0 } else { exit 1 }" >nul 2>&1
+if not defined CSV_PROPS goto :cross_format_failed
+powershell -NoProfile -Command "$d=Get-Content -Raw '%DAT_PROPS%' | ConvertFrom-Json; $o=Get-Content -Raw '%OPT_PROPS%' | ConvertFrom-Json; $c=Get-Content -Raw '%CSV_PROPS%' | ConvertFrom-Json; $dOk=$d.fileName -like '*.dat' -and $d.chaosMode.totalAnomalies -gt 0; $oOk=$o.fileName -like '*.opt' -and $o.chaosMode.totalAnomalies -gt 0; $cOk=$c.fileName -like '*.csv' -and -not $c.chaosMode.enabled; $peers=@($d.chaosMode.injectedAnomalies + $o.chaosMode.injectedAnomalies | Where-Object { -not $_.file -or -not $_.peer -or -not $_.peer.file -or -not $_.peer.lineNumber }); if ($dOk -and $oOk -and $cOk -and $peers.Count -eq 0) { exit 0 } else { exit 1 }" >nul 2>&1
 if errorlevel 1 goto :cross_format_failed
 
-%ZIPPER_CMD% --loadfile-only --load-file-formats dat,opt --count 100 --output-path "%SCEN_DIR%\run2" --chaos-mode --chaos-scenario "%SCEN%" --seed 42 >nul 2>&1
+%ZIPPER_CMD% --loadfile-only --load-file-formats dat,opt,csv --count 100 --output-path "%SCEN_DIR%\run2" --chaos-mode --chaos-scenario "%SCEN%" --seed 42 >nul 2>&1
 if errorlevel 1 goto :cross_format_failed
 set "DAT_FILE2="
 set "OPT_FILE2="
+set "CSV_FILE2="
 for %%F in ("%SCEN_DIR%\run2\*.dat") do set "DAT_FILE2=%%~fF"
 for %%F in ("%SCEN_DIR%\run2\*.opt") do set "OPT_FILE2=%%~fF"
+for %%F in ("%SCEN_DIR%\run2\*.csv") do set "CSV_FILE2=%%~fF"
 if not defined DAT_FILE2 goto :cross_format_failed
 if not defined OPT_FILE2 goto :cross_format_failed
+if not defined CSV_FILE2 goto :cross_format_failed
 fc /b "%DAT_FILE%" "%DAT_FILE2%" >nul 2>&1
 if errorlevel 1 goto :cross_format_failed
 fc /b "%OPT_FILE%" "%OPT_FILE2%" >nul 2>&1
+if errorlevel 1 goto :cross_format_failed
+fc /b "%CSV_FILE%" "%CSV_FILE2%" >nul 2>&1
 if errorlevel 1 goto :cross_format_failed
 
 echo [ INFO ] PASS: %SCEN% corrupts and audits both DAT and OPT coherently
@@ -210,5 +227,32 @@ goto :eof
 
 :cross_format_failed
 echo [ ERROR ] FAIL: %SCEN% cross-format output or audit
+set /a FAILED+=1
+goto :eof
+
+:assert_production_set_cross_format
+set "SCEN=%~1"
+set "TYPE=%~2"
+set "EXTRA=%~3"
+set "SAFE=%SCEN:-=_%"
+set "SCEN_DIR=%TEST_OUTPUT_DIR%\production_set_%SAFE%"
+set "PRODUCTION_DIR=%SCEN_DIR%\%SAFE%"
+%ZIPPER_CMD% --production-set --type %TYPE% %EXTRA% --count 20 --output-path "%SCEN_DIR%" --production-id "%SAFE%" --bates-prefix TEST --chaos-mode --chaos-scenario "%SCEN%" --seed 42 >nul 2>&1
+if errorlevel 1 goto :production_set_cross_format_failed
+set "DAT_PROPS=%PRODUCTION_DIR%\DATA\loadfile_properties.json"
+set "OPT_PROPS=%PRODUCTION_DIR%\DATA\loadfile.opt_properties.json"
+set "VALIDATION_REPORT=%PRODUCTION_DIR%\_validation_report.json"
+if not exist "%DAT_PROPS%" goto :production_set_cross_format_failed
+if not exist "%OPT_PROPS%" goto :production_set_cross_format_failed
+if not exist "%VALIDATION_REPORT%" goto :production_set_cross_format_failed
+powershell -NoProfile -Command "$d=Get-Content -Raw '%DAT_PROPS%' | ConvertFrom-Json; $o=Get-Content -Raw '%OPT_PROPS%' | ConvertFrom-Json; $r=Get-Content -Raw '%VALIDATION_REPORT%' | ConvertFrom-Json; $dBad=@($d.chaosMode.injectedAnomalies | Where-Object { $_.file -ne 'loadfile.dat' -or $null -eq $_.peer -or $_.peer.file -ne 'loadfile.opt' -or [string]::IsNullOrEmpty($_.peer.lineNumber) }); $oBad=@($o.chaosMode.injectedAnomalies | Where-Object { $_.file -ne 'loadfile.opt' -or $null -eq $_.peer -or $_.peer.file -ne 'loadfile.dat' -or [string]::IsNullOrEmpty($_.peer.lineNumber) }); if ($d.chaosMode.targetAmount -eq '5%' -and $o.chaosMode.targetAmount -eq '5%' -and $d.chaosMode.totalAnomalies -gt 0 -and $o.chaosMode.totalAnomalies -gt 0 -and $dBad.Count -eq 0 -and $oBad.Count -eq 0 -and $r.status -eq 'failed' -and @($r.findings).Count -gt 0) { exit 0 } else { exit 1 }" >nul 2>&1
+if errorlevel 1 goto :production_set_cross_format_failed
+
+echo [ INFO ] PASS: %SCEN% Production Set chaos audits both Load Files and validator findings
+set /a PASSED+=1
+goto :eof
+
+:production_set_cross_format_failed
+echo [ ERROR ] FAIL: %SCEN% Production Set cross-format output, audit, or validation
 set /a FAILED+=1
 goto :eof

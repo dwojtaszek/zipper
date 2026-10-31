@@ -158,10 +158,10 @@ internal static class ChaosScenarios
         }
 
         Console.WriteLine();
-        Console.WriteLine("Usage: zipper --loadfile-only --count <N> --output-path <path> --chaos-mode --chaos-scenario <name>");
+        Console.WriteLine("Usage: zipper --chaos-mode --chaos-scenario <name> with --loadfile-only or --production-set (cross-format scenarios only)");
         Console.WriteLine();
         Console.WriteLine("Notes:");
-        Console.WriteLine("  - --chaos-scenario requires --chaos-mode and --loadfile-only");
+        Console.WriteLine("  - --chaos-scenario requires --chaos-mode; single-format scenarios require --loadfile-only, while cross-format scenarios also support --production-set");
         Console.WriteLine("  - --chaos-scenario conflicts with --chaos-types (use one or the other)");
         Console.WriteLine("  - --chaos-amount overrides the scenario's default amount");
         Console.WriteLine("  - 'full-chaos' enables all types for the selected format");

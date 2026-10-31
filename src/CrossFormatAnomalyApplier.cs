@@ -36,7 +36,7 @@ internal sealed record CrossFormatAnomalyResult
 }
 
 /// <summary>
-/// Coordinates anomalies that span multiple load files in a Production Set (DAT and OPT),
+/// Coordinates anomalies that span multiple load files in Loadfile-Only or Production Set mode (DAT and OPT),
 /// breaking cross-file invariants such as page count consistency, document sort order,
 /// volume-relative image path alignment, and family relationships (orphaned attachments,
 /// missing children, broken parent pointers).
@@ -48,14 +48,28 @@ internal static class CrossFormatAnomalyApplier
         List<string> Fields,
         string DocId,
         string Bates,
-        string Volume,
-        string ImagePath,
-        string PageCountRaw,
-        string ParentId,
-        string BegAttach,
-        string EndAttach)
+        string ImagePath)
     {
+        public DatRecordEntry(
+            long lineNumber,
+            List<string> fields,
+            string docId,
+            string bates,
+            string imagePath,
+            string parentId)
+            : this(lineNumber, fields, docId, bates, imagePath)
+        {
+            this.ParentId = parentId;
+            this.IsFamilyCandidate = !string.IsNullOrEmpty(parentId);
+        }
+
         public string OriginalLine { get; init; } = string.Empty;
+
+        public string ParentId { get; set; } = string.Empty;
+
+        public int ActiveIndex { get; set; } = -1;
+
+        public bool IsFamilyCandidate { get; set; }
 
         /// <summary>
         /// Gets or sets a value indicating whether this record's fields were mutated and must be re-rendered.
@@ -63,11 +77,50 @@ internal static class CrossFormatAnomalyApplier
         public bool IsDirty { get; set; }
     }
 
+    private sealed class ActiveDatRecords
+    {
+        private readonly List<int> activeRecordIndexes;
+
+        public ActiveDatRecords(List<DatRecordEntry> originalOrder)
+        {
+            this.OriginalOrder = originalOrder;
+            this.activeRecordIndexes = new List<int>(originalOrder.Count);
+            for (int i = 0; i < originalOrder.Count; i++)
+            {
+                originalOrder[i].ActiveIndex = i;
+                this.activeRecordIndexes.Add(i);
+            }
+        }
+
+        public List<DatRecordEntry> OriginalOrder { get; }
+
+        public int Count => this.activeRecordIndexes.Count;
+
+        public DatRecordEntry this[int index] => this.OriginalOrder[this.activeRecordIndexes[index]];
+
+        public bool IsActive(DatRecordEntry record) => record.ActiveIndex >= 0;
+
+        public void Remove(DatRecordEntry record)
+        {
+            int activeIndex = record.ActiveIndex;
+            if (activeIndex < 0)
+            {
+                return;
+            }
+
+            int lastActiveIndex = this.activeRecordIndexes.Count - 1;
+            int swappedRecordIndex = this.activeRecordIndexes[lastActiveIndex];
+            this.activeRecordIndexes[activeIndex] = swappedRecordIndex;
+            this.OriginalOrder[swappedRecordIndex].ActiveIndex = activeIndex;
+            this.activeRecordIndexes.RemoveAt(lastActiveIndex);
+            record.ActiveIndex = -1;
+        }
+    }
+
     private sealed class OptDocEntry
     {
         public required string DocKey { get; init; }
         public required long BreakLineNumber { get; set; }
-        public required string DeclaredPageCountRaw { get; set; }
         public required string Volume { get; set; }
         public required string FirstImagePath { get; set; }
         public List<(long LineNumber, string Line, string[] Fields)> PageRows { get; } = [];
@@ -131,7 +184,6 @@ internal static class CrossFormatAnomalyApplier
 
         int docIdIdx = headers.FindIndex(h => string.Equals(h, "DOCID", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "Control Number", StringComparison.OrdinalIgnoreCase));
         int batesIdx = headers.FindIndex(h => string.Equals(h, "BATES_NUMBER", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "BATES", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "Bates Number", StringComparison.OrdinalIgnoreCase));
-        int volumeIdx = headers.FindIndex(h => string.Equals(h, "VOLUME", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "Volume", StringComparison.OrdinalIgnoreCase));
         int imageIdx = headers.FindIndex(h => string.Equals(h, "IMAGE_PATH", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "IMAGE", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "Image Path", StringComparison.OrdinalIgnoreCase));
         int pageCountIdx = headers.FindIndex(h => string.Equals(h, "PAGECOUNT", StringComparison.OrdinalIgnoreCase)
             || string.Equals(h, "PAGE_COUNT", StringComparison.OrdinalIgnoreCase)
@@ -139,11 +191,10 @@ internal static class CrossFormatAnomalyApplier
             || string.Equals(h, "PAGECNT", StringComparison.OrdinalIgnoreCase)
             || string.Equals(h, "PAGES", StringComparison.OrdinalIgnoreCase)
             || string.Equals(h, "PAGE_CNT", StringComparison.OrdinalIgnoreCase));
-        int parentIdIdx = headers.FindIndex(h => string.Equals(h, "PARENTDOCID", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "Parent Doc ID", StringComparison.OrdinalIgnoreCase));
-        int begAttachIdx = headers.FindIndex(h => string.Equals(h, "BEGATTACH", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "BEG_ATTACH", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "BEG ATTACH", StringComparison.OrdinalIgnoreCase));
-        int endAttachIdx = headers.FindIndex(h => string.Equals(h, "ENDATTACH", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "END_ATTACH", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "END ATTACH", StringComparison.OrdinalIgnoreCase));
+        int parentIdIdx = FindParentIdColumn(headers);
+        int endAttachIdx = FindEndAttachColumn(headers);
 
-        var datRecords = new List<DatRecordEntry>(datLines.Count - 1);
+        var parsedDatRecords = new List<DatRecordEntry>(datLines.Count - 1);
         for (int i = 1; i < datLines.Count; i++)
         {
             var line = datLines[i];
@@ -155,21 +206,18 @@ internal static class CrossFormatAnomalyApplier
             var fields = ProductionSetPostValidator.ParseDatLine(line, colDelimChar, quoteDelimChar);
             string docId = docIdIdx >= 0 && docIdIdx < fields.Count ? fields[docIdIdx] : string.Empty;
             string bates = batesIdx >= 0 && batesIdx < fields.Count ? fields[batesIdx] : string.Empty;
-            string vol = volumeIdx >= 0 && volumeIdx < fields.Count ? fields[volumeIdx] : string.Empty;
             string img = imageIdx >= 0 && imageIdx < fields.Count ? fields[imageIdx] : string.Empty;
-            string pg = pageCountIdx >= 0 && pageCountIdx < fields.Count ? fields[pageCountIdx] : string.Empty;
             string parent = parentIdIdx >= 0 && parentIdIdx < fields.Count ? fields[parentIdIdx] : string.Empty;
-            string beg = begAttachIdx >= 0 && begAttachIdx < fields.Count ? fields[begAttachIdx] : string.Empty;
-            string end = endAttachIdx >= 0 && endAttachIdx < fields.Count ? fields[endAttachIdx] : string.Empty;
 
             if (string.IsNullOrEmpty(docId) && !string.IsNullOrEmpty(bates))
             {
                 docId = bates;
             }
 
-            datRecords.Add(new DatRecordEntry(i + 1, fields, docId, bates, vol, img, pg, parent, beg, end) { OriginalLine = line });
+            parsedDatRecords.Add(new DatRecordEntry(i + 1, fields, docId, bates, img, parent) { OriginalLine = line });
         }
 
+        var datRecords = new ActiveDatRecords(parsedDatRecords);
         var optDocs = new List<OptDocEntry>();
         OptDocEntry? currentOptDoc = null;
         for (int j = 0; j < optLines.Count; j++)
@@ -185,7 +233,6 @@ internal static class CrossFormatAnomalyApplier
             string vol = cols.Length > 1 ? cols[1].Trim() : string.Empty;
             string img = cols.Length > 2 ? cols[2].Trim() : string.Empty;
             bool isBreak = cols.Length > 3 && (string.Equals(cols[3].Trim(), "Y", StringComparison.OrdinalIgnoreCase) || cols[3].Trim() == "1");
-            string pageCount = cols.Length > 6 ? cols[6].Trim() : string.Empty;
 
             if (isBreak || currentOptDoc is null)
             {
@@ -193,7 +240,6 @@ internal static class CrossFormatAnomalyApplier
                 {
                     DocKey = key,
                     BreakLineNumber = j + 1,
-                    DeclaredPageCountRaw = pageCount,
                     Volume = vol,
                     FirstImagePath = img,
                 };
@@ -203,6 +249,13 @@ internal static class CrossFormatAnomalyApplier
             currentOptDoc.PageRows.Add((j + 1, line, cols));
         }
 
+        var datRecordsByKey = BuildDatRecordIndex(datRecords.OriginalOrder, includeBates: true);
+        var datRecordsByDocId = BuildDatRecordIndex(datRecords.OriginalOrder, includeBates: false);
+        var optDocsByKey = BuildOptDocumentIndex(optDocs);
+        var familyCandidates = datRecords.OriginalOrder
+            .Where(record => record.IsFamilyCandidate)
+            .ToList();
+        int familyCandidateIndex = 0;
         var candidateTypes = ResolveCandidateTypes(scenarioOrTypes);
         var scenario = string.IsNullOrEmpty(scenarioOrTypes) ? null : ChaosScenarios.GetByName(scenarioOrTypes);
         string? resolvedAmount = string.IsNullOrEmpty(chaosAmount) ? scenario?.DefaultAmount : chaosAmount;
@@ -221,6 +274,7 @@ internal static class CrossFormatAnomalyApplier
 
         var datAnomalies = new List<ChaosAnomaly>();
         var optAnomalies = new List<ChaosAnomaly>();
+        var targetedRecords = new HashSet<DatRecordEntry>(ReferenceEqualityComparer.Instance);
 
         int typeIndex = 0;
         for (int k = 0; k < targetCount; k++)
@@ -231,22 +285,95 @@ internal static class CrossFormatAnomalyApplier
             switch (chosenType)
             {
                 case "desync-pagecount":
-                    ApplyDesyncPagecount(datRecords, optDocs, random, datAnomalies, optAnomalies, datFileName, optFileName, pageCountIdx >= 0 ? headers[pageCountIdx] : "PAGECOUNT");
+                    ApplyDesyncPagecount(
+                        datRecords,
+                        datRecordsByKey,
+                        optDocs,
+                        optDocsByKey,
+                        targetedRecords,
+                        random,
+                        datAnomalies,
+                        optAnomalies,
+                        datFileName,
+                        optFileName,
+                        pageCountIdx >= 0 ? headers[pageCountIdx] : "PAGECOUNT");
                     break;
                 case "desync-order":
-                    ApplyDesyncOrder(datRecords, optDocs, random, datAnomalies, optAnomalies, datFileName, optFileName, batesIdx >= 0 ? headers[batesIdx] : (docIdIdx >= 0 ? headers[docIdIdx] : "DOCID"));
+                    ApplyDesyncOrder(
+                        datRecords,
+                        datRecordsByKey,
+                        optDocs,
+                        targetedRecords,
+                        random,
+                        datAnomalies,
+                        optAnomalies,
+                        datFileName,
+                        optFileName,
+                        batesIdx >= 0 ? headers[batesIdx] : (docIdIdx >= 0 ? headers[docIdIdx] : "DOCID"));
                     break;
                 case "desync-path":
-                    ApplyDesyncPath(datRecords, optDocs, random, datAnomalies, optAnomalies, datFileName, optFileName, imageIdx >= 0 ? headers[imageIdx] : "IMAGE_PATH");
+                    ApplyDesyncPath(
+                        datRecords,
+                        datRecordsByKey,
+                        optDocs,
+                        targetedRecords,
+                        random,
+                        datAnomalies,
+                        optAnomalies,
+                        datFileName,
+                        optFileName,
+                        imageIdx >= 0 ? headers[imageIdx] : "IMAGE_PATH");
                     break;
                 case "orphan-attachment":
-                    ApplyOrphanAttachment(datRecords, optDocs, random, datAnomalies, optAnomalies, datFileName, optFileName, parentIdIdx >= 0 ? headers[parentIdIdx] : "PARENTDOCID", headers, colDelimChar, quoteDelimChar);
+                    ApplyOrphanAttachment(
+                        datRecords,
+                        familyCandidates,
+                        ref familyCandidateIndex,
+                        targetedRecords,
+                        datRecordsByDocId,
+                        optDocsByKey,
+                        optDocs,
+                        random,
+                        datAnomalies,
+                        optAnomalies,
+                        datFileName,
+                        optFileName,
+                        headers,
+                        ref parentIdIdx);
                     break;
                 case "missing-child":
-                    ApplyMissingChild(datRecords, optDocs, random, datAnomalies, optAnomalies, datFileName, optFileName, endAttachIdx >= 0 ? headers[endAttachIdx] : "ENDATTACH", headers, colDelimChar, quoteDelimChar);
+                    ApplyMissingChild(
+                        datRecords,
+                        familyCandidates,
+                        ref familyCandidateIndex,
+                        targetedRecords,
+                        datRecordsByDocId,
+                        optDocsByKey,
+                        optDocs,
+                        random,
+                        datAnomalies,
+                        optAnomalies,
+                        datFileName,
+                        optFileName,
+                        headers,
+                        ref endAttachIdx);
                     break;
                 case "broken-parent":
-                    ApplyBrokenParent(datRecords, optDocs, random, datAnomalies, optAnomalies, datFileName, optFileName, parentIdIdx >= 0 ? headers[parentIdIdx] : "PARENTDOCID", parentIdIdx, headers);
+                    ApplyBrokenParent(
+                        datRecords,
+                        familyCandidates,
+                        ref familyCandidateIndex,
+                        targetedRecords,
+                        datRecordsByDocId,
+                        optDocsByKey,
+                        optDocs,
+                        random,
+                        datAnomalies,
+                        optAnomalies,
+                        datFileName,
+                        optFileName,
+                        headers,
+                        ref parentIdIdx);
                     break;
             }
         }
@@ -258,8 +385,13 @@ internal static class CrossFormatAnomalyApplier
         {
             headerChanged ? datSerializer.RenderHeader(headers) : headerLine,
         };
-        foreach (var rec in datRecords)
+        foreach (var rec in datRecords.OriginalOrder)
         {
+            if (!datRecords.IsActive(rec))
+            {
+                continue;
+            }
+
             outDatLines.Add(headerChanged || rec.IsDirty
                 ? datSerializer.RenderRecord(new LoadFileRecord
                 {
@@ -280,6 +412,28 @@ internal static class CrossFormatAnomalyApplier
             }
         }
 
+        if (datAnomalies.Count > 0 || optAnomalies.Count > 0)
+        {
+            var datLineNumbers = BuildDatLineNumbers(datRecords, docIdIdx, batesIdx);
+            var optLineNumbers = BuildOptLineNumbers(optDocs);
+            UpdateAnomalyLineNumbers(
+                datAnomalies,
+                datFileName,
+                optFileName,
+                datLineNumbers,
+                optLineNumbers,
+                outDatLines.Count + 1L,
+                outOptLines.Count + 1L);
+            UpdateAnomalyLineNumbers(
+                optAnomalies,
+                datFileName,
+                optFileName,
+                datLineNumbers,
+                optLineNumbers,
+                outDatLines.Count + 1L,
+                outOptLines.Count + 1L);
+        }
+
         return new CrossFormatAnomalyResult
         {
             DatLines = outDatLines,
@@ -287,6 +441,121 @@ internal static class CrossFormatAnomalyApplier
             DatAnomalies = datAnomalies,
             OptAnomalies = optAnomalies,
         };
+    }
+
+    private static Dictionary<string, long> BuildDatLineNumbers(
+        ActiveDatRecords records,
+        int docIdIndex,
+        int batesIndex)
+    {
+        var lineNumbers = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        long lineNumber = 2;
+        foreach (var record in records.OriginalOrder)
+        {
+            AddLineNumber(lineNumbers, record.Fields, docIdIndex, lineNumber);
+            AddLineNumber(lineNumbers, record.Fields, batesIndex, lineNumber);
+            if (records.IsActive(record))
+            {
+                lineNumber++;
+            }
+        }
+
+        return lineNumbers;
+    }
+
+    private static Dictionary<string, long> BuildOptLineNumbers(IReadOnlyList<OptDocEntry> documents)
+    {
+        var lineNumbers = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        long lineNumber = 1;
+        foreach (var document in documents)
+        {
+            foreach (var row in document.PageRows)
+            {
+                if (row.Fields.Length > 0 && !string.IsNullOrEmpty(row.Fields[0]))
+                {
+                    lineNumbers.TryAdd(row.Fields[0].Trim(), lineNumber);
+                }
+
+                lineNumber++;
+            }
+        }
+
+        return lineNumbers;
+    }
+
+    private static void AddLineNumber(Dictionary<string, long> lineNumbers, IReadOnlyList<string> fields, int fieldIndex, long lineNumber)
+    {
+        if (fieldIndex >= 0 && fieldIndex < fields.Count && !string.IsNullOrEmpty(fields[fieldIndex]))
+        {
+            lineNumbers.TryAdd(fields[fieldIndex], lineNumber);
+        }
+    }
+
+    private static void UpdateAnomalyLineNumbers(
+        List<ChaosAnomaly> anomalies,
+        string datFileName,
+        string optFileName,
+        IReadOnlyDictionary<string, long> datLineNumbers,
+        IReadOnlyDictionary<string, long> optLineNumbers,
+        long datGapLineNumber,
+        long optGapLineNumber)
+    {
+        for (int i = 0; i < anomalies.Count; i++)
+        {
+            var anomaly = anomalies[i];
+            string? lineNumber = FindAuditLineNumber(
+                anomaly.File,
+                anomaly.RecordID,
+                datFileName,
+                optFileName,
+                datLineNumbers,
+                optLineNumbers);
+            long anomalyGapLineNumber = string.Equals(anomaly.File, datFileName, StringComparison.OrdinalIgnoreCase)
+                ? datGapLineNumber
+                : optGapLineNumber;
+            var peer = anomaly.Peer;
+            if (peer is not null)
+            {
+                string? peerLineNumber = FindAuditLineNumber(
+                    peer.File,
+                    peer.RecordID,
+                    datFileName,
+                    optFileName,
+                    datLineNumbers,
+                    optLineNumbers);
+                long peerGapLineNumber = string.Equals(peer.File, datFileName, StringComparison.OrdinalIgnoreCase)
+                    ? datGapLineNumber
+                    : optGapLineNumber;
+                peer = peer with
+                {
+                    LineNumber = peerLineNumber ?? peerGapLineNumber.ToString(CultureInfo.InvariantCulture),
+                };
+            }
+
+            anomalies[i] = anomaly with
+            {
+                LineNumber = lineNumber ?? anomalyGapLineNumber.ToString(CultureInfo.InvariantCulture),
+                Peer = peer,
+            };
+        }
+    }
+
+    private static string? FindAuditLineNumber(
+        string? file,
+        string recordId,
+        string datFileName,
+        string optFileName,
+        IReadOnlyDictionary<string, long> datLineNumbers,
+        IReadOnlyDictionary<string, long> optLineNumbers)
+    {
+        IReadOnlyDictionary<string, long>? lineNumbers = string.Equals(file, datFileName, StringComparison.OrdinalIgnoreCase)
+            ? datLineNumbers
+            : string.Equals(file, optFileName, StringComparison.OrdinalIgnoreCase)
+                ? optLineNumbers
+                : null;
+        return lineNumbers is not null && lineNumbers.TryGetValue(recordId, out long lineNumber)
+            ? lineNumber.ToString(CultureInfo.InvariantCulture)
+            : null;
     }
 
     private static IReadOnlyList<string> ResolveCandidateTypes(string? scenarioOrTypes)
@@ -312,9 +581,96 @@ internal static class CrossFormatAnomalyApplier
         return split.Count > 0 ? split : ChaosAnomalyTypes.CrossFormat.All;
     }
 
+    private static (OptDocEntry OptDoc, DatRecordEntry DatDoc)? FindRandomUnprocessedOptDocument(
+        IReadOnlyList<OptDocEntry> optDocs,
+        IReadOnlyDictionary<string, DatRecordEntry> datRecordsByKey,
+        ActiveDatRecords datRecords,
+        HashSet<DatRecordEntry> targetedRecords,
+        Random random)
+    {
+        if (optDocs.Count == 0 || datRecords.Count == 0)
+        {
+            return null;
+        }
+
+        int start = random.Next(optDocs.Count);
+        for (int offset = 0; offset < optDocs.Count; offset++)
+        {
+            int index = (start + offset) % optDocs.Count;
+            var optDoc = optDocs[index];
+            DatRecordEntry? datDoc;
+            if (datRecordsByKey.TryGetValue(optDoc.DocKey, out var mappedRecord))
+            {
+                if (!datRecords.IsActive(mappedRecord))
+                {
+                    continue;
+                }
+
+                datDoc = mappedRecord;
+            }
+            else
+            {
+                datDoc = FindRandomUnprocessedDatRecord(datRecords, targetedRecords, random);
+                if (datDoc is null)
+                {
+                    return null;
+                }
+            }
+
+            if (!targetedRecords.Contains(datDoc))
+            {
+                return (optDoc, datDoc);
+            }
+        }
+
+        return null;
+    }
+
+    private static DatRecordEntry? FindRandomUnprocessedDatRecord(
+        ActiveDatRecords datRecords,
+        HashSet<DatRecordEntry> targetedRecords,
+        Random random)
+    {
+        if (datRecords.Count == 0)
+        {
+            return null;
+        }
+
+        int start = random.Next(datRecords.Count);
+        for (int offset = 0; offset < datRecords.Count; offset++)
+        {
+            var candidate = datRecords[(start + offset) % datRecords.Count];
+            if (!targetedRecords.Contains(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private static DatRecordEntry? FindDatForOptDocument(
+        OptDocEntry optDoc,
+        int optDocumentIndex,
+        IReadOnlyDictionary<string, DatRecordEntry> datRecordsByKey,
+        ActiveDatRecords datRecords)
+    {
+        if (datRecordsByKey.TryGetValue(optDoc.DocKey, out var mappedRecord))
+        {
+            return datRecords.IsActive(mappedRecord) ? mappedRecord : null;
+        }
+
+        return datRecords.Count == 0
+            ? null
+            : datRecords[Math.Min(optDocumentIndex, datRecords.Count - 1)];
+    }
+
     private static void ApplyDesyncPagecount(
-        List<DatRecordEntry> datRecords,
+        ActiveDatRecords datRecords,
+        IReadOnlyDictionary<string, DatRecordEntry> datRecordsByKey,
         List<OptDocEntry> optDocs,
+        IReadOnlyDictionary<string, OptDocEntry> optDocsByKey,
+        HashSet<DatRecordEntry> targetedRecords,
         Random random,
         List<ChaosAnomaly> datAnomalies,
         List<ChaosAnomaly> optAnomalies,
@@ -322,20 +678,13 @@ internal static class CrossFormatAnomalyApplier
         string optFileName,
         string pageCountColumnName)
     {
-        if (optDocs.Count == 0 || datRecords.Count == 0)
+        var target = FindRandomUnprocessedOptDocument(optDocs, datRecordsByKey, datRecords, targetedRecords, random);
+        if (target is null)
         {
             return;
         }
 
-        // Find a document with multi-page OPT rows, or pick any document
-        int targetDocIdx = optDocs.FindIndex(d => d.PageRows.Count > 1);
-        if (targetDocIdx < 0)
-        {
-            targetDocIdx = random.Next(optDocs.Count);
-        }
-
-        var optDoc = optDocs[targetDocIdx];
-        var datDoc = FindMatchingDat(datRecords, optDoc.DocKey) ?? datRecords[Math.Min(targetDocIdx, datRecords.Count - 1)];
+        var (optDoc, datDoc) = target.Value;
 
         if (optDoc.PageRows.Count > 1)
         {
@@ -380,19 +729,19 @@ internal static class CrossFormatAnomalyApplier
         else
         {
             // Duplicate/add a continuation page row
-            string baseKey = optDoc.DocKey.EndsWith("_001", StringComparison.OrdinalIgnoreCase)
-                ? optDoc.DocKey[..^4]
-                : optDoc.DocKey;
-            string extraKey = $"{baseKey}_002";
-            string firstImg = optDoc.FirstImagePath;
-            string extraImg = firstImg.Replace("_001", "_002");
-            if (string.Equals(extraImg, firstImg, StringComparison.Ordinal))
+            int pageNumber = 2;
+            string extraKey = $"{optDoc.DocKey}_{pageNumber:D3}";
+            while (optDocsByKey.ContainsKey(extraKey))
             {
-                var ext = Path.GetExtension(firstImg);
-                extraImg = $"{firstImg[..^ext.Length]}_002{ext}";
+                pageNumber++;
+                extraKey = $"{optDoc.DocKey}_{pageNumber:D3}";
             }
 
-            string extraLine = $"{extraKey},{optDoc.Volume},{extraImg},,,,,";
+            string firstImg = optDoc.FirstImagePath;
+            var ext = Path.GetExtension(firstImg);
+            string extraImg = $"{firstImg[..^ext.Length]}_{pageNumber:D3}{ext}";
+
+            string extraLine = $"{extraKey},{optDoc.Volume},{extraImg},,,,";
             var extraCols = extraLine.Split(',');
             optDoc.PageRows.Add((optDoc.BreakLineNumber + 1, extraLine, extraCols));
 
@@ -430,11 +779,15 @@ internal static class CrossFormatAnomalyApplier
                 },
             });
         }
+
+        targetedRecords.Add(datDoc);
     }
 
     private static void ApplyDesyncOrder(
-        List<DatRecordEntry> datRecords,
+        ActiveDatRecords datRecords,
+        IReadOnlyDictionary<string, DatRecordEntry> datRecordsByKey,
         List<OptDocEntry> optDocs,
+        HashSet<DatRecordEntry> targetedRecords,
         Random random,
         List<ChaosAnomaly> datAnomalies,
         List<ChaosAnomaly> optAnomalies,
@@ -447,8 +800,38 @@ internal static class CrossFormatAnomalyApplier
             return;
         }
 
-        int idx1 = random.Next(optDocs.Count - 1);
-        int idx2 = idx1 + 1;
+        int pairCount = optDocs.Count - 1;
+        int start = random.Next(pairCount);
+        int idx1 = -1;
+        int idx2 = -1;
+        DatRecordEntry? datDoc1 = null;
+        DatRecordEntry? datDoc2 = null;
+        for (int offset = 0; offset < pairCount; offset++)
+        {
+            int candidateIndex = (start + offset) % pairCount;
+            var candidateDoc1 = optDocs[candidateIndex];
+            var candidateDoc2 = optDocs[candidateIndex + 1];
+            var candidateDat1 = FindDatForOptDocument(candidateDoc1, candidateIndex, datRecordsByKey, datRecords);
+            var candidateDat2 = FindDatForOptDocument(candidateDoc2, candidateIndex + 1, datRecordsByKey, datRecords);
+            if (candidateDat1 is null
+                || candidateDat2 is null
+                || targetedRecords.Contains(candidateDat1)
+                || targetedRecords.Contains(candidateDat2))
+            {
+                continue;
+            }
+
+            idx1 = candidateIndex;
+            idx2 = candidateIndex + 1;
+            datDoc1 = candidateDat1;
+            datDoc2 = candidateDat2;
+            break;
+        }
+
+        if (idx1 < 0 || datDoc1 is null || datDoc2 is null)
+        {
+            return;
+        }
 
         var optDoc1 = optDocs[idx1];
         var optDoc2 = optDocs[idx2];
@@ -457,8 +840,7 @@ internal static class CrossFormatAnomalyApplier
         optDocs[idx1] = optDoc2;
         optDocs[idx2] = optDoc1;
 
-        var datDoc1 = FindMatchingDat(datRecords, optDoc1.DocKey) ?? datRecords[idx1];
-        var datDoc2 = FindMatchingDat(datRecords, optDoc2.DocKey) ?? datRecords[idx2];
+        long optDoc2LineNumber = optDoc2.BreakLineNumber;
 
         datAnomalies.Add(new ChaosAnomaly
         {
@@ -471,7 +853,7 @@ internal static class CrossFormatAnomalyApplier
             Peer = new ChaosAnomalyPeer
             {
                 File = optFileName,
-                LineNumber = optDoc2.BreakLineNumber.ToString(CultureInfo.InvariantCulture),
+                LineNumber = optDoc2LineNumber.ToString(CultureInfo.InvariantCulture),
                 RecordID = optDoc2.DocKey,
                 Column = "DocBreak",
             },
@@ -480,7 +862,7 @@ internal static class CrossFormatAnomalyApplier
         optAnomalies.Add(new ChaosAnomaly
         {
             File = optFileName,
-            LineNumber = optDoc2.BreakLineNumber.ToString(CultureInfo.InvariantCulture),
+            LineNumber = optDoc2LineNumber.ToString(CultureInfo.InvariantCulture),
             RecordID = optDoc2.DocKey,
             Column = "DocBreak",
             ErrorType = "desync-order",
@@ -493,11 +875,16 @@ internal static class CrossFormatAnomalyApplier
                 Column = batesColumnName,
             },
         });
+
+        targetedRecords.Add(datDoc1);
+        targetedRecords.Add(datDoc2);
     }
 
     private static void ApplyDesyncPath(
-        List<DatRecordEntry> datRecords,
+        ActiveDatRecords datRecords,
+        IReadOnlyDictionary<string, DatRecordEntry> datRecordsByKey,
         List<OptDocEntry> optDocs,
+        HashSet<DatRecordEntry> targetedRecords,
         Random random,
         List<ChaosAnomaly> datAnomalies,
         List<ChaosAnomaly> optAnomalies,
@@ -505,14 +892,13 @@ internal static class CrossFormatAnomalyApplier
         string optFileName,
         string imageColumnName)
     {
-        if (optDocs.Count == 0 || datRecords.Count == 0)
+        var target = FindRandomUnprocessedOptDocument(optDocs, datRecordsByKey, datRecords, targetedRecords, random);
+        if (target is null)
         {
             return;
         }
 
-        int targetIdx = random.Next(optDocs.Count);
-        var optDoc = optDocs[targetIdx];
-        var datDoc = FindMatchingDat(datRecords, optDoc.DocKey) ?? datRecords[Math.Min(targetIdx, datRecords.Count - 1)];
+        var (optDoc, datDoc) = target.Value;
 
         // Point OPT image path to different volume, e.g. VOL999
         string originalPath = optDoc.FirstImagePath;
@@ -567,112 +953,111 @@ internal static class CrossFormatAnomalyApplier
                 Column = imageColumnName,
             },
         });
+
+        targetedRecords.Add(datDoc);
     }
 
     private static void ApplyOrphanAttachment(
-        List<DatRecordEntry> datRecords,
+        ActiveDatRecords datRecords,
+        List<DatRecordEntry> familyCandidates,
+        ref int familyCandidateIndex,
+        HashSet<DatRecordEntry> targetedRecords,
+        IReadOnlyDictionary<string, DatRecordEntry> datRecordsByDocId,
+        IReadOnlyDictionary<string, OptDocEntry> optDocsByKey,
         List<OptDocEntry> optDocs,
         Random random,
         List<ChaosAnomaly> datAnomalies,
         List<ChaosAnomaly> optAnomalies,
         string datFileName,
         string optFileName,
-        string parentIdColumnName,
         List<string> headers,
-        char colDelimChar,
-        char quoteDelimChar)
+        ref int parentIdIndex)
     {
-        // Try finding a child record with a parent
         if (datRecords.Count == 0 || optDocs.Count == 0)
         {
             return;
         }
 
-        int childIdx = datRecords.FindIndex(r => !string.IsNullOrEmpty(r.ParentId));
-        if (childIdx >= 0)
+        var childRec = FindFamilyCandidate(
+            datRecords,
+            familyCandidates,
+            ref familyCandidateIndex,
+            targetedRecords,
+            datRecordsByDocId,
+            requireActiveParent: true);
+        if (childRec is not null
+            && datRecordsByDocId.TryGetValue(childRec.ParentId, out var parentRec)
+            && datRecords.IsActive(parentRec))
         {
-            var childRec = datRecords[childIdx];
-            var parentRec = datRecords.FirstOrDefault(r => string.Equals(r.DocId, childRec.ParentId, StringComparison.OrdinalIgnoreCase));
-            if (parentRec is not null)
+            datRecords.Remove(parentRec);
+            targetedRecords.Add(childRec);
+
+            var optParent = FindMatchingOptForDat(optDocsByKey, parentRec)
+                ?? optDocs[Math.Min(childRec.ActiveIndex, optDocs.Count - 1)];
+            string parentIdColumnName = parentIdIndex >= 0 ? headers[parentIdIndex] : "PARENTDOCID";
+
+            datAnomalies.Add(new ChaosAnomaly
             {
-                // Remove parent from DAT (leaving child orphaned in DAT)
-                datRecords.Remove(parentRec);
-
-                var optParent = optDocs.FirstOrDefault(o => string.Equals(o.DocKey, parentRec.DocId, StringComparison.OrdinalIgnoreCase)) ?? optDocs[0];
-
-                datAnomalies.Add(new ChaosAnomaly
-                {
-                    File = datFileName,
-                    LineNumber = childRec.LineNumber.ToString(CultureInfo.InvariantCulture),
-                    RecordID = childRec.DocId,
-                    Column = parentIdColumnName,
-                    ErrorType = "orphan-attachment",
-                    Description = $"Attachment row '{childRec.DocId}' has no parent row in DAT (parent '{parentRec.DocId}' dropped).",
-                    Peer = new ChaosAnomalyPeer
-                    {
-                        File = optFileName,
-                        LineNumber = optParent.BreakLineNumber.ToString(CultureInfo.InvariantCulture),
-                        RecordID = optParent.DocKey,
-                        Column = "DocBreak",
-                    },
-                });
-
-                optAnomalies.Add(new ChaosAnomaly
+                File = datFileName,
+                LineNumber = childRec.LineNumber.ToString(CultureInfo.InvariantCulture),
+                RecordID = childRec.DocId,
+                Column = parentIdColumnName,
+                ErrorType = "orphan-attachment",
+                Description = $"Attachment row '{childRec.DocId}' has no parent row in DAT (parent '{parentRec.DocId}' dropped).",
+                Peer = new ChaosAnomalyPeer
                 {
                     File = optFileName,
                     LineNumber = optParent.BreakLineNumber.ToString(CultureInfo.InvariantCulture),
                     RecordID = optParent.DocKey,
                     Column = "DocBreak",
-                    ErrorType = "orphan-attachment",
-                    Description = $"Parent document '{optParent.DocKey}' retained in OPT while dropped from DAT, orphaning attachment child '{childRec.DocId}'.",
-                    Peer = new ChaosAnomalyPeer
-                    {
-                        File = datFileName,
-                        LineNumber = childRec.LineNumber.ToString(CultureInfo.InvariantCulture),
-                        RecordID = childRec.DocId,
-                        Column = parentIdColumnName,
-                    },
-                });
-                return;
-            }
-        }
+                },
+            });
 
-        // If no existing family, turn a DAT record into an orphaned child
-        int targetIdx = Math.Min(1, datRecords.Count - 1);
-        var targetRec = datRecords[targetIdx];
-        string missingParentId = "DOC_PARENT_MISSING";
-        string orphanedChildId = $"{missingParentId}_A001";
-
-        int pIdx = headers.FindIndex(h => string.Equals(h, "PARENTDOCID", StringComparison.OrdinalIgnoreCase));
-        if (pIdx < 0)
-        {
-            headers.Add("PARENTDOCID");
-            pIdx = headers.Count - 1;
-            foreach (var r in datRecords)
+            optAnomalies.Add(new ChaosAnomaly
             {
-                r.Fields.Add(string.Empty);
-            }
+                File = optFileName,
+                LineNumber = optParent.BreakLineNumber.ToString(CultureInfo.InvariantCulture),
+                RecordID = optParent.DocKey,
+                Column = "DocBreak",
+                ErrorType = "orphan-attachment",
+                Description = $"Parent document '{optParent.DocKey}' retained in OPT while dropped from DAT, orphaning attachment child '{childRec.DocId}'.",
+                Peer = new ChaosAnomalyPeer
+                {
+                    File = datFileName,
+                    LineNumber = childRec.LineNumber.ToString(CultureInfo.InvariantCulture),
+                    RecordID = childRec.DocId,
+                    Column = parentIdColumnName,
+                },
+            });
+
+            return;
         }
 
-        targetRec.Fields[pIdx] = missingParentId;
-        int dIdx = headers.FindIndex(h => string.Equals(h, "DOCID", StringComparison.OrdinalIgnoreCase));
-        if (dIdx >= 0)
+        var targetRec = FindRandomUnprocessedDatRecord(datRecords, targetedRecords, random);
+        if (targetRec is null)
         {
-            targetRec.Fields[dIdx] = orphanedChildId;
+            return;
         }
 
+        parentIdIndex = EnsureParentIdColumn(parentIdIndex, headers, datRecords);
+        string orphanParentIdColumnName = headers[parentIdIndex];
+        string missingParentId = "DOC_PARENT_MISSING";
+        targetRec.ParentId = missingParentId;
+        targetRec.Fields[parentIdIndex] = missingParentId;
         targetRec.IsDirty = true;
+        AddFamilyCandidate(targetRec, familyCandidates);
 
-        var optPeer = optDocs[Math.Min(targetIdx, optDocs.Count - 1)];
+        var optPeer = FindMatchingOptForDat(optDocsByKey, targetRec)
+            ?? optDocs[Math.Min(targetRec.ActiveIndex, optDocs.Count - 1)];
 
         datAnomalies.Add(new ChaosAnomaly
         {
             File = datFileName,
             LineNumber = targetRec.LineNumber.ToString(CultureInfo.InvariantCulture),
-            RecordID = orphanedChildId,
-            Column = parentIdColumnName,
+            RecordID = targetRec.DocId,
+            Column = orphanParentIdColumnName,
             ErrorType = "orphan-attachment",
-            Description = $"Attachment row '{orphanedChildId}' references non-existent parent '{missingParentId}'.",
+            Description = $"Attachment row '{targetRec.DocId}' references non-existent parent '{missingParentId}'.",
             Peer = new ChaosAnomalyPeer
             {
                 File = optFileName,
@@ -689,50 +1074,64 @@ internal static class CrossFormatAnomalyApplier
             RecordID = optPeer.DocKey,
             Column = "DocBreak",
             ErrorType = "orphan-attachment",
-            Description = $"Orphaned family anomaly coordinated with DAT record '{orphanedChildId}'.",
+            Description = $"Orphaned family anomaly coordinated with DAT record '{targetRec.DocId}'.",
             Peer = new ChaosAnomalyPeer
             {
                 File = datFileName,
                 LineNumber = targetRec.LineNumber.ToString(CultureInfo.InvariantCulture),
-                RecordID = orphanedChildId,
-                Column = parentIdColumnName,
+                RecordID = targetRec.DocId,
+                Column = orphanParentIdColumnName,
             },
         });
+
+        targetedRecords.Add(targetRec);
     }
 
     private static void ApplyMissingChild(
-        List<DatRecordEntry> datRecords,
+        ActiveDatRecords datRecords,
+        List<DatRecordEntry> familyCandidates,
+        ref int familyCandidateIndex,
+        HashSet<DatRecordEntry> targetedRecords,
+        IReadOnlyDictionary<string, DatRecordEntry> datRecordsByDocId,
+        IReadOnlyDictionary<string, OptDocEntry> optDocsByKey,
         List<OptDocEntry> optDocs,
         Random random,
         List<ChaosAnomaly> datAnomalies,
         List<ChaosAnomaly> optAnomalies,
         string datFileName,
         string optFileName,
-        string endAttachColumnName,
         List<string> headers,
-        char colDelimChar,
-        char quoteDelimChar)
+        ref int endAttachIndex)
     {
-        // Try finding a child record in DAT to remove from DAT while keeping it in OPT
         if (datRecords.Count == 0 || optDocs.Count == 0)
         {
             return;
         }
 
-        int childIdx = datRecords.FindIndex(r => !string.IsNullOrEmpty(r.ParentId));
-        if (childIdx >= 0)
+        var childRec = FindFamilyCandidate(
+            datRecords,
+            familyCandidates,
+            ref familyCandidateIndex,
+            targetedRecords,
+            datRecordsByDocId,
+            requireActiveParent: false);
+        if (childRec is not null)
         {
-            var childRec = datRecords[childIdx];
-            datRecords.RemoveAt(childIdx);
+            var optChild = FindMatchingOptForDat(optDocsByKey, childRec);
+            if (optChild is null)
+            {
+                return;
+            }
 
-            var optChild = optDocs.FirstOrDefault(o => string.Equals(o.DocKey, childRec.DocId, StringComparison.OrdinalIgnoreCase)) ?? optDocs[Math.Min(childIdx, optDocs.Count - 1)];
+            datRecords.Remove(childRec);
+            string familyEndAttachColumnName = endAttachIndex >= 0 ? headers[endAttachIndex] : "ENDATTACH";
 
             datAnomalies.Add(new ChaosAnomaly
             {
                 File = datFileName,
                 LineNumber = childRec.LineNumber.ToString(CultureInfo.InvariantCulture),
-                RecordID = childRec.ParentId,
-                Column = endAttachColumnName,
+                RecordID = childRec.DocId,
+                Column = familyEndAttachColumnName,
                 ErrorType = "missing-child",
                 Description = $"Parent document '{childRec.ParentId}' missing child attachment '{childRec.DocId}' in DAT.",
                 Peer = new ChaosAnomalyPeer
@@ -756,100 +1155,127 @@ internal static class CrossFormatAnomalyApplier
                 {
                     File = datFileName,
                     LineNumber = childRec.LineNumber.ToString(CultureInfo.InvariantCulture),
-                    RecordID = childRec.ParentId,
-                    Column = endAttachColumnName,
+                    RecordID = childRec.DocId,
+                    Column = familyEndAttachColumnName,
                 },
             });
+
+            targetedRecords.Add(childRec);
             return;
         }
 
-        // If no family exists, remove child from OPT if OPT has multiple docs
-        if (optDocs.Count > 1)
+        if (datRecords.Count < 2 || optDocs.Count < 2)
         {
-            var removedOptDoc = optDocs[^1];
-            optDocs.RemoveAt(optDocs.Count - 1);
-            var datPeer = datRecords[^1];
+            return;
+        }
 
-            datAnomalies.Add(new ChaosAnomaly
-            {
-                File = datFileName,
-                LineNumber = datPeer.LineNumber.ToString(CultureInfo.InvariantCulture),
-                RecordID = datPeer.DocId,
-                Column = endAttachColumnName,
-                ErrorType = "missing-child",
-                Description = $"Document '{datPeer.DocId}' exists in DAT but child/document was removed from OPT.",
-                Peer = new ChaosAnomalyPeer
-                {
-                    File = optFileName,
-                    LineNumber = removedOptDoc.BreakLineNumber.ToString(CultureInfo.InvariantCulture),
-                    RecordID = removedOptDoc.DocKey,
-                    Column = "DocBreak",
-                },
-            });
+        var childRecord = FindRandomUnprocessedDatRecord(datRecords, targetedRecords, random);
+        if (childRecord is null)
+        {
+            return;
+        }
 
-            optAnomalies.Add(new ChaosAnomaly
+        var optChild = FindMatchingOptForDat(optDocsByKey, childRecord);
+        if (optChild is null)
+        {
+            return;
+        }
+
+        var parentRecord = datRecords[0];
+        if (ReferenceEquals(parentRecord, childRecord))
+        {
+            parentRecord = datRecords[1];
+        }
+
+        endAttachIndex = EnsureEndAttachColumn(endAttachIndex, headers, datRecords);
+        string endAttachColumnName = headers[endAttachIndex];
+
+        string childEndId = string.IsNullOrEmpty(childRecord.Bates) ? childRecord.DocId : childRecord.Bates;
+        parentRecord.Fields[endAttachIndex] = childEndId;
+        parentRecord.IsDirty = true;
+
+        datRecords.Remove(childRecord);
+
+        datAnomalies.Add(new ChaosAnomaly
+        {
+            File = datFileName,
+            LineNumber = childRecord.LineNumber.ToString(CultureInfo.InvariantCulture),
+            RecordID = childRecord.DocId,
+            Column = endAttachColumnName,
+            ErrorType = "missing-child",
+            Description = $"Parent document '{parentRecord.DocId}' references missing DAT child '{childRecord.DocId}', which remains in OPT.",
+            Peer = new ChaosAnomalyPeer
             {
                 File = optFileName,
-                LineNumber = removedOptDoc.BreakLineNumber.ToString(CultureInfo.InvariantCulture),
-                RecordID = removedOptDoc.DocKey,
+                LineNumber = optChild.BreakLineNumber.ToString(CultureInfo.InvariantCulture),
+                RecordID = optChild.DocKey,
                 Column = "DocBreak",
-                ErrorType = "missing-child",
-                Description = $"Removed document '{removedOptDoc.DocKey}' from OPT, leaving orphan in DAT.",
-                Peer = new ChaosAnomalyPeer
-                {
-                    File = datFileName,
-                    LineNumber = datPeer.LineNumber.ToString(CultureInfo.InvariantCulture),
-                    RecordID = datPeer.DocId,
-                    Column = endAttachColumnName,
-                },
-            });
-        }
+            },
+        });
+
+        optAnomalies.Add(new ChaosAnomaly
+        {
+            File = optFileName,
+            LineNumber = optChild.BreakLineNumber.ToString(CultureInfo.InvariantCulture),
+            RecordID = optChild.DocKey,
+            Column = "DocBreak",
+            ErrorType = "missing-child",
+            Description = $"OPT child '{optChild.DocKey}' remains present while its DAT record '{childRecord.DocId}' is missing.",
+            Peer = new ChaosAnomalyPeer
+            {
+                File = datFileName,
+                LineNumber = childRecord.LineNumber.ToString(CultureInfo.InvariantCulture),
+                RecordID = childRecord.DocId,
+                Column = endAttachColumnName,
+            },
+        });
+
+        targetedRecords.Add(childRecord);
     }
 
     private static void ApplyBrokenParent(
-        List<DatRecordEntry> datRecords,
+        ActiveDatRecords datRecords,
+        List<DatRecordEntry> familyCandidates,
+        ref int familyCandidateIndex,
+        HashSet<DatRecordEntry> targetedRecords,
+        IReadOnlyDictionary<string, DatRecordEntry> datRecordsByDocId,
+        IReadOnlyDictionary<string, OptDocEntry> optDocsByKey,
         List<OptDocEntry> optDocs,
         Random random,
         List<ChaosAnomaly> datAnomalies,
         List<ChaosAnomaly> optAnomalies,
         string datFileName,
         string optFileName,
-        string parentIdColumnName,
-        int parentIdIdx,
-        List<string> headers)
+        List<string> headers,
+        ref int parentIdIndex)
     {
-        // Find a child record with ParentId or any record
         if (datRecords.Count == 0 || optDocs.Count == 0)
         {
             return;
         }
 
-        int targetIdx = datRecords.FindIndex(r => !string.IsNullOrEmpty(r.ParentId));
-        if (targetIdx < 0)
+        var targetRec = FindFamilyCandidate(
+            datRecords,
+            familyCandidates,
+            ref familyCandidateIndex,
+            targetedRecords,
+            datRecordsByDocId,
+            requireActiveParent: false)
+            ?? FindRandomUnprocessedDatRecord(datRecords, targetedRecords, random);
+        if (targetRec is null)
         {
-            targetIdx = Math.Min(1, datRecords.Count - 1);
+            return;
         }
-
-        var targetRec = datRecords[targetIdx];
+        parentIdIndex = EnsureParentIdColumn(parentIdIndex, headers, datRecords);
+        string parentIdColumnName = headers[parentIdIndex];
         string corruptParent = "INVALID_PARENT_PTR";
+        targetRec.ParentId = corruptParent;
+        targetRec.Fields[parentIdIndex] = corruptParent;
+        targetRec.IsDirty = true;
+        AddFamilyCandidate(targetRec, familyCandidates);
 
-        if (parentIdIdx < 0)
-        {
-            headers.Add("PARENTDOCID");
-            parentIdIdx = headers.Count - 1;
-            foreach (var record in datRecords)
-            {
-                record.Fields.Add(string.Empty);
-            }
-        }
-
-        if (parentIdIdx < targetRec.Fields.Count)
-        {
-            targetRec.Fields[parentIdIdx] = corruptParent;
-            targetRec.IsDirty = true;
-        }
-
-        var optPeer = FindMatchingOpt(optDocs, targetRec.DocId) ?? optDocs[Math.Min(targetIdx, optDocs.Count - 1)];
+        var optPeer = FindMatchingOptForDat(optDocsByKey, targetRec)
+            ?? optDocs[Math.Min(Math.Max(targetRec.ActiveIndex, 0), optDocs.Count - 1)];
 
         datAnomalies.Add(new ChaosAnomaly
         {
@@ -884,37 +1310,167 @@ internal static class CrossFormatAnomalyApplier
                 Column = parentIdColumnName,
             },
         });
+
+        targetedRecords.Add(targetRec);
     }
 
-    private static DatRecordEntry? FindMatchingDat(List<DatRecordEntry> records, string optDocKey)
+    private static DatRecordEntry? FindFamilyCandidate(
+        ActiveDatRecords records,
+        IReadOnlyList<DatRecordEntry> candidates,
+        ref int candidateIndex,
+        HashSet<DatRecordEntry> targetedRecords,
+        IReadOnlyDictionary<string, DatRecordEntry> recordsByDocId,
+        bool requireActiveParent)
     {
-        foreach (var r in records)
+        while (candidateIndex < candidates.Count)
         {
-            if (!string.IsNullOrEmpty(r.Bates) && string.Equals(r.Bates, optDocKey, StringComparison.OrdinalIgnoreCase))
+            var candidate = candidates[candidateIndex];
+            if (!records.IsActive(candidate)
+                || targetedRecords.Contains(candidate)
+                || string.IsNullOrEmpty(candidate.ParentId))
             {
-                return r;
+                candidateIndex++;
+                continue;
             }
 
-            if (string.Equals(r.DocId, optDocKey, StringComparison.OrdinalIgnoreCase))
+            if (requireActiveParent
+                && (!recordsByDocId.TryGetValue(candidate.ParentId, out var parent)
+                    || !records.IsActive(parent)
+                    || ReferenceEquals(candidate, parent)))
             {
-                return r;
+                candidateIndex++;
+                continue;
             }
+
+            return candidate;
         }
 
         return null;
     }
 
-    private static OptDocEntry? FindMatchingOpt(List<OptDocEntry> optDocs, string datKey)
+    private static void AddFamilyCandidate(DatRecordEntry record, List<DatRecordEntry> familyCandidates)
     {
-        foreach (var o in optDocs)
+        if (!record.IsFamilyCandidate)
         {
-            if (string.Equals(o.DocKey, datKey, StringComparison.OrdinalIgnoreCase))
+            record.IsFamilyCandidate = true;
+            familyCandidates.Add(record);
+        }
+    }
+
+    private static int EnsureParentIdColumn(int columnIndex, List<string> headers, ActiveDatRecords records)
+    {
+        if (columnIndex >= 0)
+        {
+            return columnIndex;
+        }
+
+        columnIndex = FindParentIdColumn(headers);
+        if (columnIndex >= 0)
+        {
+            return columnIndex;
+        }
+
+        headers.Add("PARENTDOCID");
+        foreach (var record in records.OriginalOrder)
+        {
+            while (record.Fields.Count < headers.Count - 1)
             {
-                return o;
+                record.Fields.Add(string.Empty);
+            }
+
+            record.Fields.Add(string.Empty);
+        }
+
+        return headers.Count - 1;
+    }
+
+    private static int EnsureEndAttachColumn(int columnIndex, List<string> headers, ActiveDatRecords records)
+    {
+        if (columnIndex >= 0)
+        {
+            return columnIndex;
+        }
+
+        columnIndex = FindEndAttachColumn(headers);
+        if (columnIndex >= 0)
+        {
+            return columnIndex;
+        }
+
+        headers.Add("ENDATTACH");
+        foreach (var record in records.OriginalOrder)
+        {
+            while (record.Fields.Count < headers.Count - 1)
+            {
+                record.Fields.Add(string.Empty);
+            }
+
+            record.Fields.Add(string.Empty);
+        }
+
+        return headers.Count - 1;
+    }
+
+    private static int FindParentIdColumn(IReadOnlyList<string> headers) =>
+        IndexOfAny(headers, "PARENTDOCID", "Parent Doc ID");
+
+    private static int FindEndAttachColumn(IReadOnlyList<string> headers) =>
+        IndexOfAny(headers, "ENDATTACH", "END_ATTACH", "END ATTACH");
+
+    private static int IndexOfAny(IReadOnlyList<string> values, params string[] names)
+    {
+        for (int i = 0; i < values.Count; i++)
+        {
+            if (names.Any(name => string.Equals(values[i], name, StringComparison.OrdinalIgnoreCase)))
+            {
+                return i;
             }
         }
 
-        return null;
+        return -1;
+    }
+
+    private static Dictionary<string, DatRecordEntry> BuildDatRecordIndex(IReadOnlyList<DatRecordEntry> records, bool includeBates)
+    {
+        var index = new Dictionary<string, DatRecordEntry>(StringComparer.OrdinalIgnoreCase);
+        foreach (var record in records)
+        {
+            if (includeBates && !string.IsNullOrEmpty(record.Bates))
+            {
+                index.TryAdd(record.Bates, record);
+            }
+
+            if (!string.IsNullOrEmpty(record.DocId))
+            {
+                index.TryAdd(record.DocId, record);
+            }
+        }
+
+        return index;
+    }
+
+    private static Dictionary<string, OptDocEntry> BuildOptDocumentIndex(IReadOnlyList<OptDocEntry> documents)
+    {
+        var index = new Dictionary<string, OptDocEntry>(StringComparer.OrdinalIgnoreCase);
+        foreach (var document in documents)
+        {
+            index.TryAdd(document.DocKey, document);
+        }
+
+        return index;
+    }
+
+    private static OptDocEntry? FindMatchingOpt(IReadOnlyDictionary<string, OptDocEntry> documentsByKey, string datKey)
+    {
+        return documentsByKey.TryGetValue(datKey, out var document) ? document : null;
+    }
+
+    private static OptDocEntry? FindMatchingOptForDat(
+        IReadOnlyDictionary<string, OptDocEntry> documentsByKey,
+        DatRecordEntry datRecord)
+    {
+        return FindMatchingOpt(documentsByKey, datRecord.Bates)
+            ?? FindMatchingOpt(documentsByKey, datRecord.DocId);
     }
 
     private static string ReplaceVolumeInPath(string path, string newVolume)

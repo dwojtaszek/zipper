@@ -72,6 +72,14 @@ zipper --loadfile-only --loadfile-format edrm-xml --count 10000 --output-path ./
     --chaos-mode --chaos-scenario edrm-xml-structural-failures --seed 42
 ```
 
+The `cross-format-desync` and `broken-families` scenarios coordinate DAT↔OPT anomalies and write reciprocal references into both Audit Files. Use either Loadfile-Only Mode with both formats or a Production Set, which always includes both Load Files. Any other explicitly selected Load File Formats are generated normally without cross-format anomalies:
+```bash
+zipper --loadfile-only --load-file-formats dat,opt --count 1000 --output-path ./cross-format-failures \
+    --chaos-mode --chaos-scenario cross-format-desync --seed 42
+zipper --production-set --type eml --count 1000 --output-path ./family-failures --bates-prefix TEST \
+    --with-families --attachment-rate 100 --chaos-mode --chaos-scenario broken-families --seed 42
+```
+
 #### 7. Generate parser-valid adversarial DAT values
 Exercise DAT parsers with correctly escaped delimiters, the literal `Ã¾` lookalike, a 32,768-character value, and two trailing empty rows:
 ```bash
@@ -227,7 +235,7 @@ All command-line flags recognized by Zipper:
 | `--archive-test-cases` | none | comma-separated Case Keys | Filter the suite to the named cases (closed flag set; requires `--archive-test-suite`) |
 | `--version` | `false` | flag | Print full embedded version string and exit |
 
-Chaos requires `--loadfile-only` or `--production-set` (for cross-format scenarios `cross-format-desync` and `broken-families`); `--chaos-scenario` conflicts with `--chaos-types`. Only the DAT `adversarial-values` scenario accepts `--count 0`, which writes a header-only Load File plus two trailing empty rows. It requires DAT-only output, bypasses anomaly injection, and remains parser-valid. For TIFF or JPG generation, specify `--loadfile-format dat` because those File Types normally add OPT output implicitly. For positive counts, `--chaos-amount` controls which records receive the adversarial values; the first selected record contains the escaped delimiters, `Ã¾` lookalike, and a 32,768-character value. The five documented platform import-failure DAT types are opt-in, and `realistic-import-failures` requires DAT. Each format has its own anomaly catalog: CSV, Concordance, and EDRM-XML no longer inherit the DAT arms; cross-format scenarios (`cross-format-desync`, `broken-families`) span DAT and OPT with reciprocal audit tracking. `full-chaos` enables every anomaly type for the selected format. To run a cross-format scenario outside a Production Set, pass both formats explicitly with `--load-file-formats dat,opt`.
+Chaos requires `--loadfile-only` or `--production-set` (for cross-format scenarios `cross-format-desync` and `broken-families`); `--chaos-scenario` conflicts with `--chaos-types`. Only the DAT `adversarial-values` scenario accepts `--count 0`, which writes a header-only Load File plus two trailing empty rows. It requires DAT-only output, bypasses anomaly injection, and remains parser-valid. For TIFF or JPG generation, specify `--loadfile-format dat` because those File Types normally add OPT output implicitly. For positive counts, `--chaos-amount` controls which records receive the adversarial values; the first selected record contains the escaped delimiters, `Ã¾` lookalike, and a 32,768-character value. The five documented platform import-failure DAT types are opt-in, and `realistic-import-failures` requires DAT. Each format has its own anomaly catalog: CSV, Concordance, and EDRM-XML no longer inherit the DAT arms; cross-format scenarios (`cross-format-desync`, `broken-families`) span DAT and OPT with reciprocal audit tracking. Additional explicitly selected Load File Formats are generated normally without cross-format anomalies. `full-chaos` enables every anomaly type for the selected format. To run a cross-format scenario outside a Production Set, pass both formats explicitly with `--load-file-formats dat,opt`.
 
 ### Standard Load File Columns
 

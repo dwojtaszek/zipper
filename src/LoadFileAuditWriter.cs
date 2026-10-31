@@ -159,16 +159,19 @@ internal static class LoadFileAuditWriter
     /// <param name="composedRecords">The generated records.</param>
     /// <param name="anomalies">List of chaos anomalies.</param>
     /// <param name="format">The explicit load file format.</param>
+    /// <param name="totalRecordsOverride">The emitted data-record count when output rows were mutated.</param>
     /// <returns>The properties JSON string.</returns>
     public static string GenerateAuditJson(
         string outputPath,
         FileGenerationRequest request,
         IReadOnlyCollection<FileData> composedRecords,
         IReadOnlyList<ChaosAnomaly>? anomalies = null,
-        LoadFileFormat? format = null)
+        LoadFileFormat? format = null,
+        long? totalRecordsOverride = null)
     {
         var activeFormat = format ?? (request.LoadFile.Formats.Count > 0 ? request.LoadFile.Formats[0] : LoadFileFormat.Dat);
-        var (totalRecords, _) = ComputeRecordCounts(request, composedRecords, activeFormat);
+        var (computedTotalRecords, _) = ComputeRecordCounts(request, composedRecords, activeFormat);
+        long totalRecords = totalRecordsOverride ?? computedTotalRecords;
         var formatName = activeFormat switch
         {
             LoadFileFormat.Opt => "OPT (Image)",
@@ -234,10 +237,16 @@ internal static class LoadFileAuditWriter
     {
         bool adversarialValues = ChaosScenarios.GeneratesAdversarialValues(request.Chaos.ChaosScenario);
         bool isEnabled = request.Chaos.ChaosMode && (anomalies is not null || adversarialValues);
+        string? targetAmount = request.Chaos.ChaosAmount;
+        if (string.IsNullOrEmpty(targetAmount) && request.Chaos.ChaosScenario is { } scenarioName)
+        {
+            targetAmount = ChaosScenarios.GetByName(scenarioName)?.DefaultAmount;
+        }
+
         return new AuditChaosMode
         {
             Enabled = isEnabled,
-            TargetAmount = isEnabled ? request.Chaos.ChaosAmount : null,
+            TargetAmount = isEnabled ? targetAmount : null,
             TotalAnomalies = anomalies?.Count ?? 0,
             InjectedAnomalies = anomalies is not null && anomalies.Count > 0
                 ? anomalies.Select(a => new AuditAnomalyEntry

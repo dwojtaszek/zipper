@@ -60,6 +60,30 @@ public sealed class CrossFormatAnomalyApplierTests : IDisposable
         return (datLines, optLines);
     }
 
+    private static (List<string> DatLines, List<string> OptLines) CreateNoFamilyLines(string idColumn = "DOCID")
+    {
+        var datLines = new List<string>
+        {
+            JoinDat(idColumn, "BATES_NUMBER", "IMAGE_PATH", "PAGECOUNT", "VOLUME"),
+            JoinDat("DOC00000001", "TEST00000001", "IMAGES\\VOL001\\DOC00000001.tif", "1", "VOL001"),
+            JoinDat("DOC00000002", "TEST00000002", "IMAGES\\VOL001\\DOC00000002.tif", "1", "VOL001"),
+            JoinDat("DOC00000003", "TEST00000003", "IMAGES\\VOL001\\DOC00000003.tif", "1", "VOL001"),
+        };
+        var optLines = new List<string>
+        {
+            "TEST00000001,VOL001,IMAGES\\VOL001\\DOC00000001.tif,Y,,,1",
+            "TEST00000002,VOL001,IMAGES\\VOL001\\DOC00000002.tif,Y,,,1",
+            "TEST00000003,VOL001,IMAGES\\VOL001\\DOC00000003.tif,Y,,,1",
+        };
+
+        return (datLines, optLines);
+    }
+
+    private sealed class FirstIndexRandom : Random
+    {
+        public override int Next(int maxValue) => 0;
+    }
+
     [Fact]
     public void Apply_ZeroAmount_MakesNoChanges()
     {
@@ -106,6 +130,52 @@ public sealed class CrossFormatAnomalyApplierTests : IDisposable
     }
 
     [Fact]
+    public void Apply_DesyncPagecount_OnePageDocumentEmitsSevenColumnOptRow()
+    {
+        var (datLines, optLines) = CreateNoFamilyLines();
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncPagecount,
+            chaosAmount: "1",
+            seed: 42);
+
+        Assert.Equal(optLines.Count + 1, result.OptLines.Count);
+        Assert.All(result.OptLines, line => Assert.Equal(7, line.Split(',').Length));
+    }
+
+    [Fact]
+    public void Apply_DesyncPagecount_BatesEnding001_UsesDistinctContinuationIdentity()
+    {
+        var datLines = new List<string>
+        {
+            JoinDat("DOCID", "BATES_NUMBER", "IMAGE_PATH", "PAGECOUNT", "VOLUME"),
+            JoinDat("DOC00000001", "CASE_001", "IMAGES\\VOL001\\CASE_001.tif", "1", "VOL001"),
+            JoinDat("DOC00000002", "CASE_002", "IMAGES\\VOL001\\CASE_002.tif", "1", "VOL001"),
+        };
+        var optLines = new List<string>
+        {
+            "CASE_001,VOL001,IMAGES\\VOL001\\CASE_001.tif,Y,,,1",
+            "CASE_002,VOL001,IMAGES\\VOL001\\CASE_002.tif,Y,,,1",
+        };
+
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncPagecount,
+            chaosAmount: "1",
+            random: new FirstIndexRandom());
+
+        var recordIds = result.OptLines.Select(line => line.Split(',')[0]).ToArray();
+
+        Assert.Contains("CASE_001_002", recordIds);
+        Assert.Equal(recordIds.Length, recordIds.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Contains(
+            result.OptLines,
+            line => line.StartsWith("CASE_001_002,VOL001,IMAGES\\VOL001\\CASE_001_002.tif,", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Apply_DesyncOrder_SwapsOptDocumentOrderAndProducesReciprocalAudit()
     {
         var (datLines, optLines) = CreateSampleLines();
@@ -131,6 +201,77 @@ public sealed class CrossFormatAnomalyApplierTests : IDisposable
         // Verify OPT order actually changed while DAT preserves its original bytes
         Assert.NotEqual(optLines, result.OptLines);
         Assert.Equal(datLines, result.DatLines);
+    }
+
+    [Fact]
+    public void Apply_DesyncOrder_AuditsMovedOptDocumentLineNumber()
+    {
+        var (datLines, optLines) = CreateSampleLines();
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncOrder,
+            chaosAmount: "1",
+            seed: 42);
+
+        var optAnomaly = Assert.Single(result.OptAnomalies);
+        int actualLineNumber = Array.FindIndex(
+            result.OptLines.ToArray(),
+            line => line.StartsWith($"{optAnomaly.RecordID},", StringComparison.Ordinal)) + 1;
+
+        Assert.True(actualLineNumber > 0, $"OPT record '{optAnomaly.RecordID}' must be present in the emitted lines.");
+        Assert.Equal(actualLineNumber.ToString(System.Globalization.CultureInfo.InvariantCulture), optAnomaly.LineNumber);
+    }
+
+    [Fact]
+    public void Apply_CombinedDesyncScenario_AuditsFinalPeerLineNumbers()
+    {
+        var (datLines, optLines) = CreateSampleLines();
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: "cross-format-desync",
+            chaosAmount: "3",
+            seed: 42);
+
+        static int FindLine(IReadOnlyList<string> lines, string file, string recordId)
+        {
+            string marker = file == "loadfile.dat"
+                ? $"{QuoteDelim}{recordId}{QuoteDelim}"
+                : $"{recordId},";
+            return Array.FindIndex(
+                lines.ToArray(),
+                line => line.StartsWith(marker, StringComparison.Ordinal)) + 1;
+        }
+
+        foreach (var anomaly in result.Anomalies)
+        {
+            Assert.NotNull(anomaly.Peer);
+            var anomalyLines = anomaly.File == "loadfile.dat" ? result.DatLines : result.OptLines;
+            int anomalyLine = FindLine(anomalyLines, anomaly.File!, anomaly.RecordID);
+            Assert.True(anomalyLine > 0, $"Record '{anomaly.RecordID}' must be present in {anomaly.File}.");
+            Assert.Equal(anomalyLine.ToString(System.Globalization.CultureInfo.InvariantCulture), anomaly.LineNumber);
+
+            var peerLines = anomaly.Peer.File == "loadfile.dat" ? result.DatLines : result.OptLines;
+            int peerLine = FindLine(peerLines, anomaly.Peer.File, anomaly.Peer.RecordID);
+            Assert.True(peerLine > 0, $"Peer record '{anomaly.Peer.RecordID}' must be present in {anomaly.Peer.File}.");
+            Assert.Equal(peerLine.ToString(System.Globalization.CultureInfo.InvariantCulture), anomaly.Peer.LineNumber);
+        }
+    }
+
+    [Fact]
+    public void Apply_CombinedFamilyScenario_AuditsRemovedDatRowsAtFinalGapLine()
+    {
+        var (datLines, optLines) = CreateSampleLines();
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: "broken-families",
+            chaosAmount: "2",
+            seed: 42);
+
+        Assert.Equal(2, result.DatLines.Count);
+        Assert.All(result.DatAnomalies, anomaly => Assert.Equal("2", anomaly.LineNumber));
     }
 
     [Fact]
@@ -201,6 +342,107 @@ public sealed class CrossFormatAnomalyApplierTests : IDisposable
 
         // Child DOC00000002 should be dropped from DAT while remaining in OPT
         Assert.DoesNotContain(result.DatLines, l => l.StartsWith($"\u00feDOC00000002\u00fe", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Apply_MissingChild_NoExistingFamilyCreatesMissingDatChildAndRetainsItsOptDocument()
+    {
+        var (datLines, optLines) = CreateNoFamilyLines();
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.MissingChild,
+            chaosAmount: "1",
+            seed: 42);
+
+        var header = ProductionSetPostValidator.ParseDatLine(result.DatLines[0], ColDelim, QuoteDelim);
+        int docIdIndex = header.FindIndex(h => h == "DOCID");
+        int endAttachIndex = header.FindIndex(h => h == "ENDATTACH");
+        Assert.Equal(0, header.Count(h => h == "PARENTDOCID"));
+        Assert.Equal(1, header.Count(h => h == "ENDATTACH"));
+        Assert.Equal(datLines.Count - 1, result.DatLines.Count);
+        Assert.Equal(optLines.Count, result.OptLines.Count);
+
+        var records = result.DatLines.Skip(1)
+            .Select(line => ProductionSetPostValidator.ParseDatLine(line, ColDelim, QuoteDelim))
+            .ToList();
+        var datAnomaly = Assert.Single(result.DatAnomalies);
+        var optAnomaly = Assert.Single(result.OptAnomalies);
+        Assert.DoesNotContain(records, fields => fields[docIdIndex] == datAnomaly.RecordID);
+        Assert.Contains(records, fields => fields[endAttachIndex] == optAnomaly.RecordID);
+        Assert.Equal(optAnomaly.RecordID, datAnomaly.Peer!.RecordID);
+        Assert.Equal(datAnomaly.RecordID, optAnomaly.Peer!.RecordID);
+        Assert.Contains(result.OptLines, line => line.StartsWith($"{optAnomaly.RecordID},", StringComparison.Ordinal));
+        Assert.Equal(optAnomaly.LineNumber, datAnomaly.Peer.LineNumber);
+        Assert.Equal(datAnomaly.LineNumber, optAnomaly.Peer.LineNumber);
+    }
+
+    [Fact]
+    public void Apply_BrokenParent_FullAmountTargetsDistinctDatRecords()
+    {
+        var (datLines, optLines) = CreateNoFamilyLines();
+
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.BrokenParent,
+            chaosAmount: "100%",
+            seed: 42);
+
+        var header = ProductionSetPostValidator.ParseDatLine(datLines[0], ColDelim, QuoteDelim);
+        int docIdIndex = header.FindIndex(column => column == "DOCID");
+        var inputRecordIds = datLines.Skip(1)
+            .Select(line => ProductionSetPostValidator.ParseDatLine(line, ColDelim, QuoteDelim)[docIdIndex])
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var targetedRecordIds = result.DatAnomalies
+            .Select(anomaly => anomaly.RecordID)
+            .Where(inputRecordIds.Contains)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        Assert.Equal(3, result.DatAnomalies.Count);
+        Assert.Equal(3, targetedRecordIds.Count);
+    }
+
+    [Fact]
+    public void Apply_BrokenFamilies_WithoutParentColumnAddsColumnOnlyOnce()
+    {
+        var (datLines, optLines) = CreateNoFamilyLines();
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: "broken-families",
+            chaosAmount: "3",
+            seed: 42);
+
+        var header = ProductionSetPostValidator.ParseDatLine(result.DatLines[0], ColDelim, QuoteDelim);
+
+        Assert.Equal(1, header.Count(h => h == "PARENTDOCID"));
+    }
+
+    [Fact]
+    public void Apply_OrphanAttachment_ControlNumberColumn_AuditsTheEmittedRecord()
+    {
+        var (datLines, optLines) = CreateNoFamilyLines("Control Number");
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.OrphanAttachment,
+            chaosAmount: "1",
+            seed: 42);
+
+        var header = ProductionSetPostValidator.ParseDatLine(result.DatLines[0], ColDelim, QuoteDelim);
+        int recordIdIndex = header.FindIndex(h => h == "Control Number");
+        int parentIdIndex = header.FindIndex(h => h == "PARENTDOCID");
+        var anomaly = Assert.Single(result.DatAnomalies);
+        int lineNumber = Array.FindIndex(
+            result.DatLines.ToArray(),
+            line => line.StartsWith($"{QuoteDelim}{anomaly.RecordID}{QuoteDelim}", StringComparison.Ordinal)) + 1;
+
+        Assert.True(lineNumber > 0);
+        Assert.Equal(lineNumber.ToString(System.Globalization.CultureInfo.InvariantCulture), anomaly.LineNumber);
+        var fields = ProductionSetPostValidator.ParseDatLine(result.DatLines[lineNumber - 1], ColDelim, QuoteDelim);
+        Assert.Equal("DOC_PARENT_MISSING", fields[parentIdIndex]);
+        Assert.False(string.IsNullOrEmpty(fields[recordIdIndex]));
     }
 
     [Fact]

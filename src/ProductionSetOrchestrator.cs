@@ -620,18 +620,22 @@ internal static class ProductionSetOrchestrator
             var datStream = materializer.OpenWriteStream(datPath);
             await using (datStream.ConfigureAwait(false))
             {
-                using var sw = new StreamWriter(datStream, datEncoding, leaveOpen: true);
-                for (int i = 0; i < result.DatLines.Count; i++)
-                {
-                    await sw.WriteAsync(result.DatLines[i].AsMemory(), cancellationToken).ConfigureAwait(false);
-                    await sw.WriteAsync(eol.AsMemory(), cancellationToken).ConfigureAwait(false);
-                }
-
-                await sw.FlushAsync(cancellationToken).ConfigureAwait(false);
+                await LoadFiles.LoadFileEmitter.EmitRenderedLinesAsync(
+                    datStream,
+                    result.DatLines,
+                    datEncoding,
+                    eol,
+                    cancellationToken).ConfigureAwait(false);
             }
 
             var datAuditTarget = Path.Combine(dataDir, "loadfile_properties.json");
-            var datAuditJson = LoadFileAuditWriter.GenerateAuditJson(datPath, request, fileDataList, result.DatAnomalies, LoadFileFormat.Dat);
+            var datAuditJson = LoadFileAuditWriter.GenerateAuditJson(
+                datPath,
+                request,
+                fileDataList,
+                result.DatAnomalies,
+                LoadFileFormat.Dat,
+                totalRecordsOverride: result.DatLines.Count - 1L);
             var datAuditStream = materializer.OpenWriteStream(datAuditTarget);
             await using (datAuditStream.ConfigureAwait(false))
             {
@@ -643,18 +647,22 @@ internal static class ProductionSetOrchestrator
             var optStream = materializer.OpenWriteStream(optPath);
             await using (optStream.ConfigureAwait(false))
             {
-                using var sw = new StreamWriter(optStream, optEncoding, leaveOpen: true);
-                for (int i = 0; i < result.OptLines.Count; i++)
-                {
-                    await sw.WriteAsync(result.OptLines[i].AsMemory(), cancellationToken).ConfigureAwait(false);
-                    await sw.WriteAsync(eol.AsMemory(), cancellationToken).ConfigureAwait(false);
-                }
-
-                await sw.FlushAsync(cancellationToken).ConfigureAwait(false);
+                await LoadFiles.LoadFileEmitter.EmitRenderedLinesAsync(
+                    optStream,
+                    result.OptLines,
+                    optEncoding,
+                    eol,
+                    cancellationToken).ConfigureAwait(false);
             }
 
             var optAuditTarget = optPath + "_properties.json";
-            var optAuditJson = LoadFileAuditWriter.GenerateAuditJson(optPath, request, fileDataList, result.OptAnomalies, LoadFileFormat.Opt);
+            var optAuditJson = LoadFileAuditWriter.GenerateAuditJson(
+                optPath,
+                request,
+                fileDataList,
+                result.OptAnomalies,
+                LoadFileFormat.Opt,
+                totalRecordsOverride: result.OptLines.Count);
             var optAuditStream = materializer.OpenWriteStream(optAuditTarget);
             await using (optAuditStream.ConfigureAwait(false))
             {

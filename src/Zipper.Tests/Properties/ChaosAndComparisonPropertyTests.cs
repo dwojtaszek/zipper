@@ -649,6 +649,30 @@ public sealed class ChaosAndComparisonPropertyTests
         var result1 = CrossFormatAnomalyApplier.Apply(new List<string>(datLines), new List<string>(optLines), scenarioOrTypes: chosenType, chaosAmount: "1", seed: seed);
         var result2 = CrossFormatAnomalyApplier.Apply(new List<string>(datLines), new List<string>(optLines), scenarioOrTypes: chosenType, chaosAmount: "1", seed: seed);
 
+        static void AssertFinalAuditLine(
+            IReadOnlyList<string> lines,
+            string file,
+            string recordId,
+            string lineNumber)
+        {
+            string marker = file == "loadfile.dat"
+                ? $"\u00fe{recordId}\u00fe"
+                : $"{recordId},";
+            int emittedLineNumber = Array.FindIndex(
+                lines.ToArray(),
+                line => line.StartsWith(marker, StringComparison.Ordinal)) + 1;
+            long reportedLineNumber = long.Parse(lineNumber, CultureInfo.InvariantCulture);
+
+            if (emittedLineNumber > 0)
+            {
+                Assert.Equal((long)emittedLineNumber, reportedLineNumber);
+            }
+            else
+            {
+                Assert.InRange(reportedLineNumber, 1, lines.Count + 1L);
+            }
+        }
+
         // Determinism
         Assert.Equal(result1.DatLines, result2.DatLines);
         Assert.Equal(result1.OptLines, result2.OptLines);
@@ -665,6 +689,23 @@ public sealed class ChaosAndComparisonPropertyTests
             Assert.False(string.IsNullOrEmpty(anomaly.Peer.RecordID));
             Assert.False(string.IsNullOrEmpty(anomaly.LineNumber));
             Assert.False(string.IsNullOrEmpty(anomaly.Peer.LineNumber));
+
+            var anomalyLines = anomaly.File == "loadfile.dat" ? result1.DatLines : result1.OptLines;
+            AssertFinalAuditLine(anomalyLines, anomaly.File!, anomaly.RecordID, anomaly.LineNumber);
+            var peerLines = anomaly.Peer.File == "loadfile.dat" ? result1.DatLines : result1.OptLines;
+            AssertFinalAuditLine(peerLines, anomaly.Peer.File, anomaly.Peer.RecordID, anomaly.Peer.LineNumber);
+        }
+
+        if (chosenType == ChaosAnomalyTypes.CrossFormat.DesyncOrder)
+        {
+            ChaosAnomaly optAnomaly = Assert.Single(result1.OptAnomalies);
+            int emittedLineNumber = Array.FindIndex(
+                result1.OptLines.ToArray(),
+                line => line.StartsWith($"{optAnomaly.RecordID},", StringComparison.Ordinal)) + 1;
+
+            Assert.True(emittedLineNumber > 0);
+            Assert.Equal(emittedLineNumber.ToString(CultureInfo.InvariantCulture), optAnomaly.LineNumber);
+            Assert.Equal(optAnomaly.LineNumber, Assert.Single(result1.DatAnomalies).Peer!.LineNumber);
         }
     }
 

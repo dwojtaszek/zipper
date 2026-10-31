@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using Zipper.LoadFiles;
 
 namespace Zipper;
@@ -96,14 +97,33 @@ internal static class LoadFileOnlyGenerator
         List<string> createdFiles,
         CancellationToken cancellationToken)
     {
-        if (ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario))
-        {
-            return await GenerateCrossFormatLoadFilesAsync(request, baseFileName, createWriter, createdFiles, cancellationToken).ConfigureAwait(false);
-        }
-
         var formatsToGenerate = (request.LoadFile.Formats is not null && request.LoadFile.Formats.Count > 0)
             ? request.LoadFile.Formats
             : new List<LoadFileFormat> { LoadFileFormat.Dat };
+
+        if (ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario))
+        {
+            var crossFormatResult = await GenerateCrossFormatLoadFilesAsync(request, baseFileName, createWriter, createdFiles, cancellationToken).ConfigureAwait(false);
+            var otherFormats = formatsToGenerate
+                .Where(format => format is not LoadFileFormat.Dat and not LoadFileFormat.Opt)
+                .ToList();
+            foreach (var format in otherFormats)
+            {
+                var otherFormatRequest = request.Clone();
+                otherFormatRequest.LoadFile = otherFormatRequest.LoadFile with { Formats = [format] };
+                otherFormatRequest.Chaos = otherFormatRequest.Chaos with
+                {
+                    ChaosMode = false,
+                    ChaosAmount = null,
+                    ChaosTypes = null,
+                    ChaosScenario = null,
+                };
+                string formatBaseFileName = $"{baseFileName}_{format.ToString().ToLowerInvariant()}";
+                await GenerateLoadFilesAsync(otherFormatRequest, formatBaseFileName, createWriter, createdFiles, cancellationToken).ConfigureAwait(false);
+            }
+
+            return crossFormatResult;
+        }
 
         string primaryLoadFilePath = string.Empty;
         string primaryPropertiesPath = string.Empty;
@@ -208,47 +228,71 @@ internal static class LoadFileOnlyGenerator
         createdFiles.Add(datPath);
         await using (datFileStream.ConfigureAwait(false))
         {
-            using var sw = new StreamWriter(datFileStream, datEncoding, leaveOpen: true);
-            for (int i = 0; i < result.DatLines.Count; i++)
-            {
-                await sw.WriteAsync(result.DatLines[i].AsMemory(), cancellationToken).ConfigureAwait(false);
-                await sw.WriteAsync(eol.AsMemory(), cancellationToken).ConfigureAwait(false);
-            }
-
-            await sw.FlushAsync(cancellationToken).ConfigureAwait(false);
+            await LoadFiles.LoadFileEmitter.EmitRenderedLinesAsync(
+                datFileStream,
+                result.DatLines,
+                datEncoding,
+                eol,
+                cancellationToken).ConfigureAwait(false);
         }
 
         string datPropertiesPath = Path.ChangeExtension(datPath, null) + "_properties.json";
-        await File.WriteAllTextAsync(
-            datPropertiesPath,
-            LoadFileAuditWriter.GenerateAuditJson(datPath, datRequest, records, result.DatAnomalies, LoadFileFormat.Dat),
-            cancellationToken).ConfigureAwait(false);
-        createdFiles.Add(datPropertiesPath);
+        string datAuditJson = LoadFileAuditWriter.GenerateAuditJson(
+            datPath,
+            datRequest,
+            records,
+            result.DatAnomalies,
+            LoadFileFormat.Dat,
+            totalRecordsOverride: result.DatLines.Count - 1L);
+        await WriteAuditFileAsync(datPropertiesPath, datAuditJson, createdFiles, cancellationToken).ConfigureAwait(false);
 
         // 5. Write mutated OPT
         var optFileStream = new FileStream(optPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
         createdFiles.Add(optPath);
         await using (optFileStream.ConfigureAwait(false))
         {
-            using var sw = new StreamWriter(optFileStream, optEncoding, leaveOpen: true);
-            for (int i = 0; i < result.OptLines.Count; i++)
-            {
-                await sw.WriteAsync(result.OptLines[i].AsMemory(), cancellationToken).ConfigureAwait(false);
-                await sw.WriteAsync(eol.AsMemory(), cancellationToken).ConfigureAwait(false);
-            }
-
-            await sw.FlushAsync(cancellationToken).ConfigureAwait(false);
+            await LoadFiles.LoadFileEmitter.EmitRenderedLinesAsync(
+                optFileStream,
+                result.OptLines,
+                optEncoding,
+                eol,
+                cancellationToken).ConfigureAwait(false);
         }
 
         string optPropertiesPath = optPath + "_properties.json";
-        await File.WriteAllTextAsync(
-            optPropertiesPath,
-            LoadFileAuditWriter.GenerateAuditJson(optPath, optRequest, records, result.OptAnomalies, LoadFileFormat.Opt),
-            cancellationToken).ConfigureAwait(false);
-        createdFiles.Add(optPropertiesPath);
+        string optAuditJson = LoadFileAuditWriter.GenerateAuditJson(
+            optPath,
+            optRequest,
+            records,
+            result.OptAnomalies,
+            LoadFileFormat.Opt,
+            totalRecordsOverride: result.OptLines.Count);
+        await WriteAuditFileAsync(optPropertiesPath, optAuditJson, createdFiles, cancellationToken).ConfigureAwait(false);
 
-        var (total, _) = LoadFileAuditWriter.ComputeRecordCounts(datRequest, records, LoadFileFormat.Dat);
-        return (datPath, datPropertiesPath, total);
+        return (datPath, datPropertiesPath, result.DatLines.Count - 1L);
+    }
+
+    private static async Task WriteAuditFileAsync(
+        string path,
+        string content,
+        List<string> createdFiles,
+        CancellationToken cancellationToken)
+    {
+        var stream = new FileStream(
+            path,
+            FileMode.CreateNew,
+            FileAccess.Write,
+            FileShare.None,
+            PerformanceConstants.DefaultBufferSize,
+            FileOptions.Asynchronous);
+        createdFiles.Add(path);
+
+        await using (stream.ConfigureAwait(false))
+        {
+            await using var writer = new StreamWriter(stream, new UTF8Encoding(false), leaveOpen: true);
+            await writer.WriteAsync(content.AsMemory(), cancellationToken).ConfigureAwait(false);
+            await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
