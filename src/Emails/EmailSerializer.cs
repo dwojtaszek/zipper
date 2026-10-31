@@ -5,7 +5,7 @@ using System.Text;
 namespace Zipper.Emails;
 
 /// <summary>
-/// Serializes an <see cref="Email"/> and optional attachment to EML bytes.
+/// Serializes an <see cref="Email"/> and optional attachment(s) to EML bytes.
 /// </summary>
 internal static class EmailSerializer
 {
@@ -14,8 +14,31 @@ internal static class EmailSerializer
     /// </summary>
     /// <param name="email">Email metadata and body content.</param>
     /// <param name="attachment">Optional attachment.</param>
+    /// <param name="seeded">Optional random for deterministic boundary generation.</param>
+    /// <param name="realism">Optional MIME realism emission options.</param>
     /// <returns>Byte array representing the EML file content.</returns>
-    public static byte[] ToEml(Email email, EmailAttachment? attachment, Random? seeded = null)
+    public static byte[] ToEml(
+        Email email,
+        EmailAttachment? attachment,
+        Random? seeded = null,
+        MimeRealismOptions? realism = null)
+    {
+        return ToEmlWithAttachments(email, attachment is not null ? new[] { attachment } : null, seeded, realism);
+    }
+
+    /// <summary>
+    /// Serializes an email template and optional attachments to EML bytes.
+    /// </summary>
+    /// <param name="email">Email metadata and body content.</param>
+    /// <param name="attachments">Optional attachments collection.</param>
+    /// <param name="seeded">Optional random for deterministic boundary generation.</param>
+    /// <param name="realism">Optional MIME realism emission options.</param>
+    /// <returns>Byte array representing the EML file content.</returns>
+    public static byte[] ToEmlWithAttachments(
+        Email email,
+        IReadOnlyList<EmailAttachment>? attachments,
+        Random? seeded = null,
+        MimeRealismOptions? realism = null)
     {
         ArgumentNullException.ThrowIfNull(email);
         using var ms = new MemoryStream();
@@ -23,28 +46,320 @@ internal static class EmailSerializer
         {
             NewLine = "\r\n",
         };
-        WriteToWriter(writer, email, attachment, seeded);
+        WriteToWriter(writer, email, attachments, seeded, realism);
         writer.Flush();
         return ms.ToArray();
     }
 
-    internal static void WriteToWriter(TextWriter writer, Email email, EmailAttachment? attachment, Random? seeded = null)
+    internal static void WriteToWriter(
+        TextWriter writer,
+        Email email,
+        EmailAttachment? attachment,
+        Random? seeded = null)
+    {
+        WriteToWriter(writer, email, attachment is not null ? new[] { attachment } : null, seeded, realism: null);
+    }
+
+    internal static void WriteToWriter(
+        TextWriter writer,
+        Email email,
+        IReadOnlyList<EmailAttachment>? attachments,
+        Random? seeded = null,
+        MimeRealismOptions? realism = null)
     {
         ArgumentNullException.ThrowIfNull(writer);
         ArgumentNullException.ThrowIfNull(email);
 
-        var boundary = attachment != null ? GenerateBoundary(seeded) : string.Empty;
-
-        BuildHeaders(writer, email, attachment, boundary);
-
-        if (attachment != null)
+        if (realism is null || !realism.IsEnabled)
         {
-            BuildMultipartContent(writer, email, attachment, boundary);
+            // Legacy path: byte-identical output parity
+            var attachment = attachments is not null && attachments.Count > 0 ? attachments[0] : null;
+            var boundary = attachment is not null ? GenerateBoundary(seeded) : string.Empty;
+
+            BuildHeaders(writer, email, attachment, boundary);
+
+            if (attachment is not null)
+            {
+                BuildMultipartContent(writer, email, attachment, boundary);
+            }
+            else
+            {
+                BuildSimpleContent(writer, email);
+            }
+
+            return;
+        }
+
+        // Realism-enabled path
+        WriteRealismToWriter(writer, email, attachments, seeded, realism);
+    }
+
+    private static void WriteRealismToWriter(
+        TextWriter writer,
+        Email email,
+        IReadOnlyList<EmailAttachment>? attachments,
+        Random? seeded,
+        MimeRealismOptions realism)
+    {
+        var effectiveAttachments = GetEffectiveAttachments(email, attachments, realism);
+        bool hasAttachments = effectiveAttachments.Count > 0;
+        bool hasAlternative = realism.MultipartAlternative && (!string.IsNullOrEmpty(email.HtmlBody) || email.Body.Length > 0);
+
+        string transferEncoding = realism.Base64Body ? "base64"
+            : realism.QuotedPrintableBody ? "quoted-printable"
+            : "8bit";
+
+        string topBoundary = (hasAttachments || hasAlternative) ? GenerateBoundary(seeded) : string.Empty;
+
+        BuildRealismHeaders(writer, email, hasAttachments, hasAlternative, topBoundary, transferEncoding, realism, seeded);
+
+        if (hasAttachments)
+        {
+            // Top-level is multipart/mixed
+            writer.WriteLine($"--{topBoundary}");
+            if (hasAlternative)
+            {
+                WriteAlternativeBody(writer, email, transferEncoding, seeded);
+            }
+            else
+            {
+                WriteBodyContent(writer, email.Body, "text/plain; charset=utf-8", transferEncoding);
+            }
+
+            writer.WriteLine();
+
+            foreach (var attach in effectiveAttachments)
+            {
+                WriteSingleAttachmentPart(writer, attach, topBoundary);
+            }
+
+            writer.WriteLine($"--{topBoundary}--");
+        }
+        else if (hasAlternative)
+        {
+            // Top-level is multipart/alternative
+            WriteAlternativeParts(writer, email, transferEncoding, topBoundary);
         }
         else
         {
-            BuildSimpleContent(writer, email);
+            // Single-part body
+            WriteBodyTextOnly(writer, email.Body, transferEncoding);
         }
+    }
+
+    private static IReadOnlyList<EmailAttachment> GetEffectiveAttachments(
+        Email email,
+        IReadOnlyList<EmailAttachment>? attachments,
+        MimeRealismOptions realism)
+    {
+        var list = new List<EmailAttachment>();
+        if (attachments is not null && attachments.Count > 0)
+        {
+            if (realism.MultiAttachment)
+            {
+                list.AddRange(attachments);
+            }
+            else
+            {
+                list.Add(attachments[0]);
+            }
+        }
+        else if (email.Attachments is not null && email.Attachments.Count > 0)
+        {
+            if (realism.MultiAttachment)
+            {
+                list.AddRange(email.Attachments);
+            }
+            else
+            {
+                list.Add(email.Attachments[0]);
+            }
+        }
+
+        return list;
+    }
+
+    private static void BuildRealismHeaders(
+        TextWriter writer,
+        Email email,
+        bool hasAttachments,
+        bool hasAlternative,
+        string boundary,
+        string transferEncoding,
+        MimeRealismOptions realism,
+        Random? seeded)
+    {
+        writer.WriteLine($"From: {email.From}");
+        writer.WriteLine($"To: {email.To}");
+
+        if (!string.IsNullOrEmpty(email.Cc))
+        {
+            writer.WriteLine($"Cc: {email.Cc}");
+        }
+
+        if (!string.IsNullOrEmpty(email.Bcc))
+        {
+            writer.WriteLine($"Bcc: {email.Bcc}");
+        }
+
+        string subjectToEmit = email.Subject;
+        if (realism.EncodedWords)
+        {
+            char enc = seeded is not null && seeded.Next(10) < 3 ? 'Q' : 'B';
+            subjectToEmit = Rfc2047Helper.EncodeSubject(
+                email.Subject,
+                fold: realism.HeaderFolding,
+                nonRfc: realism.DeliberatelyNonRfc,
+                preferredEncoding: enc);
+        }
+        else if (realism.HeaderFolding && subjectToEmit.Length > 75)
+        {
+            subjectToEmit = Rfc2047Helper.FoldHeaderLine("Subject: " + subjectToEmit)["Subject: ".Length..];
+        }
+
+        writer.WriteLine($"Subject: {subjectToEmit}");
+        writer.WriteLine($"Date: {email.SentDate.ToString("ddd, dd MMM yyyy HH:mm:ss zzz", CultureInfo.InvariantCulture)}");
+
+        if (!string.IsNullOrEmpty(email.MessageId))
+        {
+            writer.WriteLine($"Message-ID: {EnsureAngleBrackets(email.MessageId)}");
+        }
+
+        if (!string.IsNullOrEmpty(email.InReplyTo))
+        {
+            writer.WriteLine($"In-Reply-To: {EnsureAngleBrackets(email.InReplyTo)}");
+        }
+
+        if (!string.IsNullOrEmpty(email.References))
+        {
+            writer.WriteLine($"References: {email.References}");
+        }
+
+        writer.WriteLine("MIME-Version: 1.0");
+
+        if (email.IsHighPriority)
+        {
+            writer.WriteLine("X-Priority: 1");
+            writer.WriteLine("Priority: Urgent");
+        }
+
+        if (email.RequestReadReceipt)
+        {
+            writer.WriteLine($"Disposition-Notification-To: {email.From}");
+        }
+
+        if (!string.IsNullOrEmpty(email.ReplyTo))
+        {
+            writer.WriteLine($"Reply-To: {email.ReplyTo}");
+        }
+
+        if (hasAttachments)
+        {
+            writer.WriteLine($"Content-Type: multipart/mixed; boundary=\"{boundary}\"");
+            writer.WriteLine();
+        }
+        else if (hasAlternative)
+        {
+            writer.WriteLine($"Content-Type: multipart/alternative; boundary=\"{boundary}\"");
+            writer.WriteLine();
+        }
+        else
+        {
+            writer.WriteLine("Content-Type: text/plain; charset=utf-8");
+            writer.WriteLine($"Content-Transfer-Encoding: {transferEncoding}");
+            writer.WriteLine();
+        }
+    }
+
+    private static void WriteAlternativeBody(
+        TextWriter writer,
+        Email email,
+        string transferEncoding,
+        Random? seeded)
+    {
+        var altBoundary = GenerateBoundary(seeded);
+        writer.WriteLine($"Content-Type: multipart/alternative; boundary=\"{altBoundary}\"");
+        writer.WriteLine();
+        WriteAlternativeParts(writer, email, transferEncoding, altBoundary);
+    }
+
+    private static void WriteAlternativeParts(
+        TextWriter writer,
+        Email email,
+        string transferEncoding,
+        string altBoundary)
+    {
+        writer.WriteLine($"--{altBoundary}");
+        WriteBodyContent(writer, email.Body, "text/plain; charset=utf-8", transferEncoding);
+        writer.WriteLine();
+
+        var html = email.HtmlBody ?? $"<html><body><p>{System.Net.WebUtility.HtmlEncode(email.Body).Replace("\n", "<br/>\n")}</p></body></html>";
+        writer.WriteLine($"--{altBoundary}");
+        WriteBodyContent(writer, html, "text/html; charset=utf-8", transferEncoding);
+        writer.WriteLine();
+
+        writer.WriteLine($"--{altBoundary}--");
+    }
+
+    private static void WriteBodyContent(
+        TextWriter writer,
+        string body,
+        string contentType,
+        string transferEncoding)
+    {
+        writer.WriteLine($"Content-Type: {contentType}");
+        writer.WriteLine($"Content-Transfer-Encoding: {transferEncoding}");
+        writer.WriteLine();
+        WriteBodyTextOnly(writer, body, transferEncoding);
+    }
+
+    private static void WriteBodyTextOnly(TextWriter writer, string body, string transferEncoding)
+    {
+        if (transferEncoding == "quoted-printable")
+        {
+            writer.WriteLine(QuotedPrintableHelper.Encode(body));
+        }
+        else if (transferEncoding == "base64")
+        {
+            writer.WriteLine(Convert.ToBase64String(Encoding.UTF8.GetBytes(body), Base64FormattingOptions.InsertLineBreaks));
+        }
+        else
+        {
+            writer.WriteLine(body);
+        }
+    }
+
+    private static void WriteSingleAttachmentPart(TextWriter writer, EmailAttachment attachment, string boundary)
+    {
+        writer.WriteLine($"--{boundary}");
+
+        if (string.Equals(attachment.ContentType, "message/rfc822", StringComparison.OrdinalIgnoreCase))
+        {
+            writer.WriteLine($"Content-Type: message/rfc822; name=\"{attachment.FileName}\"");
+            writer.WriteLine("Content-Transfer-Encoding: 8bit");
+            writer.WriteLine($"Content-Disposition: attachment; filename=\"{attachment.FileName}\"");
+            writer.WriteLine();
+            writer.Write(Encoding.UTF8.GetString(attachment.Content));
+            writer.WriteLine();
+            return;
+        }
+
+        writer.WriteLine($"Content-Type: {GetContentType(attachment)}; name=\"{attachment.FileName}\"");
+        writer.WriteLine("Content-Transfer-Encoding: base64");
+
+        if (attachment.IsInline && !string.IsNullOrEmpty(attachment.ContentId))
+        {
+            writer.WriteLine($"Content-ID: <{attachment.ContentId}>");
+            writer.WriteLine($"Content-Disposition: inline; filename=\"{attachment.FileName}\"");
+        }
+        else
+        {
+            writer.WriteLine($"Content-Disposition: attachment; filename=\"{attachment.FileName}\"");
+        }
+
+        writer.WriteLine();
+        WriteBase64Content(writer, attachment.Content);
+        writer.WriteLine();
     }
 
     private static void BuildHeaders(TextWriter writer, Email email, EmailAttachment? attachment, string boundary)
@@ -129,10 +444,16 @@ internal static class EmailSerializer
         }
 
         writer.WriteLine();
+        WriteBase64Content(writer, attachment.Content);
+        writer.WriteLine();
+        writer.WriteLine($"--{boundary}--");
+    }
 
+    private static void WriteBase64Content(TextWriter writer, byte[] content)
+    {
         const int ChunkSize = 57 * 1024;
         int offset = 0;
-        int totalLength = attachment.Content.Length;
+        int totalLength = content.Length;
 
         int maxBase64Chars = ((ChunkSize + 2) / 3) * 4;
         int maxLineBreaks = maxBase64Chars / 76;
@@ -147,7 +468,7 @@ internal static class EmailSerializer
                 bool endsWithCrlf;
 
                 if (Convert.TryToBase64Chars(
-                    new ReadOnlySpan<byte>(attachment.Content, offset, count),
+                    new ReadOnlySpan<byte>(content, offset, count),
                     charBuffer,
                     out int charsWritten,
                     Base64FormattingOptions.InsertLineBreaks))
@@ -162,7 +483,7 @@ internal static class EmailSerializer
                     System.Diagnostics.Debug.Fail(
                         $"TryToBase64Chars failed unexpectedly for chunk of {count} bytes; falling back to string allocation.");
                     var base64 = Convert.ToBase64String(
-                        attachment.Content, offset, count, Base64FormattingOptions.InsertLineBreaks);
+                        content, offset, count, Base64FormattingOptions.InsertLineBreaks);
                     writer.Write(base64);
                     endsWithCrlf = base64.EndsWith("\r\n", StringComparison.Ordinal);
                 }
@@ -179,9 +500,6 @@ internal static class EmailSerializer
         {
             ArrayPool<char>.Shared.Return(charBuffer, clearArray: true);
         }
-
-        writer.WriteLine();
-        writer.WriteLine($"--{boundary}--");
     }
 
     private static void BuildSimpleContent(TextWriter writer, Email email)

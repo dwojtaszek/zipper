@@ -958,3 +958,21 @@ The encoding suite includes the #1283 policy-sensitive Case Key `encoding-local-
   - When `--with-threading` is omitted or false:
     - `EmailSerializer` shall not emit `Message-ID`, `In-Reply-To`, or `References` headers, maintaining 100% byte-identical output parity to legacy runs (Critical Rule 6).
     - Load Files shall omit the thread metadata Columns.
+
+## 25. Email MIME Realism Generation
+
+### FR-032: MIME Realism Emission Modes (`--mime-realism`)
+
+- **REQ-236**: An opt-in MIME Realism mode (`--mime-realism <level|tokens>`, with aliases `--email-mime-realism` and `--with-mime-realism`) shall configure realistic MIME structures on generated EML email files, deterministic per Seed, without modifying the default emission format when omitted:
+  - When `--mime-realism` is specified:
+    - Accepted values shall include named preset levels: `standard` (enables RFC 2047 encoded-words, header folding, quoted-printable text bodies, `multipart/alternative` plain/HTML representations, and multi-attachment selection) and `full` (enables standard realism plus base64 body encoding, bounded nested `message/rfc822` email attachments, and deliberately non-RFC adjacent encoded-words).
+    - Accepted values shall also include a comma-separated list of individual capability tokens: `encoded-words`, `header-folding`, `quoted-printable`, `base64-body`, `multipart-alternative`, `multi-attachment`, `nested-rfc822`, and `non-rfc` (deliberately non-RFC adjacent encoded-words without linear whitespace).
+    - Non-ASCII subject lines shall be encoded according to RFC 2047 using Base64 (`=?utf-8?B?...?=`) or Quoted-Printable (`=?utf-8?Q?...?=`) words bounded to ≤ 75 characters per encoded-word. A standard MIME decoder shall decode the encoded subject back to the exact original text.
+    - Long headers exceeding 78 characters shall be folded using CRLF followed by linear whitespace (space or tab) per RFC 5322.
+    - When `quoted-printable` or `base64-body` is enabled, the message or part shall declare the matching `Content-Transfer-Encoding` header and encode the body payload accordingly (with quoted-printable lines bounded to ≤ 76 characters and soft line breaks).
+    - When `multipart-alternative` is enabled, generated emails shall emit a `multipart/alternative` boundary enclosing both `text/plain` and `text/html` versions of the body.
+    - When `multi-attachment` is enabled and an email has attachments, the email may contain multiple attachments enclosed in `multipart/mixed` boundaries.
+    - When `nested-rfc822` is enabled, attachments may include nested emails formatted as `message/rfc822` parts up to a bounded nesting depth limit (default 2).
+    - When `--mime-realism` is specified without `--type eml` (or `eml` participating in `--types`), a warning shall be written to standard error while execution proceeds.
+  - When `--mime-realism` is omitted or disabled:
+    - `EmailSerializer` and `EmlFileGenerator` shall preserve 100% byte-identical output parity to legacy runs (Critical Rule 6), retaining single-line bare-ASCII headers, `text/plain` 8-bit bodies, and at most one base64 attachment.

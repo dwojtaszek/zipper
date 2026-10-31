@@ -49,6 +49,11 @@
 | **Thread ID** | The document identifier of the root **Email** of a conversation thread (`DOC00000001` or root Bates number), populated in the `Thread ID` / `THREAD ID` / `THREAD_ID` **Column** for all members of the thread. | Conversation ID, thread group |
 | **Inclusive Email** | An **Email** in a thread containing unique content not subsumed by any subsequent reply (a leaf node in the thread tree), indicated by `"Y"` (or `"N"` for subsumed ancestor messages) in the `Inclusive` / `INCLUSIVE` **Column**. | Inclusive message, thread leaf |
 | **Thread Parent** | The document identifier of the immediate parent **Email** within a conversation thread, populated in the `Thread Parent` / `THREAD PARENT` / `THREAD_PARENT` **Column** (empty for root messages and attachment family children). | Parent doc, parent thread ID |
+| **MIME Realism** | An opt-in generation mode (`--mime-realism`, aliases `--email-mime-realism`, `--with-mime-realism`) that emits realistic MIME structures (RFC 2047 encoded-words, header folding, Quoted-Printable/Base64 body encodings, `multipart/alternative`, multi-attachment parts, and bounded nested `message/rfc822` emails) on generated **Email** files. | MIME diversity, realistic MIME |
+| **RFC 2047 Encoded-Word** | A MIME-encoded ASCII token sequence (`=?utf-8?B?...?=` or `=?utf-8?Q?...?=`) used to represent non-ASCII text in email header fields, bounded to ≤ 75 characters per encoded-word. | Encoded word, MIME word |
+| **Header Folding** | The RFC 5322 continuation of long header fields across multiple lines separated by CRLF and linear whitespace (space or tab). | MIME folding, line folding |
+| **Multipart Diversity** | The emission of structured MIME multipart structures (`multipart/alternative` for text/plain and text/html bodies, `multipart/mixed` for messages with multiple attachments). | Multipart email, alternate body |
+| **Nested RFC 822** | A bounded attached **Email** formatted as a `message/rfc822` part within a parent **Email**'s MIME container up to a configured nesting depth. | Attached email, embedded EML, recursive email |
 
 ---
 

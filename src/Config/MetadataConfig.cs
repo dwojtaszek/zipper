@@ -22,6 +22,10 @@ public record MetadataConfig
 
     public bool WithThreading { get; init; }
 
+    public string? MimeRealism { get; init; }
+
+    public Emails.MimeRealismOptions GetMimeRealismOptions() => Emails.MimeRealismOptions.Parse(this.MimeRealism);
+
     internal bool ShouldIncludeEmlColumns(OutputConfig output) => output.HasFileType("eml");
 
     internal bool ShouldIncludeMetadataColumns(OutputConfig output) => this.WithMetadata || output.HasFileType("eml");

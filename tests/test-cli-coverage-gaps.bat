@@ -195,6 +195,36 @@ if !ZIPPER_EXIT! equ 0 (
     set /a FAILED+=1
 )
 
+echo [ INFO ] Test: --mime-realism warning emitted for non-eml type
+set "ERR_FILE=%TEMP%\zipper_realism_err_%RANDOM%.txt"
+call "%ZIPPER_CMD%" --type pdf --count 5 --output-path "%TEST_OUTPUT_DIR%\mime-realism-warn1" --mime-realism standard 2> "%ERR_FILE%"
+set "ZIPPER_EXIT=!ERRORLEVEL!"
+if !ZIPPER_EXIT! equ 0 (
+    findstr /c:"Warning: --mime-realism is only meaningful when --type eml (or eml participates in --types) is specified." "%ERR_FILE%" > nul 2>&1
+    if !ERRORLEVEL! equ 0 (
+        echo [ PASS ] PASS: --mime-realism warning emitted for non-eml type
+        set /a PASSED+=1
+    ) else (
+        echo [ ERROR ] FAIL: --mime-realism warning NOT emitted for non-eml type
+        set /a FAILED+=1
+    )
+) else (
+    echo [ ERROR ] FAIL: --mime-realism non-eml type command failed with exit code !ZIPPER_EXIT!
+    set /a FAILED+=1
+)
+if exist "%ERR_FILE%" del /f /q "%ERR_FILE%"
+
+echo [ INFO ] Test: --mime-realism produces realistic EML output
+call "%ZIPPER_CMD%" --type eml --count 5 --seed 42 --output-path "%TEST_OUTPUT_DIR%\mime-realism-gen" --mime-realism standard > nul 2>&1
+set "ZIPPER_EXIT=!ERRORLEVEL!"
+if !ZIPPER_EXIT! equ 0 (
+    echo [ PASS ] PASS: --mime-realism eml generation succeeded
+    set /a PASSED+=1
+) else (
+    echo [ ERROR ] FAIL: --mime-realism eml generation command failed with exit code !ZIPPER_EXIT!
+    set /a FAILED+=1
+)
+
 REM --- Cleanup ---
 if exist "%TEST_OUTPUT_DIR%" rmdir /s /q "%TEST_OUTPUT_DIR%"
 

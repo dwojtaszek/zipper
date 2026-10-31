@@ -11,6 +11,7 @@ public sealed class MetadataModule : CliModule
     private bool _withCollectionMetadata;
     private bool _withFamilies;
     private bool _withThreading;
+    private string? _mimeRealism;
     private string? _columnProfile;
     private int? _seed;
     private string? _dateFormat;
@@ -21,11 +22,12 @@ public sealed class MetadataModule : CliModule
     public override IReadOnlyCollection<string> OwnedFlags { get; } = new[]
     {
         "--with-metadata", "--with-collection-metadata", "--with-families", "--with-threading", "--with-email-threading",
+        "--mime-realism", "--email-mime-realism", "--with-mime-realism",
         "--column-profile", "--seed", "--date-format", "--empty-percentage", "--custodian-count",
         "--attachment-rate",
     };
 
-    public override bool TakesValue(string flag) => flag is not "--with-metadata" and not "--with-collection-metadata" and not "--with-families" and not "--with-threading" and not "--with-email-threading";
+    public override bool TakesValue(string flag) => flag is not "--with-metadata" and not "--with-collection-metadata" and not "--with-families" and not "--with-threading" and not "--with-email-threading" and not "--with-mime-realism";
 
     public override bool TryApply(string flag, string? value)
     {
@@ -36,6 +38,23 @@ public sealed class MetadataModule : CliModule
             case "--with-families": _withFamilies = true; return true;
             case "--with-threading":
             case "--with-email-threading": _withThreading = true; return true;
+            case "--mime-realism":
+            case "--email-mime-realism":
+                if (value is null)
+                {
+                    Console.Error.WriteLine($"Error: {flag} requires a value.");
+                    return false;
+                }
+                if (!Emails.MimeRealismOptions.TryValidate(value, out var mimeErr))
+                {
+                    Console.Error.WriteLine($"Error: {mimeErr}");
+                    return false;
+                }
+                _mimeRealism = value;
+                return true;
+            case "--with-mime-realism":
+                _mimeRealism = "standard";
+                return true;
             case "--column-profile": _columnProfile = value; return true;
             case "--date-format": _dateFormat = value; return true;
             case "--seed":
@@ -71,6 +90,7 @@ public sealed class MetadataModule : CliModule
     public bool WithCollectionMetadata => _withCollectionMetadata;
     public bool WithFamilies => _withFamilies;
     public bool WithThreading => _withThreading;
+    public string? MimeRealism => _mimeRealism;
     public int AttachmentRate => _attachmentRate;
     public string? ColumnProfile => _columnProfile;
     public int? Seed => _seed;
@@ -111,6 +131,11 @@ public sealed class MetadataModule : CliModule
         if (_withThreading && !includesEml)
         {
             Console.Error.WriteLine("Warning: --with-threading is only meaningful when --type eml (or eml participates in --types) is specified.");
+        }
+
+        if (_mimeRealism is not null && !includesEml)
+        {
+            Console.Error.WriteLine("Warning: --mime-realism is only meaningful when --type eml (or eml participates in --types) is specified.");
         }
 
         if (HasColumnProfile && !ColumnProfileLoader.IsBuiltInProfile(_columnProfile!))
@@ -172,6 +197,7 @@ public sealed class MetadataModule : CliModule
             WithFamilies = _withFamilies,
             WithCollectionMetadata = _withCollectionMetadata,
             WithThreading = _withThreading,
+            MimeRealism = _mimeRealism,
         };
         return true;
     }

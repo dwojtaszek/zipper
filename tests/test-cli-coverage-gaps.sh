@@ -285,6 +285,37 @@ else
     fail "--with-threading eml generation command failed"
 fi
 
+print_info "Test: --mime-realism warning emitted for non-eml type"
+err_file=$(mktemp)
+if zipper --type pdf --count 5 --output-path "$TEST_OUTPUT_DIR/mime-realism-warn1" \
+    --mime-realism standard 2> "$err_file"; then
+    if grep -q "Warning: --mime-realism is only meaningful when --type eml (or eml participates in --types) is specified." "$err_file"; then
+        pass "--mime-realism warning emitted for non-eml type"
+    else
+        fail "--mime-realism warning NOT emitted for non-eml type"
+    fi
+else
+    fail "--mime-realism non-eml type command failed"
+fi
+rm -f "$err_file"
+
+print_info "Test: --mime-realism produces MIME realistic structures in EML"
+if zipper --type eml --count 5 --seed 42 --output-path "$TEST_OUTPUT_DIR/mime-realism-gen" \
+    --mime-realism standard > /dev/null 2>&1; then
+    zip_file=$(find "$TEST_OUTPUT_DIR/mime-realism-gen" -name "*.zip" -print -quit)
+    if [[ -n "$zip_file" ]]; then
+        if unzip -p "$zip_file" "*00000001.eml" | grep -q "MIME-Version: 1.0"; then
+            pass "--mime-realism generates valid EML with MIME structure"
+        else
+            fail "--mime-realism missing MIME structure in 00000001.eml"
+        fi
+    else
+        fail "--mime-realism archive not found"
+    fi
+else
+    fail "--mime-realism eml generation command failed"
+fi
+
 # --- Summary ---
 
 echo ""
