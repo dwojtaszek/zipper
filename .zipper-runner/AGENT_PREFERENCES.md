@@ -57,10 +57,10 @@ Set priority: `0` = don't use, `1` = best, `2` = good, `3` = fallback.
 | `claude` | `claude-sonnet-4-20250514-thinking` (Sonnet 4 thinking) | 0|
 | `claude` | `claude-opus-4-20250514` (Opus 4) | 0|
 | `claude` | `claude-opus-4-20250514-thinking` (Opus 4 thinking) | 0|
-| `claude` | `default` | 1|
+| `claude` | `default` | 0|
 | `claude` | `claude-sonnet-4-6-20250622` (Sonnet 4.6) | 0|
 | `agy` | `default` | 0|
-| `agy` | `claude-sonnet-4-6` | 2|
+| `agy` | `claude-sonnet-4-6` | 0|
 | `agy` | `claude-opus-4-6-thinking` | 2|
 | `agy` | `gemini-3.8-flash-high` | 1|
 | `agy` | `gemini-3.8-flash-medium` | 0|
@@ -76,8 +76,8 @@ Set priority: `0` = don't use, `1` = best, `2` = good, `3` = fallback.
 | `hermes` | `default` | 0|
 | `hermes` | `stepfun/step-3.7-flash:free` | 0|
 | `hermes` | `deepseek-ai/deepseek-v4-flash` | 0|
-| `droid` | `gpt-6-luna` | 3|
-| `codex` | `openai/gpt-5.6-terra` | 3|
+| `droid` | `claude-haiku-5-5` | 3|
+| `codex` | `openai/gpt-5.6-terra` | 0|
 | `codex` | `openai/gpt-5.5` | 0|
 | `codex` | `openai/gpt-5.4` | 0|
 
