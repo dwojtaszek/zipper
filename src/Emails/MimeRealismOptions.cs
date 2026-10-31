@@ -121,6 +121,7 @@ public record MimeRealismOptions
                 case "non-rfc":
                 case "deliberately-non-rfc":
                     nonRfc = true;
+                    encodedWords = true;
                     break;
             }
         }
@@ -128,7 +129,7 @@ public record MimeRealismOptions
         return new MimeRealismOptions
         {
             IsEnabled = true,
-            EncodedWords = encodedWords,
+            EncodedWords = encodedWords || nonRfc,
             HeaderFolding = headerFolding,
             QuotedPrintableBody = qpBody,
             Base64Body = base64Body,

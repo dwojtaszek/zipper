@@ -77,6 +77,28 @@ public sealed class EmailSerializerPropertyTests
         Assert.All(encodedWords, word => Assert.InRange(word.Length, 1, 75));
     }
 
+    [Property]
+    public void MimeRealismOptions_Parse_NonRfcTokens_AlwaysImpliesEncodedWords(bool includePrefix, bool includeSuffix, int seed)
+    {
+        var tokens = new List<string>();
+        if (includePrefix)
+        {
+            tokens.Add((seed & 1) == 0 ? "qp" : "header-folding");
+        }
+        tokens.Add((seed & 2) == 0 ? "non-rfc" : "deliberately-non-rfc");
+        if (includeSuffix)
+        {
+            tokens.Add((seed & 4) == 0 ? "multipart" : "nested");
+        }
+
+        string input = string.Join(",", tokens);
+        var parsed = MimeRealismOptions.Parse(input);
+
+        Assert.True(parsed.IsEnabled);
+        Assert.True(parsed.DeliberatelyNonRfc);
+        Assert.True(parsed.EncodedWords, "Non-RFC token must always imply encoded words emission.");
+    }
+
     private static string GetSubjectHeader(string message)
     {
         string[] lines = message[..message.IndexOf("\r\n\r\n", StringComparison.Ordinal)]
