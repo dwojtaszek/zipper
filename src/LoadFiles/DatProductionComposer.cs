@@ -192,11 +192,26 @@ internal sealed class DatProductionComposer
         if (this.request.Metadata.WithThreading)
         {
             var isEml = string.Equals(wi.EffectiveFileType(this.request), "eml", StringComparison.Ordinal) && !ctx.IsChild;
-            var threadNode = isEml && fileData.Email?.ThreadId is null
-                ? EmailThreadPlan.GetOrCreate(this.request).GetNode(wi.Index)
-                : null;
+            EmailThreadNode? threadNode = null;
+            if (isEml)
+            {
+                if (fileData.Email?.ThreadId is null)
+                {
+                    threadNode = EmailThreadPlan.GetOrCreate(this.request).GetNode(wi.Index);
+                }
+                else if (fileData.Email.IsInclusive is null || fileData.Email.ThreadParentId is null)
+                {
+                    var candidate = EmailThreadPlan.GetOrCreate(this.request).GetNode(wi.Index);
+                    if (string.Equals(fileData.Email.ThreadId, candidate.ThreadDocId, StringComparison.Ordinal))
+                    {
+                        threadNode = candidate;
+                    }
+                }
+            }
+
             var threadId = isEml ? fileData.Email?.ThreadId ?? threadNode?.ThreadDocId ?? string.Empty : string.Empty;
-            var inclusive = isEml ? (fileData.Email?.IsInclusive == true || (fileData.Email?.IsInclusive is null && threadNode?.IsInclusive == true) ? "Y" : (fileData.Email?.IsInclusive == false || (fileData.Email?.IsInclusive is null && threadNode?.IsInclusive == false) ? "N" : string.Empty)) : string.Empty;
+            var isInclusive = fileData.Email?.IsInclusive ?? threadNode?.IsInclusive;
+            var inclusive = isEml && isInclusive.HasValue ? (isInclusive.Value ? "Y" : "N") : string.Empty;
             var threadParent = isEml ? fileData.Email?.ThreadParentId ?? threadNode?.ThreadParentDocId ?? string.Empty : string.Empty;
 
             v.Add(threadId);

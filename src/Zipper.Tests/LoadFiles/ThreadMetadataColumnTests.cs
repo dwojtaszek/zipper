@@ -298,6 +298,245 @@ public class ThreadMetadataColumnTests
         Assert.Contains(records[0].Values[inclusiveIdx], new[] { "Y", "N" });
     }
 
+    [Fact]
+    public void DatProductionComposer_WithPartialThreadMetadataMatchingPlan_FillsMissingFieldsFromPlan()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 1 },
+            Metadata = new MetadataConfig { Seed = 42, WithThreading = true },
+            Production = new ProductionConfig { ProductionSet = true },
+        };
+
+        var planNode = EmailThreadPlan.GetOrCreate(request).GetNode(1);
+        var composer = new DatComposer(request, WriterMode.ProductionSet);
+        var files = new[]
+        {
+            new FileData
+            {
+                WorkItem = new FileWorkItem { Index = 1, FileName = "00000001.eml" },
+                Email = new Email
+                {
+                    To = "to@example.com",
+                    From = "from@example.com",
+                    Subject = "Test",
+                    SentDate = DateTime.UtcNow,
+                    ThreadId = planNode.ThreadDocId, // Matches plan
+                    IsInclusive = null, // Missing
+                    ThreadParentId = null, // Missing
+                },
+            },
+        };
+
+        var records = composer.Compose(files).ToList();
+        var headers = composer.HeaderColumns.ToList();
+        int threadIdIdx = headers.IndexOf("Thread ID");
+        int inclusiveIdx = headers.IndexOf("Inclusive");
+        int parentIdx = headers.IndexOf("Thread Parent");
+
+        Assert.Equal(planNode.ThreadDocId, records[0].Values[threadIdIdx]);
+        Assert.Equal(planNode.IsInclusive ? "Y" : "N", records[0].Values[inclusiveIdx]);
+        Assert.Equal(planNode.ThreadParentDocId, records[0].Values[parentIdx]);
+    }
+
+    [Fact]
+    public void DatProductionComposer_WithPartialThreadMetadataMismatchedPlan_DoesNotUseMismatchedNode()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 1 },
+            Metadata = new MetadataConfig { Seed = 42, WithThreading = true },
+            Production = new ProductionConfig { ProductionSet = true },
+        };
+
+        var composer = new DatComposer(request, WriterMode.ProductionSet);
+        var files = new[]
+        {
+            new FileData
+            {
+                WorkItem = new FileWorkItem { Index = 1, FileName = "00000001.eml" },
+                Email = new Email
+                {
+                    To = "to@example.com",
+                    From = "from@example.com",
+                    Subject = "Test",
+                    SentDate = DateTime.UtcNow,
+                    ThreadId = "MISMATCHED_THREAD_ID", // Does NOT match plan
+                    IsInclusive = null,
+                    ThreadParentId = null,
+                },
+            },
+        };
+
+        var records = composer.Compose(files).ToList();
+        var headers = composer.HeaderColumns.ToList();
+        int threadIdIdx = headers.IndexOf("Thread ID");
+        int inclusiveIdx = headers.IndexOf("Inclusive");
+        int parentIdx = headers.IndexOf("Thread Parent");
+
+        Assert.Equal("MISMATCHED_THREAD_ID", records[0].Values[threadIdIdx]);
+        Assert.Equal(string.Empty, records[0].Values[inclusiveIdx]);
+        Assert.Equal(string.Empty, records[0].Values[parentIdx]);
+    }
+
+    [Fact]
+    public void DatStandardComposer_WithPartialThreadMetadataMatchingPlan_FillsMissingFieldsFromPlan()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 1 },
+            Metadata = new MetadataConfig { Seed = 42, WithThreading = true },
+        };
+
+        var planNode = EmailThreadPlan.GetOrCreate(request).GetNode(1);
+        var composer = new DatComposer(request, WriterMode.Standard);
+        var files = new[]
+        {
+            new FileData
+            {
+                WorkItem = new FileWorkItem { Index = 1, FileName = "00000001.eml", FilePathInZip = "NATIVES/00000001.eml" },
+                Email = new Email
+                {
+                    To = "to@example.com",
+                    From = "from@example.com",
+                    Subject = "Test",
+                    SentDate = DateTime.UtcNow,
+                    ThreadId = planNode.ThreadDocId,
+                    IsInclusive = null,
+                    ThreadParentId = null,
+                },
+            },
+        };
+
+        var records = composer.Compose(files).ToList();
+        var headers = composer.HeaderColumns.ToList();
+        int threadIdIdx = headers.IndexOf("Thread ID");
+        int inclusiveIdx = headers.IndexOf("Inclusive");
+        int parentIdx = headers.IndexOf("Thread Parent");
+
+        Assert.Equal(planNode.ThreadDocId, records[0].Values[threadIdIdx]);
+        Assert.Equal(planNode.IsInclusive ? "Y" : "N", records[0].Values[inclusiveIdx]);
+        Assert.Equal(planNode.ThreadParentDocId, records[0].Values[parentIdx]);
+    }
+
+    [Fact]
+    public void DatStandardComposer_WithPartialThreadMetadataMismatchedPlan_DoesNotUseMismatchedNode()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 1 },
+            Metadata = new MetadataConfig { Seed = 42, WithThreading = true },
+        };
+
+        var composer = new DatComposer(request, WriterMode.Standard);
+        var files = new[]
+        {
+            new FileData
+            {
+                WorkItem = new FileWorkItem { Index = 1, FileName = "00000001.eml", FilePathInZip = "NATIVES/00000001.eml" },
+                Email = new Email
+                {
+                    To = "to@example.com",
+                    From = "from@example.com",
+                    Subject = "Test",
+                    SentDate = DateTime.UtcNow,
+                    ThreadId = "MISMATCHED_THREAD_ID",
+                    IsInclusive = null,
+                    ThreadParentId = null,
+                },
+            },
+        };
+
+        var records = composer.Compose(files).ToList();
+        var headers = composer.HeaderColumns.ToList();
+        int threadIdIdx = headers.IndexOf("Thread ID");
+        int inclusiveIdx = headers.IndexOf("Inclusive");
+        int parentIdx = headers.IndexOf("Thread Parent");
+
+        Assert.Equal("MISMATCHED_THREAD_ID", records[0].Values[threadIdIdx]);
+        Assert.Equal(string.Empty, records[0].Values[inclusiveIdx]);
+        Assert.Equal(string.Empty, records[0].Values[parentIdx]);
+    }
+
+    [Fact]
+    public void CsvComposer_WithPartialThreadMetadataMatchingPlan_FillsMissingFieldsFromPlan()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 1 },
+            Metadata = new MetadataConfig { Seed = 42, WithThreading = true },
+        };
+
+        var planNode = EmailThreadPlan.GetOrCreate(request).GetNode(1);
+        var composer = new CsvComposer(request);
+        var files = new[]
+        {
+            new FileData
+            {
+                WorkItem = new FileWorkItem { Index = 1, FileName = "00000001.eml", FilePathInZip = "folder/00000001.eml", FileType = "eml" },
+                Email = new Email
+                {
+                    To = "to@example.com",
+                    From = "from@example.com",
+                    Subject = "Test",
+                    SentDate = DateTime.UtcNow,
+                    ThreadId = planNode.ThreadDocId,
+                    IsInclusive = null,
+                    ThreadParentId = null,
+                },
+            },
+        };
+
+        var records = composer.Compose(files).ToList();
+        var headers = composer.HeaderColumns.ToList();
+        int threadIdIdx = headers.IndexOf("THREAD ID");
+        int inclusiveIdx = headers.IndexOf("INCLUSIVE");
+        int parentIdx = headers.IndexOf("THREAD PARENT");
+
+        Assert.Equal(planNode.ThreadDocId, records[0].Values[threadIdIdx]);
+        Assert.Equal(planNode.IsInclusive ? "Y" : "N", records[0].Values[inclusiveIdx]);
+        Assert.Equal(planNode.ThreadParentDocId, records[0].Values[parentIdx]);
+    }
+
+    [Fact]
+    public void CsvComposer_WithPartialThreadMetadataMismatchedPlan_DoesNotUseMismatchedNode()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 1 },
+            Metadata = new MetadataConfig { Seed = 42, WithThreading = true },
+        };
+
+        var composer = new CsvComposer(request);
+        var files = new[]
+        {
+            new FileData
+            {
+                WorkItem = new FileWorkItem { Index = 1, FileName = "00000001.eml", FilePathInZip = "folder/00000001.eml", FileType = "eml" },
+                Email = new Email
+                {
+                    To = "to@example.com",
+                    From = "from@example.com",
+                    Subject = "Test",
+                    SentDate = DateTime.UtcNow,
+                    ThreadId = "MISMATCHED_THREAD_ID",
+                    IsInclusive = null,
+                    ThreadParentId = null,
+                },
+            },
+        };
+
+        var records = composer.Compose(files).ToList();
+        var headers = composer.HeaderColumns.ToList();
+        int threadIdIdx = headers.IndexOf("THREAD ID");
+        int inclusiveIdx = headers.IndexOf("INCLUSIVE");
+        int parentIdx = headers.IndexOf("THREAD PARENT");
+
+        Assert.Equal("MISMATCHED_THREAD_ID", records[0].Values[threadIdIdx]);
+        Assert.Equal(string.Empty, records[0].Values[inclusiveIdx]);
+        Assert.Equal(string.Empty, records[0].Values[parentIdx]);
+    }
+
     private static FileGenerationRequest CreateMixedSourceRequest()
     {
         var sourceRecords = new[]

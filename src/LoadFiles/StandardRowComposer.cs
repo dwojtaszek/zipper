@@ -1,3 +1,5 @@
+using Zipper.Emails;
+
 namespace Zipper.LoadFiles;
 
 /// <summary>
@@ -64,9 +66,22 @@ internal abstract class StandardRowComposer : ILoadFileComposer
             var recordType = wi.EffectiveFileType(this.request);
             var recordIsEml = string.Equals(recordType, "eml", StringComparison.Ordinal);
             var recordIsTiff = string.Equals(recordType, "tiff", StringComparison.Ordinal);
-            var threadNode = this.request.Metadata.WithThreading && recordIsEml && fileData.Email?.ThreadId is null
-                ? Emails.EmailThreadPlan.GetOrCreate(this.request).GetNode(wi.Index)
-                : null;
+            EmailThreadNode? threadNode = null;
+            if (this.request.Metadata.WithThreading && recordIsEml)
+            {
+                if (fileData.Email?.ThreadId is null)
+                {
+                    threadNode = Emails.EmailThreadPlan.GetOrCreate(this.request).GetNode(wi.Index);
+                }
+                else if (fileData.Email.IsInclusive is null || fileData.Email.ThreadParentId is null)
+                {
+                    var candidate = Emails.EmailThreadPlan.GetOrCreate(this.request).GetNode(wi.Index);
+                    if (string.Equals(fileData.Email.ThreadId, candidate.ThreadDocId, StringComparison.Ordinal))
+                    {
+                        threadNode = candidate;
+                    }
+                }
+            }
 
             // Draw order must stay metadata-then-email to match historical output.
             // In a File Type mix, Email values are drawn only for Email records (blank elsewhere).
