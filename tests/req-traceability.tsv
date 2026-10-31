@@ -736,7 +736,7 @@ REQ-234	unit	ChaosModuleTests.TryBuild_NonCrossFormatScenario_WithProductionSet_
 REQ-234	unit	ChaosAndComparisonPropertyTests.CrossFormatAnomalyApplier_Apply_ShouldBeDeterministicAndAuditReciprocalPeers	Property: coordinated cross-format anomaly injection is deterministic and records reciprocal peer references
 REQ-234	unit	CrossFormatAnomalyApplierTests.Apply_DesyncPagecount_OnePageDocumentEmitsSevenColumnOptRow	Added OPT continuation rows retain the seven-column row shape
 REQ-234	unit	CrossFormatAnomalyApplierTests.Apply_CombinedFamilyScenario_AuditsRemovedDatRowsAtFinalGapLine	Removed DAT records map to their final output gap line
-REQ-234	unit	CrossFormatAnomalyApplierTests.Apply_MissingChild_NoExistingFamilyCreatesRelatedDatChildAndRemovesItsOptDocument	No-family fallback links the DAT child to its parent, removes the matching OPT document, and audits its final gap line
+REQ-234	unit	CrossFormatAnomalyApplierTests.Apply_MissingChild_NoExistingFamilyCreatesMissingDatChildAndRetainsItsOptDocument	No-family fallback links the DAT child to its parent, retains the matching OPT document, and audits its final gap line
 REQ-234	unit	CrossFormatAnomalyApplierTests.Apply_BrokenFamilies_WithoutParentColumnAddsColumnOnlyOnce	Family scenarios reuse the added PARENTDOCID column
 REQ-234	unit	CrossFormatAnomalyApplierTests.Apply_OrphanAttachment_ControlNumberColumn_AuditsTheEmittedRecord	Orphan attachment audit RecordID matches the emitted Control Number
 REQ-234	unit	ChaosScenarioTests.LoadfileOnly_CrossFormatScenario_PreservesOtherSelectedFormats	Additional selected Load File Formats are emitted without cross-format anomalies or Audit File collisions
