@@ -50,6 +50,7 @@ if not exist "%PROD_DIR%\TEXT\" ( echo [ ERROR ] Missing TEXT dir & exit /b 1 )
 if not exist "%PROD_DIR%\DATA\loadfile.dat" ( echo [ ERROR ] Missing DAT load file & exit /b 1 )
 if not exist "%PROD_DIR%\DATA\loadfile.opt" ( echo [ ERROR ] Missing OPT load file & exit /b 1 )
 if not exist "%PROD_DIR%\_manifest.json" ( echo [ ERROR ] Missing manifest JSON & exit /b 1 )
+if not exist "%PROD_DIR%\_validation_report.json" ( echo [ ERROR ] Missing validation report & exit /b 1 )
 
 :: Verify volumes (10 docs / 3 = 4 volumes)
 if not exist "%PROD_DIR%\NATIVES\VOL001\" ( echo [ ERROR ] Missing VOL001 & exit /b 1 )
@@ -68,6 +69,8 @@ set "MAX_PRODUCTION_ID_BYTES=250"
 
 :: Verify manifest metadata block (Azure-safe contract, REQ-225)
 powershell -NoProfile -Command ^
+  "$report = Get-Content (Join-Path '%PROD_DIR%' '_validation_report.json') -Raw | ConvertFrom-Json;" ^
+  "if ($report.status -ne 'passed' -or $report.errorCount -ne 0) { throw 'Production Set validation report did not pass' }" ^
   "$metadata = (Get-Content (Join-Path '%PROD_DIR%' '_manifest.json') -Raw | ConvertFrom-Json).metadata;" ^
   "if (-not $metadata) { throw 'manifest metadata block missing' }" ^
   "foreach ($key in @('production_id','bates_number_start','bates_number_end','volume_count'))" ^

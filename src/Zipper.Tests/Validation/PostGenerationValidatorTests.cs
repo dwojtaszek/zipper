@@ -489,14 +489,17 @@ public class PostGenerationValidatorTests : TempDirectoryTestBase
             Directory.CreateDirectory(dataDir);
             var nativesDir = Path.Combine(tempDir, "NATIVES");
             Directory.CreateDirectory(nativesDir);
+            var imagesDir = Path.Combine(tempDir, "IMAGES", "VOL001");
+            Directory.CreateDirectory(imagesDir);
 
             var datPath = Path.Combine(dataDir, "loadfile.dat");
-            File.WriteAllText(datPath, "DOCID\u0014BATES_NUMBER\u0014NATIVE_PATH\nDOC001\u0014TEST00000001\u0014NATIVES/file1.pdf\n");
+            File.WriteAllText(datPath, "DOCID\u0014BATES_NUMBER\u0014VOLUME\u0014IMAGE_PATH\u0014NATIVE_PATH\nDOC001\u0014TEST00000001\u0014VOL001\u0014IMAGES/VOL001/TEST00000001.tif\u0014NATIVES/file1.pdf\n");
 
             var optPath = Path.Combine(dataDir, "loadfile.opt");
-            File.WriteAllText(optPath, "TEST00000001,1,NATIVES/file1.pdf,,,1,1\n");
+            File.WriteAllText(optPath, "TEST00000001,VOL001,IMAGES/VOL001/TEST00000001.tif,Y,,,1\n");
 
             File.WriteAllBytes(Path.Combine(nativesDir, "file1.pdf"), [0x25, 0x50, 0x44, 0x46]);
+            File.WriteAllBytes(Path.Combine(imagesDir, "TEST00000001.tif"), [0x49, 0x49, 0x2A, 0x00]);
 
             var request = new FileGenerationRequest
             {
@@ -531,14 +534,17 @@ public class PostGenerationValidatorTests : TempDirectoryTestBase
             Directory.CreateDirectory(dataDir);
             var nativesDir = Path.Combine(tempDir, "NATIVES");
             Directory.CreateDirectory(nativesDir);
+            var imagesDir = Path.Combine(tempDir, "IMAGES", "VOL001");
+            Directory.CreateDirectory(imagesDir);
 
             var datPath = Path.Combine(dataDir, "loadfile.dat");
-            File.WriteAllText(datPath, "DOCID\u0014BATES_NUMBER\u0014NATIVE_PATH\r\nDOC001\u0014TEST00000001\u0014NATIVES/file1.pdf\r\n");
+            File.WriteAllText(datPath, "DOCID\u0014BATES_NUMBER\u0014VOLUME\u0014IMAGE_PATH\u0014NATIVE_PATH\r\nDOC001\u0014TEST00000001\u0014VOL001\u0014IMAGES/VOL001/TEST00000001.tif\u0014NATIVES/file1.pdf\r\n");
 
             var optPath = Path.Combine(dataDir, "loadfile.opt");
-            File.WriteAllText(optPath, "TEST00000001,1,NATIVES/file1.pdf,,,1,1\n");
+            File.WriteAllText(optPath, "TEST00000001,VOL001,IMAGES/VOL001/TEST00000001.tif,Y,,,1\n");
 
             File.WriteAllBytes(Path.Combine(nativesDir, "file1.pdf"), [0x25, 0x50, 0x44, 0x46]);
+            File.WriteAllBytes(Path.Combine(imagesDir, "TEST00000001.tif"), [0x49, 0x49, 0x2A, 0x00]);
 
             var request = new FileGenerationRequest
             {
@@ -577,14 +583,17 @@ public class PostGenerationValidatorTests : TempDirectoryTestBase
             Directory.CreateDirectory(dataDir);
             var nativesDir = Path.Combine(tempDir, "NATIVES");
             Directory.CreateDirectory(nativesDir);
+            var imagesDir = Path.Combine(tempDir, "IMAGES", "VOL001");
+            Directory.CreateDirectory(imagesDir);
 
             var datPath = Path.Combine(dataDir, "loadfile.dat");
-            File.WriteAllText(datPath, "DOCID\u0014BATES_NUMBER\u0014NATIVE_PATH\nDOC001\u0014TEST00000001\u0014NATIVES/file1.pdf\n");
+            File.WriteAllText(datPath, "DOCID\u0014BATES_NUMBER\u0014VOLUME\u0014IMAGE_PATH\u0014NATIVE_PATH\nDOC001\u0014TEST00000001\u0014VOL001\u0014IMAGES/VOL001/TEST00000001.tif\u0014NATIVES/file1.pdf\n");
 
             var optPath = Path.Combine(dataDir, "loadfile.opt");
-            File.WriteAllText(optPath, "TEST00000001,1,NATIVES/file1.pdf,,,1,1\n");
+            File.WriteAllText(optPath, "TEST00000001,VOL001,IMAGES/VOL001/TEST00000001.tif,Y,,,1\n");
 
             File.WriteAllBytes(Path.Combine(nativesDir, "file1.pdf"), [0x25, 0x50, 0x44, 0x46]);
+            File.WriteAllBytes(Path.Combine(imagesDir, "TEST00000001.tif"), [0x49, 0x49, 0x2A, 0x00]);
 
             var request = new FileGenerationRequest
             {

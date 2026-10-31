@@ -110,8 +110,13 @@ public class ProductionSetValidationTests : IDisposable
         await File.WriteAllLinesAsync(result.OptFilePath, optLines);
 
         var reportWithEmptyOptPath = ProductionSetPostValidator.Validate(result.ProductionPath, request);
-        Assert.Equal("passed", reportWithEmptyOptPath.Status);
+        Assert.Equal("failed", reportWithEmptyOptPath.Status);
         Assert.Equal(5, reportWithEmptyOptPath.CheckedFileCounts["image"]);
+        Assert.Contains(reportWithEmptyOptPath.Findings, f =>
+            f.Code == "PathReconciliation"
+            && f.Path == "DATA/loadfile.opt"
+            && f.Message.Contains("OPT", StringComparison.Ordinal)
+            && f.Message.Contains("image path", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

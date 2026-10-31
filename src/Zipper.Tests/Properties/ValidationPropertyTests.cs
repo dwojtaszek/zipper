@@ -568,12 +568,12 @@ public sealed class ValidationPropertyTests : IDisposable
         Directory.CreateDirectory(Path.Combine(prodPath, "DATA"));
         Directory.CreateDirectory(Path.Combine(prodPath, "NATIVES"));
         Directory.CreateDirectory(Path.Combine(prodPath, "TEXT"));
-        Directory.CreateDirectory(Path.Combine(prodPath, "IMAGES"));
+        Directory.CreateDirectory(Path.Combine(prodPath, "IMAGES", "VOL001"));
         Directory.CreateDirectory(Path.Combine(prodPath, "REDACTED", "IMAGES"));
 
         var datRows = new List<string>
         {
-            JoinDatFields("DOCID", "BATES_NUMBER", "NATIVE_PATH", "TEXT_PATH", "IMAGE_PATH", "PARENTDOCID", "REDACTED_IMAGE_PATH", "REDACTED_TEXT_PATH", "NATIVE_WITHHELD"),
+            JoinDatFields("DOCID", "BATES_NUMBER", "VOLUME", "NATIVE_PATH", "TEXT_PATH", "IMAGE_PATH", "PARENTDOCID", "REDACTED_IMAGE_PATH", "REDACTED_TEXT_PATH", "NATIVE_WITHHELD"),
         };
 
         var optRows = new List<string>();
@@ -582,19 +582,19 @@ public sealed class ValidationPropertyTests : IDisposable
             var bates = FormatBates("TEST", i);
             var nativeRel = $"NATIVES\\DOC{i:D8}.pdf";
             var textRel = $"TEXT\\DOC{i:D8}.txt";
-            var imageRel = $"IMAGES\\DOC{i:D8}_001.tif";
+            var imageRel = $"IMAGES\\VOL001\\DOC{i:D8}_001.tif";
             var redactedImageRel = $"REDACTED\\IMAGES\\RIMG{i:D8}.tif";
 
             File.WriteAllText(Path.Combine(prodPath, "NATIVES", $"DOC{i:D8}.pdf"), "%PDF-1.4");
             File.WriteAllText(Path.Combine(prodPath, "TEXT", $"DOC{i:D8}.txt"), "extracted text");
-            File.WriteAllText(Path.Combine(prodPath, "IMAGES", $"DOC{i:D8}_001.tif"), "II*");
+            File.WriteAllText(Path.Combine(prodPath, "IMAGES", "VOL001", $"DOC{i:D8}_001.tif"), "II*");
             File.WriteAllText(Path.Combine(prodPath, "REDACTED", "IMAGES", $"RIMG{i:D8}.tif"), "II*");
 
-            datRows.Add(JoinDatFields($"DOC{i:D8}", bates, nativeRel, textRel, imageRel, string.Empty, redactedImageRel, string.Empty, "NO"));
+            datRows.Add(JoinDatFields($"DOC{i:D8}", bates, "VOL001", nativeRel, textRel, imageRel, string.Empty, redactedImageRel, string.Empty, "NO"));
 
             // The OPT is a fixed 7-column comma-delimited format whose column 3 carries a
             // real image path, so each record's image reference is checked twice (DAT + OPT).
-            optRows.Add($"{bates},CTRL{i:D8},IMAGES\\DOC{i:D8}_001.tif,1,0,,");
+            optRows.Add($"{bates},VOL001,{imageRel},Y,,,1");
         }
 
         File.WriteAllLines(Path.Combine(prodPath, "DATA", "loadfile.dat"), datRows);
@@ -631,13 +631,13 @@ public sealed class ValidationPropertyTests : IDisposable
                 File.Delete(Path.Combine(prodPath, "TEXT", "DOC00000001.txt"));
                 break;
             case 2:
-                File.Delete(Path.Combine(prodPath, "IMAGES", "DOC00000001_001.tif"));
+                File.Delete(Path.Combine(prodPath, "IMAGES", "VOL001", "DOC00000001_001.tif"));
                 break;
             case 3:
                 File.Delete(Path.Combine(prodPath, "REDACTED", "IMAGES", "RIMG00000001.tif"));
                 break;
             case 4:
-                RewriteDatRow(datPath, 1, fields => fields[8] = "MAYBE");
+                RewriteDatRow(datPath, 1, fields => fields[9] = "MAYBE");
                 break;
             case 5:
                 RewriteDatRow(datPath, 2, fields => fields[1] = FormatBates("TEST", 1));
@@ -712,13 +712,17 @@ public sealed class ValidationPropertyTests : IDisposable
     private static void WriteRollingProductionSetFrom(string prodPath, IReadOnlyList<(string Bates, string DocId)> rows, int rollingSequenceNumber)
     {
         Directory.CreateDirectory(Path.Combine(prodPath, "DATA"));
+        var imagesDir = Path.Combine(prodPath, "IMAGES", "VOL001");
+        Directory.CreateDirectory(imagesDir);
 
-        var datRows = new List<string> { JoinDatFields("DOCID", "BATES_NUMBER") };
+        var datRows = new List<string> { JoinDatFields("DOCID", "BATES_NUMBER", "VOLUME", "IMAGE_PATH") };
         var optRows = new List<string>();
         foreach (var (bates, docId) in rows)
         {
-            datRows.Add(JoinDatFields(docId, bates));
-            optRows.Add($"{bates},{docId},,1,0,,");
+            var imagePath = $"IMAGES\\VOL001\\{bates}.tif";
+            datRows.Add(JoinDatFields(docId, bates, "VOL001", imagePath));
+            optRows.Add($"{bates},VOL001,{imagePath},Y,,,1");
+            File.WriteAllBytes(Path.Combine(imagesDir, $"{bates}.tif"), [0x49, 0x49, 0x2A, 0x00]);
         }
 
         File.WriteAllLines(Path.Combine(prodPath, "DATA", "loadfile.dat"), datRows);
