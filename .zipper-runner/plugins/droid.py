@@ -18,8 +18,8 @@ import json
 import selectors
 import time
 
-DEFAULT_MODEL = "gpt-6-luna"
-REASONING_EFFORT = "max"
+DEFAULT_MODEL = "claude-haiku-5-5"
+REASONING_EFFORT = "xhigh"
 # droid is the one agent that emits a real liveness signal: `assistant progress`
 # on each assistant message, streamed as droid produces it, plus the commits it
 # makes in the worktree. So droid is bounded by *silence*, not by the clock: a
