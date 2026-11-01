@@ -134,7 +134,7 @@ public static class Pipeline
 
         if (bates is not null)
         {
-            // Only TIFF output and synthetic Loadfile-Only rows number pages from --tiff-pages; other output has one page per document.
+            // Only TIFF output and synthetic Loadfile-Only runs draw pages from --tiff-pages; other output has one page per document.
             var pagesPerDocument = (output.HasFileType("tiff") || (modules.LoadFile.LoadfileOnly && sourceRecords is null))
                 ? tiff.PageRange?.Max ?? 1
                 : 1;

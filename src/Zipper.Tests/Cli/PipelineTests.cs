@@ -375,7 +375,8 @@ public class PipelineTests : WorkingDirectoryTestBase
         var (ok, modules) = PipelineTestHelper.Parse(new[]
         {
             "--type", "pdf", "--count", "1", "--output-path", Directory.GetCurrentDirectory(), "--loadfile-only",
-            "--bates-prefix", "CL001", "--bates-digits", "12", "--bates-page-suffix", "--tiff-pages", "1000-1000",
+            "--load-file-format", "opt", "--bates-prefix", "CL001", "--bates-digits", "12", "--bates-page-suffix",
+            "--tiff-pages", "1000-1000",
         });
         Assert.True(ok);
 

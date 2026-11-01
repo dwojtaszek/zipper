@@ -212,6 +212,7 @@ if ! loadfile_output=$(zipper \
   --count 1 \
   --loadfile-only \
   --output-path "$TEST_OUTPUT_DIR/test7-loadfile" \
+  --load-file-format opt \
   --bates-prefix "CL001" \
   --bates-digits 12 \
   --bates-page-suffix \
