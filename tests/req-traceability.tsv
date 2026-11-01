@@ -846,3 +846,31 @@ REQ-237	unit	ChaosModuleTests.TryBuild_EmailRunWithNonCrossFormatScenario_Return
 REQ-237	unit	ChaosModuleTests.TryBuild_LoadfileOnlyWithEmailType_ReturnsFalseWithMessage	Email chaos types are rejected with --loadfile-only
 REQ-237	e2e	test-cli-coverage-gaps.sh	E2E verification of email chaos in Standard and Production Set modes and its rejection rules
 REQ-237	e2e	test-cli-coverage-gaps.bat	Windows batch E2E verification of email chaos in Standard and Production Set modes and its rejection rules
+REQ-238	unit	TiffMultiPageGeneratorTests.GeneratePage_WithRealisticMode_EmitsValidTiffWithExpectedIfdTags	Realistic TIFF emission generates compliant Group 4 Fax TIFF
+REQ-238	unit	TiffMultiPageGeneratorTests.GeneratePage_WithDistinctBatesNumbers_ProducesDistinctImages	Distinct Bates numbers produce distinct page images with Bates endorsement band
+REQ-238	unit	TiffMultiPageGeneratorTests.GeneratePage_LibtiffVerification_DecompressesWithoutErrors	libtiff tiffinfo decodes generated realistic TIFF without errors
+REQ-238	unit	TiffMultiPageGeneratorTests.CreatePageRaster_WithBatesNumber_DrawsInkOnlyInBottomEndorsementBand	Bates endorsement band raster draws ink only in the reserved bottom band
+REQ-238	unit	TiffMultiPageGeneratorTests.CreatePageRaster_WithoutBatesNumber_IsBlank	Page raster without a Bates number stays blank
+REQ-238	unit	TiffFileGeneratorTests.Generate_WithPageRangeAndRealismOff_ReturnsPlaceholderBytesAndRequestedPageCount	Default Standard-mode TIFF output preserves byte-identical placeholder content
+REQ-238	unit	TiffFileGeneratorTests.Generate_WithRealismAndNoPageRange_EmitsSingleRealisticPage	Standard-mode realism emits a realistic single-page TIFF
+REQ-238	unit	TiffModuleTests.TryBuild_WithTiffRealism_SetsConfig	TiffModule parses and validates --tiff-realism and compression options
+REQ-238	unit	ProductionSetTests.ProductionSet_WithTiffRealism_GeneratesDistinctPageImagesWithBates	Production Set with realism emits distinct page images with per-page Bates
+REQ-238	unit	ProductionSetTests.ProductionSet_WithoutTiffRealism_PreservesPlaceholderBytes	Production Set without realism preserves byte-identical placeholder bytes
+REQ-238	unit	ProductionSetTests.ProductionSet_WithTiffRealismUncompressed_EmitsValidUncompressedTiff	Production Set realism supports uncompressed TIFF emission
+REQ-238	unit	TiffRendererTests.CompressGroup4_WhiteRunOf1728_UsesNineBitMakeupCode	Group 4 encoder emits the T.4 white make-up code for 1728-pixel runs
+REQ-238	unit	TiffRendererTests.CompressGroup4_BlackRunOf4_UsesThreeBitTerminatingCode	Group 4 encoder emits the T.4 black terminating code for short runs
+REQ-238	unit	TiffRendererTests.CompressGroup4_BlackRunOf640_UsesBlackMakeupCode	Group 4 encoder emits the T.4 black make-up code for long runs
+REQ-238	unit	TiffRendererTests.CreatePageRaster_WithLongBatesLabel_KeepsEveryCharacterOnPage	Long Bates labels are scaled so no endorsement character is clipped
+REQ-238	unit	TiffRendererTests.GeneratePage_WithLabelLength_DecodesToSamePixelsAsUncompressed	Group 4 endorsements decode to the same pixels as uncompressed output (ImageMagick, skipped when absent)
+REQ-238	unit	TiffModuleTests.TryBuild_UncompressedRealismWithGroup4Compression_ReturnsFalse	TiffModule rejects --tiff-compression group4 with --tiff-realism uncompressed
+REQ-238	unit	TiffModuleTests.TryBuild_TiffCompressionWithoutRealism_ReturnsFalse	TiffModule rejects --tiff-compression without realism enabled
+REQ-238	unit	TiffModuleTests.TryBuild_UncompressedModeBeforeWithTiffRealismFlag_KeepsUncompressed	Realism flags resolve to the same mode regardless of flag order
+REQ-238	unit	TiffModuleTests.TryBuild_Group4RealismWithUncompressedCompression_ReturnsFalse	TiffModule rejects --tiff-compression uncompressed with --tiff-realism group4
+REQ-238	unit	TiffModuleTests.TryBuild_StandardRealismWithUncompressedCompression_SetsUncompressed	--tiff-realism standard accepts an explicit --tiff-compression value
+REQ-238	unit	TiffRendererTests.CompressGroup4_BlackRunAboveMakeupTable_UsesThirteenBitMakeupCode	Group 4 encoder emits the T.4 black make-up codes for 1280 and 1728 pixel runs
+REQ-238	unit	TiffFileGeneratorTests.Generate_WithPageRangeAndRealismOff_DoesNotEvaluateBatesConfig	Default TIFF output with a page range does not evaluate the Bates endorsement label
+REQ-238	unit	TiffFileGeneratorTests.Generate_WithRealismAndBatesConfigOnly_LabelsPageFromBatesSequence	Realistic TIFF labels the page from the request's Bates config when no per-file override is set
+REQ-238	unit	TiffRendererTests.CreatePageRaster_WithFourHundredCharacterLabel_KeepsLastCharacterOnPage	Labels up to 400 characters keep their last character on the endorsement band
+REQ-238	unit	TiffModuleTests.TryBuild_MatchingRealismAndCompression_SetsCompression	Matching --tiff-realism group4 or uncompressed with the same --tiff-compression is accepted
+REQ-238	e2e	test-cli-coverage-gaps.sh	E2E verification of --with-tiff-realism in Standard and Production Set modes
+REQ-238	e2e	test-cli-coverage-gaps.bat	Windows batch E2E verification of --with-tiff-realism

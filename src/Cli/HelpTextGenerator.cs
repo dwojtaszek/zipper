@@ -97,6 +97,10 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine();
         Console.Error.WriteLine("TIFF Options:");
         Console.Error.WriteLine("  --tiff-pages <min-max>   TIFF page range (e.g., 1-20, default: 1-1)");
+        Console.Error.WriteLine("  --tiff-realism <mode>    Enable realistic TIFF emission (standard, group4, uncompressed, none)");
+        Console.Error.WriteLine("  --with-tiff-realism      Enable standard realistic TIFF emission with Bates endorsement band (Group 4 unless --tiff-compression uncompressed)");
+        Console.Error.WriteLine("  --realistic-tiff         Alias for --with-tiff-realism");
+        Console.Error.WriteLine("  --tiff-compression <cmp> Compression scheme for realistic TIFFs (group4, uncompressed; requires realism)");
         Console.Error.WriteLine();
         Console.Error.WriteLine("Column Profile Options:");
         Console.Error.WriteLine("  --column-profile <name>  Built-in profile: minimal, standard, litigation, full");

@@ -1,4 +1,5 @@
 using Xunit;
+using static Zipper.Tests.TestHelpers.TiffTestHelpers;
 
 namespace Zipper.Tests;
 
@@ -86,7 +87,7 @@ public class TiffMultiPageGeneratorTests
         var workItem = new FileWorkItem { Index = 1 };
 
         // Act
-        var result = TiffMultiPageGenerator.Generate(5, workItem);
+        var result = TiffMultiPageGenerator.Generate(5, workItem, null);
 
         // Assert - the pre-computed Native File must be a real TIFF: "II*\0" (little-endian) or "MM\0*" (big-endian).
         Assert.NotEmpty(result);
@@ -103,8 +104,8 @@ public class TiffMultiPageGeneratorTests
         var workItem = new FileWorkItem { Index = 1 };
 
         // Act
-        var result1 = TiffMultiPageGenerator.Generate(1, workItem);
-        var result2 = TiffMultiPageGenerator.Generate(10, workItem);
+        var result1 = TiffMultiPageGenerator.Generate(1, workItem, null);
+        var result2 = TiffMultiPageGenerator.Generate(10, workItem, null);
 
         // Assert - Page Count is tracked for Load File Metadata only (see the generator's class
         // documentation): both requests return the pre-computed Native File placeholder, so the
@@ -119,32 +120,152 @@ public class TiffMultiPageGeneratorTests
         Assert.Equal(1, CountTiffPages(result2));
     }
 
-    /// <summary>
-    /// Walks a TIFF's Image File Directory chain and counts its pages, reading offsets in the
-    /// endianness declared by the magic bytes. A cycle guard bounds malformed inputs.
-    /// </summary>
-    private static int CountTiffPages(byte[] tiff)
+    [Fact]
+    public void GeneratePage_WithoutRealisticMode_ReturnsPrecomputedPlaceholder()
     {
-        bool littleEndian = tiff[0] == 0x49 && tiff[1] == 0x49;
+        var result = TiffMultiPageGenerator.GeneratePage("ABC001", 1, 1, null);
+        Assert.Equal(PlaceholderFiles.GetContent("tiff"), result);
 
-        ushort ReadUInt16(int offset) => littleEndian
-            ? (ushort)(tiff[offset] | (tiff[offset + 1] << 8))
-            : (ushort)((tiff[offset] << 8) | tiff[offset + 1]);
+        var configOff = new Config.TiffConfig { RealismMode = "none" };
+        var resultOff = TiffMultiPageGenerator.GeneratePage("ABC001", 1, 1, configOff);
+        Assert.Equal(PlaceholderFiles.GetContent("tiff"), resultOff);
+    }
 
-        uint ReadUInt32(int offset) => littleEndian
-            ? (uint)(tiff[offset] | (tiff[offset + 1] << 8) | (tiff[offset + 2] << 16) | (tiff[offset + 3] << 24))
-            : ((uint)tiff[offset] << 24) | ((uint)tiff[offset + 1] << 16) | ((uint)tiff[offset + 2] << 8) | tiff[offset + 3];
+    [Fact]
+    public void GeneratePage_WithRealisticMode_EmitsValidTiffWithExpectedIfdTags()
+    {
+        var config = new Config.TiffConfig { RealismMode = "group4" };
+        var result = TiffMultiPageGenerator.GeneratePage("PROD00000001", 1, 3, config);
 
-        int pages = 0;
-        uint nextIfdOffset = ReadUInt32(4);
-        while (nextIfdOffset != 0)
+        Assert.NotEmpty(result);
+        Assert.True(result.Length >= 8);
+        Assert.Equal(0x49, result[0]);
+        Assert.Equal(0x49, result[1]);
+        Assert.Equal(0x2A, result[2]);
+        Assert.Equal(0x00, result[3]);
+
+        var tags = ReadFirstIfdTags(result);
+        Assert.Equal(2550u, tags[256].Value); // ImageWidth
+        Assert.Equal(3300u, tags[257].Value); // ImageLength
+        Assert.Equal(1u, tags[258].Value);    // BitsPerSample
+        Assert.Equal(4u, tags[259].Value);    // Compression: CCITT Group 4
+        Assert.Equal(0u, tags[262].Value);    // PhotometricInterpretation: min-is-white
+        Assert.Equal(2u, tags[296].Value);    // ResolutionUnit: Inch
+        Assert.Equal(1u, tags[284].Value);    // PlanarConfiguration
+
+        // PageNumber: count 2 SHORTs: pageIndex - 1 (0) and pageCount (3)
+        var pageNumValue = tags[297].Value;
+        Assert.Equal(0, (int)(pageNumValue & 0xFFFF));
+        Assert.Equal(3, (int)((pageNumValue >> 16) & 0xFFFF));
+    }
+
+    [Fact]
+    public void GeneratePage_WithDistinctBatesNumbers_ProducesDistinctImages()
+    {
+        // Page index is held constant so only the endorsement Bates number differs between the images.
+        var config = new Config.TiffConfig { RealismMode = "group4" };
+        var page1 = TiffMultiPageGenerator.GeneratePage("PROD00000001_001", 1, 2, config);
+        var page2 = TiffMultiPageGenerator.GeneratePage("PROD00000001_002", 1, 2, config);
+
+        Assert.NotEqual(page1, page2);
+    }
+
+    [Fact]
+    public void CreatePageRaster_WithBatesNumber_DrawsInkOnlyInBottomEndorsementBand()
+    {
+        var raster = TiffRenderer.CreatePageRaster("PROD00000001", TiffRenderer.DefaultWidth, TiffRenderer.DefaultHeight);
+        int bytesPerRow = (TiffRenderer.DefaultWidth + 7) / 8;
+        const int endorsementBandHeight = 300;
+
+        bool anyInkOutsideBand = false;
+        for (int y = 0; y < TiffRenderer.DefaultHeight - endorsementBandHeight; y++)
         {
-            int entryCount = ReadUInt16((int)nextIfdOffset);
-            nextIfdOffset = ReadUInt32((int)nextIfdOffset + 2 + (12 * entryCount));
-            pages++;
-            Assert.InRange(pages, 1, 1000); // Bound the walk if the IFD chain is cyclic.
+            for (int x = 0; x < bytesPerRow; x++)
+            {
+                anyInkOutsideBand |= raster[(y * bytesPerRow) + x] != 0;
+            }
         }
 
-        return pages;
+        bool anyInkInsideBand = false;
+        for (int y = TiffRenderer.DefaultHeight - endorsementBandHeight; y < TiffRenderer.DefaultHeight; y++)
+        {
+            for (int x = 0; x < bytesPerRow; x++)
+            {
+                anyInkInsideBand |= raster[(y * bytesPerRow) + x] != 0;
+            }
+        }
+
+        Assert.False(anyInkOutsideBand);
+        Assert.True(anyInkInsideBand);
+    }
+
+    [Fact]
+    public void CreatePageRaster_WithoutBatesNumber_IsBlank()
+    {
+        var raster = TiffRenderer.CreatePageRaster(null, TiffRenderer.DefaultWidth, TiffRenderer.DefaultHeight);
+
+        Assert.All(raster, pixel => Assert.Equal(0, pixel));
+    }
+
+    [Fact]
+    public void GeneratePage_WithSameInput_IsDeterministic()
+    {
+        var config = new Config.TiffConfig { RealismMode = "group4" };
+        var pageA = TiffMultiPageGenerator.GeneratePage("PROD00000001", 1, 1, config);
+        var pageB = TiffMultiPageGenerator.GeneratePage("PROD00000001", 1, 1, config);
+
+        Assert.Equal(pageA, pageB);
+    }
+
+    [Fact]
+    public void GeneratePage_WithUncompressedOption_EmitsCompressionOne()
+    {
+        var config = new Config.TiffConfig { RealismMode = "standard", Compression = "uncompressed" };
+        var result = TiffMultiPageGenerator.GeneratePage("PROD00000001", 1, 1, config);
+
+        var tags = ReadFirstIfdTags(result);
+        Assert.Equal(1u, tags[259].Value); // Compression: 1 (Uncompressed)
+        Assert.Equal(2550u, tags[256].Value);
+        Assert.Equal(3300u, tags[257].Value);
+    }
+
+    [Fact]
+    public void Generate_MultiPageWithRealisticMode_EmitsChainedIfds()
+    {
+        var workItem = new FileWorkItem { Index = 1 };
+        var config = new Config.TiffConfig { RealismMode = "group4" };
+        var result = TiffMultiPageGenerator.Generate(3, workItem, config, "PROD00000001");
+
+        Assert.Equal(3, CountTiffPages(result));
+    }
+
+    [SkippableFact]
+    public void GeneratePage_LibtiffVerification_DecompressesWithoutErrors()
+    {
+        var tiffinfo = FindToolOnPath("tiffinfo");
+        Skip.If(tiffinfo is null, "libtiff tiffinfo is not installed");
+
+        var config = new Config.TiffConfig { RealismMode = "group4" };
+        var result = TiffMultiPageGenerator.GeneratePage("TEST-BATES-001_001", 1, 1, config);
+
+        var tempPath = Path.Combine(Path.GetTempPath(), $"test_tiff_{Guid.NewGuid():N}.tif");
+        try
+        {
+            File.WriteAllBytes(tempPath, result);
+
+            // -D reads the strip data so libtiff decodes every row and reports any bad code word on stderr.
+            var (exitCode, stdout, stderr) = RunTool(tiffinfo!, "-D", tempPath);
+
+            Assert.Equal(0, exitCode);
+            Assert.Contains("Compression Scheme: CCITT Group 4", stdout);
+            Assert.Empty(stderr);
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+            {
+                File.Delete(tempPath);
+            }
+        }
     }
 }

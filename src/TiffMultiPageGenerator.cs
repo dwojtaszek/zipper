@@ -1,8 +1,8 @@
 namespace Zipper;
 
 /// <summary>
-/// Generates TIFF files for legal Native File testing
-/// Note: Currently generates single-page TIFF files with page count metadata.
+/// Generates TIFF files for legal Native File testing: the precomputed placeholder by default, or
+/// realistic bitonal page images with chained IFDs when TIFF Realism is enabled (REQ-238).
 /// </summary>
 internal static class TiffMultiPageGenerator
 {
@@ -10,16 +10,64 @@ internal static class TiffMultiPageGenerator
     private const int MaxPageCount = 1000;
 
     /// <summary>
-    /// Returns a pre-computed TIFF file.
-    /// The pageCount is tracked for metadata purposes only.
+    /// Generates TIFF file content, either using pre-computed placeholder or realistic emission.
+    /// The placeholder path tracks the page count for metadata only.
+    /// Realistic emission streams pages sequentially and preallocates uncompressed buffers to avoid
+    /// holding duplicate byte arrays in memory.
     /// </summary>
-    /// <param name="pageCount">Number of pages (for metadata tracking).</param>
-    /// <param name="workItem">File work item for context.</param>
-    /// <returns>Byte array containing a TIFF file.</returns>
-    public static byte[] Generate(int pageCount, FileWorkItem workItem)
+    public static byte[] Generate(int pageCount, FileWorkItem workItem, Config.TiffConfig? tiffConfig, string? batesNumber = null)
     {
-        // O(1): return pre-computed TIFF from PlaceholderFiles
-        return PlaceholderFiles.GetContent("tiff");
+        if (tiffConfig?.IsRealistic != true)
+        {
+            return PlaceholderFiles.GetContent("tiff");
+        }
+
+        var bates = batesNumber ?? workItem.BatesNumberOverride ?? workItem.ControlNumberOverride ?? $"DOC{workItem.Index:D8}";
+        return TiffRenderer.RenderMultiPage(pageCount, bates, tiffConfig);
+    }
+
+    /// <summary>
+    /// Generates TIFF file content directly into the destination stream.
+    /// </summary>
+    public static void Generate(Stream destination, int pageCount, FileWorkItem workItem, Config.TiffConfig? tiffConfig, string? batesNumber = null)
+    {
+        if (tiffConfig?.IsRealistic != true)
+        {
+            var placeholder = PlaceholderFiles.GetContent("tiff");
+            destination.Write(placeholder, 0, placeholder.Length);
+            return;
+        }
+
+        var bates = batesNumber ?? workItem.BatesNumberOverride ?? workItem.ControlNumberOverride ?? $"DOC{workItem.Index:D8}";
+        TiffRenderer.RenderMultiPage(destination, pageCount, bates, tiffConfig);
+    }
+
+    /// <summary>
+    /// Generates a single page image TIFF with an endorsement band.
+    /// </summary>
+    public static byte[] GeneratePage(string? batesNumber, int pageIndex = 1, int pageCount = 1, Config.TiffConfig? tiffConfig = null)
+    {
+        if (tiffConfig?.IsRealistic != true)
+        {
+            return PlaceholderFiles.GetContent("tiff");
+        }
+
+        return TiffRenderer.RenderPage(batesNumber, pageIndex, pageCount, tiffConfig);
+    }
+
+    /// <summary>
+    /// Generates a single page image TIFF directly into the destination stream.
+    /// </summary>
+    public static void GeneratePage(Stream destination, string? batesNumber, int pageIndex = 1, int pageCount = 1, Config.TiffConfig? tiffConfig = null)
+    {
+        if (tiffConfig?.IsRealistic != true)
+        {
+            var placeholder = PlaceholderFiles.GetContent("tiff");
+            destination.Write(placeholder, 0, placeholder.Length);
+            return;
+        }
+
+        TiffRenderer.RenderPage(destination, batesNumber, pageIndex, pageCount, tiffConfig);
     }
 
     /// <summary>

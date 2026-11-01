@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using Xunit;
 using Zipper.Config;
@@ -887,6 +888,55 @@ public class ParallelFileGeneratorTests
     }
 
     [Fact]
+    public void GenerateFileData_LargeUnpaddedContent_HandsOffGeneratedBufferWithoutCopy()
+    {
+        // Content above the pool limit gets a dedicated buffer. With no padding, that buffer must be the generated array itself.
+        var content = new byte[PerformanceConstants.MaxPoolSize + 1];
+        var generator = new ParallelFileGenerator();
+        var workItem = new FileWorkItem { Index = 1 };
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                OutputPath = "dummy",
+                FileType = "tiff",
+                FileCount = 1,
+            }
+        };
+
+        var fileData = generator.GenerateFileData(workItem, 0, request, new FixedContentGenerator(content));
+
+        Assert.Null(fileData.MemoryOwner);
+        Assert.Equal(content.Length, fileData.DataLength);
+        Assert.True(MemoryMarshal.TryGetArray(fileData.Data, out var segment));
+        Assert.Same(content, segment.Array);
+    }
+
+    [Fact]
+    public void GenerateFileData_LargePaddedContent_KeepsGeneratedBytesAsPrefix()
+    {
+        // Padding that pushes the total past the pool limit takes the dedicated-buffer path, which must copy the content first.
+        var content = new byte[] { 0x10, 0x20, 0x30, 0x40 };
+        var generator = new ParallelFileGenerator();
+        var workItem = new FileWorkItem { Index = 1 };
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                OutputPath = "dummy",
+                FileType = "tiff",
+                FileCount = 1,
+            }
+        };
+
+        var fileData = generator.GenerateFileData(workItem, PerformanceConstants.MaxPoolSize, request, new FixedContentGenerator(content));
+
+        Assert.Null(fileData.MemoryOwner);
+        Assert.Equal(content.Length + PerformanceConstants.MaxPoolSize, fileData.DataLength);
+        Assert.Equal(content, fileData.Data.Span[..content.Length].ToArray());
+    }
+
+    [Fact]
     public async Task GenerateFilesAsync_SequentialSameSecondCalls_AllocateDistinctBasenamesAndPreserveFirstArchive()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "zipper_test_" + Guid.NewGuid().ToString("N"));
@@ -1146,5 +1196,14 @@ public class ParallelFileGeneratorTests
         Metadata = new MetadataConfig { Seed = 42 },
         Chaos = chaos,
     };
+
+    private sealed class FixedContentGenerator(byte[] content) : IFileGenerator
+    {
+        public string FileType => "tiff";
+
+        public bool IsPlaceholderBased => false;
+
+        public GeneratedFileContent Generate(FileWorkItem workItem, FileGenerationRequest request) => new() { Content = content };
+    }
 }
 

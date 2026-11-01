@@ -424,8 +424,15 @@ internal static class ProductionSetOrchestrator
                           LoremIpsum.GetParagraph(random);
         await materializer.WriteTextAsync(Path.Combine(productionPath, plan.TextRelPath), textContent, encoding, cancellationToken).ConfigureAwait(false);
 
-        // Write placeholder TIFF image (single-pixel stub)
-        await WritePlaceholderImagesAsync(productionPath, plan.ImageRelPath, generated.PageCount, materializer, cancellationToken).ConfigureAwait(false);
+        // Write TIFF page images (placeholder stub or realistic page image)
+        await WriteTiffImagesAsync(
+            productionPath,
+            plan.ImageRelPath,
+            generated.PageCount,
+            materializer,
+            cancellationToken,
+            plan.BatesNumber,
+            request.Tiff).ConfigureAwait(false);
 
         // Write redacted image/text files when redacted mode is on
         var (nativePathOverride, redactionReason) = await WriteRedactedDocumentFilesAsync(
@@ -480,12 +487,14 @@ internal static class ProductionSetOrchestrator
         return fileData;
     }
 
-    private static async Task WritePlaceholderImagesAsync(
+    private static async Task WriteTiffImagesAsync(
         string productionPath,
         string imageRelPath,
         int pageCount,
         IFileMaterializer materializer,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? batesNumber = null,
+        Config.TiffConfig? tiffConfig = null)
     {
         if (pageCount > 1)
         {
@@ -495,12 +504,15 @@ internal static class ProductionSetOrchestrator
             for (int pageIdx = 1; pageIdx <= pageCount; pageIdx++)
             {
                 var pageImageRelPath = $"{imagePathWithoutExt}_{pageIdx:D3}{imageExt}";
-                await materializer.WriteBytesAsync(Path.Combine(productionPath, pageImageRelPath), PlaceholderFiles.GetContent("tiff"), cancellationToken).ConfigureAwait(false);
+                var pageBates = batesNumber is not null ? $"{batesNumber}_{pageIdx:D3}" : null;
+                byte[] content = TiffMultiPageGenerator.GeneratePage(pageBates, pageIdx, pageCount, tiffConfig);
+                await materializer.WriteBytesAsync(Path.Combine(productionPath, pageImageRelPath), content, cancellationToken).ConfigureAwait(false);
             }
         }
         else
         {
-            await materializer.WriteBytesAsync(Path.Combine(productionPath, imageRelPath), PlaceholderFiles.GetContent("tiff"), cancellationToken).ConfigureAwait(false);
+            byte[] content = TiffMultiPageGenerator.GeneratePage(batesNumber, 1, 1, tiffConfig);
+            await materializer.WriteBytesAsync(Path.Combine(productionPath, imageRelPath), content, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -522,7 +534,8 @@ internal static class ProductionSetOrchestrator
 
         if (plan.RedactedImageRelPath is not null)
         {
-            await materializer.WriteBytesAsync(Path.Combine(productionPath, plan.RedactedImageRelPath), PlaceholderFiles.GetContent("tiff"), cancellationToken).ConfigureAwait(false);
+            byte[] content = TiffMultiPageGenerator.GeneratePage(plan.BatesNumber, 1, 1, request.Tiff);
+            await materializer.WriteBytesAsync(Path.Combine(productionPath, plan.RedactedImageRelPath), content, cancellationToken).ConfigureAwait(false);
         }
 
         if (plan.RedactedTextRelPath is not null && request.Output.WithText)
@@ -586,13 +599,15 @@ internal static class ProductionSetOrchestrator
         var childTextContent = $"Extracted text for attachment {childBates}.";
         await materializer.WriteTextAsync(Path.Combine(productionPath, childTextRelPath), childTextContent, encoding, cancellationToken).ConfigureAwait(false);
 
-        await materializer.WriteBytesAsync(Path.Combine(productionPath, childImageRelPath), PlaceholderFiles.GetContent("tiff"), cancellationToken).ConfigureAwait(false);
+        byte[] childImageContent = TiffMultiPageGenerator.GeneratePage(childBates, 1, 1, request.Tiff);
+        await materializer.WriteBytesAsync(Path.Combine(productionPath, childImageRelPath), childImageContent, cancellationToken).ConfigureAwait(false);
 
         // Write redacted child files when redacted mode is on
         if (request.Production.RedactedProduction)
         {
             var childRedactedImageRelPath = Path.Combine("REDACTED", "IMAGES", plan.VolumeName, $"{childBates}.tif");
-            await materializer.WriteBytesAsync(Path.Combine(productionPath, childRedactedImageRelPath), PlaceholderFiles.GetContent("tiff"), cancellationToken).ConfigureAwait(false);
+            byte[] childRedactedContent = TiffMultiPageGenerator.GeneratePage(childBates, 1, 1, request.Tiff);
+            await materializer.WriteBytesAsync(Path.Combine(productionPath, childRedactedImageRelPath), childRedactedContent, cancellationToken).ConfigureAwait(false);
 
             if (request.Output.WithText)
             {

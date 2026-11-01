@@ -382,6 +382,69 @@ if !ERRORLEVEL! neq 0 (
     set /a FAILED+=1
 )
 
+REM --- REQ-238: TIFF Realism Mode ---
+echo [ INFO ] Test: --type tiff with --with-tiff-realism in Standard mode
+set "TIFF_REALISM_STD_OUTPUT=%TEST_OUTPUT_DIR%\tiff-realism-std"
+%ZIPPER_CMD% --type tiff --count 2 --tiff-pages 1-1 --bates-prefix REAL --with-tiff-realism --output-path "%TIFF_REALISM_STD_OUTPUT%" >nul 2>&1
+if !ERRORLEVEL! equ 0 (
+    echo [ INFO ] PASS: --with-tiff-realism generated successfully in Standard mode
+    set /a PASSED+=1
+) else (
+    echo [ ERROR ] FAIL: --with-tiff-realism generation failed in Standard mode
+    set /a FAILED+=1
+)
+
+echo [ INFO ] Test: Production Set with --with-tiff-realism
+set "TIFF_REALISM_PROD_OUTPUT=%TEST_OUTPUT_DIR%\tiff-realism-prod"
+%ZIPPER_CMD% --production-set --count 2 --bates-prefix PROD --with-tiff-realism --output-path "%TIFF_REALISM_PROD_OUTPUT%" >nul 2>&1
+if !ERRORLEVEL! equ 0 (
+    echo [ INFO ] PASS: Production Set with --with-tiff-realism generated successfully
+    set /a PASSED+=1
+) else (
+    echo [ ERROR ] FAIL: Production Set with --with-tiff-realism failed
+    set /a FAILED+=1
+)
+
+echo [ INFO ] Test: Invalid --tiff-realism mode fails validation
+%ZIPPER_CMD% --type tiff --count 2 --tiff-realism invalid-mode --output-path "%TEST_OUTPUT_DIR%\tiff-invalid" >nul 2>&1
+if !ERRORLEVEL! neq 0 (
+    echo [ INFO ] PASS: Invalid --tiff-realism mode correctly failed validation
+    set /a PASSED+=1
+) else (
+    echo [ ERROR ] FAIL: Invalid --tiff-realism mode should have failed validation
+    set /a FAILED+=1
+)
+
+echo [ INFO ] Test: --tiff-compression without realism fails validation
+%ZIPPER_CMD% --type tiff --count 2 --tiff-compression uncompressed --output-path "%TEST_OUTPUT_DIR%\tiff-compression-no-realism" >nul 2>&1
+if !ERRORLEVEL! neq 0 (
+    echo [ INFO ] PASS: --tiff-compression without realism correctly failed validation
+    set /a PASSED+=1
+) else (
+    echo [ ERROR ] FAIL: --tiff-compression without realism should have failed validation
+    set /a FAILED+=1
+)
+
+echo [ INFO ] Test: --tiff-realism uncompressed with --tiff-compression group4 fails validation
+%ZIPPER_CMD% --type tiff --count 2 --tiff-realism uncompressed --tiff-compression group4 --output-path "%TEST_OUTPUT_DIR%\tiff-compression-conflict" >nul 2>&1
+if !ERRORLEVEL! neq 0 (
+    echo [ INFO ] PASS: Conflicting --tiff-realism uncompressed and --tiff-compression group4 correctly failed validation
+    set /a PASSED+=1
+) else (
+    echo [ ERROR ] FAIL: Conflicting --tiff-realism uncompressed and --tiff-compression group4 should have failed validation
+    set /a FAILED+=1
+)
+
+echo [ INFO ] Test: --tiff-realism group4 with --tiff-compression uncompressed fails validation
+%ZIPPER_CMD% --type tiff --count 2 --tiff-realism group4 --tiff-compression uncompressed --output-path "%TEST_OUTPUT_DIR%\tiff-compression-conflict-g4" >nul 2>&1
+if !ERRORLEVEL! neq 0 (
+    echo [ INFO ] PASS: Conflicting --tiff-realism group4 and --tiff-compression uncompressed correctly failed validation
+    set /a PASSED+=1
+) else (
+    echo [ ERROR ] FAIL: Conflicting --tiff-realism group4 and --tiff-compression uncompressed should have failed validation
+    set /a FAILED+=1
+)
+
 REM --- Cleanup ---
 if exist "%TEST_OUTPUT_DIR%" rmdir /s /q "%TEST_OUTPUT_DIR%"
 

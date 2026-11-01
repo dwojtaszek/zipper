@@ -503,11 +503,14 @@ public class ParallelFileGenerator
 
         if (memoryOwner is null)
         {
-            var data = new byte[(int)totalSize];
-            Buffer.BlockCopy(fileContent, 0, data, 0, fileContent.Length);
+            // Unpadded content already is the whole Archive entry, so reuse the generated buffer instead of
+            // holding a second copy of a large file. The buffer is aliased, so generators must return a fresh array.
+            var data = effectivePadding == 0 ? fileContent : new byte[(int)totalSize];
 
             if (effectivePadding > 0)
             {
+                Buffer.BlockCopy(fileContent, 0, data, 0, fileContent.Length);
+
                 if (request.Metadata.Seed.HasValue)
                 {
                     var fileSeed = unchecked((int)(request.Metadata.Seed.Value + workItem.Index));

@@ -330,6 +330,10 @@ zipper --loadfile-only --loadfile-format concordance --count 100000 --output-pat
 zipper --loadfile-only --loadfile-format edrm-xml --count 10000 --output-path ./xml_failures \
     --chaos-mode --chaos-scenario edrm-xml-structural-failures --seed 42
 
+# Realistic TIFF Native Files with a burned-in Bates endorsement band
+zipper --type tiff --count 10 --tiff-pages 1-5 --with-tiff-realism \
+    --bates-prefix PROD --output-path ./realistic_tiff
+
 # Coordinate DAT and OPT anomalies in a Production Set
 zipper --production-set --type tiff --tiff-pages 2-3 --count 1000 --output-path ./cross_format \
     --bates-prefix TEST --chaos-mode --chaos-scenario cross-format-desync --seed 42
@@ -566,6 +570,7 @@ Written by `--compare-production-manifests` to `--comparison-output`. Records co
 | `--with-families` | Only meaningful when `--type eml` (or `eml` participates in `--types`) and `--attachment-rate > 0` (emits a soft warning to stderr otherwise) |
 | `--with-threading` | Only meaningful when `--type eml` (or `eml` participates in `--types`); otherwise emits a warning and continues. Adds RFC 5322 threading headers to generated Emails and thread metadata Columns to DAT, CSV, and Concordance Load Files. With `--column-profile`, the headers are still added to Emails, but the profile defines the DAT Columns and no thread metadata Columns are added. |
 | `--tiff-pages` | Only meaningful when `--type tiff` or when `tiff` participates in `--types`. In Loadfile-Only mode with `--type tiff`, controls page counts in companion OPT and profile-driven DAT `PAGECOUNT` columns. |
+| `--tiff-realism`, `--with-tiff-realism`, `--realistic-tiff`, `--tiff-compression` | Opt-in realistic TIFF emission (REQ-238) for `--type tiff` and Production Set page images. `--with-tiff-realism` and `--realistic-tiff` are aliases for `--tiff-realism standard`, which an explicit `--tiff-realism` value overrides in either flag order. `--tiff-compression` requires realism, and a `--tiff-realism` value of `group4` or `uncompressed` conflicts with the other compression value. Realism flags do not change `--loadfile-only` output, which emits no native files. Omitting `--tiff-realism` (or passing `none`) keeps byte-identical placeholder TIFF output. |
 | `--bates-start`, `--bates-digits` | Only meaningful when `--bates-prefix` is specified |
 | `--date-format`, `--empty-percentage`, `--custodian-count` | Only meaningful when `--column-profile` is specified |
 | `--load-file-formats` vs `--load-file-format` | Multi-format list takes precedence over single format |
