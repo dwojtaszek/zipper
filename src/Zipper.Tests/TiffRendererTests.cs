@@ -332,6 +332,60 @@ public class TiffRendererTests
         Assert.Equal(directBytes, ms.ToArray());
     }
 
+    [Theory]
+    [InlineData("group4")]
+    [InlineData("uncompressed")]
+    public void RenderMultiPage_ToNonSeekableStream_ProducesIdenticalOutput(string compression)
+    {
+        var config = new TiffConfig { RealismMode = "standard", Compression = compression };
+        var directBytes = TiffRenderer.RenderMultiPage(2, "PROD00000001", config);
+
+        using var backing = new MemoryStream();
+        using (var nonSeekable = new NonSeekableStream(backing))
+        {
+            TiffRenderer.RenderMultiPage(nonSeekable, 2, "PROD00000001", config);
+        }
+
+        Assert.Equal(directBytes, backing.ToArray());
+    }
+
+    [Theory]
+    [InlineData("group4")]
+    [InlineData("uncompressed")]
+    public void RenderMultiPage_ToStreamWithPriorContent_ProducesIdenticalTiffPayload(string compression)
+    {
+        var config = new TiffConfig { RealismMode = "standard", Compression = compression };
+        var directBytes = TiffRenderer.RenderMultiPage(2, "PROD00000001", config);
+
+        byte[] prefix = [0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03];
+        using var ms = new MemoryStream();
+        ms.Write(prefix, 0, prefix.Length);
+
+        TiffRenderer.RenderMultiPage(ms, 2, "PROD00000001", config);
+
+        var result = ms.ToArray();
+        Assert.Equal(prefix, result.Take(prefix.Length).ToArray());
+        Assert.Equal(directBytes, result.Skip(prefix.Length).ToArray());
+    }
+
+    private sealed class NonSeekableStream(Stream inner) : Stream
+    {
+        public override bool CanRead => inner.CanRead;
+        public override bool CanSeek => false;
+        public override bool CanWrite => inner.CanWrite;
+        public override long Length => throw new NotSupportedException();
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+        public override void Flush() => inner.Flush();
+        public override int Read(byte[] buffer, int offset, int count) => inner.Read(buffer, offset, count);
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => inner.Write(buffer, offset, count);
+    }
+
     private static byte[] Raster(string? label)
         => TiffRenderer.CreatePageRaster(label, TiffRenderer.DefaultWidth, TiffRenderer.DefaultHeight);
 

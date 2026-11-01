@@ -261,11 +261,14 @@ internal static class TiffRenderer
         bw.Write((uint)1);
         // Software, padded so the strip starts at its word-aligned offset
         bw.Write(SoftwareBytes);
-        PadTo(bw, stripOffset);
+        WritePadding(bw, stripOffset - (swOffset + (uint)SoftwareBytes.Length));
 
         // Strip data, padded up to the next IFD (the last page has none, so nothing is written)
         bw.Write(stripData);
-        PadTo(bw, nextIfdOffset);
+        if (!isLast)
+        {
+            WritePadding(bw, nextIfdOffset - (stripOffset + (uint)stripData.Length));
+        }
 
         return nextIfdOffset;
     }
@@ -276,11 +279,11 @@ internal static class TiffRenderer
     private static uint AlignToWord(uint offset) => offset % 2 == 0 ? offset : offset + 1;
 
     /// <summary>
-    /// Writes zero bytes until the stream reaches <paramref name="offset"/>. Does nothing when it is already there.
+    /// Writes the specified count of zero bytes for word alignment.
     /// </summary>
-    private static void PadTo(BinaryWriter bw, uint offset)
+    private static void WritePadding(BinaryWriter bw, uint count)
     {
-        while (bw.BaseStream.Position < offset)
+        for (uint i = 0; i < count; i++)
         {
             bw.Write((byte)0);
         }
