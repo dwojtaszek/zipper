@@ -54,7 +54,7 @@ public class ParallelFileGenerator
         try
         {
             // Validate inputs
-            if (request.Chaos.ChaosMode && !request.LoadfileOnly)
+            if (request.Chaos.ChaosMode && !request.LoadfileOnly && !request.Output.HasFileType("eml"))
             {
                 throw new InvalidOperationException("Chaos mode requires loadfile-only mode at the generation layer.");
             }
@@ -68,6 +68,8 @@ public class ParallelFileGenerator
             {
                 request.Output = request.Output with { Concurrency = PerformanceConstants.DefaultConcurrency };
             }
+
+            ChaosEngine? emailChaosEngine = ChaosEngineBuilder.BuildForStandardEmail(request);
 
             var generators = this.customGenerators ?? BuildGenerators(request);
 
@@ -160,18 +162,20 @@ public class ParallelFileGenerator
                 orderingWindow.OnItemCommitted(fileData.WorkItem.Index);
             };
 
-            // Start the consumer task to write the archive concurrently
+            // Start the consumer task to write the archive concurrently. The anomaly provider is read by the
+            // consumer after the producers finish, so the audit sees every anomaly.
+            Func<IReadOnlyList<ChaosAnomaly>>? anomalyProvider = emailChaosEngine is null ? null : () => emailChaosEngine.Anomalies;
             Task<string> consumerTask;
             if (this.archiveSink is ZipArchiveSink zipSink)
             {
                 zipSink.ArchiveStream = archiveStream;
-                consumerTask = zipSink.CreateArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultChannel.Reader, onItemCommitted, pipelineCts.Token);
+                consumerTask = zipSink.CreateArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultChannel.Reader, onItemCommitted, pipelineCts.Token, anomalyProvider);
             }
             else
             {
                 archiveStream.Dispose();
                 archiveStream = null;
-                consumerTask = this.archiveSink.CreateArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultChannel.Reader, onItemCommitted, pipelineCts.Token);
+                consumerTask = this.archiveSink.CreateArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultChannel.Reader, onItemCommitted, pipelineCts.Token, anomalyProvider);
             }
 
             // Generate files in parallel (producers)
@@ -184,7 +188,8 @@ public class ParallelFileGenerator
                     orderingWindow,
                     request,
                     generators,
-                    pipelineCts);
+                    pipelineCts,
+                    emailChaosEngine);
 
                 var producerTasks = Enumerable.Range(0, request.Output.Concurrency)
                     .Select(i => Task.Run(() => this.ProcessFileWorkAsync(workerContext, cancellationToken), cancellationToken))
@@ -422,7 +427,7 @@ public class ParallelFileGenerator
                 await context.OrderingWindow.WaitForPermitAsync(workItem.Index, context.PipelineCts.Token).ConfigureAwait(false);
 
                 var fileGenerator = context.Generators[workItem.EffectiveFileType(context.Request)];
-                var fileData = this.GenerateFileData(workItem, context.PaddingPerFile, context.Request, fileGenerator);
+                var fileData = this.GenerateFileData(workItem, context.PaddingPerFile, context.Request, fileGenerator, context.EmailChaosEngine);
                 try
                 {
                     await context.Writer.WriteAsync(fileData, context.PipelineCts.Token).ConfigureAwait(false);
@@ -462,11 +467,16 @@ public class ParallelFileGenerator
         OrderingWindow OrderingWindow,
         FileGenerationRequest Request,
         IReadOnlyDictionary<string, IFileGenerator> Generators,
-        CancellationTokenSource PipelineCts);
+        CancellationTokenSource PipelineCts,
+        ChaosEngine? EmailChaosEngine = null);
 
-    internal FileData GenerateFileData(FileWorkItem workItem, long paddingPerFile, FileGenerationRequest request, IFileGenerator fileGenerator)
+    internal FileData GenerateFileData(FileWorkItem workItem, long paddingPerFile, FileGenerationRequest request, IFileGenerator fileGenerator, ChaosEngine? emailChaosEngine = null)
     {
         var generated = fileGenerator.Generate(workItem, request);
+        if (emailChaosEngine is not null)
+        {
+            generated = emailChaosEngine.ApplyEmailChaos(workItem, generated);
+        }
         var fileContent = generated.Content;
         var attachmentPayloads = generated.GetAttachments();
         var attachment = generated.Attachment

@@ -39,7 +39,7 @@ internal static class ProductionSetOrchestrator
         ArgumentNullException.ThrowIfNull(materializer);
         ArgumentNullException.ThrowIfNull(hashComputer);
 
-        if (request.Chaos.ChaosMode && !request.LoadfileOnly && (request.Chaos.ChaosScenario is null || !ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario)))
+        if (request.Chaos.ChaosMode && !request.LoadfileOnly && !request.Output.HasFileType("eml") && (request.Chaos.ChaosScenario is null || !ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario)))
         {
             throw new InvalidOperationException("Chaos mode requires loadfile-only mode at the generation layer.");
         }
@@ -238,13 +238,14 @@ internal static class ProductionSetOrchestrator
         // Create directory structure
         await SetupDirectoriesAsync(productionPath, request, volumeCount, plans, materializer, cancellationToken).ConfigureAwait(false);
 
+        ChaosEngine? emailChaosEngine = ChaosEngineBuilder.BuildForProductionEmail(request, plans);
 
         // Generate files using the plan
         var fileDataList = await GenerateVolumeFilesAsync(
-            productionPath, request, plans, materializer, hashComputer, cancellationToken).ConfigureAwait(false);
+            productionPath, request, plans, materializer, hashComputer, cancellationToken, emailChaosEngine).ConfigureAwait(false);
 
         // Write DAT + OPT load files and their audits through the shared orchestrator
-        var (datPath, optPath) = await EmitLoadFilesAsync(dataDir, request, fileDataList, materializer, cancellationToken).ConfigureAwait(false);
+        var (datPath, optPath) = await EmitLoadFilesAsync(dataDir, request, fileDataList, materializer, cancellationToken, emailChaosEngine?.Anomalies).ConfigureAwait(false);
 
         // Write manifest
         var manifestPath = await WriteManifestAsync(
@@ -342,7 +343,8 @@ internal static class ProductionSetOrchestrator
         IReadOnlyList<ProductionNativeFilePlan> plans,
         IFileMaterializer materializer,
         IHashComputer hashComputer,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ChaosEngine? emailChaosEngine = null)
     {
         var encoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
         var fileGenerators = FileGeneratorFactory.CreateMap(request);
@@ -367,7 +369,8 @@ internal static class ProductionSetOrchestrator
                 random,
                 materializer,
                 hashComputer,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                emailChaosEngine).ConfigureAwait(false);
 
             materializer.AddFileData(fileData);
             fileDataList.Add(fileData);
@@ -392,7 +395,8 @@ internal static class ProductionSetOrchestrator
         Random random,
         IFileMaterializer materializer,
         IHashComputer hashComputer,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ChaosEngine? emailChaosEngine = null)
     {
         var workItem = new FileWorkItem
         {
@@ -406,6 +410,10 @@ internal static class ProductionSetOrchestrator
             SourceMetadata = request.SourceRecords?[(int)plan.Index].Metadata,
         };
         var generated = fileGenerators[plan.FileType].Generate(workItem, request);
+        if (emailChaosEngine is not null)
+        {
+            generated = emailChaosEngine.ApplyEmailChaos(workItem, generated);
+        }
         var nativeContent = generated.Content;
         var attachments = generated.GetAttachments();
         var attachmentMetadata = FileAttachmentMetadata.FromPayloads(attachments, request, workItem);
@@ -600,13 +608,15 @@ internal static class ProductionSetOrchestrator
         FileGenerationRequest request,
         IReadOnlyList<FileData> fileDataList,
         IFileMaterializer materializer,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<ChaosAnomaly>? emailAnomalies = null)
     {
         var datPath = Path.Combine(dataDir, "loadfile.dat");
         var optPath = Path.Combine(dataDir, "loadfile.opt");
 
         if (request.Chaos.ChaosMode && ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario))
         {
+            // emailAnomalies is always null here: ChaosEngineBuilder.BuildForEmail returns no engine for cross-format scenarios.
             var datEncoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
             var optEncoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.IsEncodingExplicit ? request.LoadFile.Encoding : "ANSI");
 
@@ -696,7 +706,8 @@ internal static class ProductionSetOrchestrator
                 return (loadTarget, auditTarget);
             },
             target => materializer.OpenWriteStream(target),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            anomalies: emailAnomalies).ConfigureAwait(false);
 
         return (datPath, optPath);
     }

@@ -631,8 +631,9 @@ This section clarifies behavior when multiple arguments interact:
 | `--production-zip` + `--production-set` | **Requires**: `--production-zip` cannot be used without `--production-set` |
 | `--volume-size` + `--production-set` | **Requires**: `--volume-size` cannot be used without `--production-set` |
 | `--col-delim`, `--quote-delim`, etc. | Supported in all modes; use `ascii:N` or `char:C` prefix |
-| `--chaos-mode` | Requires `--loadfile-only` or `--production-set` |
-| `--chaos-mode` + `--production-set` | Permitted with cross-format scenarios (`cross-format-desync`, `broken-families`); requires `--loadfile-only` for single-format chaos modes |
+| `--chaos-mode` | Requires `--loadfile-only`, `--production-set`, or Standard Mode generating `--type eml` (REQ-094, REQ-237) |
+| `--chaos-mode` + `--production-set` | Permitted with cross-format scenarios (`cross-format-desync`, `broken-families`) or when generating `eml` (email anomalies); requires `--loadfile-only` for other single-format chaos modes |
+| `--chaos-mode` + `--type eml` (no `--loadfile-only`) | Permitted; `--chaos-types` selects email types only (`mime-boundary`, `encoded-word`, `header-fold`, `rf822-depth`); `--chaos-scenario` is rejected except for Production Set cross-format scenarios (REQ-237) |
 | `--chaos-amount`, `--chaos-types` | Require `--chaos-mode` |
 | `--chaos-scenario` | Requires `--chaos-mode`; conflicts with `--chaos-types` |
 | `--chaos-scenario` + format | Some scenarios require specific `--loadfile-format` |
@@ -676,7 +677,7 @@ This section clarifies behavior when multiple arguments interact:
 
 ### FR-019: Deliberate Anomaly Injection
 
-- **REQ-094**: A new optional command-line argument `--chaos-mode` shall be introduced. Requires `--loadfile-only` or `--production-set` (when targeting coordinated cross-format scenarios). Supported for the `dat`, `opt`, `csv`, `concordance`, and `edrm-xml` Load File formats, each with its own anomaly catalog, as well as coordinated cross-format scenarios spanning DAT and OPT.
+- **REQ-094**: A new optional command-line argument `--chaos-mode` shall be introduced. Requires `--loadfile-only`, `--production-set` (when targeting coordinated cross-format scenarios or generating **Emails**), or Standard Mode when generating **Emails** (`--type eml` or `eml` in a File Type mix). Supported for the `dat`, `opt`, `csv`, `concordance`, and `edrm-xml` Load File formats, each with its own anomaly catalog, coordinated cross-format scenarios spanning DAT and OPT, and **Email** MIME anomalies (REQ-237).
 - **REQ-095**: A new optional argument `--chaos-amount <N|N%>` shall specify the number or percentage of records to corrupt. Requires `--chaos-mode`. Defaults to 1%.
 - **REQ-096**: A new optional argument `--chaos-types <type1,type2,...>` shall filter specific anomaly types. Requires `--chaos-mode`. When not specified, the original DAT types, all existing OPT types except `opt-encoding`, and every type in the selected CSV, Concordance, or EDRM-XML catalog are enabled; the new DAT record-level types are opt-in to preserve existing output. `full-chaos` enables every type for the selected format.
 - **REQ-097**: The following DAT chaos anomaly types shall be supported:
@@ -978,3 +979,22 @@ The encoding suite includes the #1283 policy-sensitive Case Key `encoding-local-
     - When `--mime-realism` is specified without `--type eml` (or `eml` participating in `--types`), a warning shall be written to standard error while execution proceeds.
   - When `--mime-realism` is omitted or disabled:
     - `EmailSerializer` and `EmlFileGenerator` shall preserve 100% byte-identical output parity to legacy runs (Critical Rule 6), retaining single-line bare-ASCII headers, `text/plain` 8-bit bodies, and at most one base64 attachment.
+
+## 26. Email/MIME Chaos Engine Anomaly Types
+
+### FR-033: Email MIME Deliberate Anomaly Injection (`--chaos-mode` with Email Generation)
+
+- **REQ-237**: When `--chaos-mode` is enabled for a Standard Mode or Production Set run that generates **Emails** (`--type eml`, or `eml` in a File Type mix), the Chaos Engine shall inject MIME-level anomalies into the generated `.eml` files via `EmailAnomalyApplier`:
+  - The email anomaly types are `mime-boundary`, `encoded-word`, `header-fold`, and `rf822-depth`. `--chaos-types` selects a subset of them; when omitted, all four are enabled. The alias `rfc822-depth` is accepted and normalized to `rf822-depth`.
+    - `mime-boundary`: Drops the trailing hyphens from the final multipart closing delimiter, leaving the container unclosed, or changes the `Content-Type` boundary so it no longer matches the body delimiters. A single-part **Email** is declared as multipart with a boundary that does not appear in its body.
+    - `encoded-word`: Replaces the `Subject` header with a malformed RFC 2047 encoded-word, using an unknown charset, invalid Base64 padding, or whitespace inside the encoded text.
+    - `header-fold`: Folds the `Subject` header at a non-whitespace position with no continuation whitespace, or inserts a bare LF or bare CR.
+    - `rf822-depth`: Wraps the **Email** in 25 nested `message/rfc822` parts to exceed common parser depth limits.
+  - On an email run, `--chaos-types` shall name email types only, and `--chaos-scenario` shall be rejected. The one exception is a Production Set cross-format scenario (`cross-format-desync` or `broken-families`), which still injects its coordinated DAT/OPT anomalies and injects no email anomalies. An email type on a `--loadfile-only` run shall be rejected, because that run generates no **Emails**.
+  - `--chaos-amount <N|N%>` selects the **Emails** to corrupt through `ChaosSampler`, deterministically per `--seed`. Each selected **Email** receives exactly one anomaly. Types rotate over the selected **Emails** in work item order, with the enabled types sorted by name.
+  - Each mutation is derived from the run `--seed` and the **Email**'s work item index, so the output and audit do not depend on worker scheduling or concurrency.
+  - Mutations operate on the raw message bytes, so attachment payloads and non-UTF-8 bytes outside the mutated lines are preserved.
+  - Every injected email anomaly shall be audited in the Audit File (`_properties.json`) with the EML filename, the **Record Id** of the **Load File Record** for that **Email** (its Bates Number when one is assigned, otherwise its Control Number or `DOC` index), 1-based line number in the EML, affected header or delimiter column, error type, description, and location. In Production Set mode, the DAT and OPT Audit Files both list the email anomalies. In Standard Mode, the Load File's Audit File lists them.
+  - Load File lines are not changed by email anomalies. Load File chaos (REQ-094 through REQ-096) keeps its existing behavior.
+  - When `--chaos-mode` is omitted or disabled, email generation shall preserve 100% byte-identical output parity to legacy runs (Critical Rule 6).
+

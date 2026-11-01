@@ -59,8 +59,15 @@ internal static class CrossCuttingRules
                     .Where(t => !string.IsNullOrEmpty(t))
                     .ToList();
 
+                // Email types apply to generated .eml files and are validated by ChaosModule, not against load file formats.
+                var loadFileTypes = requestedTypes.Where(t => !ChaosAnomalyTypes.IsEmail(t)).ToList();
+                if (requestedTypes.Count > 0 && loadFileTypes.Count == 0)
+                {
+                    return true;
+                }
+
                 // Reject any requested type that is not valid for ANY selected format
-                foreach (var requestedType in requestedTypes)
+                foreach (var requestedType in loadFileTypes)
                 {
                     if (!validTypesPerFormat.Values.Any(v => v.Contains(requestedType, StringComparer.OrdinalIgnoreCase)))
                     {
@@ -73,7 +80,7 @@ internal static class CrossCuttingRules
                 foreach (var format in formats)
                 {
                     var validTypes = validTypesPerFormat[format];
-                    if (!requestedTypes.Any(t => validTypes.Contains(t, StringComparer.OrdinalIgnoreCase)))
+                    if (!loadFileTypes.Any(t => validTypes.Contains(t, StringComparer.OrdinalIgnoreCase)))
                     {
                         Console.Error.WriteLine($"Error: --chaos-types selects no valid type for load file format '{format.ToString().ToLowerInvariant()}'. Valid types: {string.Join(", ", validTypes)}");
                         return false;

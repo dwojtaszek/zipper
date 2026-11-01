@@ -1,3 +1,5 @@
+using System.IO.Compression;
+using System.Text.Json;
 using Xunit;
 using Zipper.Config;
 using Zipper.Tests.TestHelpers;
@@ -1069,5 +1071,80 @@ public class ParallelFileGeneratorTests
             }
         }
     }
+
+    [Fact]
+    public async Task GenerateFilesAsync_WithEmailChaos_MutatesEverySampledEmlAndAuditsIt()
+    {
+        var plainPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        var chaosPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(plainPath);
+        Directory.CreateDirectory(chaosPath);
+
+        try
+        {
+            var plain = await new ParallelFileGenerator().GenerateFilesAsync(CreateEmlRequest(plainPath, new ChaosConfig()));
+            var chaotic = await new ParallelFileGenerator().GenerateFilesAsync(CreateEmlRequest(chaosPath, new ChaosConfig
+            {
+                ChaosMode = true,
+                ChaosAmount = "100%",
+                ChaosTypes = "mime-boundary,encoded-word,header-fold,rf822-depth",
+            }));
+
+            using (var plainZip = ZipFile.OpenRead(plain.ZipFilePath))
+            using (var chaosZip = ZipFile.OpenRead(chaotic.ZipFilePath))
+            {
+                var mutated = plainZip.Entries.Count(entry =>
+                {
+                    using var plainStream = entry.Open();
+                    using var chaosStream = chaosZip.GetEntry(entry.FullName)!.Open();
+                    using var plainBytes = new MemoryStream();
+                    using var chaosBytes = new MemoryStream();
+                    plainStream.CopyTo(plainBytes);
+                    chaosStream.CopyTo(chaosBytes);
+                    return !plainBytes.ToArray().AsSpan().SequenceEqual(chaosBytes.ToArray());
+                });
+
+                Assert.Equal(10, mutated);
+            }
+
+            var auditPath = Assert.Single(Directory.GetFiles(chaosPath, "*_properties.json"));
+            using var audit = JsonDocument.Parse(await File.ReadAllTextAsync(auditPath));
+            var chaosMode = audit.RootElement.GetProperty("chaosMode");
+            Assert.True(chaosMode.GetProperty("enabled").GetBoolean());
+
+            var anomalies = chaosMode.GetProperty("injectedAnomalies").EnumerateArray().ToList();
+            Assert.Equal(10, anomalies.Count);
+            Assert.All(anomalies, anomaly => Assert.EndsWith(".eml", anomaly.GetProperty("file").GetString(), StringComparison.Ordinal));
+            Assert.Equal(
+                new[] { "encoded-word", "header-fold", "mime-boundary", "rf822-depth" },
+                anomalies.Select(anomaly => anomaly.GetProperty("errorType").GetString()!).Distinct().Order(StringComparer.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(plainPath))
+            {
+                Directory.Delete(plainPath, true);
+            }
+
+            if (Directory.Exists(chaosPath))
+            {
+                Directory.Delete(chaosPath, true);
+            }
+        }
+    }
+
+    private static FileGenerationRequest CreateEmlRequest(string outputPath, ChaosConfig chaos) => new()
+    {
+        Output = new OutputConfig
+        {
+            OutputPath = outputPath,
+            FileCount = 10,
+            FileType = "eml",
+            Folders = 1,
+            Concurrency = 2,
+        },
+        Metadata = new MetadataConfig { Seed = 42 },
+        Chaos = chaos,
+    };
 }
 

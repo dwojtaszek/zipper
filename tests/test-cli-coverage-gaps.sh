@@ -363,6 +363,61 @@ else
     fail "--mime-realism full with --with-families generation failed"
 fi
 
+# --- REQ-237: Email/MIME Chaos Engine Anomaly Types ---
+
+print_info "Test: --type eml with --chaos-mode in Standard mode succeeds and audits anomalies"
+eml_chaos_output="$TEST_OUTPUT_DIR/eml-chaos-standard"
+if zipper --type eml --count 20 --seed 42 --chaos-mode --chaos-amount 50% \
+    --chaos-types "mime-boundary,encoded-word,header-fold,rf822-depth" \
+    --output-path "$eml_chaos_output" > /dev/null 2>&1; then
+    eml_chaos_zip=$(find "$eml_chaos_output" -name "*.zip" -print -quit)
+    eml_chaos_props=$(find "$eml_chaos_output" -name "*_properties.json" -print -quit)
+    if [[ -n "$eml_chaos_zip" ]] && python3 "$(dirname "$0")/validate_email_chaos_audit.py" standard "$eml_chaos_props"; then
+        pass "--type eml with --chaos-mode generated valid archive with MIME anomalies"
+    else
+        fail "--type eml with --chaos-mode did not generate archive with the expected email anomalies"
+    fi
+else
+    fail "--type eml with --chaos-mode generation failed"
+fi
+
+print_info "Test: --type eml with --chaos-mode in Production Set mode succeeds"
+eml_chaos_prod_output="$TEST_OUTPUT_DIR/eml-chaos-prod"
+if zipper --production-set --type eml --count 10 --seed 42 --bates-prefix PROD \
+    --chaos-mode --chaos-types "encoded-word,header-fold" \
+    --output-path "$eml_chaos_prod_output" > /dev/null 2>&1; then
+    manifest_file=$(find "$eml_chaos_prod_output" -name "_manifest.json" -print -quit)
+    prod_chaos_props=$(find "$eml_chaos_prod_output" -name "loadfile_properties.json" -print -quit)
+    if [[ -n "$manifest_file" && -f "$manifest_file" ]] && python3 "$(dirname "$0")/validate_email_chaos_audit.py" production "$prod_chaos_props"; then
+        pass "--type eml with --chaos-mode generated production set successfully"
+    else
+        fail "--type eml with --chaos-mode production set did not generate _manifest.json with the expected email anomalies"
+    fi
+else
+    fail "--type eml with --chaos-mode in production set failed"
+fi
+
+print_info "Test: --type pdf with --chaos-mode without loadfile-only fails validation"
+if zipper --type pdf --count 5 --chaos-mode --output-path "$TEST_OUTPUT_DIR/pdf-chaos-invalid" > /dev/null 2>&1; then
+    fail "--type pdf with --chaos-mode should have failed validation"
+else
+    pass "--type pdf with --chaos-mode correctly failed validation"
+fi
+
+print_info "Test: --type eml with --chaos-scenario in Standard mode fails validation"
+if zipper --type eml --count 5 --chaos-mode --chaos-scenario cross-format-desync --output-path "$TEST_OUTPUT_DIR/eml-chaos-scenario-invalid" > /dev/null 2>&1; then
+    fail "--type eml with --chaos-scenario should have failed validation"
+else
+    pass "--type eml with --chaos-scenario correctly failed validation"
+fi
+
+print_info "Test: email chaos types with --loadfile-only fail validation"
+if zipper --loadfile-only --type eml --count 5 --chaos-mode --chaos-types mime-boundary --output-path "$TEST_OUTPUT_DIR/eml-loadfile-only-invalid" > /dev/null 2>&1; then
+    fail "email chaos types with --loadfile-only should have failed validation"
+else
+    pass "email chaos types with --loadfile-only correctly failed validation"
+fi
+
 # --- Summary ---
 
 echo ""

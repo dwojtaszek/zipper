@@ -29,7 +29,8 @@ internal static class LoadFileOrchestrator
         WriterMode mode,
         Func<LoadFileFormat, ILoadFileWriter, (string LoadFileTarget, string AuditTarget)> getTargets,
         Func<string, System.IO.Stream> openTarget,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        System.Collections.Generic.IReadOnlyList<ChaosAnomaly>? anomalies = null)
     {
         string lastLoadFileTarget = string.Empty;
 
@@ -46,7 +47,7 @@ internal static class LoadFileOrchestrator
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            var auditJson = LoadFileAuditWriter.GenerateAuditJson(loadFileTarget, request, processedFiles, null, format);
+            var auditJson = LoadFileAuditWriter.GenerateAuditJson(loadFileTarget, request, processedFiles, anomalies, format);
             var auditStream = openTarget(auditTarget);
             await using (auditStream.ConfigureAwait(false))
             {

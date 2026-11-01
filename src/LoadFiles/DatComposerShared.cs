@@ -41,13 +41,20 @@ internal static class DatComposerShared
         bool hasAttachment = request.Metadata.WithFamilies
             && string.Equals(fileData.WorkItem.EffectiveFileType(request), "eml", StringComparison.Ordinal)
             && attachmentCount > 0;
-        string parentId = fileData.WorkItem.BatesNumberOverride
-            ?? (batesSequence is not null
-                ? batesSequence.Format(fileData.WorkItem.Index - 1).ToString()
-                : fileData.WorkItem.ControlNumberOverride ?? $"DOC{fileData.WorkItem.Index:D8}");
+        string parentId = ResolveParentId(fileData.WorkItem, batesSequence);
         string childId = hasAttachment ? FamilyPlan.GetChildId(parentId, attachmentCount) : parentId;
         return (parentId, childId, hasAttachment);
     }
+
+    /// <summary>
+    /// Resolves the record identifier a Load File uses for a work item: the Bates Number override, else the
+    /// Bates sequence when configured, else the Control Number override, else the DOC index fallback.
+    /// </summary>
+    internal static string ResolveParentId(FileWorkItem workItem, BatesSequence? batesSequence) =>
+        workItem.BatesNumberOverride
+        ?? (batesSequence is not null
+            ? batesSequence.Format(workItem.Index - 1).ToString()
+            : workItem.ControlNumberOverride ?? $"DOC{workItem.Index:D8}");
 
     /// <summary>
     /// Merges Source Record metadata into generated profile values: a source value wins when

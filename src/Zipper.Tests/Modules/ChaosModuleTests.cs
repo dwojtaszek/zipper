@@ -332,4 +332,137 @@ public class ChaosModuleTests
         Assert.True(config.ChaosMode);
         Assert.Equal(scenario, config.ChaosScenario);
     }
+
+    [Fact]
+    public void TryBuild_StandardMode_WithEmail_AllowsChaosMode()
+    {
+        var module = new ChaosModule();
+        Assert.True(module.TryApply("--chaos-mode", null));
+        Assert.True(module.TryApply("--chaos-types", "mime-boundary,rfc822-depth"));
+
+        Assert.True(module.TryBuild(
+            loadfileOnly: false,
+            formats: new List<LoadFileFormat> { LoadFileFormat.Dat },
+            out var config,
+            productionSet: false,
+            hasEml: true));
+
+        Assert.True(config.ChaosMode);
+        // Note: rfc822-depth alias is normalized to rf822-depth
+        Assert.Equal("mime-boundary,rf822-depth", config.ChaosTypes);
+    }
+
+    [Fact]
+    public void TryBuild_ProductionSet_WithEmail_AllowsChaosMode()
+    {
+        var module = new ChaosModule();
+        Assert.True(module.TryApply("--chaos-mode", null));
+        Assert.True(module.TryApply("--chaos-types", "encoded-word,header-fold"));
+
+        Assert.True(module.TryBuild(
+            loadfileOnly: false,
+            formats: new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt },
+            out var config,
+            productionSet: true,
+            hasEml: true));
+
+        Assert.True(config.ChaosMode);
+        Assert.Equal("encoded-word,header-fold", config.ChaosTypes);
+    }
+
+    [Theory]
+    [InlineData("cross-format-desync")]
+    [InlineData("broken-families")]
+    public void TryBuild_ProductionSet_WithEmailAndCrossFormatScenario_BuildsConfig(string scenario)
+    {
+        var module = new ChaosModule();
+        Assert.True(module.TryApply("--chaos-mode", null));
+        Assert.True(module.TryApply("--chaos-scenario", scenario));
+
+        Assert.True(module.TryBuild(
+            loadfileOnly: false,
+            formats: new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt },
+            out var config,
+            productionSet: true,
+            hasEml: true));
+
+        Assert.Equal(scenario, config.ChaosScenario);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TryBuild_EmailRunWithNonCrossFormatScenario_ReturnsFalseWithMessage(bool productionSet)
+    {
+        var module = new ChaosModule();
+        Assert.True(module.TryApply("--chaos-mode", null));
+        Assert.True(module.TryApply("--chaos-scenario", "structured-import-failures"));
+
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => module.TryBuild(
+            loadfileOnly: false,
+            formats: new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt },
+            out _,
+            productionSet: productionSet,
+            hasEml: true));
+
+        Assert.False(result);
+        Assert.Contains("Error: --chaos-scenario does not apply to email (.eml) chaos. Use --chaos-types with email types.", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryBuild_StandardEmailRunWithCrossFormatScenario_ReturnsFalseWithMessage()
+    {
+        var module = new ChaosModule();
+        Assert.True(module.TryApply("--chaos-mode", null));
+        Assert.True(module.TryApply("--chaos-scenario", "cross-format-desync"));
+
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => module.TryBuild(
+            loadfileOnly: false,
+            formats: new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt },
+            out _,
+            productionSet: false,
+            hasEml: true));
+
+        Assert.False(result);
+        Assert.Contains("Error: --chaos-scenario does not apply to email (.eml) chaos.", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryBuild_EmailRunWithLoadFileChaosType_ReturnsFalseWithEmailScope()
+    {
+        var module = new ChaosModule();
+        Assert.True(module.TryApply("--chaos-mode", null));
+        Assert.True(module.TryApply("--chaos-types", "mime-boundary,unclosed-quote"));
+
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => module.TryBuild(
+            loadfileOnly: false,
+            formats: new List<LoadFileFormat> { LoadFileFormat.Dat },
+            out _,
+            productionSet: false,
+            hasEml: true));
+
+        Assert.False(result);
+        Assert.Contains(
+            "Error: Invalid chaos type 'unclosed-quote'. Valid types for email (.eml) generation: encoded-word, header-fold, mime-boundary, rf822-depth",
+            stderr,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryBuild_LoadfileOnlyWithEmailType_ReturnsFalseWithMessage()
+    {
+        var module = new ChaosModule();
+        Assert.True(module.TryApply("--chaos-mode", null));
+        Assert.True(module.TryApply("--chaos-types", "mime-boundary"));
+
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => module.TryBuild(
+            loadfileOnly: true,
+            formats: new List<LoadFileFormat> { LoadFileFormat.Dat },
+            out _,
+            productionSet: false,
+            hasEml: true));
+
+        Assert.False(result);
+        Assert.Contains("Error: Chaos type 'mime-boundary' applies only to email (.eml) generation, not to load file output.", stderr, StringComparison.Ordinal);
+    }
 }

@@ -818,3 +818,31 @@ REQ-236	unit	MimeRealismTests.ToEml_WithHeaderFolding_FoldsLongReferencesHeader	
 REQ-236	unit	MimeRealismTests.EmlFileGenerator_WithNestedRfc822AndFullAttachmentRate_PreservesRateSelectedPlaceholder	Nested MIME realism preserves a rate-selected Attachment when multi-attachment is disabled
 REQ-236	e2e	test-cli-coverage-gaps.sh	E2E verifies warnings, standard/full body fidelity, multi-Attachment family records and text sidecars, and MIME parser output
 REQ-236	e2e	test-cli-coverage-gaps.bat	Windows E2E verifies warnings, standard/full body fidelity, multi-Attachment family records and text sidecars, and MIME parser output
+REQ-237	unit	EmailAnomalyApplierTests.Apply_MimeBoundary_AcrossSeeds_ProducesHeaderMismatchOrUnclosedDelimiter	MIME boundary anomaly produces a Content-Type boundary mismatch or an unclosed delimiter across seeds
+REQ-237	unit	EmailAnomalyApplierTests.Apply_MimeBoundary_SinglePartMessage_DeclaresBoundaryAbsentFromBody	Single-part message declares a boundary that never appears in the body
+REQ-237	unit	EmailAnomalyApplierTests.Apply_EncodedWord_AcrossSeeds_ReplacesSubjectWithMalformedEncodedWord	Encoded-word anomaly replaces the Subject with a malformed RFC 2047 encoded word
+REQ-237	unit	EmailAnomalyApplierTests.Apply_EncodedWord_WhenSubjectIsMissing_InsertsMalformedSubjectHeader	Encoded-word anomaly inserts a malformed Subject header when none exists
+REQ-237	unit	EmailAnomalyApplierTests.Apply_HeaderFold_AcrossSeeds_InjectsIllegalFoldingOrBareLineBreak	Header-fold anomaly injects illegal folding or a bare LF or CR line break
+REQ-237	unit	EmailAnomalyApplierTests.Apply_Rfc822Depth_WrapsMessageInTwentyFiveNestedRfc822Parts	rf822-depth anomaly wraps the message in twenty-five nested message/rfc822 parts
+REQ-237	unit	EmailAnomalyApplierTests.Apply_NonUtf8Payload_SurvivesEveryType	Email anomalies preserve non-UTF-8 payload bytes byte-for-byte outside the mutation
+REQ-237	unit	EmailAnomalyApplierTests.Apply_SameInputSeedAndIndex_ProducesIdenticalOutputAndAudit	Same seed and work item index produce identical mutated bytes and audit entries
+REQ-237	unit	ChaosAnomalyTypesTests.Email_ContainsExpectedTypes	Email anomaly type catalog contains the four canonical email types
+REQ-237	unit	ChaosAnomalyTypesTests.IsEmail_EmailTypeName_ReturnsTrue	Email anomaly type names, including the rfc822-depth alias, are classified as email types
+REQ-237	unit	ChaosEngineTests.EmailChaos_ShouldInterceptAndApplyAnomalies	ChaosEngine email anomaly dispatch and audit tracking
+REQ-237	unit	ChaosEngineTests.ApplyEmailChaos_ConcurrentCalls_MatchSequentialOutputAndAudit	Concurrent email chaos calls produce the same output and audit as sequential calls
+REQ-237	unit	ChaosEngineTests.ApplyEmailChaos_ResultDoesNotDependOnCallOrder_ForSameSeed	Email chaos result for a seed does not depend on the order of calls
+REQ-237	unit	ChaosEngineTests.ApplyEmailChaos_WithItemIndexes_SamplesOnlyEligibleItems	Email chaos samples only the eligible work item indexes
+REQ-237	unit	ChaosEngineTests.ApplyEmailChaos_WithBatesSequence_AuditsBatesNumberAsRecordId	Email chaos audit names each record by its Bates Number when a Bates sequence is configured
+REQ-237	unit	ChaosEngineTests.ApplyEmailChaos_WithoutBatesSequence_AuditsControlNumberOverrideAsRecordId	Email chaos audit names each record by its Control Number when no Bates sequence applies
+REQ-237	unit	ChaosEngineBuilderTests.BuildForStandardEmail_WithMixedFileTypes_SamplesOnlyEmlWorkItems	Standard mode email chaos samples only work items whose effective type is eml
+REQ-237	unit	ChaosEngineBuilderTests.BuildForStandardEmail_WithBatesConfig_AuditsBatesNumberAsRecordId	Standard mode email chaos audit uses the run's Bates Number as the record ID
+REQ-237	unit	ChaosEngineBuilderTests.BuildForProductionEmail_WithMixedFileTypes_SamplesOnlyEmlPlans	Production Set email chaos samples only eml plans
+REQ-237	unit	ParallelFileGeneratorTests.GenerateFilesAsync_WithEmailChaos_MutatesEverySampledEmlAndAuditsIt	Standard mode mutates every sampled .eml and audits the anomalies
+REQ-237	unit	ProductionSetTests.GenerateAsync_WithEmailChaos_AuditsEmailAnomaliesOnEveryLoadFileAudit	Production Set email anomalies appear on every Load File audit
+REQ-237	unit	ChaosAndComparisonPropertyTests.EmailAnomalyApplier_Apply_ShouldMutateAndAuditAnomaliesDeterministically	Property: email anomaly application mutates and audits deterministically
+REQ-237	unit	ChaosModuleTests.TryBuild_StandardMode_WithEmail_AllowsChaosMode	ChaosModule allows chaos-mode in Standard mode with email generation
+REQ-237	unit	ChaosModuleTests.TryBuild_ProductionSet_WithEmail_AllowsChaosMode	ChaosModule allows chaos-mode in Production Set mode with email generation
+REQ-237	unit	ChaosModuleTests.TryBuild_EmailRunWithNonCrossFormatScenario_ReturnsFalseWithMessage	--chaos-scenario is rejected on email runs except Production Set cross-format scenarios
+REQ-237	unit	ChaosModuleTests.TryBuild_LoadfileOnlyWithEmailType_ReturnsFalseWithMessage	Email chaos types are rejected with --loadfile-only
+REQ-237	e2e	test-cli-coverage-gaps.sh	E2E verification of email chaos in Standard and Production Set modes and its rejection rules
+REQ-237	e2e	test-cli-coverage-gaps.bat	Windows batch E2E verification of email chaos in Standard and Production Set modes and its rejection rules

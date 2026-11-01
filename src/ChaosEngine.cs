@@ -8,7 +8,9 @@ namespace Zipper;
 /// Acts as a line-level interceptor before output is written to the stream.
 /// </summary>
 /// <remarks>
-/// This class is not thread-safe. Instances should not be shared across threads.
+/// Line-level chaos is not thread-safe. Instances used for line-level chaos should not be shared across threads.
+/// Email chaos (<see cref="ApplyEmailChaos(FileWorkItem, GeneratedFileContent)"/>) is safe for concurrent calls
+/// as long as each work item is applied once.
 /// </remarks>
 internal class ChaosEngine
 {
@@ -20,12 +22,13 @@ internal class ChaosEngine
     private static readonly string[] CsvChaosTypes = ChaosAnomalyTypes.Csv.ToArray();
     private static readonly string[] ConcordanceChaosTypes = ChaosAnomalyTypes.Concordance.ToArray();
     private static readonly string[] EdrmXmlChaosTypes = ChaosAnomalyTypes.EdrmXml.ToArray();
+    private static readonly string[] EmailChaosTypes = ChaosAnomalyTypes.Email.ToArray();
 
     private readonly HashSet<string> enabledTypes;
     private readonly List<ChaosAnomaly> anomalies = new();
     private int anomalyTypeIndex;
 
-    private readonly IAnomalyApplier applier;
+    private readonly IAnomalyApplier? applier;
     private readonly LoadFileFormat format;
     private readonly long totalLines;
     private readonly bool onlyOptEncoding;
@@ -33,6 +36,14 @@ internal class ChaosEngine
     private readonly bool hasDatRecordOnlyTypes;
     private readonly bool noDatRecords;
     private readonly ChaosSampler sampler;
+
+    // Email chaos: the sampled work items, and one audit slot per sampled item in work item order.
+    private readonly int emailSeed;
+    private readonly BatesSequence? emailBatesSequence;
+    private readonly Dictionary<long, EmailSample>? emailSamples;
+    private readonly ChaosAnomaly?[]? emailAnomalies;
+
+    private readonly record struct EmailSample(int Slot, string Type);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ChaosEngine"/> class.
@@ -100,6 +111,71 @@ internal class ChaosEngine
             dateColumnNames,
             sourceFilePaths,
             dateColumnIndexes);
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ChaosEngine"/> class for email work items.
+    /// </summary>
+    /// <param name="totalItems">Number of eligible work items to sample over.</param>
+    /// <param name="chaosAmount">Amount string: percentage (e.g., "1%") or exact count (e.g., "500").</param>
+    /// <param name="chaosTypes">Comma-separated email type filter, or null or empty for all email types.</param>
+    /// <param name="seed">Optional run seed. Each work item derives its own random sequence from this seed and its index.</param>
+    /// <param name="itemIndexes">
+    /// Optional ascending 1-based indexes of the eligible work items. Its count must equal <paramref name="totalItems"/>.
+    /// Null means work items 1 through <paramref name="totalItems"/> are all eligible.
+    /// </param>
+    /// <param name="batesSequence">Optional Bates sequence of the run, used to name each audited record as its Load File record is named.</param>
+    public ChaosEngine(
+        long totalItems,
+        string? chaosAmount,
+        string? chaosTypes,
+        int? seed = null,
+        IReadOnlyList<long>? itemIndexes = null,
+        BatesSequence? batesSequence = null)
+    {
+        this.format = LoadFileFormat.Dat;
+        this.totalLines = totalItems;
+        ChaosSampler.ValidateTotalLines(totalItems);
+        if (itemIndexes is not null && itemIndexes.Count != totalItems)
+        {
+            throw new ArgumentException("The item index count must equal totalItems.", nameof(itemIndexes));
+        }
+
+#pragma warning disable S2245 // Pseudo-randomness is safe for mock metadata generation
+        Random random = seed.HasValue ? new Random(seed.Value) : new Random();
+#pragma warning restore S2245
+
+        this.emailSeed = seed ?? random.Next();
+        this.emailBatesSequence = batesSequence;
+        this.enabledTypes = ResolveEnabledEmailTypes(chaosTypes);
+        var emailTypes = this.enabledTypes.OrderBy(type => type, StringComparer.Ordinal).ToArray();
+
+        this.sampler = new ChaosSampler(totalItems, chaosAmount, random);
+        long[] sampledOrdinals = emailTypes.Length == 0 ? [] : this.sampler.TargetLines.Order().ToArray();
+
+        // Ordinals are ascending, so audit slots follow work item order. Types rotate over the sampled items.
+        this.emailSamples = new Dictionary<long, EmailSample>(sampledOrdinals.Length);
+        this.emailAnomalies = new ChaosAnomaly?[sampledOrdinals.Length];
+        for (int slot = 0; slot < sampledOrdinals.Length; slot++)
+        {
+            long ordinal = sampledOrdinals[slot];
+            long workItemIndex = itemIndexes is null ? ordinal : itemIndexes[(int)(ordinal - 1)];
+            this.emailSamples.Add(workItemIndex, new EmailSample(slot, emailTypes[slot % emailTypes.Length]));
+        }
+    }
+
+    private static HashSet<string> ResolveEnabledEmailTypes(string? chaosTypes)
+    {
+        if (!string.IsNullOrEmpty(chaosTypes))
+        {
+            var resolvedTypes = new HashSet<string>(
+                chaosTypes.Split(',').Select(type => ChaosAnomalyTypes.CanonicalEmailType(type.Trim().ToLowerInvariant())),
+                StringComparer.OrdinalIgnoreCase);
+            resolvedTypes.IntersectWith(EmailChaosTypes);
+            return resolvedTypes;
+        }
+
+        return new HashSet<string>(EmailChaosTypes, StringComparer.OrdinalIgnoreCase);
     }
 
     private static HashSet<string> ResolveEnabledTypes(LoadFileFormat format, string? chaosTypes)
@@ -196,7 +272,9 @@ internal class ChaosEngine
     /// <summary>
     /// Gets the list of injected anomalies for audit output.
     /// </summary>
-    public IReadOnlyList<ChaosAnomaly> Anomalies => this.anomalies;
+    public IReadOnlyList<ChaosAnomaly> Anomalies => this.emailAnomalies is null
+        ? this.anomalies
+        : this.emailAnomalies.OfType<ChaosAnomaly>().ToList();
 
     /// <summary>
     /// Determines if a line should be intercepted by the chaos engine.
@@ -237,7 +315,7 @@ internal class ChaosEngine
         LoadFileRecord? record = null,
         ILoadFileSerializer? serializer = null)
     {
-        if (this.enabledTypes.Count == 0)
+        if (this.enabledTypes.Count == 0 || this.applier is null)
         {
             return line;
         }
@@ -395,7 +473,43 @@ internal class ChaosEngine
             return null;
         }
 
-        return this.applier.GetEncodingAnomaly(lineNumber, nextLineNumber, encoding, this.anomalies);
+        return this.applier?.GetEncodingAnomaly(lineNumber, nextLineNumber, encoding, this.anomalies);
+    }
+
+    /// <summary>
+    /// Applies the email anomaly sampled for a work item and records its audit entry.
+    /// Returns the content unchanged when the work item was not sampled.
+    /// </summary>
+    /// <remarks>
+    /// The anomaly depends only on the seed, the work item index, and the content, so the output and audit
+    /// match regardless of call order or concurrency. Each work item must be applied at most once.
+    /// </remarks>
+    public GeneratedFileContent ApplyEmailChaos(
+        FileWorkItem workItem,
+        GeneratedFileContent generated)
+    {
+        if (this.emailSamples is null || !this.emailSamples.TryGetValue(workItem.Index, out var sample))
+        {
+            return generated;
+        }
+
+        var result = EmailAnomalyApplier.Apply(
+            generated.Content,
+            workItem.FileName,
+            DatComposerShared.ResolveParentId(workItem, this.emailBatesSequence),
+            sample.Type,
+            workItem.Index,
+            EmailAnomalyApplier.CreateItemRandom(this.emailSeed, workItem.Index));
+        this.emailAnomalies![sample.Slot] = result.Anomaly;
+
+        return new GeneratedFileContent
+        {
+            Content = result.Content,
+            Attachment = generated.Attachment,
+            Attachments = generated.Attachments,
+            Email = generated.Email,
+            PageCount = generated.PageCount,
+        };
     }
 
     /// <summary>

@@ -104,7 +104,8 @@ public static class Pipeline
             out var chaos,
             delimiters,
             loadFile.Encoding,
-            production.ProductionSet))
+            production.ProductionSet,
+            output.HasFileType("eml")))
         {
             return null;
         }

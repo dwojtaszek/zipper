@@ -84,6 +84,16 @@ internal static class ChaosAnomalyTypes
     }
 
     /// <summary>
+    /// Email/MIME structural and parsing anomalies injected into generated EML files:
+    /// mismatched boundary strings, malformed RFC 2047 encoded-word sequences,
+    /// illegal header folding / bare CR/LF, and excessive RFC 822 nesting depth.
+    /// </summary>
+    public static readonly IReadOnlyList<string> Email = new[]
+    {
+        "mime-boundary", "encoded-word", "header-fold", "rf822-depth",
+    };
+
+    /// <summary>
     /// Returns the valid anomaly types for the given format.
     /// </summary>
     public static IReadOnlyList<string> ForFormat(LoadFileFormat format) =>
@@ -95,4 +105,16 @@ internal static class ChaosAnomalyTypes
             LoadFileFormat.EdrmXml => EdrmXml,
             _ => Dat,
         };
+
+    /// <summary>
+    /// Maps the <c>rfc822-depth</c> alias to its canonical <c>rf822-depth</c> name. Other names are returned unchanged.
+    /// </summary>
+    public static string CanonicalEmailType(string type) =>
+        string.Equals(type, "rfc822-depth", StringComparison.OrdinalIgnoreCase) ? "rf822-depth" : type;
+
+    /// <summary>
+    /// Returns whether a type name selects an email anomaly. The <c>rfc822-depth</c> alias is accepted for <c>rf822-depth</c>.
+    /// </summary>
+    public static bool IsEmail(string type) =>
+        Email.Contains(CanonicalEmailType(type), StringComparer.OrdinalIgnoreCase);
 }

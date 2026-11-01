@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Xunit;
+using Zipper.Config;
 using Zipper.LoadFiles;
 
 namespace Zipper.Tests;
@@ -1289,5 +1290,266 @@ public class ChaosEngineTests
         }
 
         Assert.Contains(engine.Anomalies, anomaly => anomaly.ErrorType == "csv-bom");
+    }
+
+    [Fact]
+    public void Constructor_EmailTotalItemsExceedsIntMax_ThrowsArgumentOutOfRangeException()
+    {
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => new ChaosEngine(
+            totalItems: (long)int.MaxValue + 1,
+            chaosAmount: "1%",
+            chaosTypes: null,
+            seed: 42));
+
+        Assert.Contains("Chaos Engine does not support load files larger than Int32.MaxValue lines", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EmailChaos_ShouldInterceptAndApplyAnomalies()
+    {
+        var engine = new ChaosEngine(5, "100%", "encoded-word,header-fold", seed: 42);
+        byte[] emailBytes = Encoding.UTF8.GetBytes("From: a@b.com\r\nTo: c@d.com\r\nSubject: Hello\r\n\r\nBody\r\n");
+
+        for (int i = 1; i <= 5; i++)
+        {
+            var content = new GeneratedFileContent { Content = emailBytes };
+            var item = new FileWorkItem { Index = i, FileName = $"DOC{i:D4}.eml" };
+            var result = engine.ApplyEmailChaos(item, content);
+            Assert.False(emailBytes.AsSpan().SequenceEqual(result.Content));
+        }
+
+        Assert.Equal(5, engine.Anomalies.Count);
+        Assert.All(engine.Anomalies, a =>
+        {
+            Assert.True(a.ErrorType is "encoded-word" or "header-fold");
+            Assert.NotNull(a.File);
+            Assert.NotNull(a.Location);
+        });
+    }
+
+    [Fact]
+    public void EmailChaos_WhenAmountIsZero_DoesNotMutateAndKeepsOutputIdentical()
+    {
+        var engine = new ChaosEngine(3, "0", null, seed: 42);
+        byte[] emailBytes = Encoding.UTF8.GetBytes("From: a@b.com\r\nTo: c@d.com\r\nSubject: Hello\r\n\r\nBody\r\n");
+
+        for (int i = 1; i <= 3; i++)
+        {
+            var content = new GeneratedFileContent { Content = emailBytes };
+            var item = new FileWorkItem { Index = i, FileName = $"DOC{i:D4}.eml" };
+            var result = engine.ApplyEmailChaos(item, content);
+            Assert.Same(emailBytes, result.Content);
+        }
+
+        Assert.Empty(engine.Anomalies);
+    }
+
+    [Fact]
+    public void EmailChaos_IsDeterministicForSameSeed()
+    {
+        var engine1 = new ChaosEngine(10, "50%", null, seed: 99);
+        var engine2 = new ChaosEngine(10, "50%", null, seed: 99);
+        byte[] emailBytes = Encoding.UTF8.GetBytes("From: a@b.com\r\nTo: c@d.com\r\nSubject: Hello\r\n\r\nBody\r\n");
+
+        for (int i = 1; i <= 10; i++)
+        {
+            var c1 = new GeneratedFileContent { Content = (byte[])emailBytes.Clone() };
+            var c2 = new GeneratedFileContent { Content = (byte[])emailBytes.Clone() };
+            var item = new FileWorkItem { Index = i, FileName = $"DOC{i:D4}.eml" };
+
+            var r1 = engine1.ApplyEmailChaos(item, c1);
+            var r2 = engine2.ApplyEmailChaos(item, c2);
+
+            Assert.Equal(r1.Content, r2.Content);
+        }
+
+        Assert.Equal(engine1.Anomalies.Count, engine2.Anomalies.Count);
+        for (int i = 0; i < engine1.Anomalies.Count; i++)
+        {
+            Assert.Equal(engine1.Anomalies[i].ErrorType, engine2.Anomalies[i].ErrorType);
+            Assert.Equal(engine1.Anomalies[i].LineNumber, engine2.Anomalies[i].LineNumber);
+            Assert.Equal(engine1.Anomalies[i].Description, engine2.Anomalies[i].Description);
+        }
+    }
+
+    private static FileWorkItem EmlWorkItem(long index) =>
+        new() { Index = index, FileName = $"DOC{index:D8}.eml" };
+
+    private static GeneratedFileContent EmlContent() =>
+        new() { Content = Encoding.UTF8.GetBytes("From: a@b.com\r\nTo: c@d.com\r\nSubject: Hello\r\n\r\nBody\r\n") };
+
+    [Fact]
+    public void ApplyEmailChaos_ResultDoesNotDependOnCallOrder_ForSameSeed()
+    {
+        const int count = 40;
+        var forward = new ChaosEngine(count, "50%", null, seed: 7);
+        var reverse = new ChaosEngine(count, "50%", null, seed: 7);
+
+        var forwardOutputs = new byte[count + 1][];
+        for (int i = 1; i <= count; i++)
+        {
+            forwardOutputs[i] = forward.ApplyEmailChaos(EmlWorkItem(i), EmlContent()).Content;
+        }
+
+        var reverseOutputs = new byte[count + 1][];
+        for (int i = count; i >= 1; i--)
+        {
+            reverseOutputs[i] = reverse.ApplyEmailChaos(EmlWorkItem(i), EmlContent()).Content;
+        }
+
+        for (int i = 1; i <= count; i++)
+        {
+            Assert.Equal(forwardOutputs[i], reverseOutputs[i]);
+        }
+
+        Assert.Equal(forward.Anomalies, reverse.Anomalies);
+    }
+
+    [Fact]
+    public void ApplyEmailChaos_ConcurrentCalls_MatchSequentialOutputAndAudit()
+    {
+        const int count = 200;
+        var sequential = new ChaosEngine(count, "30%", null, seed: 11);
+        var concurrent = new ChaosEngine(count, "30%", null, seed: 11);
+
+        var expected = new byte[count + 1][];
+        for (int i = 1; i <= count; i++)
+        {
+            expected[i] = sequential.ApplyEmailChaos(EmlWorkItem(i), EmlContent()).Content;
+        }
+
+        var actual = new byte[count + 1][];
+        Parallel.For(1, count + 1, new ParallelOptions { MaxDegreeOfParallelism = 8 }, i =>
+        {
+            actual[i] = concurrent.ApplyEmailChaos(EmlWorkItem(i), EmlContent()).Content;
+        });
+
+        for (int i = 1; i <= count; i++)
+        {
+            Assert.Equal(expected[i], actual[i]);
+        }
+
+        Assert.Equal(sequential.Anomalies, concurrent.Anomalies);
+    }
+
+    [Fact]
+    public void ApplyEmailChaos_Anomalies_AreAuditedInWorkItemOrder()
+    {
+        const int count = 25;
+        var engine = new ChaosEngine(count, "100%", null, seed: 3);
+
+        for (int i = count; i >= 1; i--)
+        {
+            engine.ApplyEmailChaos(EmlWorkItem(i), EmlContent());
+        }
+
+        var expectedFiles = Enumerable.Range(1, count).Select(i => $"DOC{i:D8}.eml").ToList();
+        Assert.Equal(expectedFiles, engine.Anomalies.Select(a => a.File));
+    }
+
+    [Fact]
+    public void ApplyEmailChaos_UnsampledItems_ReturnTheInputBytesUnchanged()
+    {
+        var engine = new ChaosEngine(10, "2", null, seed: 5);
+        var inputs = new List<GeneratedFileContent>();
+        var results = new List<GeneratedFileContent>();
+
+        for (int i = 1; i <= 10; i++)
+        {
+            var input = EmlContent();
+            inputs.Add(input);
+            results.Add(engine.ApplyEmailChaos(EmlWorkItem(i), input));
+        }
+
+        int untouched = results.Zip(inputs).Count(pair => ReferenceEquals(pair.First.Content, pair.Second.Content));
+        Assert.Equal(8, untouched);
+        Assert.Equal(2, engine.Anomalies.Count);
+    }
+
+    [Fact]
+    public void ApplyEmailChaos_WhenNoEmailTypeIsSelected_LeavesEveryItemUnchanged()
+    {
+        var engine = new ChaosEngine(5, "100%", "quotes", seed: 1);
+        var input = EmlContent();
+
+        for (int i = 1; i <= 5; i++)
+        {
+            Assert.Same(input.Content, engine.ApplyEmailChaos(EmlWorkItem(i), input).Content);
+        }
+
+        Assert.Empty(engine.Anomalies);
+    }
+
+    [Fact]
+    public void ApplyEmailChaos_FullSample_ExercisesEveryEmailType()
+    {
+        var engine = new ChaosEngine(200, "100%", null, seed: 9);
+
+        for (int i = 1; i <= 200; i++)
+        {
+            engine.ApplyEmailChaos(EmlWorkItem(i), EmlContent());
+        }
+
+        var observedTypes = engine.Anomalies.Select(a => a.ErrorType).Distinct().OrderBy(t => t, StringComparer.Ordinal);
+        Assert.Equal(ChaosAnomalyTypes.Email.OrderBy(t => t, StringComparer.Ordinal), observedTypes);
+    }
+
+    [Fact]
+    public void ApplyEmailChaos_WithItemIndexes_SamplesOnlyEligibleItems()
+    {
+        IReadOnlyList<long> eligible = new long[] { 2, 5, 9 };
+        var engine = new ChaosEngine(eligible.Count, "100%", null, seed: 4, itemIndexes: eligible);
+        var input = EmlContent();
+
+        var mutatedIndexes = new List<long>();
+        for (int i = 1; i <= 10; i++)
+        {
+            var result = engine.ApplyEmailChaos(EmlWorkItem(i), input);
+            if (!ReferenceEquals(result.Content, input.Content))
+            {
+                mutatedIndexes.Add(i);
+            }
+        }
+
+        Assert.Equal(eligible, mutatedIndexes);
+        Assert.Equal(eligible.Select(i => $"DOC{i:D8}.eml"), engine.Anomalies.Select(a => a.File));
+    }
+
+    [Fact]
+    public void ApplyEmailChaos_FullSample_AssignsTypesRoundRobinInWorkItemOrder()
+    {
+        var engine = new ChaosEngine(8, "100%", null, seed: 9);
+
+        for (int i = 1; i <= 8; i++)
+        {
+            engine.ApplyEmailChaos(EmlWorkItem(i), EmlContent());
+        }
+
+        var sortedTypes = ChaosAnomalyTypes.Email.OrderBy(t => t, StringComparer.Ordinal).ToArray();
+        var expected = Enumerable.Range(0, 8).Select(i => sortedTypes[i % sortedTypes.Length]).ToArray();
+        Assert.Equal(expected, engine.Anomalies.Select(a => a.ErrorType).ToArray());
+    }
+
+    [Fact]
+    public void ApplyEmailChaos_WithBatesSequence_AuditsBatesNumberAsRecordId()
+    {
+        var bates = BatesSequence.FromConfig(new BatesNumberConfig { Prefix = "PROD", Start = 1, Digits = 8 });
+        var engine = new ChaosEngine(2, "100%", null, seed: 4, batesSequence: bates);
+
+        engine.ApplyEmailChaos(EmlWorkItem(1), EmlContent());
+        engine.ApplyEmailChaos(EmlWorkItem(2), EmlContent());
+
+        Assert.Equal(new[] { "PROD00000001", "PROD00000002" }, engine.Anomalies.Select(a => a.RecordID));
+    }
+
+    [Fact]
+    public void ApplyEmailChaos_WithoutBatesSequence_AuditsControlNumberOverrideAsRecordId()
+    {
+        var engine = new ChaosEngine(1, "100%", null, seed: 4);
+        var item = new FileWorkItem { Index = 1, FileName = "DOC00000001.eml", ControlNumberOverride = "CTRL-001" };
+
+        engine.ApplyEmailChaos(item, EmlContent());
+
+        Assert.Equal("CTRL-001", Assert.Single(engine.Anomalies).RecordID);
     }
 }

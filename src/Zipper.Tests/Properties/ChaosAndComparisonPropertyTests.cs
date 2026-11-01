@@ -266,6 +266,59 @@ public sealed class ChaosAndComparisonPropertyTests
     }
 
     [Property]
+    public void EmailAnomalyApplier_Apply_ShouldMutateAndAuditAnomaliesDeterministically(
+        byte rawTypeIndex,
+        ChaosSeedPropertyInput seedInput)
+    {
+        string[] chaosTypes = [.. ChaosAnomalyTypes.Email];
+        string chosenType = chaosTypes[rawTypeIndex % chaosTypes.Length];
+
+        string boundary = "----=_Part_Sample_123";
+        string sampleEmail = string.Concat(
+            "From: alice@example.com\r\n",
+            "To: bob@example.com\r\n",
+            "Subject: Important Project Status Update\r\n",
+            "Date: Mon, 01 Jan 2024 10:00:00 +0000\r\n",
+            "MIME-Version: 1.0\r\n",
+            $"Content-Type: multipart/mixed; boundary=\"{boundary}\"\r\n",
+            "\r\n",
+            $"--{boundary}\r\n",
+            "Content-Type: text/plain; charset=utf-8\r\n",
+            "\r\n",
+            "Hello Bob,\r\nHere is the weekly update.\r\n",
+            $"--{boundary}\r\n",
+            "Content-Type: application/pdf; name=\"report.pdf\"\r\n",
+            "Content-Disposition: attachment; filename=\"report.pdf\"\r\n",
+            "\r\n",
+            "JVBERi0xLjQKfakecontent\r\n",
+            $"--{boundary}--\r\n");
+
+        byte[] originalBytes = Encoding.UTF8.GetBytes(sampleEmail);
+        string recordId = $"DOC{seedInput.RecordOrdinal.ToString("D4", CultureInfo.InvariantCulture)}";
+        string fileName = $"{recordId}.eml";
+        int workItemIndex = (int)(seedInput.LineNumber % 1000) + 1;
+
+        var first = EmailAnomalyApplier.Apply(originalBytes, fileName, recordId, chosenType, workItemIndex, new Random(seedInput.Seed));
+        var second = EmailAnomalyApplier.Apply(originalBytes, fileName, recordId, chosenType, workItemIndex, new Random(seedInput.Seed));
+
+        // Determinism invariant
+        Assert.Equal(first.Content, second.Content);
+        Assert.Equal(first.Anomaly, second.Anomaly);
+
+        // Mutation invariant
+        Assert.False(originalBytes.SequenceEqual(first.Content));
+
+        // Audit contract
+        ChaosAnomaly anomaly = first.Anomaly;
+        Assert.Equal(fileName, anomaly.File);
+        Assert.Equal(recordId, anomaly.RecordID);
+        Assert.Equal(chosenType, anomaly.ErrorType);
+        Assert.False(string.IsNullOrEmpty(anomaly.Location));
+        Assert.False(string.IsNullOrEmpty(anomaly.LineNumber));
+        Assert.False(string.IsNullOrEmpty(anomaly.Description));
+    }
+
+    [Property]
     public void DatAnomalyApplier_ApplyRecord_ShouldBeDeterministicAndAuditTheColumn(
         byte rawTypeIndex,
         ChaosSeedPropertyInput seedInput)
