@@ -107,8 +107,9 @@ internal static class TiffTestHelpers
         }
 
         using var process = Process.Start(psi)!;
+        var stdErrTask = process.StandardError.ReadToEndAsync();
         var stdOut = process.StandardOutput.ReadToEnd();
-        var stdErr = process.StandardError.ReadToEnd();
+        var stdErr = stdErrTask.GetAwaiter().GetResult();
         process.WaitForExit();
         return (process.ExitCode, stdOut, stdErr);
     }

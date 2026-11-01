@@ -32,17 +32,25 @@ internal static class TiffRenderer
             ? CompressGroup4(raster, DefaultWidth, DefaultHeight)
             : raster;
 
-        return BuildTiff(new[] { (stripData, pageIndex, pageCount, useGroup4) }, DefaultWidth, DefaultHeight);
+        using var ms = new MemoryStream();
+        using var bw = new BinaryWriter(ms);
+        WriteTiffHeader(bw);
+        WritePage(bw, 8, stripData, pageIndex, pageCount, useGroup4, isLast: true);
+        return ms.ToArray();
     }
 
     /// <summary>
     /// Renders a multi-page TIFF file with chained IFDs for each page.
+    /// Pages are streamed directly to the writer to avoid retaining uncompressed rasters in memory.
     /// </summary>
     public static byte[] RenderMultiPage(int pageCount, string? baseBates, TiffConfig? tiffConfig)
     {
         bool useGroup4 = UseGroup4(tiffConfig);
+        using var ms = new MemoryStream();
+        using var bw = new BinaryWriter(ms);
+        WriteTiffHeader(bw);
+        uint offset = 8;
 
-        var pages = new List<(byte[] StripData, int PageIndex, int PageCount, bool IsGroup4)>(pageCount);
         for (int p = 1; p <= pageCount; p++)
         {
             var pageBates = string.IsNullOrEmpty(baseBates) || pageCount <= 1
@@ -52,10 +60,11 @@ internal static class TiffRenderer
             var stripData = useGroup4
                 ? CompressGroup4(raster, DefaultWidth, DefaultHeight)
                 : raster;
-            pages.Add((stripData, p, pageCount, useGroup4));
+
+            offset = WritePage(bw, offset, stripData, p, pageCount, useGroup4, isLast: p == pageCount);
         }
 
-        return BuildTiff(pages, DefaultWidth, DefaultHeight);
+        return ms.ToArray();
     }
 
     /// <summary>
@@ -130,75 +139,69 @@ internal static class TiffRenderer
         }
     }
 
-    private static byte[] BuildTiff(
-        IReadOnlyList<(byte[] StripData, int PageIndex, int PageCount, bool IsGroup4)> pages,
-        int width,
-        int height)
+    private static void WriteTiffHeader(BinaryWriter bw)
     {
-        using var ms = new MemoryStream();
-        using var bw = new BinaryWriter(ms);
-
         // Header: "II", magic 42, offset to first IFD (8)
         bw.Write((byte)'I');
         bw.Write((byte)'I');
         bw.Write((ushort)42);
         bw.Write((uint)8);
+    }
 
-        uint currentIfdOffset = 8;
+    private static uint WritePage(
+        BinaryWriter bw,
+        uint currentIfdOffset,
+        byte[] stripData,
+        int pageIndex,
+        int pageCount,
+        bool isGroup4,
+        bool isLast)
+    {
+        uint extraDataOffset = currentIfdOffset + IfdSize;
+        uint xResOffset = extraDataOffset;
+        uint yResOffset = extraDataOffset + 8;
+        uint swOffset = extraDataOffset + 16;
+        uint stripOffset = AlignToWord(swOffset + (uint)SoftwareBytes.Length);
+        uint nextIfdOffset = isLast ? 0 : AlignToWord(stripOffset + (uint)stripData.Length);
 
-        for (int pageIdx = 0; pageIdx < pages.Count; pageIdx++)
-        {
-            var (stripData, pageNum, pageTotal, isGroup4) = pages[pageIdx];
-            bool isLast = pageIdx == pages.Count - 1;
+        // Directory entries sorted in strictly ascending tag order
+        bw.Write((ushort)IfdEntryCount);
 
-            uint extraDataOffset = currentIfdOffset + IfdSize;
-            uint xResOffset = extraDataOffset;
-            uint yResOffset = extraDataOffset + 8;
-            uint swOffset = extraDataOffset + 16;
-            uint stripOffset = AlignToWord(swOffset + (uint)SoftwareBytes.Length);
-            uint nextIfdOffset = isLast ? 0 : AlignToWord(stripOffset + (uint)stripData.Length);
+        WriteEntry(bw, 254, 4, 1, 0);                               // NewSubfileType: 0
+        WriteEntry(bw, 256, 4, 1, (uint)DefaultWidth);              // ImageWidth
+        WriteEntry(bw, 257, 4, 1, (uint)DefaultHeight);             // ImageLength
+        WriteEntry(bw, 258, 3, 1, 1);                               // BitsPerSample: 1
+        WriteEntry(bw, 259, 3, 1, (uint)(isGroup4 ? 4 : 1));        // Compression: 4 (G4) or 1 (None)
+        WriteEntry(bw, 262, 3, 1, 0);                               // Photometric: 0 (WhiteIsZero)
+        WriteEntry(bw, 273, 4, 1, stripOffset);                     // StripOffsets
+        WriteEntry(bw, 277, 3, 1, 1);                               // SamplesPerPixel: 1
+        WriteEntry(bw, 278, 4, 1, (uint)DefaultHeight);             // RowsPerStrip
+        WriteEntry(bw, 279, 4, 1, (uint)stripData.Length);          // StripByteCounts
+        WriteEntry(bw, 282, 5, 1, xResOffset);                      // XResolution -> 300/1
+        WriteEntry(bw, 283, 5, 1, yResOffset);                      // YResolution -> 300/1
+        WriteEntry(bw, 284, 3, 1, 1);                               // PlanarConfiguration: 1
+        WriteEntry(bw, 296, 3, 1, 2);                               // ResolutionUnit: 2 (Inch)
+        WriteEntry(bw, 297, 3, 2, (uint)((pageCount << 16) | (pageIndex - 1))); // PageNumber
+        WriteEntry(bw, 305, 2, (uint)SoftwareBytes.Length, swOffset); // Software: "Zipper\0"
 
-            // Directory entries sorted in strictly ascending tag order
-            bw.Write((ushort)IfdEntryCount);
+        bw.Write(nextIfdOffset);
 
-            WriteEntry(bw, 254, 4, 1, 0);                               // NewSubfileType: 0
-            WriteEntry(bw, 256, 4, 1, (uint)width);                     // ImageWidth
-            WriteEntry(bw, 257, 4, 1, (uint)height);                    // ImageLength
-            WriteEntry(bw, 258, 3, 1, 1);                               // BitsPerSample: 1
-            WriteEntry(bw, 259, 3, 1, (uint)(isGroup4 ? 4 : 1));        // Compression: 4 (G4) or 1 (None)
-            WriteEntry(bw, 262, 3, 1, 0);                               // Photometric: 0 (WhiteIsZero)
-            WriteEntry(bw, 273, 4, 1, stripOffset);                     // StripOffsets
-            WriteEntry(bw, 277, 3, 1, 1);                               // SamplesPerPixel: 1
-            WriteEntry(bw, 278, 4, 1, (uint)height);                    // RowsPerStrip
-            WriteEntry(bw, 279, 4, 1, (uint)stripData.Length);          // StripByteCounts
-            WriteEntry(bw, 282, 5, 1, xResOffset);                      // XResolution -> 300/1
-            WriteEntry(bw, 283, 5, 1, yResOffset);                      // YResolution -> 300/1
-            WriteEntry(bw, 284, 3, 1, 1);                               // PlanarConfiguration: 1
-            WriteEntry(bw, 296, 3, 1, 2);                               // ResolutionUnit: 2 (Inch)
-            WriteEntry(bw, 297, 3, 2, (uint)((pageTotal << 16) | (pageNum - 1))); // PageNumber
-            WriteEntry(bw, 305, 2, (uint)SoftwareBytes.Length, swOffset); // Software: "Zipper\0"
+        // Extra data
+        // XResolution: 300 / 1
+        bw.Write((uint)DefaultDpi);
+        bw.Write((uint)1);
+        // YResolution: 300 / 1
+        bw.Write((uint)DefaultDpi);
+        bw.Write((uint)1);
+        // Software, padded so the strip starts at its word-aligned offset
+        bw.Write(SoftwareBytes);
+        PadTo(bw, stripOffset);
 
-            bw.Write(nextIfdOffset);
+        // Strip data, padded up to the next IFD (the last page has none, so nothing is written)
+        bw.Write(stripData);
+        PadTo(bw, nextIfdOffset);
 
-            // Extra data
-            // XResolution: 300 / 1
-            bw.Write((uint)DefaultDpi);
-            bw.Write((uint)1);
-            // YResolution: 300 / 1
-            bw.Write((uint)DefaultDpi);
-            bw.Write((uint)1);
-            // Software, padded so the strip starts at its word-aligned offset
-            bw.Write(SoftwareBytes);
-            PadTo(bw, stripOffset);
-
-            // Strip data, padded up to the next IFD (the last page has none, so nothing is written)
-            bw.Write(stripData);
-            PadTo(bw, nextIfdOffset);
-
-            currentIfdOffset = nextIfdOffset;
-        }
-
-        return ms.ToArray();
+        return nextIfdOffset;
     }
 
     /// <summary>
