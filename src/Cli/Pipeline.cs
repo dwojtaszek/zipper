@@ -134,10 +134,12 @@ public static class Pipeline
 
         if (bates is not null)
         {
-            // Only TIFF output and synthetic Loadfile-Only runs draw pages from --tiff-pages; other output has one page per document.
-            var pagesPerDocument = (output.HasFileType("tiff") || (modules.LoadFile.LoadfileOnly && sourceRecords is null))
-                ? tiff.PageRange?.Max ?? 1
-                : 1;
+            // Loadfile-Only OPT rows number pages from --tiff-pages for synthetic runs and for source-driven TIFF runs; a source-driven
+            // PDF keeps one page. Standard and Production Set runs number pages only for TIFF output; other runs have one page per document.
+            var numbersPages = modules.LoadFile.LoadfileOnly
+                ? resolvedLoadFile.Formats.Contains(LoadFileFormat.Opt) && (sourceRecords is null || output.HasFileType("tiff"))
+                : output.HasFileType("tiff");
+            var pagesPerDocument = numbersPages ? tiff.PageRange?.Max ?? 1 : 1;
             BatesModule.WarnPlatformLimits(bates, production, output.FileCount, pagesPerDocument);
         }
 

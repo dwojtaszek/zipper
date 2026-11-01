@@ -130,6 +130,17 @@ public class BatesPlatformLimitsTests
     }
 
     [Fact]
+    public void Evaluate_WithPageSuffixAndLastNumberWiderThanDigits_AddsSuffixToLastNumberWidth()
+    {
+        // The suffix adds to the 17-character last number (10000000000000000), not to Digits.
+        var config = new BatesNumberConfig { Prefix = "DOC", Start = 9999999999999999L, Digits = 8, PageSuffix = true };
+
+        var warning = Assert.Single(Standard(config, 2));
+
+        Assert.Contains("Bates numbers are 21 characters including the page suffix;", warning, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Evaluate_WithCountOverDiscoLimit_ReturnsRangeWarning()
     {
         var warnings = Standard(new BatesNumberConfig { Prefix = "DOC" }, 30001);

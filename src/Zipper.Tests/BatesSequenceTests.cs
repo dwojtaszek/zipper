@@ -170,7 +170,7 @@ public class BatesSequenceTests
     [InlineData("ABC00000001", 12, "ABC00000001_012")]
     [InlineData("ABC00000001", 999, "ABC00000001_999")]
     [InlineData("ABC00000001", 1000, "ABC00000001_1000")]
-    public void FormatPageBates_WithDocumentBatesAndPageNumber_AppendsThreeDigitPageSuffix(string documentBates, int pageNumber, string expected)
+    public void FormatPageBates_WithDocumentBatesAndPageNumber_AppendsAtLeastThreeDigitPageSuffix(string documentBates, int pageNumber, string expected)
     {
         Assert.Equal(expected, BatesSequence.FormatPageBates(documentBates, pageNumber));
     }

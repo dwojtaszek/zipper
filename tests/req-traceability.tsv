@@ -874,7 +874,7 @@ REQ-238	unit	TiffRendererTests.CreatePageRaster_WithFourHundredCharacterLabel_Ke
 REQ-238	unit	TiffModuleTests.TryBuild_MatchingRealismAndCompression_SetsCompression	Matching --tiff-realism group4 or uncompressed with the same --tiff-compression is accepted
 REQ-238	e2e	test-cli-coverage-gaps.sh	E2E verification of --with-tiff-realism in Standard and Production Set modes
 REQ-238	e2e	test-cli-coverage-gaps.bat	Windows batch E2E verification of --with-tiff-realism
-REQ-239	unit	BatesSequenceTests.FormatPageBates_WithDocumentBatesAndPageNumber_AppendsThreeDigitPageSuffix	Page-level Bates numbers append a three-digit page suffix
+REQ-239	unit	BatesSequenceTests.FormatPageBates_WithDocumentBatesAndPageNumber_AppendsAtLeastThreeDigitPageSuffix	Page-level Bates numbers append a three-digit page suffix
 REQ-239	unit	BatesModuleTests.TakesValue_BatesPageSuffix_IsParameterless	--bates-page-suffix is a parameterless flag
 REQ-239	unit	BatesModuleTests.TryBuild_PageSuffixWithPrefix_BuildsConfigWithPageSuffix	--bates-page-suffix sets the page-level Bates config
 REQ-239	unit	BatesModuleTests.TryBuild_PageSuffixWithoutPrefix_ReturnsFalseWithError	--bates-page-suffix requires --bates-prefix
@@ -908,5 +908,8 @@ REQ-240	unit	PipelineTests.Build_SourceInputDiscoRange_WarnsOnlyAboveLimit	Sourc
 REQ-240	unit	PipelineTests.Build_ProductionSetRollingSetWiderThanLimit_WarnsForThatSet	Production Set build prints the rolling set Bates number limit warning
 REQ-240	unit	PipelineTests.Build_WithoutBatesFlags_PrintsNoPlatformWarning	Configurations without Bates flags print no platform warnings
 REQ-240	unit	PipelineTests.Build_OverLimitBatesWithLaterValidationError_PrintsNoPlatformWarning	A run that fails a later configuration check prints no platform warnings
+REQ-240	unit	PipelineTests.Build_TiffPagesPast999InLoadfileOnlyDat_PrintsNoPlatformWarning	DAT-only Loadfile-Only run has no page-level Bates to widen, so no page suffix warning
+REQ-240	unit	PipelineTests.Build_TiffPagesPast999InSourceDrivenLoadfileOnlyOpt_WarnsOnlyForTiffOutput	Source-driven Loadfile-Only OPT widens the suffix for TIFF output and keeps one page for PDF
+REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithPageSuffixAndLastNumberWiderThanDigits_AddsSuffixToLastNumberWidth	Page suffix adds to the widest generated number, not to --bates-digits
 REQ-240	e2e	test-bates-numbering.sh	E2E: over-limit Bates prefix warns and still generates
 REQ-240	e2e	test-bates-numbering.bat	Windows batch E2E: over-limit Bates prefix warning

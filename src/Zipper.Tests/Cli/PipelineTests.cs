@@ -365,6 +365,29 @@ public class PipelineTests : WorkingDirectoryTestBase
         var (_, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => result = PipelineTestHelper.Build(modules: modules));
 
         Assert.NotNull(result);
+        Assert.NotNull(result.Bates);
+        Assert.True(result.Bates.PageSuffix);
+        Assert.DoesNotContain("Warning: Bates numbers are", stderr, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("pdf")]
+    [InlineData("tiff")]
+    public void Build_TiffPagesPast999InLoadfileOnlyDat_PrintsNoPlatformWarning(string fileType)
+    {
+        // DAT Bates stay document-level (REQ-239) and Loadfile-Only writes no images, so a DAT-only run has no page-level number to widen.
+        var (ok, modules) = PipelineTestHelper.Parse(new[]
+        {
+            "--type", fileType, "--count", "1", "--output-path", Directory.GetCurrentDirectory(), "--loadfile-only",
+            "--load-file-format", "dat", "--bates-prefix", "CL001", "--bates-digits", "12", "--bates-page-suffix",
+            "--tiff-pages", "1000-1000",
+        });
+        Assert.True(ok);
+
+        FileGenerationRequest? result = null;
+        var (_, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => result = PipelineTestHelper.Build(modules: modules));
+
+        Assert.NotNull(result);
         Assert.DoesNotContain("Warning: Bates numbers are", stderr, StringComparison.Ordinal);
     }
 
@@ -385,6 +408,43 @@ public class PipelineTests : WorkingDirectoryTestBase
 
         Assert.NotNull(result);
         Assert.Contains("Warning: Bates numbers are 17 characters including the page suffix", stderr, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("pdf", false)]
+    [InlineData("tiff", true)]
+    public void Build_TiffPagesPast999InSourceDrivenLoadfileOnlyOpt_WarnsOnlyForTiffOutput(string fileType, bool expectWarning)
+    {
+        // Source-driven OPT rows take their pages from --tiff-pages only for TIFF output; a source-driven PDF keeps one page.
+        var tempCsv = Path.Combine(Directory.GetCurrentDirectory(), "source_" + Guid.NewGuid().ToString("N") + ".csv");
+        try
+        {
+            File.WriteAllText(tempCsv, $"FilePath,FileType\nfolder/doc.{fileType},{fileType}\n");
+            var (ok, modules) = PipelineTestHelper.Parse(new[]
+            {
+                "--loadfile-only", "--input-csv", tempCsv, "--output-path", Directory.GetCurrentDirectory(),
+                "--load-file-format", "opt", "--bates-prefix", "CL001", "--bates-digits", "12", "--bates-page-suffix",
+                "--tiff-pages", "1000-1000",
+            });
+            Assert.True(ok);
+
+            FileGenerationRequest? result = null;
+            var (_, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => result = PipelineTestHelper.Build(modules: modules));
+
+            Assert.NotNull(result);
+            if (expectWarning)
+            {
+                Assert.Contains("Warning: Bates numbers are 17 characters including the page suffix", stderr, StringComparison.Ordinal);
+            }
+            else
+            {
+                Assert.DoesNotContain("Warning: Bates numbers are", stderr, StringComparison.Ordinal);
+            }
+        }
+        finally
+        {
+            if (File.Exists(tempCsv)) File.Delete(tempCsv);
+        }
     }
 
     [Fact]
