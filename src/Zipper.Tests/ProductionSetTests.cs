@@ -865,6 +865,35 @@ public class ProductionSetTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public async Task GenerateAsync_WithEmailChaos_AuditsEmailAnomaliesOnEveryLoadFileAudit()
+    {
+        // Arrange
+        var request = this.CreateTestRequest(count: 5, batesPrefix: "ABC", batesDigits: 6, fileType: "eml");
+        request.Chaos = new ChaosConfig
+        {
+            ChaosMode = true,
+            ChaosAmount = "100%",
+            ChaosTypes = "encoded-word",
+        };
+
+        // Act
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        // Assert: the DAT and OPT Audit Files both record the email anomalies.
+        foreach (var auditName in new[] { "loadfile_properties.json", "loadfile.opt_properties.json" })
+        {
+            var json = await File.ReadAllTextAsync(Path.Combine(result.ProductionPath, "DATA", auditName));
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var chaosMode = doc.RootElement.GetProperty("chaosMode");
+
+            Assert.Equal(5, chaosMode.GetProperty("totalAnomalies").GetInt32());
+            Assert.All(
+                chaosMode.GetProperty("injectedAnomalies").EnumerateArray(),
+                anomaly => Assert.Equal("encoded-word", anomaly.GetProperty("errorType").GetString()));
+        }
+    }
+
+    [Fact]
     public void ProductionSet_RollingArgs_ParsesCorrectly()
 
     {

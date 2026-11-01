@@ -538,7 +538,7 @@ public class CliPipelineTests : WorkingDirectoryTestBase
         var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         Assert.Null(result);
-        Assert.Contains("Error: --chaos-mode requires --loadfile-only or --production-set.", stderr, StringComparison.Ordinal);
+        Assert.Contains("Error: --chaos-mode requires --loadfile-only, --production-set, or email (.eml) generation.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -550,6 +550,64 @@ public class CliPipelineTests : WorkingDirectoryTestBase
 
         Assert.NotNull(result);
         Assert.Equal(new[] { LoadFileFormat.Dat, LoadFileFormat.Opt }, result!.LoadFile.Formats);
+    }
+
+    [Fact]
+    public void Build_StandardEmailWithEmailChaosTypes_ReturnsChaosConfig()
+    {
+        var args = new[] { "--type", "eml", "--count", "10", "--output-path", this.tempDir, "--chaos-mode", "--chaos-types", "mime-boundary,rfc822-depth" };
+
+        var (result, _, _) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
+
+        Assert.NotNull(result);
+        Assert.True(result!.Chaos.ChaosMode);
+        Assert.Equal("mime-boundary,rf822-depth", result.Chaos.ChaosTypes);
+    }
+
+    [Fact]
+    public void Build_StandardEmailWithLoadFileChaosType_ReturnsNullWithEmailScope()
+    {
+        var args = new[] { "--type", "eml", "--count", "10", "--output-path", this.tempDir, "--chaos-mode", "--chaos-types", "unclosed-quote" };
+
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
+
+        Assert.Null(result);
+        Assert.Contains("Error: Invalid chaos type 'unclosed-quote'. Valid types for email (.eml) generation:", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_StandardEmailWithChaosScenario_ReturnsNull()
+    {
+        var args = new[] { "--type", "eml", "--count", "10", "--output-path", this.tempDir, "--chaos-mode", "--chaos-scenario", "cross-format-desync" };
+
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
+
+        Assert.Null(result);
+        Assert.Contains("Error: --chaos-scenario does not apply to email (.eml) chaos.", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_LoadfileOnlyWithEmailChaosType_ReturnsNullWithEmailScope()
+    {
+        var args = new[] { "--loadfile-only", "--type", "eml", "--count", "10", "--output-path", this.tempDir, "--chaos-mode", "--chaos-types", "mime-boundary" };
+
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
+
+        Assert.Null(result);
+        Assert.Contains("Error: Chaos type 'mime-boundary' applies only to email (.eml) generation, not to load file output.", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_ProductionSetWithEmailAndCrossFormatScenario_ReturnsChaosConfig()
+    {
+        var args = new[] { "--production-set", "--bates-prefix", "CLIENT001", "--type", "eml", "--count", "10", "--output-path", this.tempDir, "--chaos-mode", "--chaos-scenario", "cross-format-desync" };
+
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
+
+        Assert.NotNull(result);
+        Assert.True(result!.Chaos.ChaosMode);
+        Assert.Equal("cross-format-desync", result.Chaos.ChaosScenario);
+        Assert.DoesNotContain("Error:", stderr, StringComparison.Ordinal);
     }
 
     [Fact]

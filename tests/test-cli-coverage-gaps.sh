@@ -402,6 +402,20 @@ else
     pass "--type pdf with --chaos-mode correctly failed validation"
 fi
 
+print_info "Test: --type eml with --chaos-scenario in Standard mode fails validation"
+if zipper --type eml --count 5 --chaos-mode --chaos-scenario cross-format-desync --output-path "$TEST_OUTPUT_DIR/eml-chaos-scenario-invalid" > /dev/null 2>&1; then
+    fail "--type eml with --chaos-scenario should have failed validation"
+else
+    pass "--type eml with --chaos-scenario correctly failed validation"
+fi
+
+print_info "Test: email chaos types with --loadfile-only fail validation"
+if zipper --loadfile-only --type eml --count 5 --chaos-mode --chaos-types mime-boundary --output-path "$TEST_OUTPUT_DIR/eml-loadfile-only-invalid" > /dev/null 2>&1; then
+    fail "email chaos types with --loadfile-only should have failed validation"
+else
+    pass "email chaos types with --loadfile-only correctly failed validation"
+fi
+
 # --- Summary ---
 
 echo ""

@@ -118,12 +118,22 @@ public class ChaosAnomalyTypesTests
     }
 
     [Theory]
-    [InlineData("eml")]
-    [InlineData("email")]
-    [InlineData("EML")]
-    public void ForFormat_String_ReturnsEmailTypes(string format)
+    [InlineData("mime-boundary")]
+    [InlineData("encoded-word")]
+    [InlineData("header-fold")]
+    [InlineData("rf822-depth")]
+    [InlineData("RFC822-DEPTH")]
+    public void IsEmail_EmailTypeName_ReturnsTrue(string type)
     {
-        var types = ChaosAnomalyTypes.ForFormat(format);
-        Assert.Equal(ChaosAnomalyTypes.Email, types);
+        Assert.True(ChaosAnomalyTypes.IsEmail(type));
+    }
+
+    [Theory]
+    [InlineData("quotes")]
+    [InlineData("opt-boundary")]
+    [InlineData("")]
+    public void IsEmail_LoadFileTypeName_ReturnsFalse(string type)
+    {
+        Assert.False(ChaosAnomalyTypes.IsEmail(type));
     }
 }

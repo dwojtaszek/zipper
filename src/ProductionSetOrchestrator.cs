@@ -238,11 +238,7 @@ internal static class ProductionSetOrchestrator
         // Create directory structure
         await SetupDirectoriesAsync(productionPath, request, volumeCount, plans, materializer, cancellationToken).ConfigureAwait(false);
 
-        ChaosEngine? emailChaosEngine = null;
-        if (request.Chaos.ChaosMode && request.Output.HasFileType("eml"))
-        {
-            emailChaosEngine = ChaosEngineBuilder.BuildForEmail(request, request.Output.FileCount);
-        }
+        ChaosEngine? emailChaosEngine = ChaosEngineBuilder.BuildForProductionEmail(request, plans);
 
         // Generate files using the plan
         var fileDataList = await GenerateVolumeFilesAsync(
@@ -650,16 +646,12 @@ internal static class ProductionSetOrchestrator
                     cancellationToken).ConfigureAwait(false);
             }
 
-            var datAnomalies = emailAnomalies is not null && emailAnomalies.Count > 0
-                ? result.DatAnomalies.Concat(emailAnomalies).ToList()
-                : result.DatAnomalies;
-
             var datAuditTarget = Path.Combine(dataDir, "loadfile_properties.json");
             var datAuditJson = LoadFileAuditWriter.GenerateAuditJson(
                 datPath,
                 request,
                 fileDataList,
-                datAnomalies,
+                result.DatAnomalies,
                 LoadFileFormat.Dat,
                 totalRecordsOverride: result.DatLines.Count - 1L);
             var datAuditStream = materializer.OpenWriteStream(datAuditTarget);

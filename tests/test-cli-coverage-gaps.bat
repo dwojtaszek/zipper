@@ -318,7 +318,7 @@ echo [ INFO ] Test: --type eml with --chaos-mode in Standard mode succeeds
 set "EML_CHAOS_OUTPUT=%TEST_OUTPUT_DIR%\eml-chaos-standard"
 %ZIPPER_CMD% --type eml --count 20 --seed 42 --chaos-mode --chaos-amount 50%% --chaos-types "mime-boundary,encoded-word,header-fold,rf822-depth" --output-path "%EML_CHAOS_OUTPUT%" >nul 2>&1
 if !ERRORLEVEL! equ 0 (
-    echo [ PASS ] PASS: --type eml with --chaos-mode generated valid archive with MIME anomalies
+    echo [ INFO ] PASS: --type eml with --chaos-mode generated valid archive with MIME anomalies
     set /a PASSED+=1
 ) else (
     echo [ ERROR ] FAIL: --type eml with --chaos-mode generation failed
@@ -329,7 +329,7 @@ echo [ INFO ] Test: --type eml with --chaos-mode in Production Set mode succeeds
 set "EML_CHAOS_PROD_OUTPUT=%TEST_OUTPUT_DIR%\eml-chaos-prod"
 %ZIPPER_CMD% --production-set --type eml --count 10 --seed 42 --bates-prefix PROD --chaos-mode --chaos-types "encoded-word,header-fold" --output-path "%EML_CHAOS_PROD_OUTPUT%" >nul 2>&1
 if !ERRORLEVEL! equ 0 (
-    echo [ PASS ] PASS: --type eml with --chaos-mode generated production set successfully
+    echo [ INFO ] PASS: --type eml with --chaos-mode generated production set successfully
     set /a PASSED+=1
 ) else (
     echo [ ERROR ] FAIL: --type eml with --chaos-mode in production set failed
@@ -339,10 +339,30 @@ if !ERRORLEVEL! equ 0 (
 echo [ INFO ] Test: --type pdf with --chaos-mode without loadfile-only fails validation
 %ZIPPER_CMD% --type pdf --count 5 --chaos-mode --output-path "%TEST_OUTPUT_DIR%\pdf-chaos-invalid" >nul 2>&1
 if !ERRORLEVEL! neq 0 (
-    echo [ PASS ] PASS: --type pdf with --chaos-mode correctly failed validation
+    echo [ INFO ] PASS: --type pdf with --chaos-mode correctly failed validation
     set /a PASSED+=1
 ) else (
     echo [ ERROR ] FAIL: --type pdf with --chaos-mode should have failed validation
+    set /a FAILED+=1
+)
+
+echo [ INFO ] Test: --type eml with --chaos-scenario in Standard mode fails validation
+%ZIPPER_CMD% --type eml --count 5 --chaos-mode --chaos-scenario cross-format-desync --output-path "%TEST_OUTPUT_DIR%\eml-chaos-scenario-invalid" >nul 2>&1
+if !ERRORLEVEL! neq 0 (
+    echo [ INFO ] PASS: --type eml with --chaos-scenario correctly failed validation
+    set /a PASSED+=1
+) else (
+    echo [ ERROR ] FAIL: --type eml with --chaos-scenario should have failed validation
+    set /a FAILED+=1
+)
+
+echo [ INFO ] Test: email chaos types with --loadfile-only fail validation
+%ZIPPER_CMD% --loadfile-only --type eml --count 5 --chaos-mode --chaos-types mime-boundary --output-path "%TEST_OUTPUT_DIR%\eml-loadfile-only-invalid" >nul 2>&1
+if !ERRORLEVEL! neq 0 (
+    echo [ INFO ] PASS: email chaos types with --loadfile-only correctly failed validation
+    set /a PASSED+=1
+) else (
+    echo [ ERROR ] FAIL: email chaos types with --loadfile-only should have failed validation
     set /a FAILED+=1
 )
 

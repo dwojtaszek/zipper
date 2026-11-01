@@ -5,203 +5,247 @@ namespace Zipper.Tests.Emails;
 
 public class EmailAnomalyApplierTests
 {
-    private static readonly UTF8Encoding Utf8 = new(false);
+    private const string Boundary = "----=_Part_12345";
+    private const string EncodedWordCharsetMarker = "unknown-8859-99";
 
-    private static byte[] CreateSampleMultipartEmail(string boundary = "----=_Part_12345")
-    {
-        var sb = new StringBuilder();
-        sb.Append("From: alice@example.com\r\n");
-        sb.Append("To: bob@example.com\r\n");
-        sb.Append("Subject: Test Multipart Email\r\n");
-        sb.Append("MIME-Version: 1.0\r\n");
-        sb.Append($"Content-Type: multipart/mixed; boundary=\"{boundary}\"\r\n");
-        sb.Append("\r\n");
-        sb.Append($"--{boundary}\r\n");
-        sb.Append("Content-Type: text/plain; charset=utf-8\r\n");
-        sb.Append("\r\n");
-        sb.Append("Hello Bob,\r\nThis is a multipart email.\r\n");
-        sb.Append($"--{boundary}\r\n");
-        sb.Append("Content-Type: application/pdf; name=\"doc.pdf\"\r\n");
-        sb.Append("Content-Disposition: attachment; filename=\"doc.pdf\"\r\n");
-        sb.Append("\r\n");
-        sb.Append("JVBERi0xLjQKfakecontent\r\n");
-        sb.Append($"--{boundary}--\r\n");
-        return Utf8.GetBytes(sb.ToString());
-    }
+    private static readonly Encoding Lossless = Encoding.Latin1;
 
-    private static byte[] CreateSampleSimpleEmail()
-    {
-        var sb = new StringBuilder();
-        sb.Append("From: alice@example.com\r\n");
-        sb.Append("To: bob@example.com\r\n");
-        sb.Append("Subject: Simple Test Email\r\n");
-        sb.Append("Date: Mon, 01 Jan 2024 10:00:00 +0000\r\n");
-        sb.Append("MIME-Version: 1.0\r\n");
-        sb.Append("Content-Type: text/plain; charset=utf-8\r\n");
-        sb.Append("\r\n");
-        sb.Append("Hello Bob,\r\nThis is a simple plain text email.\r\n");
-        return Utf8.GetBytes(sb.ToString());
-    }
+    private static byte[] MultipartEmail() => Lossless.GetBytes(string.Join(
+        "\r\n",
+        "From: alice@example.com",
+        "To: bob@example.com",
+        "Subject: Quarterly report",
+        "Date: Mon, 01 Jan 2024 10:00:00 +0000",
+        "MIME-Version: 1.0",
+        $"Content-Type: multipart/mixed; boundary=\"{Boundary}\"",
+        string.Empty,
+        $"--{Boundary}",
+        "Content-Type: text/plain; charset=utf-8",
+        string.Empty,
+        "Body text",
+        $"--{Boundary}",
+        "Content-Type: application/octet-stream; name=\"a.bin\"",
+        "Content-Transfer-Encoding: base64",
+        string.Empty,
+        "AAEC",
+        $"--{Boundary}--",
+        string.Empty));
 
-    [Fact]
-    public void ChaosAnomalyTypes_Email_ContainsExpectedFourAnomalyTypes()
-    {
-        Assert.Contains("mime-boundary", ChaosAnomalyTypes.Email);
-        Assert.Contains("encoded-word", ChaosAnomalyTypes.Email);
-        Assert.Contains("header-fold", ChaosAnomalyTypes.Email);
-        Assert.Contains("rf822-depth", ChaosAnomalyTypes.Email);
-        Assert.Equal(4, ChaosAnomalyTypes.Email.Count);
-    }
+    private static byte[] SinglePartEmail() => Lossless.GetBytes(string.Join(
+        "\r\n",
+        "From: alice@example.com",
+        "To: bob@example.com",
+        "Subject: Quarterly report",
+        "MIME-Version: 1.0",
+        "Content-Type: text/plain; charset=utf-8",
+        "Content-Transfer-Encoding: 8bit",
+        string.Empty,
+        "Body text",
+        string.Empty));
+
+    private static EmailAnomalyResult Apply(byte[] eml, string type, int seed = 1, long index = 1) =>
+        EmailAnomalyApplier.Apply(eml, "DOC00000001.eml", "DOC00000001", type, index, new Random(seed));
+
+    private static string Text(byte[] bytes) => Lossless.GetString(bytes);
 
     [Fact]
-    public void ChaosAnomalyTypes_ForFormat_WithEmailString_ReturnsEmailTypes()
+    public void Apply_MimeBoundary_AcrossSeeds_ProducesHeaderMismatchOrUnclosedDelimiter()
     {
-        Assert.Equal(ChaosAnomalyTypes.Email, ChaosAnomalyTypes.ForFormat("eml"));
-        Assert.Equal(ChaosAnomalyTypes.Email, ChaosAnomalyTypes.ForFormat("email"));
-    }
+        var variantsSeen = new HashSet<string>(StringComparer.Ordinal);
+        var originalLineCount = Text(MultipartEmail()).Split("\r\n").Length;
 
-    [Fact]
-    public void Apply_MimeBoundary_InjectsBoundaryMismatchOrMissingClose()
-    {
-        var applier = new EmailAnomalyApplier(new Random(42));
-        var original = CreateSampleMultipartEmail();
-        var anomalies = new List<ChaosAnomaly>();
-
-        var mutated = applier.ApplyToEmail(
-            original,
-            fileName: "DOC00000001.eml",
-            recordId: "DOC00000001",
-            chaosType: "mime-boundary",
-            anomalies: anomalies,
-            workItemIndex: 1);
-
-        Assert.NotEqual(original, mutated);
-        var anomaly = Assert.Single(anomalies);
-        Assert.Equal("DOC00000001.eml", anomaly.File);
-        Assert.Equal("DOC00000001", anomaly.RecordID);
-        Assert.Equal("mime-boundary", anomaly.ErrorType);
-        Assert.False(string.IsNullOrEmpty(anomaly.LineNumber));
-        Assert.False(string.IsNullOrEmpty(anomaly.Description));
-
-        string mutatedText = Utf8.GetString(mutated);
-        // Either boundary in Content-Type differs from body, or closing delimiter was altered
-        bool hasMismatch = mutatedText.Contains("_MISMATCH", StringComparison.Ordinal)
-            || !mutatedText.Contains("------=_Part_12345--", StringComparison.Ordinal);
-        Assert.True(hasMismatch);
-    }
-
-    [Fact]
-    public void Apply_EncodedWord_InjectsMalformedSequence()
-    {
-        var applier = new EmailAnomalyApplier(new Random(42));
-        var original = CreateSampleSimpleEmail();
-        var anomalies = new List<ChaosAnomaly>();
-
-        var mutated = applier.ApplyToEmail(
-            original,
-            fileName: "DOC00000002.eml",
-            recordId: "DOC00000002",
-            chaosType: "encoded-word",
-            anomalies: anomalies,
-            workItemIndex: 2);
-
-        Assert.NotEqual(original, mutated);
-        var anomaly = Assert.Single(anomalies);
-        Assert.Equal("DOC00000002.eml", anomaly.File);
-        Assert.Equal("DOC00000002", anomaly.RecordID);
-        Assert.Equal("Subject", anomaly.Column);
-        Assert.Equal("encoded-word", anomaly.ErrorType);
-
-        string mutatedText = Utf8.GetString(mutated);
-        Assert.Contains("=?", mutatedText, StringComparison.Ordinal);
-        Assert.Contains("?=", mutatedText, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Apply_HeaderFold_InjectsIllegalFoldingOrBareLfCr()
-    {
-        var applier = new EmailAnomalyApplier(new Random(42));
-        var original = CreateSampleSimpleEmail();
-        var anomalies = new List<ChaosAnomaly>();
-
-        var mutated = applier.ApplyToEmail(
-            original,
-            fileName: "DOC00000003.eml",
-            recordId: "DOC00000003",
-            chaosType: "header-fold",
-            anomalies: anomalies,
-            workItemIndex: 3);
-
-        Assert.NotEqual(original, mutated);
-        var anomaly = Assert.Single(anomalies);
-        Assert.Equal("DOC00000003.eml", anomaly.File);
-        Assert.Equal("header-fold", anomaly.ErrorType);
-    }
-
-    [Fact]
-    public void Apply_Rfc822Depth_GeneratesDeeplyNestedMessageExceedingCommonLimits()
-    {
-        var applier = new EmailAnomalyApplier(new Random(42));
-        var original = CreateSampleSimpleEmail();
-        var anomalies = new List<ChaosAnomaly>();
-
-        var mutated = applier.ApplyToEmail(
-            original,
-            fileName: "DOC00000004.eml",
-            recordId: "DOC00000004",
-            chaosType: "rf822-depth",
-            anomalies: anomalies,
-            workItemIndex: 4);
-
-        Assert.NotEqual(original, mutated);
-        var anomaly = Assert.Single(anomalies);
-        Assert.Equal("DOC00000004.eml", anomaly.File);
-        Assert.Equal("rf822-depth", anomaly.ErrorType);
-
-        string mutatedText = Utf8.GetString(mutated);
-        // Count occurrences of message/rfc822 in the mutated email
-        int count = 0;
-        int idx = 0;
-        while ((idx = mutatedText.IndexOf("message/rfc822", idx, StringComparison.OrdinalIgnoreCase)) != -1)
+        for (int seed = 1; seed <= 30; seed++)
         {
-            count++;
-            idx += "message/rfc822".Length;
+            var result = Apply(MultipartEmail(), "mime-boundary", seed);
+            string text = Text(result.Content);
+            var lines = text.Split("\r\n");
+
+            // Replacements keep the physical line count, so the audit line number points at real content.
+            Assert.Equal(originalLineCount, lines.Length);
+            Assert.Equal("mime-boundary", result.Anomaly.ErrorType);
+
+            if (text.Contains($"boundary=\"{Boundary}_MISMATCH\"", StringComparison.Ordinal))
+            {
+                variantsSeen.Add("header-mismatch");
+                Assert.Contains($"--{Boundary}", lines);
+                Assert.DoesNotContain($"--{Boundary}_MISMATCH", lines);
+                Assert.Equal("Content-Type", result.Anomaly.Column);
+            }
+            else
+            {
+                variantsSeen.Add("unclosed-delimiter");
+                Assert.Contains($"--{Boundary}", lines);
+                Assert.DoesNotContain($"--{Boundary}--", lines);
+                Assert.Equal("MIME-Boundary", result.Anomaly.Column);
+            }
         }
 
-        // Must exceed common parser limit of 20
-        Assert.True(count >= 20, $"Expected >= 20 nested message/rfc822 parts, got {count}");
+        Assert.Equal(2, variantsSeen.Count);
     }
 
     [Fact]
-    public void Apply_IsDeterministic_ForSameSeed()
+    public void Apply_MimeBoundary_SinglePartMessage_DeclaresBoundaryAbsentFromBody()
     {
-        var applier1 = new EmailAnomalyApplier(new Random(100));
-        var applier2 = new EmailAnomalyApplier(new Random(100));
-        var original = CreateSampleMultipartEmail();
+        var result = Apply(SinglePartEmail(), "mime-boundary");
+        var lines = Text(result.Content).Split("\r\n");
 
-        var anomalies1 = new List<ChaosAnomaly>();
-        var anomalies2 = new List<ChaosAnomaly>();
-
-        var mutated1 = applier1.ApplyToEmail(original, "DOC1.eml", "DOC1", "mime-boundary", anomalies1, 1);
-        var mutated2 = applier2.ApplyToEmail(original, "DOC1.eml", "DOC1", "mime-boundary", anomalies2, 1);
-
-        Assert.Equal(mutated1, mutated2);
-        Assert.Equal(anomalies1, anomalies2);
+        Assert.Contains(lines, line => line.StartsWith("Content-Type: multipart/mixed; boundary=", StringComparison.Ordinal));
+        Assert.DoesNotContain(lines, line => line.StartsWith("--", StringComparison.Ordinal));
+        Assert.Equal("5", result.Anomaly.LineNumber);
+        Assert.Equal("Content-Type", result.Anomaly.Column);
     }
 
     [Fact]
-    public void Implements_IAnomalyApplier_Interface_Safely()
+    public void Apply_EncodedWord_AcrossSeeds_ReplacesSubjectWithMalformedEncodedWord()
     {
-        IAnomalyApplier applier = new EmailAnomalyApplier(new Random(42));
-        var anomalies = new List<ChaosAnomaly>();
+        var variantsSeen = new HashSet<string>(StringComparer.Ordinal);
 
-        // Line-based Apply should not crash
-        string line = "Subject: Hello World";
-        string result = applier.Apply(1, line, "DOC1", "encoded-word", anomalies);
-        Assert.NotNull(result);
+        for (int seed = 1; seed <= 30; seed++)
+        {
+            var result = Apply(MultipartEmail(), "encoded-word", seed);
+            var lines = Text(result.Content).Split("\r\n");
+            string subject = lines.Single(line => line.StartsWith("Subject:", StringComparison.Ordinal));
 
-        // GetEncodingAnomaly should return null without crash
-        byte[]? encAnomaly = applier.GetEncodingAnomaly(1, 2, Encoding.UTF8, anomalies);
-        Assert.Null(encAnomaly);
+            Assert.DoesNotContain("Quarterly report", subject, StringComparison.Ordinal);
+            Assert.StartsWith("Subject: =?", subject, StringComparison.Ordinal);
+
+            if (subject.Contains(EncodedWordCharsetMarker, StringComparison.Ordinal))
+            {
+                variantsSeen.Add("unknown-charset");
+            }
+            else if (subject.Contains("abc===", StringComparison.Ordinal))
+            {
+                variantsSeen.Add("bad-base64-padding");
+            }
+            else
+            {
+                Assert.Contains("dGV zdA==", subject, StringComparison.Ordinal);
+                variantsSeen.Add("whitespace-in-encoded-word");
+            }
+
+            Assert.Equal("encoded-word", result.Anomaly.ErrorType);
+            Assert.Equal("Subject", result.Anomaly.Column);
+            Assert.Equal("3", result.Anomaly.LineNumber);
+        }
+
+        Assert.Equal(3, variantsSeen.Count);
+    }
+
+    [Fact]
+    public void Apply_EncodedWord_WhenSubjectIsMissing_InsertsMalformedSubjectHeader()
+    {
+        var eml = Lossless.GetBytes("From: alice@example.com\r\nMIME-Version: 1.0\r\n\r\nBody\r\n");
+
+        var result = Apply(eml, "encoded-word");
+        var lines = Text(result.Content).Split("\r\n");
+
+        Assert.Contains(lines, line => line.StartsWith("Subject: =?", StringComparison.Ordinal));
+        Assert.Equal("3", result.Anomaly.LineNumber);
+    }
+
+    [Fact]
+    public void Apply_HeaderFold_AcrossSeeds_InjectsIllegalFoldingOrBareLineBreak()
+    {
+        var variantsSeen = new HashSet<string>(StringComparer.Ordinal);
+
+        for (int seed = 1; seed <= 30; seed++)
+        {
+            var result = Apply(MultipartEmail(), "header-fold", seed);
+            string text = Text(result.Content);
+
+            if (text.Contains("\nBareLFInHeader", StringComparison.Ordinal))
+            {
+                variantsSeen.Add("bare-lf");
+            }
+            else if (text.Contains("\rBareCRInHeader", StringComparison.Ordinal))
+            {
+                variantsSeen.Add("bare-cr");
+            }
+            else
+            {
+                // Illegal fold: the original Subject value is intact once the injected CRLF is removed,
+                // and the continuation line has no leading linear whitespace.
+                Assert.Contains("Subject: Quarterly report", text.Replace("\r\n", string.Empty, StringComparison.Ordinal), StringComparison.Ordinal);
+                var continuation = text.Split("\r\n").Skip(3).First();
+                Assert.False(continuation.Length > 0 && (continuation[0] == ' ' || continuation[0] == '\t'));
+                variantsSeen.Add("illegal-fold");
+            }
+
+            Assert.Equal("header-fold", result.Anomaly.ErrorType);
+            Assert.Equal("Subject", result.Anomaly.Column);
+        }
+
+        Assert.Equal(3, variantsSeen.Count);
+    }
+
+    [Fact]
+    public void Apply_Rfc822Depth_WrapsMessageInTwentyFiveNestedRfc822Parts()
+    {
+        var result = Apply(MultipartEmail(), "rf822-depth");
+        string text = Text(result.Content);
+
+        Assert.Equal(25, CountOccurrences(text, "Content-Type: message/rfc822"));
+        Assert.Equal(25, CountOccurrences(text, "boundary=\"----=_Chaos_Depth_1_"));
+        Assert.Contains("Subject: Forwarded Level 1", text, StringComparison.Ordinal);
+        Assert.Contains("Subject: Quarterly report", text, StringComparison.Ordinal);
+        Assert.Equal("rf822-depth", result.Anomaly.ErrorType);
+        Assert.Equal("1", result.Anomaly.LineNumber);
+    }
+
+    [Fact]
+    public void Apply_NonUtf8Payload_SurvivesEveryType()
+    {
+        byte[] payload = { 0xFF, 0xFE, 0x80, 0x00 };
+        var eml = MultipartEmail().Concat(payload).ToArray();
+
+        foreach (var type in ChaosAnomalyTypes.Email)
+        {
+            var result = Apply(eml, type);
+
+            Assert.True(
+                result.Content.AsSpan().IndexOf(payload) >= 0,
+                $"Payload bytes were altered by '{type}'.");
+        }
+    }
+
+    [Fact]
+    public void Apply_SameInputSeedAndIndex_ProducesIdenticalOutputAndAudit()
+    {
+        foreach (var type in ChaosAnomalyTypes.Email)
+        {
+            var first = Apply(MultipartEmail(), type, seed: 42, index: 7);
+            var second = Apply(MultipartEmail(), type, seed: 42, index: 7);
+
+            Assert.Equal(first.Content, second.Content);
+            Assert.Equal(first.Anomaly, second.Anomaly);
+        }
+    }
+
+    [Fact]
+    public void Apply_Rfc822Depth_NestedBoundariesDependOnWorkItemIndex()
+    {
+        var first = Apply(MultipartEmail(), "rf822-depth", index: 1);
+        var second = Apply(MultipartEmail(), "rf822-depth", index: 2);
+
+        Assert.NotEqual(first.Content, second.Content);
+    }
+
+    [Fact]
+    public void Apply_UnknownType_ThrowsArgumentException()
+    {
+        Assert.Throws<ArgumentException>(() => Apply(MultipartEmail(), "not-a-type"));
+    }
+
+    private static int CountOccurrences(string text, string needle)
+    {
+        int count = 0;
+        int index = 0;
+        while ((index = text.IndexOf(needle, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += needle.Length;
+        }
+
+        return count;
     }
 }

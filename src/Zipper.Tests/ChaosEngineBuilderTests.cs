@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text;
 using Xunit;
 using Zipper.Config;
 using Zipper.LoadFiles;
@@ -441,4 +442,180 @@ public class ChaosEngineBuilderTests
         Assert.Equal("\u0014", colDelim); // Defaults to Device Control 4 (Thorn-like delimiter in Concordance)
         Assert.Equal("\u00fe", quoteDelim); // Defaults to thorn quote
     }
+
+    [Fact]
+    public void BuildForStandardEmail_WhenChaosModeIsDisabled_ReturnsNull()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileCount = 3, FileType = "eml" },
+        };
+
+        Assert.Null(ChaosEngineBuilder.BuildForStandardEmail(request));
+    }
+
+    [Fact]
+    public void BuildForStandardEmail_WithoutEmlFileType_ReturnsNull()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileCount = 3, FileType = "pdf" },
+            Chaos = new ChaosConfig { ChaosMode = true, ChaosAmount = "100%", ChaosTypes = "encoded-word" },
+        };
+
+        Assert.Null(ChaosEngineBuilder.BuildForStandardEmail(request));
+    }
+
+    [Fact]
+    public void BuildForStandardEmail_WithMixedFileTypes_SamplesOnlyEmlWorkItems()
+    {
+        // Arrange
+        var ratios = new[]
+        {
+            new FileTypeRatio { Type = "eml", Weight = 1 },
+            new FileTypeRatio { Type = "pdf", Weight = 1 },
+        };
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileCount = 12,
+                FileType = "pdf",
+                FileTypeRatios = ratios,
+                FileTypePlan = new FileTypePlan(ratios, 12),
+            },
+            Chaos = new ChaosConfig { ChaosMode = true, ChaosAmount = "100%", ChaosTypes = "encoded-word" },
+            Metadata = new MetadataConfig { Seed = 42 },
+        };
+        var emlCount = Enumerable.Range(1, 12).Count(i => request.Output.ResolveFileType(i) == "eml");
+        Assert.InRange(emlCount, 1, 11);
+
+        // Act
+        var engine = ChaosEngineBuilder.BuildForStandardEmail(request);
+
+        // Assert
+        Assert.NotNull(engine);
+        for (long index = 1; index <= 12; index++)
+        {
+            var content = EmlContent();
+            var item = new FileWorkItem { Index = index, FileType = request.Output.ResolveFileType(index), FileName = $"{index:D8}.eml" };
+            var result = engine!.ApplyEmailChaos(item, content);
+
+            if (item.FileType == "eml")
+            {
+                Assert.False(content.Content.AsSpan().SequenceEqual(result.Content));
+            }
+            else
+            {
+                Assert.Same(content, result);
+            }
+        }
+
+        Assert.Equal(emlCount, engine!.Anomalies.Count);
+    }
+
+    [Fact]
+    public void BuildForStandardEmail_WithSourceRecords_UsesRecordFileTypeAndRequestFallback()
+    {
+        // Arrange: the empty File Type on the third record falls back to the request-level eml type.
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileCount = 3, FileType = "eml" },
+            SourceRecords = new List<SourceRecord>
+            {
+                new() { RelativePath = "a.pdf", FileType = "pdf" },
+                new() { RelativePath = "b.eml", FileType = "eml" },
+                new() { RelativePath = "c", FileType = string.Empty },
+            },
+            Chaos = new ChaosConfig { ChaosMode = true, ChaosAmount = "100%", ChaosTypes = "encoded-word" },
+            Metadata = new MetadataConfig { Seed = 42 },
+        };
+
+        // Act
+        var engine = ChaosEngineBuilder.BuildForStandardEmail(request);
+
+        // Assert
+        Assert.NotNull(engine);
+        for (int i = 0; i < request.SourceRecords!.Count; i++)
+        {
+            var content = EmlContent();
+            var item = new FileWorkItem { Index = i + 1, FileType = request.SourceRecords[i].FileType, FileName = $"{i + 1:D8}.eml" };
+            var result = engine!.ApplyEmailChaos(item, content);
+
+            if (item.EffectiveFileType(request) == "eml")
+            {
+                Assert.False(content.Content.AsSpan().SequenceEqual(result.Content));
+            }
+            else
+            {
+                Assert.Same(content, result);
+            }
+        }
+
+        Assert.Equal(2, engine!.Anomalies.Count);
+    }
+
+    [Fact]
+    public void BuildForProductionEmail_WithMixedFileTypes_SamplesOnlyEmlPlans()
+    {
+        // Arrange
+        var ratios = new[]
+        {
+            new FileTypeRatio { Type = "eml", Weight = 1 },
+            new FileTypeRatio { Type = "pdf", Weight = 1 },
+        };
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileCount = 8,
+                FileType = "pdf",
+                FileTypeRatios = ratios,
+                FileTypePlan = new FileTypePlan(ratios, 8),
+            },
+            Production = new ProductionConfig { ProductionSet = true },
+            Bates = new BatesNumberConfig { Prefix = "PLAN", Start = 1, Digits = 8 },
+            Chaos = new ChaosConfig { ChaosMode = true, ChaosAmount = "100%", ChaosTypes = "encoded-word" },
+            Metadata = new MetadataConfig { Seed = 42 },
+        };
+        var plans = ProductionSetPlanner.Plan(request);
+        var emlCount = plans.Count(plan => plan.FileType == "eml");
+        Assert.InRange(emlCount, 1, plans.Count - 1);
+
+        // Act
+        var engine = ChaosEngineBuilder.BuildForProductionEmail(request, plans);
+
+        // Assert
+        Assert.NotNull(engine);
+        foreach (var plan in plans)
+        {
+            // Production plans are 0-based; work item indexes are 1-based.
+            var content = EmlContent();
+            var item = new FileWorkItem { Index = plan.Index + 1, FileType = plan.FileType, FileName = $"{plan.Index + 1:D8}.{plan.FileType}" };
+            var result = engine!.ApplyEmailChaos(item, content);
+
+            if (plan.FileType == "eml")
+            {
+                Assert.False(content.Content.AsSpan().SequenceEqual(result.Content));
+            }
+            else
+            {
+                Assert.Same(content, result);
+            }
+        }
+
+        Assert.Equal(emlCount, engine!.Anomalies.Count);
+    }
+
+    private static GeneratedFileContent EmlContent() => new()
+    {
+        Content = Encoding.ASCII.GetBytes(
+            "From: sender@example.com\r\n" +
+            "To: recipient@example.com\r\n" +
+            "Subject: Hello\r\n" +
+            "MIME-Version: 1.0\r\n" +
+            "Content-Type: text/plain; charset=us-ascii\r\n" +
+            "\r\n" +
+            "Body\r\n"),
+    };
 }

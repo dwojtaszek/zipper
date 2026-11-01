@@ -34,10 +34,11 @@ internal class ZipArchiveSink : IArchiveSink
         ChannelReader<FileData> fileDataReader,
         Action<FileData>? onItemCommitted = null,
         CancellationToken cancellationToken = default)
-        => CreateArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, fileDataReader, onItemCommitted, cancellationToken, anomalies: null);
+        => CreateArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, fileDataReader, onItemCommitted, cancellationToken, anomalyProvider: null);
 
     /// <summary>
-    /// Creates a ZIP archive and streams files into it concurrently, optionally auditing injected anomalies.
+    /// Creates a ZIP archive and streams files into it concurrently, auditing the anomalies returned by
+    /// <paramref name="anomalyProvider"/> once every item has been drained.
     /// </summary>
     public async Task<string> CreateArchiveAsync(
         string zipFilePath,
@@ -47,7 +48,7 @@ internal class ZipArchiveSink : IArchiveSink
         ChannelReader<FileData> fileDataReader,
         Action<FileData>? onItemCommitted,
         CancellationToken cancellationToken,
-        IReadOnlyList<ChaosAnomaly>? anomalies)
+        Func<IReadOnlyList<ChaosAnomaly>>? anomalyProvider)
     {
         var archiveStream = this.ArchiveStream;
         if (archiveStream is null)
@@ -123,7 +124,7 @@ internal class ZipArchiveSink : IArchiveSink
                     },
                     openTarget,
                     CancellationToken.None,
-                    anomalies: anomalies).ConfigureAwait(false);
+                    anomalies: anomalyProvider?.Invoke()).ConfigureAwait(false);
 
                 return request.Output.IncludeLoadFile
                     ? actualLoadFileTarget

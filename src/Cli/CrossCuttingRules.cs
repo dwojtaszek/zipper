@@ -45,58 +45,45 @@ internal static class CrossCuttingRules
     {
         if (modules.Chaos.ChaosMode && !string.IsNullOrEmpty(modules.Chaos.ChaosTypes))
         {
-            bool hasEml = modules.Output.HasFileType("eml");
             var formats = modules.LoadFile.Formats;
-            var validTypesPerFormat = new Dictionary<string, IReadOnlyList<string>>();
-
             if (formats is not null && formats.Count > 0)
             {
+                var validTypesPerFormat = new Dictionary<LoadFileFormat, IReadOnlyList<string>>();
                 foreach (var format in formats)
                 {
-                    validTypesPerFormat[format.ToString().ToLowerInvariant()] = ChaosAnomalyTypes.ForFormat(format);
+                    validTypesPerFormat[format] = ChaosAnomalyTypes.ForFormat(format);
                 }
-            }
 
-            if (hasEml)
-            {
-                validTypesPerFormat["eml"] = ChaosAnomalyTypes.Email;
-            }
-
-            if (validTypesPerFormat.Count > 0)
-            {
                 var requestedTypes = modules.Chaos.ChaosTypes.Split(',')
-                    .Select(t =>
-                    {
-                        var trimmed = t.Trim().ToLowerInvariant();
-                        return trimmed == "rfc822-depth" ? "rf822-depth" : trimmed;
-                    })
+                    .Select(t => t.Trim().ToLowerInvariant())
                     .Where(t => !string.IsNullOrEmpty(t))
                     .ToList();
 
+                // Email types apply to generated .eml files and are validated by ChaosModule, not against load file formats.
+                var loadFileTypes = requestedTypes.Where(t => !ChaosAnomalyTypes.IsEmail(t)).ToList();
+                if (requestedTypes.Count > 0 && loadFileTypes.Count == 0)
+                {
+                    return true;
+                }
+
                 // Reject any requested type that is not valid for ANY selected format
-                foreach (var requestedType in requestedTypes)
+                foreach (var requestedType in loadFileTypes)
                 {
                     if (!validTypesPerFormat.Values.Any(v => v.Contains(requestedType, StringComparer.OrdinalIgnoreCase)))
                     {
-                        Console.Error.WriteLine(hasEml
-                            ? $"Error: Chaos type '{requestedType}' is not valid for any selected format."
-                            : $"Error: Chaos type '{requestedType}' is not valid for any selected load file format.");
+                        Console.Error.WriteLine($"Error: Chaos type '{requestedType}' is not valid for any selected load file format.");
                         return false;
                     }
                 }
 
-                // In loadfile-only mode with multiple formats, reject any format whose valid type set matches none of the requested types
-                if (modules.LoadFile.LoadfileOnly && formats is not null)
+                // Reject any format whose valid type set matches none of the requested types
+                foreach (var format in formats)
                 {
-                    foreach (var format in formats)
+                    var validTypes = validTypesPerFormat[format];
+                    if (!loadFileTypes.Any(t => validTypes.Contains(t, StringComparer.OrdinalIgnoreCase)))
                     {
-                        var key = format.ToString().ToLowerInvariant();
-                        var validTypes = validTypesPerFormat[key];
-                        if (!requestedTypes.Any(t => validTypes.Contains(t, StringComparer.OrdinalIgnoreCase)))
-                        {
-                            Console.Error.WriteLine($"Error: --chaos-types selects no valid type for load file format '{key}'. Valid types: {string.Join(", ", validTypes)}");
-                            return false;
-                        }
+                        Console.Error.WriteLine($"Error: --chaos-types selects no valid type for load file format '{format.ToString().ToLowerInvariant()}'. Valid types: {string.Join(", ", validTypes)}");
+                        return false;
                     }
                 }
             }

@@ -27,6 +27,9 @@ internal class ChaosSampler
 
     public bool ShouldIntercept(long lineNumber) => this.targetLines.Contains(lineNumber);
 
+    /// <summary>Gets the sampled 1-based line numbers.</summary>
+    public IReadOnlySet<long> TargetLines => this.targetLines;
+
     public static int ParseChaosAmount(string? chaosAmount, int totalLines) =>
         checked((int)Math.Min(totalLines, ParseChaosAmount(chaosAmount, (long)totalLines)));
 

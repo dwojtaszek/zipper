@@ -107,16 +107,9 @@ internal static class ChaosAnomalyTypes
         };
 
     /// <summary>
-    /// Returns the valid anomaly types for the given format or artifact name.
+    /// Returns whether a type name selects an email anomaly. The <c>rfc822-depth</c> alias is accepted for <c>rf822-depth</c>.
     /// </summary>
-    public static IReadOnlyList<string> ForFormat(string? formatOrType) =>
-        formatOrType?.Trim().ToLowerInvariant() switch
-        {
-            "eml" or "email" or "mime" => Email,
-            "opt" => Opt,
-            "csv" => Csv,
-            "concordance" => Concordance,
-            "edrmxml" or "edrm-xml" or "xml" => EdrmXml,
-            _ => Dat,
-        };
+    public static bool IsEmail(string type) =>
+        Email.Contains(type, StringComparer.OrdinalIgnoreCase)
+        || string.Equals(type, "rfc822-depth", StringComparison.OrdinalIgnoreCase);
 }

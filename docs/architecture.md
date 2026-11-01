@@ -8,7 +8,7 @@ The diagrams in this file are a **contract**, not just documentation:
 
 - **The load-file pipeline is `composer → serializer → emitter`.** Column decisions live in a **Composer**, line rendering in a **Serializer** (pure — no I/O), and all I/O + chaos in the **Emitter**. Do not reintroduce a "fat writer" that owns more than one of these responsibilities.
 - **EDRM-XML is the only carve-out.** It keeps its own `ILoadFileWriter` because it is a hierarchical document tree, not a flat record. Do not force other formats out of the seam, and do not fold XML into it.
-- **`ILoadFileWriter` is the format-selection seam** the factory returns; per-format **Chaos Engine** anomalies run in the emitter. The `cross-format-desync` and `broken-families` scenarios are a coordinated exception: DAT and OPT are rendered to line buffers, passed through `CrossFormatAnomalyApplier`, then written through `LoadFileEmitter`. EDRM-XML applies its own document-scoped anomalies inside the carve-out writer. Single-format chaos remains scoped to Loadfile-Only Mode; coordinated cross-format chaos also supports Production Set mode (REQ-094, REQ-234).
+- **`ILoadFileWriter` is the format-selection seam** the factory returns; per-format **Chaos Engine** anomalies run in the emitter. The `cross-format-desync` and `broken-families` scenarios are a coordinated exception: DAT and OPT are rendered to line buffers, passed through `CrossFormatAnomalyApplier`, then written through `LoadFileEmitter`. EDRM-XML applies its own document-scoped anomalies inside the carve-out writer. Single-format Load File chaos remains scoped to Loadfile-Only Mode; coordinated cross-format chaos also supports Production Set mode (REQ-094, REQ-234). Email MIME anomalies (REQ-237) mutate generated `.eml` bytes instead of Load File lines: `ChaosEngine.ApplyEmailChaos` runs in the producers before the archive consumer writes each Email, and the Audit Files receive the anomalies through `LoadFileOrchestrator`. The Load File seam is unchanged by them.
 
 **Any deviation from these invariants — or any change that makes a diagram inaccurate — requires explicit human approval, plus a same-PR update to the affected diagram.** AI agents: stop and ask the maintainer (e.g. via the AskUserQuestion tool) before merging such a change. See the **Architecture** checklist in the PR template. Decision rationale is recorded in [ADR-0006](adr/ADR-0006-three-mode-pipeline.md) and [ADR-0007](adr/ADR-0007-loadfile-composition-seam.md). See also [ADR-0004](adr/ADR-0004-unified-column-generation.md) (unified column value generation via `IColumnValueGenerator`) and [ADR-0005](adr/ADR-0005-email-aggregate.md) (Email value object + `EmailFactory` as sole constructor).
 
@@ -37,7 +37,7 @@ Source-Driven Generation has exactly one semantic seam: `SourceRecordIntake` (in
 
 ## Chaos Engine and Cross-Format Anomalies
 
-`ChaosEngine` uses Floyd's algorithm for O(k) exact random sampling of lines to corrupt. Per-format anomaly catalogs live in `ChaosAnomalyTypes.cs` (DAT, OPT, CSV, Concordance, EDRM-XML), and single-format anomalies run in Loadfile-Only Mode through `LoadFileEmitter`. EDRM-XML applies document-scoped anomalies inside the `XmlLoadFileWriter` carve-out.
+`ChaosEngine` uses Floyd's algorithm for O(k) exact random sampling of lines to corrupt. Per-format anomaly catalogs live in `ChaosAnomalyTypes.cs` (DAT, OPT, CSV, Concordance, EDRM-XML), and single-format anomalies run in Loadfile-Only Mode through `LoadFileEmitter`. EDRM-XML applies document-scoped anomalies inside the `XmlLoadFileWriter` carve-out. Email anomalies (`ChaosAnomalyTypes.Email`) sample the `.eml` work items with the same sampler, and `EmailAnomalyApplier` applies one deterministic anomaly to each sampled Email. Each mutation depends only on the run seed and the work item index, so concurrent producers produce the same output and audit.
 
 The `cross-format-desync` and `broken-families` scenarios coordinate DAT and OPT in Loadfile-Only Mode or Production Set mode. `CrossFormatLoadFileRenderer` renders both formats through their normal writers into line buffers, `CrossFormatAnomalyApplier` mutates the coordinated view, and `LoadFileEmitter` writes the final lines. This path buffers both rendered Load Files; ordinary generation and single-format chaos retain their streaming behavior. Each Audit File records the peer Load File and line.
 
@@ -52,7 +52,7 @@ graph TD
     SelectMode -->|"--production-set"| ProductionSetMode["ProductionSetMode"]
 
     StandardMode --> PFG["ParallelFileGenerator"]
-    PFG -->|"Work Channel"| Producers["N Concurrent Producers"]
+    PFG -->|"Work Channel"| Producers["N Concurrent Producers<br/>(email chaos on sampled .eml)"]
     Producers -->|"Result Channel"| ZAS["ZipArchiveSink (Consumer)"]
     ZAS --> ZIP["ZIP Archive"]
     ZAS --> LFO["LoadFileOrchestrator<br/>(format dispatch)"]

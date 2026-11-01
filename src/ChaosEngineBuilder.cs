@@ -67,12 +67,64 @@ internal static class ChaosEngineBuilder
     }
 
     /// <summary>
-    /// Builds a <see cref="ChaosEngine"/> for email/MIME anomaly generation,
-    /// or returns <c>null</c> when chaos is disabled or email chaos is not targeted.
+    /// Builds a <see cref="ChaosEngine"/> that samples the eml work items of a Standard run,
+    /// or returns <c>null</c> when chaos is disabled or no work item is an eml.
     /// </summary>
-    internal static ChaosEngine? BuildForEmail(FileGenerationRequest request, long totalEmails)
+    internal static ChaosEngine? BuildForStandardEmail(FileGenerationRequest request)
     {
-        if (!request.Chaos.ChaosMode || totalEmails <= 0)
+        if (!request.Chaos.ChaosMode)
+        {
+            return null;
+        }
+
+        var output = request.Output;
+        var sourceRecords = request.SourceRecords;
+        if (sourceRecords is null && output.FileTypePlan is null)
+        {
+            // One File Type for every work item: sample all of them, or none.
+            return IsEml(output.FileTypeLower)
+                ? BuildForEmail(request, output.FileCount, itemIndexes: null)
+                : null;
+        }
+
+        // Source Records carry their own File Type; an empty one falls back to the request-level type.
+        string FileTypeAt(long index) => sourceRecords is null
+            ? output.ResolveFileType(index)
+            : string.IsNullOrEmpty(sourceRecords[(int)(index - 1)].FileType)
+                ? output.FileTypeLower
+                : sourceRecords[(int)(index - 1)].FileType;
+
+        var indexes = new List<long>();
+        for (long index = 1; index <= output.FileCount; index++)
+        {
+            if (IsEml(FileTypeAt(index)))
+            {
+                indexes.Add(index);
+            }
+        }
+
+        return BuildForEmail(request, indexes.Count, indexes);
+    }
+
+    /// <summary>
+    /// Builds a <see cref="ChaosEngine"/> that samples the eml work items of a Production Set,
+    /// or returns <c>null</c> when chaos is disabled or no work item is an eml.
+    /// </summary>
+    internal static ChaosEngine? BuildForProductionEmail(FileGenerationRequest request, IReadOnlyList<ProductionNativeFilePlan> plans)
+    {
+        if (!request.Chaos.ChaosMode)
+        {
+            return null;
+        }
+
+        // Production plans are 0-based; work item indexes are 1-based.
+        var indexes = plans.Where(plan => IsEml(plan.FileType)).Select(plan => plan.Index + 1).ToList();
+        return BuildForEmail(request, indexes.Count, indexes.Count == plans.Count ? null : indexes);
+    }
+
+    private static ChaosEngine? BuildForEmail(FileGenerationRequest request, long totalItems, IReadOnlyList<long>? itemIndexes)
+    {
+        if (totalItems <= 0)
         {
             return null;
         }
@@ -83,16 +135,16 @@ internal static class ChaosEngineBuilder
             return null;
         }
 
-        string? resolvedTypes = request.Chaos.ChaosTypes;
-        string? resolvedAmount = request.Chaos.ChaosAmount;
-
         return new ChaosEngine(
-            totalEmails,
-            resolvedAmount,
-            resolvedTypes,
-            "eml",
-            request.Metadata.Seed);
+            totalItems,
+            request.Chaos.ChaosAmount,
+            request.Chaos.ChaosTypes,
+            request.Metadata.Seed,
+            itemIndexes);
     }
+
+    private static bool IsEml(string? fileType) =>
+        string.Equals(fileType, "eml", StringComparison.OrdinalIgnoreCase);
 
     private static IReadOnlyCollection<string> GetDateColumnNames(FileGenerationRequest request)
     {

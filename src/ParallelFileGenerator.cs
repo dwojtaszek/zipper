@@ -69,11 +69,7 @@ public class ParallelFileGenerator
                 request.Output = request.Output with { Concurrency = PerformanceConstants.DefaultConcurrency };
             }
 
-            ChaosEngine? emailChaosEngine = null;
-            if (request.Chaos.ChaosMode && request.Output.HasFileType("eml"))
-            {
-                emailChaosEngine = ChaosEngineBuilder.BuildForEmail(request, request.Output.FileCount);
-            }
+            ChaosEngine? emailChaosEngine = ChaosEngineBuilder.BuildForStandardEmail(request);
 
             var generators = this.customGenerators ?? BuildGenerators(request);
 
@@ -166,18 +162,20 @@ public class ParallelFileGenerator
                 orderingWindow.OnItemCommitted(fileData.WorkItem.Index);
             };
 
-            // Start the consumer task to write the archive concurrently
+            // Start the consumer task to write the archive concurrently. The anomaly provider is read by the
+            // consumer after the producers finish, so the audit sees every anomaly.
+            Func<IReadOnlyList<ChaosAnomaly>>? anomalyProvider = emailChaosEngine is null ? null : () => emailChaosEngine.Anomalies;
             Task<string> consumerTask;
             if (this.archiveSink is ZipArchiveSink zipSink)
             {
                 zipSink.ArchiveStream = archiveStream;
-                consumerTask = zipSink.CreateArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultChannel.Reader, onItemCommitted, pipelineCts.Token, emailChaosEngine?.Anomalies);
+                consumerTask = zipSink.CreateArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultChannel.Reader, onItemCommitted, pipelineCts.Token, anomalyProvider);
             }
             else
             {
                 archiveStream.Dispose();
                 archiveStream = null;
-                consumerTask = this.archiveSink.CreateArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultChannel.Reader, onItemCommitted, pipelineCts.Token, emailChaosEngine?.Anomalies);
+                consumerTask = this.archiveSink.CreateArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultChannel.Reader, onItemCommitted, pipelineCts.Token, anomalyProvider);
             }
 
             // Generate files in parallel (producers)

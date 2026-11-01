@@ -84,10 +84,14 @@ public sealed class ChaosModule : CliModule
         bool productionSet = false,
         bool hasEml = false)
     {
+        // An email run generates .eml work items in Standard or Production Set mode. Its chaos types
+        // apply to those work items, not to load file lines.
+        bool emailRun = hasEml && !loadfileOnly;
         if (!this.TryValidateMode(loadfileOnly, productionSet, hasEml)
+            || !this.TryValidateEmailScenario(emailRun, productionSet)
             || !this.TryValidateScenario(formats, delimiters, encoding)
             || !this.TryValidateAmount()
-            || !this.TryNormalizeChaosTypes(formats, hasEml, out var normalizedChaosTypes))
+            || !this.TryNormalizeChaosTypes(formats, emailRun, out var normalizedChaosTypes))
         {
             config = default!;
             return false;
@@ -137,6 +141,19 @@ public sealed class ChaosModule : CliModule
         if (!string.IsNullOrEmpty(this._scenario))
         {
             Console.Error.WriteLine("Error: --chaos-scenario requires --chaos-mode.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool TryValidateEmailScenario(bool emailRun, bool productionSet)
+    {
+        // Production Set cross-format scenarios still drive load file chaos next to the .eml files.
+        bool loadFileScenario = productionSet && ChaosScenarios.IsCrossFormat(this._scenario);
+        if (emailRun && !string.IsNullOrEmpty(this._scenario) && !loadFileScenario)
+        {
+            Console.Error.WriteLine("Error: --chaos-scenario does not apply to email (.eml) chaos. Use --chaos-types with email types.");
             return false;
         }
 
@@ -209,7 +226,7 @@ public sealed class ChaosModule : CliModule
 
     private bool TryNormalizeChaosTypes(
         IReadOnlyList<LoadFileFormat> formats,
-        bool hasEml,
+        bool emailRun,
         out string? normalizedChaosTypes)
     {
         // Defaults to the raw value so an unset/unparseable input is never silently widened.
@@ -219,14 +236,13 @@ public sealed class ChaosModule : CliModule
             return true;
         }
 
-        // Build union of valid types for all formats.
+        // Build union of valid types for all formats, or only the email types for an email run.
         var validTypesUnion = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (hasEml)
+        if (emailRun)
         {
             validTypesUnion.UnionWith(ChaosAnomalyTypes.Email);
         }
-
-        if (formats is { Count: > 0 })
+        else if (formats is { Count: > 0 })
         {
             foreach (var format in formats)
             {
@@ -246,9 +262,16 @@ public sealed class ChaosModule : CliModule
                 ? "rf822-depth"
                 : trimmed;
 
+            if (!emailRun && ChaosAnomalyTypes.IsEmail(effectiveType))
+            {
+                Console.Error.WriteLine($"Error: Chaos type '{trimmed}' applies only to email (.eml) generation, not to load file output.");
+                return false;
+            }
+
             if (!validTypesUnion.Contains(effectiveType))
             {
-                Console.Error.WriteLine($"Error: Invalid chaos type '{trimmed}'. Valid types for selected formats: {string.Join(", ", validTypesUnion.OrderBy(value => value))}");
+                string scope = emailRun ? "email (.eml) generation" : "selected formats";
+                Console.Error.WriteLine($"Error: Invalid chaos type '{trimmed}'. Valid types for {scope}: {string.Join(", ", validTypesUnion.OrderBy(value => value))}");
                 return false;
             }
 

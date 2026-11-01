@@ -266,7 +266,7 @@ public sealed class ChaosAndComparisonPropertyTests
     }
 
     [Property]
-    public void EmailAnomalyApplier_ApplyToEmail_ShouldMutateAndAuditAnomaliesDeterministically(
+    public void EmailAnomalyApplier_Apply_ShouldMutateAndAuditAnomaliesDeterministically(
         byte rawTypeIndex,
         ChaosSeedPropertyInput seedInput)
     {
@@ -298,24 +298,18 @@ public sealed class ChaosAndComparisonPropertyTests
         string fileName = $"{recordId}.eml";
         int workItemIndex = (int)(seedInput.LineNumber % 1000) + 1;
 
-        var applier1 = new EmailAnomalyApplier(new Random(seedInput.Seed));
-        var applier2 = new EmailAnomalyApplier(new Random(seedInput.Seed));
-
-        var anomalies1 = new List<ChaosAnomaly>();
-        var anomalies2 = new List<ChaosAnomaly>();
-
-        byte[] mutated1 = applier1.ApplyToEmail(originalBytes, fileName, recordId, chosenType, anomalies1, workItemIndex);
-        byte[] mutated2 = applier2.ApplyToEmail(originalBytes, fileName, recordId, chosenType, anomalies2, workItemIndex);
+        var first = EmailAnomalyApplier.Apply(originalBytes, fileName, recordId, chosenType, workItemIndex, new Random(seedInput.Seed));
+        var second = EmailAnomalyApplier.Apply(originalBytes, fileName, recordId, chosenType, workItemIndex, new Random(seedInput.Seed));
 
         // Determinism invariant
-        Assert.Equal(mutated1, mutated2);
-        Assert.Equal(anomalies1.Count, anomalies2.Count);
+        Assert.Equal(first.Content, second.Content);
+        Assert.Equal(first.Anomaly, second.Anomaly);
 
         // Mutation invariant
-        Assert.False(originalBytes.SequenceEqual(mutated1));
+        Assert.False(originalBytes.SequenceEqual(first.Content));
 
         // Audit contract
-        ChaosAnomaly anomaly = Assert.Single(anomalies1);
+        ChaosAnomaly anomaly = first.Anomaly;
         Assert.Equal(fileName, anomaly.File);
         Assert.Equal(recordId, anomaly.RecordID);
         Assert.Equal(chosenType, anomaly.ErrorType);

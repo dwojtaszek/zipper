@@ -1,482 +1,421 @@
+using System.Globalization;
 using System.Text;
-using Zipper.LoadFiles;
 
 namespace Zipper;
 
 /// <summary>
-/// Chaos Engine applier for Email and MIME-level anomaly types.
-/// Injects boundary disagreements, malformed RFC 2047 encoded-word sequences,
-/// illegal header folding / bare CR/LF, and excessive RFC 822 nesting depth.
+/// The mutated EML bytes and the audit entry describing the anomaly applied to them.
 /// </summary>
-internal sealed class EmailAnomalyApplier : IAnomalyApplier
+internal readonly record struct EmailAnomalyResult(byte[] Content, ChaosAnomaly Anomaly);
+
+/// <summary>
+/// Injects MIME-level anomalies into rendered EML bytes: boundary disagreements, malformed RFC 2047
+/// encoded-words, illegal header folding or bare CR/LF, and deep <c>message/rfc822</c> nesting.
+/// </summary>
+/// <remarks>
+/// Mutations work on the raw bytes through ISO-8859-1, which maps every byte to exactly one character,
+/// so attachment payloads and non-UTF-8 bytes pass through unchanged. Each call is pure: the output
+/// depends only on the input bytes, the anomaly type, the work item index, and the random sequence.
+/// </remarks>
+internal static class EmailAnomalyApplier
 {
-    private static readonly UTF8Encoding Utf8 = new(false);
+    private const string Crlf = "\r\n";
+    private const string MissingDelimitersBoundary = "----=_Part_MISSING_DELIMITERS";
+    private const int RfC822NestingDepth = 25;
 
-    private readonly Random random;
+    private static readonly Encoding Lossless = Encoding.Latin1;
 
-    public EmailAnomalyApplier(Random? random = null)
+    /// <summary>
+    /// Applies one email anomaly type to the EML bytes. Every call changes the bytes and returns one audit entry.
+    /// </summary>
+    /// <param name="emlBytes">The rendered EML bytes.</param>
+    /// <param name="fileName">The EML file name recorded in the audit entry.</param>
+    /// <param name="recordId">The record identifier recorded in the audit entry.</param>
+    /// <param name="chaosType">A type from <see cref="ChaosAnomalyTypes.Email"/>.</param>
+    /// <param name="workItemIndex">The 1-based work item index, used to keep nested boundaries unique.</param>
+    /// <param name="random">The random sequence for this work item.</param>
+    /// <returns>The mutated bytes and their audit entry.</returns>
+    public static EmailAnomalyResult Apply(
+        byte[] emlBytes,
+        string fileName,
+        string recordId,
+        string chaosType,
+        long workItemIndex,
+        Random random)
     {
+        return chaosType switch
+        {
+            "mime-boundary" => ApplyMimeBoundary(emlBytes, fileName, recordId, random),
+            "encoded-word" => ApplyEncodedWord(emlBytes, fileName, recordId, random),
+            "header-fold" => ApplyHeaderFold(emlBytes, fileName, recordId, random),
+            "rf822-depth" => ApplyRfc822Depth(emlBytes, fileName, recordId, workItemIndex),
+            _ => throw new ArgumentException($"Unknown email anomaly type '{chaosType}'.", nameof(chaosType)),
+        };
+    }
+
+    /// <summary>
+    /// Derives the random sequence for one work item from the run seed and the item index. The sequence
+    /// does not depend on which thread generates the item or in what order items are generated.
+    /// </summary>
+    internal static Random CreateItemRandom(long seed, long workItemIndex)
+    {
+        ulong mixed = Mix(unchecked((ulong)seed) + (unchecked((ulong)workItemIndex) * 0x9E3779B97F4A7C15UL));
+
 #pragma warning disable S2245 // Pseudo-randomness is safe for mock metadata generation
-        this.random = random ?? new Random();
+        return new Random(unchecked((int)(mixed >> 33)));
 #pragma warning restore S2245
     }
 
-    /// <inheritdoc/>
-    public string Apply(
-        long lineNumber,
-        string line,
-        string recordId,
-        string chaosType,
-        List<ChaosAnomaly> anomalies,
-        LoadFileRecord? record = null,
-        ILoadFileSerializer? serializer = null)
+    // SplitMix64 finalizer: a fixed bit mixer. Unlike HashCode, its output is stable across processes.
+    private static ulong Mix(ulong value)
     {
-        string normalizedType = NormalizeType(chaosType);
-        switch (normalizedType)
-        {
-            case "encoded-word":
-                if (line.StartsWith("Subject:", StringComparison.OrdinalIgnoreCase))
-                {
-                    string mutated = "Subject: =?unknown-8859-99?B?dGVzdA==?=";
-                    anomalies.Add(new ChaosAnomaly
-                    {
-                        File = recordId,
-                        LineNumber = lineNumber.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                        RecordID = recordId,
-                        Column = "Subject",
-                        ErrorType = "encoded-word",
-                        Description = "Injected RFC 2047 encoded-word with unknown charset 'unknown-8859-99'.",
-                        Location = $"line {lineNumber}, Subject header",
-                    });
-                    return mutated;
-                }
-                return line;
-
-            case "header-fold":
-                if (line.Contains(':', StringComparison.Ordinal))
-                {
-                    int colonIndex = line.IndexOf(':', StringComparison.Ordinal);
-                    string headerName = line[..colonIndex].Trim();
-                    string mutated = line.Insert(colonIndex + 2, "\r\nIllegalFold ");
-                    anomalies.Add(new ChaosAnomaly
-                    {
-                        File = recordId,
-                        LineNumber = lineNumber.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                        RecordID = recordId,
-                        Column = headerName,
-                        ErrorType = "header-fold",
-                        Description = "Injected illegal header folding without linear whitespace on continuation line.",
-                        Location = $"line {lineNumber}, {headerName} header",
-                    });
-                    return mutated;
-                }
-                return line;
-
-            case "mime-boundary":
-                if (line.StartsWith("Content-Type:", StringComparison.OrdinalIgnoreCase))
-                {
-                    string mutated = "Content-Type: multipart/mixed; boundary=\"----=_Part_MISMATCH\"";
-                    anomalies.Add(new ChaosAnomaly
-                    {
-                        File = recordId,
-                        LineNumber = lineNumber.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                        RecordID = recordId,
-                        Column = "Content-Type",
-                        ErrorType = "mime-boundary",
-                        Description = "Boundary parameter in Content-Type header differs from the actual delimiters in the body.",
-                        Location = $"line {lineNumber}, Content-Type header",
-                    });
-                    return mutated;
-                }
-                return line;
-
-            case "rf822-depth":
-                anomalies.Add(new ChaosAnomaly
-                {
-                    File = recordId,
-                    LineNumber = lineNumber.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    RecordID = recordId,
-                    Column = "Content-Type",
-                    ErrorType = "rf822-depth",
-                    Description = "Generated nested message/rfc822 parts to a depth of 25, exceeding common parser recursion limits.",
-                    Location = $"line {lineNumber}, Content-Type header",
-                });
-                return line;
-
-            default:
-                return line;
-        }
+        ulong z = value + 0x9E3779B97F4A7C15UL;
+        z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9UL;
+        z = (z ^ (z >> 27)) * 0x94D049BB133111EBUL;
+        return z ^ (z >> 31);
     }
 
-    /// <inheritdoc/>
-    public byte[]? GetEncodingAnomaly(long lineNumber, long nextLineNumber, Encoding encoding, List<ChaosAnomaly> anomalies)
-        => null;
-
-    /// <summary>
-    /// Applies an email/MIME chaos anomaly to rendered EML bytes.
-    /// </summary>
-    public byte[] ApplyToEmail(
-        byte[] emlBytes,
-        string fileName,
-        string recordId,
-        string chaosType,
-        List<ChaosAnomaly> anomalies,
-        long workItemIndex = 1)
+    private static EmailAnomalyResult ApplyMimeBoundary(byte[] emlBytes, string fileName, string recordId, Random random)
     {
-        string normalizedType = NormalizeType(chaosType);
-        switch (normalizedType)
+        var message = EmlLines.Parse(emlBytes);
+        int contentType = message.FindHeader("Content-Type");
+
+        if (contentType >= 0 && TryFindBoundary(message, contentType, out int boundaryLine, out string boundary))
         {
-            case "mime-boundary":
-                return ApplyMimeBoundary(emlBytes, fileName, recordId, anomalies);
+            int closingLine = message.FindClosingDelimiter(boundary);
+            if (closingLine >= 0 && random.Next(2) == 0)
+            {
+                // Drop the closing hyphens so the multipart container never closes.
+                message.Lines[closingLine] = $"--{boundary}";
+                return new EmailAnomalyResult(
+                    message.ToBytes(),
+                    Audit(
+                        fileName,
+                        recordId,
+                        closingLine + 1,
+                        "MIME-Boundary",
+                        "mime-boundary",
+                        "Final MIME multipart closing delimiter is missing its trailing hyphens, leaving the container unclosed.",
+                        $"line {closingLine + 1}, MIME closing delimiter"));
+            }
 
-            case "encoded-word":
-                return ApplyEncodedWord(emlBytes, fileName, recordId, anomalies);
-
-            case "header-fold":
-                return ApplyHeaderFold(emlBytes, fileName, recordId, anomalies);
-
-            case "rf822-depth":
-                return ApplyRfc822Depth(emlBytes, fileName, recordId, anomalies, workItemIndex);
-
-            default:
-                return emlBytes;
+            // The Content-Type boundary no longer matches the delimiters that the body still uses.
+            message.Lines[boundaryLine] = message.Lines[boundaryLine].Replace(boundary, boundary + "_MISMATCH", StringComparison.Ordinal);
+            return new EmailAnomalyResult(
+                message.ToBytes(),
+                Audit(
+                    fileName,
+                    recordId,
+                    boundaryLine + 1,
+                    "Content-Type",
+                    "mime-boundary",
+                    "Content-Type boundary parameter differs from the actual delimiters in the body.",
+                    $"line {boundaryLine + 1}, Content-Type header"));
         }
+
+        // Single-part message: declare a multipart container whose delimiters the body does not contain.
+        int declared = message.ReplaceHeader("Content-Type", $"Content-Type: multipart/mixed; boundary=\"{MissingDelimitersBoundary}\"");
+        return new EmailAnomalyResult(
+            message.ToBytes(),
+            Audit(
+                fileName,
+                recordId,
+                declared + 1,
+                "Content-Type",
+                "mime-boundary",
+                $"Content-Type declares multipart boundary '{MissingDelimitersBoundary}' with no matching delimiters in the body.",
+                $"line {declared + 1}, Content-Type header"));
     }
 
-    private byte[] ApplyMimeBoundary(
-        byte[] emlBytes,
-        string fileName,
-        string recordId,
-        List<ChaosAnomaly> anomalies)
+    private static EmailAnomalyResult ApplyEncodedWord(byte[] emlBytes, string fileName, string recordId, Random random)
     {
-        string text = Utf8.GetString(emlBytes);
-        string[] lines = text.Split("\r\n");
-
-        int contentTypeLineIndex = -1;
-        string? boundary = null;
-
-        for (int i = 0; i < lines.Length; i++)
+        var message = EmlLines.Parse(emlBytes);
+        var (malformed, description) = random.Next(3) switch
         {
-            if (lines[i].Length == 0)
-            {
-                // Reached end of top-level message headers
-                break;
-            }
+            0 => ("=?x-unknown-8859-99?B?dGVzdA==?=", "Subject uses an RFC 2047 encoded-word with an unknown charset."),
+            1 => ("=?utf-8?B?abc===?=", "Subject uses an RFC 2047 encoded-word with invalid Base64 padding."),
+            _ => ("=?utf-8?B?dGV zdA==?=", "Subject uses an RFC 2047 encoded-word with whitespace inside the encoded text."),
+        };
 
-            if (lines[i].StartsWith("Content-Type:", StringComparison.OrdinalIgnoreCase))
-            {
-                contentTypeLineIndex = i;
-                int bIndex = lines[i].IndexOf("boundary=", StringComparison.OrdinalIgnoreCase);
-                if (bIndex >= 0)
-                {
-                    string rawVal = lines[i][(bIndex + 9)..].Trim();
-                    if (rawVal.StartsWith('"'))
-                    {
-                        int quoteEnd = rawVal.IndexOf('"', 1);
-                        if (quoteEnd > 1)
-                        {
-                            boundary = rawVal[1..quoteEnd];
-                        }
-                    }
-                    else
-                    {
-                        int semi = rawVal.IndexOfAny([';', ' ', '\r', '\n']);
-                        boundary = semi >= 0 ? rawVal[..semi] : rawVal;
-                    }
-                }
-                break;
-            }
+        int line = message.ReplaceHeader("Subject", $"Subject: {malformed}");
+        return new EmailAnomalyResult(
+            message.ToBytes(),
+            Audit(fileName, recordId, line + 1, "Subject", "encoded-word", description, $"line {line + 1}, Subject header"));
+    }
+
+    private static EmailAnomalyResult ApplyHeaderFold(byte[] emlBytes, string fileName, string recordId, Random random)
+    {
+        var message = EmlLines.Parse(emlBytes);
+        string value = message.HeaderValue("Subject") ?? "Test Message";
+
+        int variant = random.Next(3);
+        int foldAt = FindNonWhitespaceBoundary(value);
+        if (variant == 0 && foldAt < 0)
+        {
+            variant = 1;
         }
 
-        if (contentTypeLineIndex >= 0 && !string.IsNullOrEmpty(boundary))
+        string[] replacement;
+        string description;
+        switch (variant)
         {
-            // Choose between mismatching Content-Type boundary vs removing closing delimiter
-            int variant = this.random.Next(2);
-            if (variant == 0)
+            case 0:
+                // Continuation line without leading whitespace, split between two non-whitespace characters.
+                replacement = new[] { $"Subject: {value[..foldAt]}", value[foldAt..] };
+                description = "Subject header is folded at a non-whitespace position with no linear whitespace on the continuation line.";
+                break;
+            case 1:
+                replacement = new[] { $"Subject: {value}\nBareLFInHeader" };
+                description = "Subject header contains a bare LF character.";
+                break;
+            default:
+                replacement = new[] { $"Subject: {value}\rBareCRInHeader" };
+                description = "Subject header contains a bare CR character.";
+                break;
+        }
+
+        int line = message.ReplaceHeader("Subject", replacement);
+        return new EmailAnomalyResult(
+            message.ToBytes(),
+            Audit(fileName, recordId, line + 1, "Subject", "header-fold", description, $"line {line + 1}, Subject header"));
+    }
+
+    private static EmailAnomalyResult ApplyRfc822Depth(byte[] emlBytes, string fileName, string recordId, long workItemIndex)
+    {
+        byte[] content = emlBytes;
+        for (int depth = RfC822NestingDepth; depth >= 1; depth--)
+        {
+            content = WrapInForwardedPart(content, depth, workItemIndex);
+        }
+
+        return new EmailAnomalyResult(
+            content,
+            Audit(
+                fileName,
+                recordId,
+                1,
+                "Content-Type",
+                "rf822-depth",
+                $"Wrapped the message in {RfC822NestingDepth} nested message/rfc822 parts to exercise parser recursion limits.",
+                $"Content-Type: multipart/mixed (nested message/rfc822 depth {RfC822NestingDepth})"));
+    }
+
+    private static byte[] WrapInForwardedPart(byte[] inner, int depth, long workItemIndex)
+    {
+        string boundary = $"----=_Chaos_Depth_{workItemIndex}_{depth}";
+        string head =
+            $"From: user{depth}@example.com{Crlf}" +
+            $"To: recipient{depth}@example.com{Crlf}" +
+            $"Subject: Forwarded Level {depth}{Crlf}" +
+            $"Date: Mon, 01 Jan 2024 10:00:00 +0000{Crlf}" +
+            $"MIME-Version: 1.0{Crlf}" +
+            $"Content-Type: multipart/mixed; boundary=\"{boundary}\"{Crlf}" +
+            Crlf +
+            $"--{boundary}{Crlf}" +
+            $"Content-Type: text/plain; charset=utf-8{Crlf}" +
+            Crlf +
+            $"Enclosing RFC 822 message level {depth}.{Crlf}" +
+            $"--{boundary}{Crlf}" +
+            $"Content-Type: message/rfc822{Crlf}" +
+            $"Content-Disposition: attachment; filename=\"forwarded_{depth}.eml\"{Crlf}" +
+            Crlf;
+        byte[] headBytes = Lossless.GetBytes(head);
+        byte[] tailBytes = Lossless.GetBytes($"{Crlf}--{boundary}--{Crlf}");
+
+        var wrapped = new byte[headBytes.Length + inner.Length + tailBytes.Length];
+        headBytes.CopyTo(wrapped, 0);
+        inner.CopyTo(wrapped, headBytes.Length);
+        tailBytes.CopyTo(wrapped, headBytes.Length + inner.Length);
+        return wrapped;
+    }
+
+    private static bool TryFindBoundary(EmlLines message, int contentType, out int lineIndex, out string boundary)
+    {
+        const string parameter = "boundary=";
+        int end = message.HeaderEndOf(contentType);
+        for (int i = contentType; i < end; i++)
+        {
+            string line = message.Lines[i];
+            int at = line.IndexOf(parameter, StringComparison.OrdinalIgnoreCase);
+            if (at < 0)
             {
-                // Variant A: Corrupt the boundary parameter in Content-Type
-                string oldLine = lines[contentTypeLineIndex];
-                string corruptedLine = oldLine.Replace(boundary, boundary + "_MISMATCH", StringComparison.Ordinal);
-                lines[contentTypeLineIndex] = corruptedLine;
+                continue;
+            }
 
-                anomalies.Add(new ChaosAnomaly
-                {
-                    File = fileName,
-                    LineNumber = (contentTypeLineIndex + 1).ToString(System.Globalization.CultureInfo.InvariantCulture),
-                    RecordID = recordId,
-                    Column = "Content-Type",
-                    ErrorType = "mime-boundary",
-                    Description = "Boundary parameter in Content-Type header differs from the actual delimiters in the body (cpython#135854).",
-                    Location = $"line {contentTypeLineIndex + 1}, Content-Type header",
-                });
-
-                return Utf8.GetBytes(string.Join("\r\n", lines));
+            string rest = line[(at + parameter.Length)..];
+            string value;
+            if (rest.StartsWith('"'))
+            {
+                int closeQuote = rest.IndexOf('"', 1);
+                value = closeQuote > 1 ? rest[1..closeQuote] : string.Empty;
             }
             else
             {
-                // Variant B: Alter or remove the final closing delimiter --{boundary}--
-                string closingDelimiter = $"--{boundary}--";
-                int closingIndex = -1;
-                for (int i = lines.Length - 1; i >= 0; i--)
-                {
-                    if (lines[i].Trim() == closingDelimiter)
-                    {
-                        closingIndex = i;
-                        break;
-                    }
-                }
+                int stop = rest.IndexOfAny([';', ' ', '\t']);
+                value = stop >= 0 ? rest[..stop] : rest;
+            }
 
-                if (closingIndex >= 0)
-                {
-                    // Remove the trailing -- so it looks like an unclosed part delimiter
-                    lines[closingIndex] = $"--{boundary}";
-
-                    anomalies.Add(new ChaosAnomaly
-                    {
-                        File = fileName,
-                        LineNumber = (closingIndex + 1).ToString(System.Globalization.CultureInfo.InvariantCulture),
-                        RecordID = recordId,
-                        Column = "MIME-Boundary",
-                        ErrorType = "mime-boundary",
-                        Description = "Final MIME multipart closing delimiter is missing trailing hyphens, leaving container unclosed.",
-                        Location = $"line {closingIndex + 1}, MIME closing delimiter",
-                    });
-
-                    return Utf8.GetBytes(string.Join("\r\n", lines));
-                }
+            if (value.Length > 0)
+            {
+                lineIndex = i;
+                boundary = value;
+                return true;
             }
         }
 
-        // Fallback for single-part emails: change Content-Type to multipart with missing delimiters
-        if (contentTypeLineIndex >= 0)
-        {
-            lines[contentTypeLineIndex] = "Content-Type: multipart/mixed; boundary=\"----=_Part_MISSING_DELIMITERS\"";
-            anomalies.Add(new ChaosAnomaly
-            {
-                File = fileName,
-                LineNumber = (contentTypeLineIndex + 1).ToString(System.Globalization.CultureInfo.InvariantCulture),
-                RecordID = recordId,
-                Column = "Content-Type",
-                ErrorType = "mime-boundary",
-                Description = "Content-Type header declares multipart boundary '----=_Part_MISSING_DELIMITERS' that does not exist in the body.",
-                Location = $"line {contentTypeLineIndex + 1}, Content-Type header",
-            });
-            return Utf8.GetBytes(string.Join("\r\n", lines));
-        }
-
-        return emlBytes;
+        lineIndex = -1;
+        boundary = string.Empty;
+        return false;
     }
 
-    private byte[] ApplyEncodedWord(
-        byte[] emlBytes,
+    // Returns a split point with non-whitespace characters on both sides, searching from the middle outward.
+    private static int FindNonWhitespaceBoundary(string value)
+    {
+        int middle = value.Length / 2;
+        for (int i = middle; i < value.Length; i++)
+        {
+            if (IsSplittable(value, i))
+            {
+                return i;
+            }
+        }
+
+        for (int i = middle - 1; i >= 1; i--)
+        {
+            if (IsSplittable(value, i))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static bool IsSplittable(string value, int index) =>
+        index > 0 && index < value.Length && !char.IsWhiteSpace(value[index - 1]) && !char.IsWhiteSpace(value[index]);
+
+    private static ChaosAnomaly Audit(
         string fileName,
         string recordId,
-        List<ChaosAnomaly> anomalies)
-    {
-        string text = Utf8.GetString(emlBytes);
-        string[] lines = text.Split("\r\n");
-
-        int targetLineIndex = -1;
-        for (int i = 0; i < lines.Length; i++)
-        {
-            if (lines[i].StartsWith("Subject:", StringComparison.OrdinalIgnoreCase))
-            {
-                targetLineIndex = i;
-                break;
-            }
-        }
-
-        if (targetLineIndex < 0)
-        {
-            for (int i = 0; i < lines.Length; i++)
-            {
-                if (lines[i].StartsWith("From:", StringComparison.OrdinalIgnoreCase))
-                {
-                    targetLineIndex = i;
-                    break;
-                }
-            }
-        }
-
-        if (targetLineIndex < 0)
-        {
-            return emlBytes;
-        }
-
-        int variant = this.random.Next(3);
-        string malformedEncodedWord = variant switch
-        {
-            0 => "=?unknown-8859-99?B?dGVzdA==?=",
-            1 => "=?utf-8?B?abc===?=",
-            _ => "=?utf-8?B?dGV zdA==?=",
-        };
-
-        string description = variant switch
-        {
-            0 => "Injected RFC 2047 encoded-word with unknown charset 'unknown-8859-99'.",
-            1 => "Injected RFC 2047 encoded-word with invalid Base64 padding 'abc==='.",
-            _ => "Injected RFC 2047 encoded-word containing illegal whitespace.",
-        };
-
-        lines[targetLineIndex] = $"Subject: {malformedEncodedWord}";
-
-        anomalies.Add(new ChaosAnomaly
+        int lineNumber,
+        string column,
+        string errorType,
+        string description,
+        string location) =>
+        new()
         {
             File = fileName,
-            LineNumber = (targetLineIndex + 1).ToString(System.Globalization.CultureInfo.InvariantCulture),
+            LineNumber = lineNumber.ToString(CultureInfo.InvariantCulture),
             RecordID = recordId,
-            Column = "Subject",
-            ErrorType = "encoded-word",
+            Column = column,
+            ErrorType = errorType,
             Description = description,
-            Location = $"line {targetLineIndex + 1}, Subject header",
-        });
+            Location = location,
+        };
 
-        return Utf8.GetBytes(string.Join("\r\n", lines));
-    }
-
-    private byte[] ApplyHeaderFold(
-        byte[] emlBytes,
-        string fileName,
-        string recordId,
-        List<ChaosAnomaly> anomalies)
+    /// <summary>
+    /// The EML message as physical lines. Splitting and joining on CRLF is lossless, so untouched lines
+    /// keep their exact bytes.
+    /// </summary>
+    private sealed class EmlLines
     {
-        string text = Utf8.GetString(emlBytes);
-        string[] lines = text.Split("\r\n");
-
-        int targetLineIndex = -1;
-        for (int i = 0; i < lines.Length; i++)
+        private EmlLines(List<string> lines)
         {
-            if (lines[i].StartsWith("Subject:", StringComparison.OrdinalIgnoreCase))
-            {
-                targetLineIndex = i;
-                break;
-            }
+            this.Lines = lines;
         }
 
-        if (targetLineIndex < 0)
+        public List<string> Lines { get; }
+
+        public static EmlLines Parse(byte[] bytes) => new(Lossless.GetString(bytes).Split(Crlf).ToList());
+
+        public byte[] ToBytes() => Lossless.GetBytes(string.Join(Crlf, this.Lines));
+
+        // Index of the blank line that ends the top-level header block, or the line count when there is none.
+        public int HeaderBlockEnd()
         {
-            for (int i = 0; i < lines.Length; i++)
+            int blank = this.Lines.IndexOf(string.Empty);
+            return blank < 0 ? this.Lines.Count : blank;
+        }
+
+        public int FindHeader(string name)
+        {
+            string prefix = name + ":";
+            int end = this.HeaderBlockEnd();
+            for (int i = 0; i < end; i++)
             {
-                if (lines[i].StartsWith("From:", StringComparison.OrdinalIgnoreCase))
+                if (this.Lines[i].StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
                 {
-                    targetLineIndex = i;
-                    break;
+                    return i;
                 }
             }
+
+            return -1;
         }
 
-        if (targetLineIndex < 0)
+        // Index just after the last continuation line (a line starting with whitespace) of the header at start.
+        public int HeaderEndOf(int start)
         {
-            return emlBytes;
+            int i = start + 1;
+            while (i < this.Lines.Count && this.Lines[i].Length > 0 && (this.Lines[i][0] == ' ' || this.Lines[i][0] == '\t'))
+            {
+                i++;
+            }
+
+            return i;
         }
 
-        string originalLine = lines[targetLineIndex];
-        int colon = originalLine.IndexOf(':', StringComparison.Ordinal);
-        string headerVal = colon >= 0 && colon + 1 < originalLine.Length
-            ? originalLine[(colon + 1)..].TrimStart()
-            : "Test Message";
+        public string? HeaderValue(string name)
+        {
+            int start = this.FindHeader(name);
+            if (start < 0)
+            {
+                return null;
+            }
 
-        int variant = this.random.Next(3);
-        string mutatedLine;
-        string description;
+            int end = this.HeaderEndOf(start);
+            var parts = new List<string>(end - start);
+            for (int i = start; i < end; i++)
+            {
+                int valueStart = i == start ? this.Lines[i].IndexOf(':', StringComparison.Ordinal) + 1 : 0;
+                parts.Add(this.Lines[i][valueStart..].Trim());
+            }
 
-        if (variant == 0)
-        {
-            // Illegal folding without leading whitespace
-            mutatedLine = $"Subject: {headerVal}\r\nIllegalFoldedContinuation";
-            description = "Injected illegal header folding without linear whitespace on continuation line.";
-        }
-        else if (variant == 1)
-        {
-            // Bare LF inside header
-            mutatedLine = $"Subject: {headerVal}\nBareLFInHeader";
-            description = "Injected bare LF character inside header value.";
-        }
-        else
-        {
-            // Bare CR inside header
-            mutatedLine = $"Subject: {headerVal}\rBareCRInHeader";
-            description = "Injected bare CR character inside header value.";
+            return string.Join(' ', parts).Trim();
         }
 
-        lines[targetLineIndex] = mutatedLine;
-
-        anomalies.Add(new ChaosAnomaly
+        /// <summary>
+        /// Replaces the top-level header named <paramref name="name"/>, including its continuation lines,
+        /// with <paramref name="newLines"/>. Inserts them before the header block end when the header is absent.
+        /// </summary>
+        /// <returns>The 0-based index of the first replacement line.</returns>
+        public int ReplaceHeader(string name, params string[] newLines)
         {
-            File = fileName,
-            LineNumber = (targetLineIndex + 1).ToString(System.Globalization.CultureInfo.InvariantCulture),
-            RecordID = recordId,
-            Column = "Subject",
-            ErrorType = "header-fold",
-            Description = description,
-            Location = $"line {targetLineIndex + 1}, Subject header",
-        });
+            int start = this.FindHeader(name);
+            if (start < 0)
+            {
+                start = this.HeaderBlockEnd();
+            }
+            else
+            {
+                this.Lines.RemoveRange(start, this.HeaderEndOf(start) - start);
+            }
 
-        return Utf8.GetBytes(string.Join("\r\n", lines));
-    }
-
-    private static byte[] ApplyRfc822Depth(
-        byte[] emlBytes,
-        string fileName,
-        string recordId,
-        List<ChaosAnomaly> anomalies,
-        long workItemIndex)
-    {
-        const int targetDepth = 25;
-        byte[] currentBytes = emlBytes;
-
-        for (int depth = targetDepth; depth >= 1; depth--)
-        {
-            string boundary = string.Format(System.Globalization.CultureInfo.InvariantCulture, "----=_Part_Depth_{0}_{1}", workItemIndex, depth);
-            var sb = new StringBuilder();
-            sb.Append(System.Globalization.CultureInfo.InvariantCulture, $"From: user_{depth}@example.com\r\n");
-            sb.Append(System.Globalization.CultureInfo.InvariantCulture, $"To: recipient_{depth}@example.com\r\n");
-            sb.Append(System.Globalization.CultureInfo.InvariantCulture, $"Subject: Forwarded Level {depth}\r\n");
-            sb.Append("Date: Mon, 01 Jan 2024 10:00:00 +0000\r\n");
-            sb.Append("MIME-Version: 1.0\r\n");
-            sb.Append(System.Globalization.CultureInfo.InvariantCulture, $"Content-Type: multipart/mixed; boundary=\"{boundary}\"\r\n");
-            sb.Append("\r\n");
-            sb.Append(System.Globalization.CultureInfo.InvariantCulture, $"--{boundary}\r\n");
-            sb.Append("Content-Type: text/plain; charset=utf-8\r\n");
-            sb.Append("\r\n");
-            sb.Append(System.Globalization.CultureInfo.InvariantCulture, $"Enclosing RFC 822 message level {depth}.\r\n");
-            sb.Append(System.Globalization.CultureInfo.InvariantCulture, $"--{boundary}\r\n");
-            sb.Append(System.Globalization.CultureInfo.InvariantCulture, $"Content-Type: message/rfc822; name=\"forwarded_{depth}.eml\"\r\n");
-            sb.Append(System.Globalization.CultureInfo.InvariantCulture, $"Content-Disposition: attachment; filename=\"forwarded_{depth}.eml\"\r\n");
-            sb.Append("\r\n");
-
-            byte[] headerPrefixBytes = Utf8.GetBytes(sb.ToString());
-            byte[] closingBytes = Utf8.GetBytes($"\r\n--{boundary}--\r\n");
-
-            var wrapped = new byte[headerPrefixBytes.Length + currentBytes.Length + closingBytes.Length];
-            Buffer.BlockCopy(headerPrefixBytes, 0, wrapped, 0, headerPrefixBytes.Length);
-            Buffer.BlockCopy(currentBytes, 0, wrapped, headerPrefixBytes.Length, currentBytes.Length);
-            Buffer.BlockCopy(closingBytes, 0, wrapped, headerPrefixBytes.Length + currentBytes.Length, closingBytes.Length);
-
-            currentBytes = wrapped;
+            this.Lines.InsertRange(start, newLines);
+            return start;
         }
 
-        anomalies.Add(new ChaosAnomaly
+        public int FindClosingDelimiter(string boundary)
         {
-            File = fileName,
-            LineNumber = "1",
-            RecordID = recordId,
-            Column = "Content-Type",
-            ErrorType = "rf822-depth",
-            Description = $"Generated nested message/rfc822 parts to a depth of {targetDepth}, exceeding common parser recursion limits.",
-            Location = $"Content-Type: multipart/mixed (nested message/rfc822 depth {targetDepth})",
-        });
+            string closing = $"--{boundary}--";
+            for (int i = this.Lines.Count - 1; i >= 0; i--)
+            {
+                if (this.Lines[i].TrimEnd() == closing)
+                {
+                    return i;
+                }
+            }
 
-        return currentBytes;
-    }
-
-    private static string NormalizeType(string type)
-    {
-        string lower = type.Trim().ToLowerInvariant();
-        return lower switch
-        {
-            "rfc822-depth" => "rf822-depth",
-            _ => lower,
-        };
+            return -1;
+        }
     }
 }
