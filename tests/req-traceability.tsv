@@ -874,3 +874,23 @@ REQ-238	unit	TiffRendererTests.CreatePageRaster_WithFourHundredCharacterLabel_Ke
 REQ-238	unit	TiffModuleTests.TryBuild_MatchingRealismAndCompression_SetsCompression	Matching --tiff-realism group4 or uncompressed with the same --tiff-compression is accepted
 REQ-238	e2e	test-cli-coverage-gaps.sh	E2E verification of --with-tiff-realism in Standard and Production Set modes
 REQ-238	e2e	test-cli-coverage-gaps.bat	Windows batch E2E verification of --with-tiff-realism
+REQ-239	unit	BatesSequenceTests.FormatPageBates_WithDocumentBatesAndPageNumber_AppendsThreeDigitPageSuffix	Page-level Bates numbers append a three-digit page suffix
+REQ-239	unit	BatesModuleTests.TakesValue_BatesPageSuffix_IsParameterless	--bates-page-suffix is a parameterless flag
+REQ-239	unit	BatesModuleTests.TryBuild_PageSuffixWithPrefix_BuildsConfigWithPageSuffix	--bates-page-suffix sets the page-level Bates config
+REQ-239	unit	BatesModuleTests.TryBuild_PageSuffixWithoutPrefix_ReturnsFalseWithError	--bates-page-suffix requires --bates-prefix
+REQ-239	unit	HelpTextGeneratorTests.Show_DisplaysUsageInformation	Usage text lists --bates-page-suffix
+REQ-239	unit	OptComposingWriterLoadFileTests.OptWriter_WithBatesPageSuffix_SuffixesSinglePageDocumentsToo	Standard OPT keys one-page documents with _001 in page-suffix mode
+REQ-239	unit	OptComposingWriterLoadFileTests.LoadfileOnlyOptWriter_WithBatesPageSuffix_SuffixesEveryDocumentsFirstPage	Loadfile-only OPT keys every document with _001 in page-suffix mode
+REQ-239	unit	ProductionSetTests.ProductionSet_WithBatesPageSuffix_NamesEverySingleDocumentImageWithPageSuffix	Production Set images for one-page documents are named {Bates}_001.tif
+REQ-239	unit	TiffFileGeneratorTests.Generate_WithRealismPageSuffixAndSinglePage_EndorsesPageWithSuffixedBates	One-page realistic TIFF endorsement carries the page-level Bates number
+REQ-239	unit	BatesAndDistributionPropertyTests.FormatPageBates_ForEveryDocumentAndPage_ShouldStripBackToItsDocumentAndStayUnique	Property: page-level Bates numbers strip back to their document and stay unique
+REQ-239	e2e	test-bates-numbering.sh	E2E: --bates-page-suffix keys one-page documents with _001 in the OPT Load File
+REQ-239	e2e	test-bates-numbering.bat	Windows batch E2E: --bates-page-suffix keys one-page documents with _001 in the OPT Load File
+REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithPrefixOverLimit_ReturnsPrefixWarning	Everlaw prefix limit (36 characters) warning
+REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithDigitsOverNumberLimit_ReturnsNumberWarning	Everlaw Bates number limit (16 characters) warning
+REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithPageSuffixOverNumberLimit_CountsSuffixInWidth	Page suffix counts toward the Bates number limit
+REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithCountOverDiscoLimit_ReturnsRangeWarning	DISCO 30,000 Bates number range warning
+REQ-240	unit	BatesModuleTests.TryBuild_PrefixOverPlatformLimit_WarnsAndStillBuilds	Over-limit prefix warns at configuration build and still builds
+REQ-240	unit	BatesModuleTests.TryBuild_RangeOverDiscoLimit_Warns	Over-limit range warns at configuration build and still builds
+REQ-240	e2e	test-bates-numbering.sh	E2E: over-limit Bates prefix warns and still generates
+REQ-240	e2e	test-bates-numbering.bat	Windows batch E2E: over-limit Bates prefix warning

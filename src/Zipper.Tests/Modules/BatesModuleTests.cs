@@ -209,6 +209,126 @@ public class BatesModuleTests
     }
 
     [Fact]
+    public void TakesValue_BatesPageSuffix_IsParameterless()
+    {
+        var module = new BatesModule();
+
+        Assert.True(module.Owns("--bates-page-suffix"));
+        Assert.False(module.TakesValue("--bates-page-suffix"));
+    }
+
+    [Fact]
+    public void TryBuild_PageSuffixWithPrefix_BuildsConfigWithPageSuffix()
+    {
+        var module = new BatesModule();
+        Assert.True(module.TryApply("--bates-prefix", "CL001"));
+        Assert.True(module.TryApply("--bates-page-suffix", null));
+
+        Assert.True(module.TryBuild(false, 1, "continuous", null, out var config));
+
+        Assert.NotNull(config);
+        Assert.True(config!.PageSuffix);
+    }
+
+    [Fact]
+    public void TryBuild_DefaultArgs_LeavesPageSuffixOff()
+    {
+        Assert.True(TryBuild(false, 1, "continuous", null, new[] { "--bates-prefix", "CL001" }, out var config));
+
+        Assert.NotNull(config);
+        Assert.False(config!.PageSuffix);
+    }
+
+    [Fact]
+    public void TryBuild_PageSuffixWithoutPrefix_ReturnsFalseWithError()
+    {
+        var module = new BatesModule();
+        Assert.True(module.TryApply("--bates-page-suffix", null));
+        BatesNumberConfig? config = null;
+        bool built = true;
+
+        var (_, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => built = module.TryBuild(false, 1, "continuous", null, out config));
+
+        Assert.False(built);
+        Assert.Null(config);
+        Assert.Contains("Error: --bates-page-suffix requires --bates-prefix.", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryBuild_PrefixOverPlatformLimit_WarnsAndStillBuilds()
+    {
+        var prefix = new string('A', 37);
+        bool built = false;
+        BatesNumberConfig? config = null;
+
+        var (_, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => built = TryBuild(false, 1, "continuous", null, new[] { "--bates-prefix", prefix }, out config));
+
+        Assert.True(built);
+        Assert.NotNull(config);
+        Assert.Contains($"Warning: Bates prefix '{prefix}' is 37 characters", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryBuild_PrefixAtPlatformLimit_DoesNotWarn()
+    {
+        var prefix = new string('A', 36);
+        bool built = false;
+
+        var (_, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => built = TryBuild(false, 1, "continuous", null, new[] { "--bates-prefix", prefix }, out _));
+
+        Assert.True(built);
+        Assert.DoesNotContain("Warning:", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryBuild_DigitsOverPlatformLimit_WarnsAndStillBuilds()
+    {
+        bool built = false;
+
+        var (_, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => built = TryBuild(false, 1, "continuous", null, new[] { "--bates-prefix", "CL001", "--bates-digits", "17" }, out _));
+
+        Assert.True(built);
+        Assert.Contains("Warning: Bates numbers are 17 characters", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryBuild_PageSuffixPushesNumberOverPlatformLimit_Warns()
+    {
+        var module = new BatesModule();
+        Assert.True(module.TryApply("--bates-prefix", "CL001"));
+        Assert.True(module.TryApply("--bates-digits", "13"));
+        Assert.True(module.TryApply("--bates-page-suffix", null));
+        bool built = false;
+
+        var (_, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => built = module.TryBuild(false, 1, "continuous", null, out _));
+
+        Assert.True(built);
+        Assert.Contains("Warning: Bates numbers are 17 characters including the page suffix", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryBuild_RangeOverDiscoLimit_Warns()
+    {
+        bool built = false;
+
+        var (_, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => built = TryBuild(false, 1, "continuous", 30001L, new[] { "--bates-prefix", "CL001" }, out _));
+
+        Assert.True(built);
+        Assert.Contains("Warning: Bates range 1 through 30001 spans 30,001 Bates numbers", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryBuild_RangeAtDiscoLimit_DoesNotWarn()
+    {
+        bool built = false;
+
+        var (_, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => built = TryBuild(false, 1, "continuous", 30000L, new[] { "--bates-prefix", "CL001" }, out _));
+
+        Assert.True(built);
+        Assert.DoesNotContain("Warning:", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TryApply_InvalidBatesStart_ReturnsFalse()
     {
         Assert.False(new BatesModule().TryApply("--bates-start", "notanumber"));

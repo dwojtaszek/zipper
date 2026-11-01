@@ -94,6 +94,7 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine("  --bates-prefix <string>  Bates Number prefix, max 200 UTF-8 bytes per list element (e.g., CLIENT001)");
         Console.Error.WriteLine("  --bates-start <number>   Bates start number (default: 1)");
         Console.Error.WriteLine("  --bates-digits <number>  Bates digit count (default: 8)");
+        Console.Error.WriteLine("  --bates-page-suffix      Page-level Bates numbers (<prefix><number>_NNN) for every document, including one-page");
         Console.Error.WriteLine();
         Console.Error.WriteLine("TIFF Options:");
         Console.Error.WriteLine("  --tiff-pages <min-max>   TIFF page range (e.g., 1-20, default: 1-1)");

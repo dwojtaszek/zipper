@@ -141,6 +141,53 @@ fi
 
 print_success "Test Case 4: Bates numbering with DOCX passed"
 
+# --- Test Case 5: Page-level Bates suffix on one-page documents ---
+
+print_info "Test Case 5: Page-level Bates suffix (--bates-page-suffix)"
+
+zipper \
+  --type pdf \
+  --count 3 \
+  --output-path "$TEST_OUTPUT_DIR/test5" \
+  --bates-prefix "PGS" \
+  --bates-page-suffix \
+  --load-file-format opt
+
+# Verify output
+opt_file=$(find "$TEST_OUTPUT_DIR/test5" -name "*.opt" -print -quit)
+
+if [[ -z "$opt_file" ]]; then
+  print_error "Test 5: No .opt file found"
+fi
+
+if ! grep -q "^PGS00000001_001," "$opt_file"; then
+  print_error "Test 5: Page-level Bates 'PGS00000001_001' not found in .opt file"
+fi
+
+if grep -q "^PGS00000001," "$opt_file"; then
+  print_error "Test 5: Document-level Bates 'PGS00000001' should not be an OPT key with --bates-page-suffix"
+fi
+
+print_success "Test Case 5: Page-level Bates suffix passed"
+
+# --- Test Case 6: Over-limit Bates configuration warns and still generates ---
+
+print_info "Test Case 6: Bates prefix over the Everlaw limit warns"
+
+if ! warn_output=$(zipper \
+  --type pdf \
+  --count 2 \
+  --output-path "$TEST_OUTPUT_DIR/test6" \
+  --bates-prefix "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDE" 2>&1); then
+  print_error "Test 6: zipper failed on an over-limit Bates prefix (limits must warn, not fail)"
+fi
+
+if ! grep -q "Warning: Bates prefix 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDE' is 41 characters" <<< "$warn_output"; then
+  print_error "Test 6: Everlaw prefix warning not printed"
+fi
+
+print_success "Test Case 6: Over-limit Bates prefix warning passed"
+
 # --- All Tests Passed ---
 
 print_success "All Bates Numbering E2E tests passed!"

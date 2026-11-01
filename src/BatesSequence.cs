@@ -17,8 +17,12 @@ public sealed class BatesSequence
     private BatesSequence(BatesNumberConfig config)
     {
         _config = config;
+        PageSuffix = config.PageSuffix;
         _currentIndex = 0;
     }
+
+    /// <summary>True when page-level Bates Numbers (see <see cref="FormatPageBates"/>) apply to every document (REQ-239).</summary>
+    public bool PageSuffix { get; }
 
     public static BatesSequence FromConfig(BatesNumberConfig config)
     {
@@ -113,5 +117,19 @@ public sealed class BatesSequence
             var formattedNumber = number.ToString($"D{_config.Digits}", CultureInfo.InvariantCulture);
             return new BatesNumber(_config.Prefix ?? string.Empty, formattedNumber);
         }
+    }
+
+    /// <summary>
+    /// Builds the page-level Bates Number for one page of a document (REQ-239): the document Bates
+    /// Number plus a three-digit page suffix, for example <c>ABC00000001_001</c>.
+    /// </summary>
+    public static string FormatPageBates(string documentBates, int pageNumber)
+    {
+        if (pageNumber < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(pageNumber), "Page number must be at least 1.");
+        }
+
+        return $"{documentBates}_{pageNumber:D3}";
     }
 }

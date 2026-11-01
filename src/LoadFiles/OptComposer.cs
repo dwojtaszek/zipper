@@ -17,12 +17,14 @@ internal sealed class OptComposer : ILoadFileComposer
     private readonly FileGenerationRequest request;
     private readonly WriterMode mode;
     private readonly BatesSequence? batesSequence;
+    private readonly bool pageSuffix;
 
     public OptComposer(FileGenerationRequest request, WriterMode mode)
     {
         this.request = request;
         this.mode = mode;
         this.batesSequence = request.Bates != null ? BatesSequence.FromConfig(request.Bates) : null;
+        this.pageSuffix = this.batesSequence?.PageSuffix == true;
     }
 
     public IReadOnlyList<string> HeaderColumns => Array.Empty<string>();
@@ -58,7 +60,7 @@ internal sealed class OptComposer : ILoadFileComposer
                 ? TiffMultiPageGenerator.GetPageCount(this.request.Tiff.PageRange, this.request.Metadata.Seed, i)
                 : random.Next(1, 11);
 
-            foreach (var entry in GeneratePageEntries(batesNumber, imagePath, pageCount))
+            foreach (var entry in GeneratePageEntries(batesNumber, imagePath, pageCount, this.pageSuffix))
             {
                 yield return MakeRecord(entry.Bates, volume, entry.ImagePath, entry.DocBreak, entry.PageCountStr);
             }
@@ -107,7 +109,7 @@ internal sealed class OptComposer : ILoadFileComposer
                 && fileData.GetAttachmentMetadata().Count > 0;
             var attachments = hasAttachment ? fileData.GetAttachmentMetadata() : Array.Empty<FileAttachmentMetadata>();
 
-            foreach (var entry in GeneratePageEntries(baseBatesNumber, baseImagePath, actualPages))
+            foreach (var entry in GeneratePageEntries(baseBatesNumber, baseImagePath, actualPages, this.pageSuffix))
             {
                 yield return MakeRecord(entry.Bates, volume, entry.ImagePath, entry.DocBreak, entry.PageCountStr);
             }
@@ -129,16 +131,17 @@ internal sealed class OptComposer : ILoadFileComposer
     private static IEnumerable<(string Bates, string ImagePath, string DocBreak, string PageCountStr)> GeneratePageEntries(
         string baseBates,
         string baseImagePath,
-        int actualPages)
+        int actualPages,
+        bool pageSuffix)
     {
-        if (actualPages > 1)
+        if (actualPages > 1 || pageSuffix)
         {
             var ext = Path.GetExtension(baseImagePath) ?? string.Empty;
             var pathWithoutExt = baseImagePath[..^ext.Length];
 
             for (int pageIdx = 1; pageIdx <= actualPages; pageIdx++)
             {
-                var pageBates = $"{baseBates}_{pageIdx:D3}";
+                var pageBates = BatesSequence.FormatPageBates(baseBates, pageIdx);
                 var pageImagePath = $"{pathWithoutExt}_{pageIdx:D3}{ext}";
                 var docBreak = pageIdx == 1 ? "Y" : string.Empty;
                 var pageCountStr = pageIdx == 1 ? actualPages.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty;

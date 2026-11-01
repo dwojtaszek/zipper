@@ -84,4 +84,20 @@ public class TiffFileGeneratorTests
 
         Assert.Equal(TiffMultiPageGenerator.Generate(1, workItem, request.Tiff, "PROD00000001"), result.Content);
     }
+
+    [Fact]
+    public void Generate_WithRealismPageSuffixAndSinglePage_EndorsesPageWithSuffixedBates()
+    {
+        // Page suffixes apply to one-page documents too, so the endorsement matches the OPT page key.
+        var request = new FileGenerationRequest
+        {
+            Tiff = new Config.TiffConfig { RealismMode = "group4" },
+            Bates = new Config.BatesNumberConfig { Prefix = "PROD", Digits = 8, PageSuffix = true },
+        };
+        var workItem = new FileWorkItem { Index = 1 };
+
+        var result = new TiffFileGenerator(request).Generate(workItem, request);
+
+        Assert.Equal(TiffMultiPageGenerator.Generate(1, workItem, request.Tiff, "PROD00000001_001"), result.Content);
+    }
 }

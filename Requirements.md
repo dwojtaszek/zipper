@@ -98,6 +98,16 @@ The application operates in three distinct generation modes:
 - **REQ-040**: When Bates numbering is enabled, the Load File must include a `Bates Number` column.
 - **REQ-041**: Bates numbers shall be formatted as `{PREFIX}{PADDED_NUMBER}` where the number is zero-padded to the specified digit count.
 - **REQ-042**: Bates numbers must increment sequentially for each Native File generated.
+- **REQ-239**: An opt-in page-level Bates mode shall be introduced via `--bates-page-suffix`. The flag takes no value, requires `--bates-prefix` (otherwise validation fails with `--bates-page-suffix requires --bates-prefix.`), and is off by default, leaving default Bates numbering unchanged. When enabled, every Native File, including a one-page document, emits page-level Bates numbers `{PREFIX}{PADDED_NUMBER}_{NNN}` (for example `ABC00000001_001`, `ABC00000001_002`), so platforms group them as pages of one document:
+  - OPT Load Files (Standard, Loadfile-Only, and Production Set) emit one record per page keyed by the page-level Bates number, with the document break and page count on the first page.
+  - Production Set page images are written one per page as `{page-level Bates number}.tif` (for example `IMAGES/VOL001/ABC00000001_001.tif`), so each image name matches its OPT image key.
+  - Realistic TIFF endorsement bands show the page-level Bates number for one-page documents (REQ-238).
+  - DAT, CSV, Concordance, and EDRM-XML Bates numbers, Production Manifest Bates ranges, Attachment child Bates numbers, and REDACTED image names stay document-level.
+- **REQ-240**: Bates configuration that exceeds a documented review platform limit shall print a `Warning:` line to stderr when the Bates configuration is built. It shall not fail validation or change any generated value. The checked limits are:
+  - Everlaw prefix: a prefix longer than 36 characters. Each element of a comma-separated `--bates-prefix` list is checked.
+  - Everlaw Bates number: a Bates number longer than 16 characters, excluding the prefix. The width is the larger of `--bates-digits` and the last generated number, plus the four-character `_NNN` suffix when `--bates-page-suffix` is set.
+  - DISCO range: a Bates range spanning more than 30,000 Bates numbers, from `--bates-start` through the last of `--count` documents (one Bates number per document). The range check counts document-level Bates numbers, not pages.
+  - Configurations without Bates flags print no platform warnings.
 
 ### FR-009: Multipage TIFF Support
 - **REQ-043**: A new optional command-line argument `--tiff-pages <min-max>` shall be introduced.
@@ -148,6 +158,7 @@ The application operates in three distinct generation modes:
 - `--bates-prefix <prefix>`: (Optional) Prefix for Bates numbering, maximum 200 UTF-8 bytes per element.
 - `--bates-start <number>`: (Optional) Starting number for Bates numbering. Defaults to 1.
 - `--bates-digits <number>`: (Optional) Number of digits for Bates numbering. Defaults to 8.
+- `--bates-page-suffix`: (Optional) Page-level Bates numbers (`{Bates}_NNN`) for every document, including one-page documents (REQ-239). Requires `--bates-prefix`; takes no value.
 - `--tiff-pages <min-max>`: (Optional) Page count range for TIFF files (e.g., "1-20"). Defaults to "1-1".
 - `--tiff-realism <none|standard|group4|uncompressed>`: (Optional) Opt-in realism mode for TIFF emission (REQ-238). Defaults to `none`.
 - `--with-tiff-realism`: (Optional) Convenience flag to enable standard realistic TIFF emission (alias for `--tiff-realism standard`).

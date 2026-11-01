@@ -160,6 +160,63 @@ if errorlevel 1 (
 
 echo [ SUCCESS ] Test Case 4: Bates numbering with DOCX passed
 
+:: --- Test Case 5: Page-level Bates suffix on one-page documents ---
+
+echo [ INFO ] Test Case 5: Page-level Bates suffix (--bates-page-suffix)
+
+%ZIPPER_CMD% ^
+  --type pdf ^
+  --count 3 ^
+  --output-path "%TEST_OUTPUT_DIR%\test5" ^
+  --bates-prefix "PGS" ^
+  --bates-page-suffix ^
+  --load-file-format opt
+
+if errorlevel 1 (
+  echo [ ERROR ] Test 5 failed during execution
+  exit /b 1
+)
+
+:: Verify output
+for %%f in ("%TEST_OUTPUT_DIR%\test5\*.opt") do set OPT_FILE=%%f
+
+findstr /B /C:"PGS00000001_001," "%OPT_FILE%" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 5: Page-level Bates 'PGS00000001_001' not found in .opt file
+  exit /b 1
+)
+
+findstr /B /C:"PGS00000001," "%OPT_FILE%" >nul
+if not errorlevel 1 (
+  echo [ ERROR ] Test 5: Document-level Bates 'PGS00000001' should not be an OPT key with --bates-page-suffix
+  exit /b 1
+)
+
+echo [ SUCCESS ] Test Case 5: Page-level Bates suffix passed
+
+:: --- Test Case 6: Over-limit Bates configuration warns and still generates ---
+
+echo [ INFO ] Test Case 6: Bates prefix over the Everlaw limit warns
+
+%ZIPPER_CMD% ^
+  --type pdf ^
+  --count 2 ^
+  --output-path "%TEST_OUTPUT_DIR%\test6" ^
+  --bates-prefix "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDE" > "%TEST_OUTPUT_DIR%\test6-output.txt" 2>&1
+
+if errorlevel 1 (
+  echo [ ERROR ] Test 6 failed: over-limit Bates prefix must warn, not fail
+  exit /b 1
+)
+
+findstr /C:"Warning: Bates prefix 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDE' is 41 characters" "%TEST_OUTPUT_DIR%\test6-output.txt" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 6: Everlaw prefix warning not printed
+  exit /b 1
+)
+
+echo [ SUCCESS ] Test Case 6: Over-limit Bates prefix warning passed
+
 :: --- All Tests Passed ---
 
 echo [ SUCCESS ] All Bates Numbering E2E tests passed!

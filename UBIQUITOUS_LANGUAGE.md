@@ -101,6 +101,8 @@ The delimited **Load File Formats** (DAT, OPT, CSV, Concordance) are produced by
 | **Bates Prefix** | The text prefix for a **Bates Number** (e.g., "CLIENT001"). Specified by `--bates-prefix`. | Bates code prefix |
 | **Bates Start** | The non-negative starting integer (`>= 0`) for **Bates Number** generation. Defaults to 1 (REQ-039). | Start number, initial count |
 | **Bates Digits** | The zero-padding width for the numeric part of a **Bates Number** (e.g., 8 digits yields `00000001`). Defaults to 8. | Digit count, padding width |
+| **Page Suffix** | The three-digit `_NNN` ordinal that turns a document's **Bates Number** into a page-level Bates Number (`ABC00000001_001`). Multi-page TIFFs carry it by default; `--bates-page-suffix` (REQ-239) applies it to every document, including one-page documents. Platforms such as Everlaw group suffixed Bates Numbers as pages of one document. | Page Bates number, `_NNN` suffix |
+| **Platform Limits** | Documented review platform constraints on Bates configuration: Everlaw allows a 36-character **Bates Prefix** and a 16-character Bates Number (excluding the prefix), and DISCO warns on Bates ranges over 30,000 numbers. Violations print warnings and never fail generation (REQ-240). | Platform warnings, platform caps |
 
 ---
 

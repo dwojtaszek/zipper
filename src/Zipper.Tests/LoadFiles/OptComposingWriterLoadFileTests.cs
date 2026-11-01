@@ -80,6 +80,54 @@ public class OptComposingWriterLoadFileTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public async Task OptWriter_WithBatesPageSuffix_SuffixesSinglePageDocumentsToo()
+    {
+        var request = this.CreateTestRequest("tiff");
+        request.Tiff = request.Tiff with { PageRange = (1, 10) };
+        request.Bates = new BatesNumberConfig { Prefix = "DOC", PageSuffix = true };
+
+        var files = new List<FileData>
+            {
+                new FileData
+                {
+                    WorkItem = new FileWorkItem
+                    {
+                        Index = 1,
+                        FolderNumber = 1,
+                        FilePathInZip = "folder_001/file_00000001.tiff",
+                    },
+                    PageCount = 3,
+                },
+                new FileData
+                {
+                    WorkItem = new FileWorkItem
+                    {
+                        Index = 2,
+                        FolderNumber = 1,
+                        FilePathInZip = "folder_001/file_00000002.tiff",
+                    },
+                    PageCount = 1,
+                }
+            };
+
+        var writer = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Opt);
+        var outputPath = Path.Combine(this.TempDir, "test_page_suffix.opt");
+
+        await using (var stream = File.OpenWrite(outputPath))
+        {
+            await writer.WriteAsync(stream, request, files);
+        }
+
+        var lines = (await File.ReadAllLinesAsync(outputPath)).Where(line => line.Length > 0).ToArray();
+
+        Assert.Equal(4, lines.Length);
+        Assert.Equal("DOC00000001_001,VOL001,IMAGES\\DOC00000001_001.tif,Y,,,3", lines[0]);
+        Assert.Equal("DOC00000001_002,VOL001,IMAGES\\DOC00000001_002.tif,,,,", lines[1]);
+        Assert.Equal("DOC00000001_003,VOL001,IMAGES\\DOC00000001_003.tif,,,,", lines[2]);
+        Assert.Equal("DOC00000002_001,VOL001,IMAGES\\DOC00000002_001.tif,Y,,,1", lines[3]);
+    }
+
+    [Fact]
     public async Task OptWriter_ShouldWriteCommaDelimitedNoHeaderFormat()
     {
         var request = this.CreateTestRequest();
@@ -207,6 +255,36 @@ public class OptComposingWriterLoadFileTests : TempDirectoryTestBase
             Assert.StartsWith("IMG", line, StringComparison.Ordinal);
             Assert.Contains("VOL001", line, StringComparison.Ordinal);
         }
+    }
+
+    [Fact]
+    public async Task LoadfileOnlyOptWriter_WithBatesPageSuffix_SuffixesEveryDocumentsFirstPage()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileCount = 3,
+                FileType = "pdf",
+            },
+            Metadata = new MetadataConfig { Seed = 42 },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+            Delimiters = new DelimiterConfig { EndOfLine = "CRLF" },
+            Bates = new BatesNumberConfig { Prefix = "LF", PageSuffix = true },
+        };
+        var writer = new OptComposingWriter(WriterMode.LoadfileOnly);
+        using var stream = new MemoryStream();
+        await writer.WriteAsync(stream, request, new List<FileData>());
+
+        stream.Position = 0;
+        var content = Encoding.UTF8.GetString(stream.ToArray());
+        var lines = content.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.All(lines, line => Assert.Matches(@"^LF\d{8}_\d{3},", line));
+        Assert.Contains(lines, line => line.StartsWith("LF00000001_001,", StringComparison.Ordinal));
+        Assert.Contains(lines, line => line.StartsWith("LF00000002_001,", StringComparison.Ordinal));
+        Assert.Contains(lines, line => line.StartsWith("LF00000003_001,", StringComparison.Ordinal));
+        Assert.DoesNotContain(lines, line => line.StartsWith("LF00000001,", StringComparison.Ordinal));
     }
 
     [Fact]

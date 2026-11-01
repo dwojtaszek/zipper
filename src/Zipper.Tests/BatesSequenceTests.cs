@@ -164,4 +164,39 @@ public class BatesSequenceTests
         var ex = Assert.Throws<System.ArgumentException>(() => BatesSequence.FromConfig(badConfig));
         Assert.Contains(expectedMessage, ex.Message, StringComparison.Ordinal);
     }
+
+    [Theory]
+    [InlineData("ABC00000001", 1, "ABC00000001_001")]
+    [InlineData("ABC00000001", 12, "ABC00000001_012")]
+    [InlineData("ABC00000001", 999, "ABC00000001_999")]
+    [InlineData("ABC00000001", 1000, "ABC00000001_1000")]
+    public void FormatPageBates_WithDocumentBatesAndPageNumber_AppendsThreeDigitPageSuffix(string documentBates, int pageNumber, string expected)
+    {
+        Assert.Equal(expected, BatesSequence.FormatPageBates(documentBates, pageNumber));
+    }
+
+    [Fact]
+    public void FormatPageBates_WithPageBelowOne_ThrowsArgumentOutOfRangeException()
+    {
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => BatesSequence.FormatPageBates("DOC00000001", 0));
+        Assert.Equal("pageNumber", ex.ParamName);
+    }
+
+    [Fact]
+    public void Format_WithPageSuffixEnabled_ReturnsDocumentLevelBatesWithoutSuffix()
+    {
+        var sequence = BatesSequence.FromConfig(new BatesNumberConfig { Prefix = "DOC", PageSuffix = true });
+
+        Assert.True(sequence.PageSuffix);
+        Assert.Equal("DOC00000001", sequence.Format(0).ToString());
+        Assert.Equal("DOC00000002", sequence.Format(1).ToString());
+    }
+
+    [Fact]
+    public void PageSuffix_WithDefaultConfig_IsOff()
+    {
+        var sequence = BatesSequence.FromConfig(new BatesNumberConfig { Prefix = "DOC" });
+
+        Assert.False(sequence.PageSuffix);
+    }
 }

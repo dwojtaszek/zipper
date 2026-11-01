@@ -432,7 +432,8 @@ internal static class ProductionSetOrchestrator
             materializer,
             cancellationToken,
             plan.BatesNumber,
-            request.Tiff).ConfigureAwait(false);
+            request.Tiff,
+            request.Bates?.PageSuffix == true).ConfigureAwait(false);
 
         // Write redacted image/text files when redacted mode is on
         var (nativePathOverride, redactionReason) = await WriteRedactedDocumentFilesAsync(
@@ -494,9 +495,11 @@ internal static class ProductionSetOrchestrator
         IFileMaterializer materializer,
         CancellationToken cancellationToken,
         string? batesNumber = null,
-        Config.TiffConfig? tiffConfig = null)
+        Config.TiffConfig? tiffConfig = null,
+        bool pageSuffix = false)
     {
-        if (pageCount > 1)
+        // Page suffix mode names one-page documents' images with _001 too, matching their OPT page key (REQ-239).
+        if (pageCount > 1 || pageSuffix)
         {
             var imageExt = Path.GetExtension(imageRelPath) ?? string.Empty;
             var imagePathWithoutExt = imageRelPath[..^imageExt.Length];
@@ -504,7 +507,7 @@ internal static class ProductionSetOrchestrator
             for (int pageIdx = 1; pageIdx <= pageCount; pageIdx++)
             {
                 var pageImageRelPath = $"{imagePathWithoutExt}_{pageIdx:D3}{imageExt}";
-                var pageBates = batesNumber is not null ? $"{batesNumber}_{pageIdx:D3}" : null;
+                var pageBates = batesNumber is not null ? BatesSequence.FormatPageBates(batesNumber, pageIdx) : null;
                 byte[] content = TiffMultiPageGenerator.GeneratePage(pageBates, pageIdx, pageCount, tiffConfig);
                 await materializer.WriteBytesAsync(Path.Combine(productionPath, pageImageRelPath), content, cancellationToken).ConfigureAwait(false);
             }

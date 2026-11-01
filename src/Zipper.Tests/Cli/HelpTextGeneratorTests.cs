@@ -42,6 +42,10 @@ public class HelpTextGeneratorTests
             "  --bates-prefix <string>  Bates Number prefix, max 200 UTF-8 bytes per list element (e.g., CLIENT001)",
             stderr,
             StringComparison.Ordinal);
+        Assert.Contains(
+            "  --bates-page-suffix      Page-level Bates numbers (<prefix><number>_NNN) for every document, including one-page",
+            stderr,
+            StringComparison.Ordinal);
         Assert.Contains("TIFF Options:", stderr, StringComparison.Ordinal);
         Assert.Contains("Column Profile Options:", stderr, StringComparison.Ordinal);
         Assert.Contains("Utility Options:", stderr, StringComparison.Ordinal);
