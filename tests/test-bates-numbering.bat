@@ -217,6 +217,53 @@ if errorlevel 1 (
 
 echo [ SUCCESS ] Test Case 6: Over-limit Bates prefix warning passed
 
+:: --- Test Case 7: Page-suffix width warning follows the pages each output numbers ---
+
+echo [ INFO ] Test Case 7: Page-suffix width warning covers Loadfile-Only pages only
+
+%ZIPPER_CMD% ^
+  --type pdf ^
+  --count 1 ^
+  --output-path "%TEST_OUTPUT_DIR%\test7-pdf" ^
+  --bates-prefix "CL001" ^
+  --bates-digits 12 ^
+  --bates-page-suffix ^
+  --tiff-pages 1-1000 > "%TEST_OUTPUT_DIR%\test7-pdf-output.txt" 2>&1
+
+if errorlevel 1 (
+  echo [ ERROR ] Test 7 failed: PDF run with --tiff-pages past 999 must not fail
+  exit /b 1
+)
+
+findstr /C:"Warning: Bates numbers are" "%TEST_OUTPUT_DIR%\test7-pdf-output.txt" >nul
+if not errorlevel 1 (
+  echo [ ERROR ] Test 7: PDF run should not warn about a page suffix it never numbers
+  exit /b 1
+)
+
+%ZIPPER_CMD% ^
+  --type pdf ^
+  --count 1 ^
+  --loadfile-only ^
+  --output-path "%TEST_OUTPUT_DIR%\test7-loadfile" ^
+  --bates-prefix "CL001" ^
+  --bates-digits 12 ^
+  --bates-page-suffix ^
+  --tiff-pages 1000-1000 > "%TEST_OUTPUT_DIR%\test7-loadfile-output.txt" 2>&1
+
+if errorlevel 1 (
+  echo [ ERROR ] Test 7 failed: Loadfile-Only run with --tiff-pages 1000 must not fail
+  exit /b 1
+)
+
+findstr /C:"Warning: Bates numbers are 17 characters including the page suffix" "%TEST_OUTPUT_DIR%\test7-loadfile-output.txt" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 7: Loadfile-Only page suffix width warning not printed
+  exit /b 1
+)
+
+echo [ SUCCESS ] Test Case 7: Page-suffix width warning passed
+
 :: --- All Tests Passed ---
 
 echo [ SUCCESS ] All Bates Numbering E2E tests passed!

@@ -351,6 +351,42 @@ public class PipelineTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void Build_TiffPagesPast999OnPdfWithPageSuffix_PrintsNoPlatformWarning()
+    {
+        // A PDF run numbers one page per document, so its page suffix stays _001 (four characters).
+        var (ok, modules) = PipelineTestHelper.Parse(new[]
+        {
+            "--type", "pdf", "--count", "1", "--output-path", Directory.GetCurrentDirectory(),
+            "--bates-prefix", "CL001", "--bates-digits", "12", "--bates-page-suffix", "--tiff-pages", "1-1000",
+        });
+        Assert.True(ok);
+
+        FileGenerationRequest? result = null;
+        var (_, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => result = PipelineTestHelper.Build(modules: modules));
+
+        Assert.NotNull(result);
+        Assert.DoesNotContain("Warning: Bates numbers are", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_TiffPagesPast999InLoadfileOnlyPdf_WarnsWithFourDigitPageOrdinal()
+    {
+        // Loadfile-Only OPT rows number pages from --tiff-pages for any output type, so page 1000 prints as _1000.
+        var (ok, modules) = PipelineTestHelper.Parse(new[]
+        {
+            "--type", "pdf", "--count", "1", "--output-path", Directory.GetCurrentDirectory(), "--loadfile-only",
+            "--bates-prefix", "CL001", "--bates-digits", "12", "--bates-page-suffix", "--tiff-pages", "1000-1000",
+        });
+        Assert.True(ok);
+
+        FileGenerationRequest? result = null;
+        var (_, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => result = PipelineTestHelper.Build(modules: modules));
+
+        Assert.NotNull(result);
+        Assert.Contains("Warning: Bates numbers are 17 characters including the page suffix", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Build_WithoutBatesFlags_PrintsNoPlatformWarning()
     {
         var (ok, modules) = PipelineTestHelper.Parse(new[] { "--type", "pdf", "--count", "30001", "--output-path", Directory.GetCurrentDirectory() });
