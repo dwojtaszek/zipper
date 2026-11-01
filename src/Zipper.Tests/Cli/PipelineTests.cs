@@ -272,4 +272,51 @@ public class PipelineTests : WorkingDirectoryTestBase
             if (File.Exists(tempCsv)) File.Delete(tempCsv);
         }
     }
+
+    [Fact]
+    public void Build_SourceInputOverDiscoRange_WarnsWithSourceRecordCount()
+    {
+        // The range check needs the Source Record count, which exists only after source input loads.
+        var tempCsv = Path.Combine(Directory.GetCurrentDirectory(), "source_" + Guid.NewGuid().ToString("N") + ".csv");
+        try
+        {
+            var lines = new List<string> { "FilePath,FileType" };
+            lines.AddRange(Enumerable.Range(1, 30_001).Select(i => $"doc{i:D5}.pdf,pdf"));
+            File.WriteAllLines(tempCsv, lines);
+            var (ok, modules) = PipelineTestHelper.Parse(new[]
+            {
+                "--input-csv", tempCsv,
+                "--output-path", Directory.GetCurrentDirectory(),
+                "--bates-prefix", "CL001",
+            });
+            Assert.True(ok);
+
+            FileGenerationRequest? result = null;
+            var (_, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => result = PipelineTestHelper.Build(modules: modules));
+
+            Assert.NotNull(result);
+            Assert.Contains("Warning: Bates range 1 through 30001 spans 30,001 Bates numbers", stderr, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (File.Exists(tempCsv)) File.Delete(tempCsv);
+        }
+    }
+
+    [Fact]
+    public void Build_ProductionSetRollingSetWiderThanLimit_WarnsForThatSet()
+    {
+        var (ok, modules) = PipelineTestHelper.Parse(new[]
+        {
+            "--type", "pdf", "--count", "2", "--output-path", Directory.GetCurrentDirectory(),
+            "--production-set", "--rolling-count", "2", "--bates-prefix", "CL001", "--bates-start", "1,9999999999999999",
+        });
+        Assert.True(ok);
+
+        FileGenerationRequest? result = null;
+        var (_, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => result = PipelineTestHelper.Build(modules: modules));
+
+        Assert.NotNull(result);
+        Assert.Contains("Warning: Bates numbers are 17 characters", stderr, StringComparison.Ordinal);
+    }
 }

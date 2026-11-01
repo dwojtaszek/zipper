@@ -39,7 +39,7 @@ internal sealed class TiffFileGenerator : IFileGenerator
         var batesNumber = !request.Tiff.IsRealistic ? null : this.ResolveEndorsementLabel(workItem);
         if (batesNumber is not null && pageCount == 1 && request.Bates?.PageSuffix == true)
         {
-            // Multi-page labels already carry _NNN per page; one-page documents need it too (REQ-239).
+            // Multi-page renders label each page with _NNN; a one-page document needs its page labeled too (REQ-239).
             batesNumber = BatesSequence.FormatPageBates(batesNumber, 1);
         }
 

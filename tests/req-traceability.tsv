@@ -883,6 +883,7 @@ REQ-239	unit	OptComposingWriterLoadFileTests.OptWriter_WithBatesPageSuffix_Suffi
 REQ-239	unit	OptComposingWriterLoadFileTests.LoadfileOnlyOptWriter_WithBatesPageSuffix_SuffixesEveryDocumentsFirstPage	Loadfile-only OPT keys every document with _001 in page-suffix mode
 REQ-239	unit	ProductionSetTests.ProductionSet_WithBatesPageSuffix_NamesEverySingleDocumentImageWithPageSuffix	Production Set images for one-page documents are named {Bates}_001.tif
 REQ-239	unit	TiffFileGeneratorTests.Generate_WithRealismPageSuffixAndSinglePage_EndorsesPageWithSuffixedBates	One-page realistic TIFF endorsement carries the page-level Bates number
+REQ-239	unit	CrossFormatAnomalyApplierTests.Apply_DesyncPagecount_PageSuffixOnePageDocument_ContinuesFromDocumentBates	Desync page-count continuation under page-suffix mode extends the document Bates number
 REQ-239	unit	BatesAndDistributionPropertyTests.FormatPageBates_ForEveryDocumentAndPage_ShouldStripBackToItsDocumentAndStayUnique	Property: page-level Bates numbers strip back to their document and stay unique
 REQ-239	e2e	test-bates-numbering.sh	E2E: --bates-page-suffix keys one-page documents with _001 in the OPT Load File
 REQ-239	e2e	test-bates-numbering.bat	Windows batch E2E: --bates-page-suffix keys one-page documents with _001 in the OPT Load File
@@ -890,7 +891,15 @@ REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithPrefixOverLimit_ReturnsPrefix
 REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithDigitsOverNumberLimit_ReturnsNumberWarning	Everlaw Bates number limit (16 characters) warning
 REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithPageSuffixOverNumberLimit_CountsSuffixInWidth	Page suffix counts toward the Bates number limit
 REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithCountOverDiscoLimit_ReturnsRangeWarning	DISCO 30,000 Bates number range warning
-REQ-240	unit	BatesModuleTests.TryBuild_PrefixOverPlatformLimit_WarnsAndStillBuilds	Over-limit prefix warns at configuration build and still builds
-REQ-240	unit	BatesModuleTests.TryBuild_RangeOverDiscoLimit_Warns	Over-limit range warns at configuration build and still builds
+REQ-240	unit	BatesModuleTests.WarnPlatformLimits_PrefixOverPlatformLimit_WarnsAndKeepsBuiltConfig	Over-limit prefix warns once the document count is known
+REQ-240	unit	BatesModuleTests.WarnPlatformLimits_RangeOverDiscoLimit_Warns	Over-limit Bates range warns once the document count is known
+REQ-240	unit	BatesModuleTests.WarnPlatformLimits_ProductionSetRollingSetWiderThanLimit_WarnsForThatSet	Production Set rolling set past the Bates number limit warns for that set
+REQ-240	unit	BatesModuleTests.WarnPlatformLimits_NonProductionSetIgnoresUngeneratedRollingSets	Rolling count without --production-set is not checked
+REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithListedRollingStartWiderThanLimit_WarnsForThatSetOnly	Rolling Production Set with a listed start past the Bates number limit warns for that set only
+REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithContinuousSetChainPastWidthLimit_WarnsForLaterSet	Continuous Rolling Production Sets that chain past the Bates number limit warn for the later set
+REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithContinuousSetsEachOverRangeLimit_WarnsForEachSet	Each over-limit continuous Rolling Production Set warns for its own DISCO range
+REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithListedPrefixUnusedByStandardRun_DoesNotWarn	Standard run ignores listed prefixes it does not number with
+REQ-240	unit	PipelineTests.Build_SourceInputOverDiscoRange_WarnsWithSourceRecordCount	Source-driven run is checked against its Source Record count for the DISCO range
+REQ-240	unit	PipelineTests.Build_ProductionSetRollingSetWiderThanLimit_WarnsForThatSet	Production Set build prints the rolling set Bates number limit warning
 REQ-240	e2e	test-bates-numbering.sh	E2E: over-limit Bates prefix warns and still generates
 REQ-240	e2e	test-bates-numbering.bat	Windows batch E2E: over-limit Bates prefix warning

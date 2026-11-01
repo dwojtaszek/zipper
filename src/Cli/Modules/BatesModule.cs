@@ -145,15 +145,6 @@ public sealed class BatesModule : CliModule
                 return false;
             }
             config = HasBatesPrefix ? built : null;
-
-            // Limits are advisory: the configured values still generate (REQ-240).
-            if (config is not null)
-            {
-                foreach (var warning in BatesPlatformLimits.Evaluate(config, count))
-                {
-                    Console.Error.WriteLine($"Warning: {warning}");
-                }
-            }
         }
         else
         {
@@ -161,6 +152,22 @@ public sealed class BatesModule : CliModule
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Prints the advisory platform limit warnings (REQ-240) for a built Bates configuration. Call it once the
+    /// Output count is known, so a source-driven run is checked against its Source Record count.
+    /// </summary>
+    public static void WarnPlatformLimits(BatesNumberConfig config, ProductionConfig production, long documentCount)
+    {
+        ArgumentNullException.ThrowIfNull(production);
+
+        // Only a Production Set generates its rolling sets; any other run numbers one sequence.
+        var rollingCount = production.ProductionSet ? production.RollingCount : 1;
+        foreach (var warning in BatesPlatformLimits.Evaluate(config, documentCount, rollingCount, production.RollingBatesMode))
+        {
+            Console.Error.WriteLine($"Warning: {warning}");
+        }
     }
 
     private bool ValidateRollingBates(int rollingCount, string? rollingBatesMode, long? count)

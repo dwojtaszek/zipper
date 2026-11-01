@@ -215,6 +215,91 @@ public sealed class CrossFormatAnomalyApplierTests : IDisposable
     }
 
     [Fact]
+    public void Apply_DesyncPagecount_PageSuffixOnePageDocument_ContinuesFromDocumentBates()
+    {
+        // Page-suffix mode keys a one-page document's first page as TEST00000002_001, so the added
+        // continuation page must extend the document Bates number rather than the first-page key (REQ-239).
+        var datLines = new List<string>
+        {
+            JoinDat("DOCID", "BATES_NUMBER", "IMAGE_PATH", "PAGECOUNT", "VOLUME"),
+            JoinDat("DOC00000002", "TEST00000002", "IMAGES\\VOL001\\TEST00000002.tif", "1", "VOL001"),
+        };
+        var optLines = new List<string>
+        {
+            "TEST00000002_001,VOL001,IMAGES\\VOL001\\TEST00000002_001.tif,Y,,,1",
+        };
+
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncPagecount,
+            chaosAmount: "1",
+            random: new FirstIndexRandom());
+
+        Assert.Contains(
+            result.OptLines,
+            line => line == "TEST00000002_002,VOL001,IMAGES\\VOL001\\TEST00000002_002.tif,,,,");
+        Assert.DoesNotContain(result.OptLines, line => line.Contains("_001_002", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Apply_DesyncPagecount_KeyWithoutPageSuffix_DoesNotTrimToDatKeyPrefix()
+    {
+        // "ABC" is a DAT Bates number, but the OPT key "ABC1234" carries no _001 page suffix, so its
+        // continuation must extend "ABC1234" rather than trim the last four characters to "ABC" (REQ-239).
+        var datLines = new List<string>
+        {
+            JoinDat("DOCID", "BATES_NUMBER", "IMAGE_PATH", "PAGECOUNT", "VOLUME"),
+            JoinDat("DOC00000001", "ABC", "IMAGES\\VOL001\\ABC.tif", "1", "VOL001"),
+        };
+        var optLines = new List<string>
+        {
+            "ABC1234,VOL001,IMAGES\\VOL001\\ABC1234.tif,Y,,,1",
+        };
+
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncPagecount,
+            chaosAmount: "1",
+            random: new FirstIndexRandom());
+
+        Assert.Contains(
+            result.OptLines,
+            line => line == "ABC1234_002,VOL001,IMAGES\\VOL001\\ABC1234_002.tif,,,,");
+        Assert.DoesNotContain(result.OptLines, line => line.StartsWith("ABC_002,", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Apply_DesyncPagecount_PageSuffixKeyWithDatBaseKeyAlsoPresent_ExtendsSuffixKey()
+    {
+        // DAT carries both CASE and CASE_001 as Bates numbers. The OPT key CASE_001 is its own one-page
+        // document, so its continuation must extend CASE_001 rather than the base key CASE (REQ-239).
+        var datLines = new List<string>
+        {
+            JoinDat("DOCID", "BATES_NUMBER", "IMAGE_PATH", "PAGECOUNT", "VOLUME"),
+            JoinDat("DOC00000001", "CASE", "IMAGES\\VOL001\\CASE.tif", "1", "VOL001"),
+            JoinDat("DOC00000002", "CASE_001", "IMAGES\\VOL001\\CASE_001.tif", "1", "VOL001"),
+        };
+        var optLines = new List<string>
+        {
+            "CASE_001,VOL001,IMAGES\\VOL001\\CASE_001.tif,Y,,,1",
+        };
+
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncPagecount,
+            chaosAmount: "1",
+            random: new FirstIndexRandom());
+
+        Assert.Contains(
+            result.OptLines,
+            line => line == "CASE_001_002,VOL001,IMAGES\\VOL001\\CASE_001_002.tif,,,,");
+        Assert.DoesNotContain(result.OptLines, line => line.StartsWith("CASE_002,", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Apply_DesyncPagecount_MultipageOptKeyEnding001_PairsWithBaseDatRecordAndProducesAccurateAudit()
     {
         var datLines = new List<string>

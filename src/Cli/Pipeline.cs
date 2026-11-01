@@ -61,6 +61,11 @@ public static class Pipeline
             return null;
         }
 
+        if (bates is not null)
+        {
+            BatesModule.WarnPlatformLimits(bates, production, output.FileCount);
+        }
+
         if (!modules.Metadata.TryBuild(output.HasFileType("eml"), modules.SourceInput.HasSourceInput, out var metadata))
         {
             return null;

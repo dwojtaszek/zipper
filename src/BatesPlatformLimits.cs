@@ -24,18 +24,23 @@ public static class BatesPlatformLimits
     private const int PageSuffixCharacters = 4;
 
     /// <summary>
-    /// Returns one warning per configured value that exceeds a documented platform limit.
-    /// <paramref name="count"/> is the number of documents the configuration numbers; a null or
-    /// non-positive count skips the range check.
+    /// Returns one warning per configured value that exceeds a documented platform limit. Each
+    /// checked run is a Bates sequence that generation numbers: the Standard run, or each Production
+    /// Set rolling set. <paramref name="documentCount"/> is the number of documents each run numbers.
     /// </summary>
-    public static IReadOnlyList<string> Evaluate(BatesNumberConfig config, long? count)
+    public static IReadOnlyList<string> Evaluate(
+        BatesNumberConfig config,
+        long documentCount,
+        int rollingCount,
+        RollingBatesMode rollingBatesMode)
     {
         ArgumentNullException.ThrowIfNull(config);
+        ArgumentOutOfRangeException.ThrowIfLessThan(rollingCount, 1);
 
+        var runs = PlannedRuns(config, documentCount, rollingCount, rollingBatesMode).Distinct().ToList();
         var warnings = new List<string>();
 
-        var prefixes = config.Prefixes is { Count: > 0 } listed ? listed : new[] { config.Prefix };
-        foreach (var prefix in prefixes)
+        foreach (var prefix in runs.Select(run => run.Prefix).Distinct(StringComparer.Ordinal))
         {
             if (prefix.Length > MaxPrefixCharacters)
             {
@@ -44,8 +49,8 @@ public static class BatesPlatformLimits
             }
         }
 
-        var numberWidth = Math.Max(config.Digits, WidestNumberWidth(config, count))
-            + (config.PageSuffix ? PageSuffixCharacters : 0);
+        var widestNumber = runs.Max(run => run.Last.ToString(CultureInfo.InvariantCulture).Length);
+        var numberWidth = Math.Max(config.Digits, widestNumber) + (config.PageSuffix ? PageSuffixCharacters : 0);
         if (numberWidth > MaxNumberCharacters)
         {
             var suffixNote = config.PageSuffix ? " including the page suffix" : string.Empty;
@@ -56,29 +61,45 @@ public static class BatesPlatformLimits
                 $"Bates numbers are {numberWidth} characters{suffixNote}; Everlaw limits Bates numbers to {MaxNumberCharacters} characters. {remedy}");
         }
 
-        if (count is > 0)
+        foreach (var run in runs)
         {
-            BigInteger span = ((BigInteger)count.Value - 1) * config.Increment + 1;
+            var span = run.Last - run.First + 1;
             if (span > MaxRangeNumbers)
             {
-                BigInteger end = config.Start + span - 1;
                 warnings.Add(
-                    $"Bates range {config.Start} through {end} spans {span.ToString("N0", CultureInfo.InvariantCulture)} Bates numbers; DISCO warns on ranges over {MaxRangeNumbers.ToString("N0", CultureInfo.InvariantCulture)}. Split the documents into smaller Bates ranges.");
+                    $"Bates range {run.First} through {run.Last} spans {span.ToString("N0", CultureInfo.InvariantCulture)} Bates numbers; DISCO warns on ranges over {MaxRangeNumbers.ToString("N0", CultureInfo.InvariantCulture)}. Split the documents into smaller Bates ranges.");
             }
         }
 
         return warnings;
     }
 
-    // Increment is positive, so the last number generated is the widest.
-    private static int WidestNumberWidth(BatesNumberConfig config, long? count)
+    // Follows the numbering the generation uses: a rolling set takes its listed prefix and start; without a
+    // listed start, restart sets begin at --bates-start and continuous sets begin where the previous set ended.
+    private static IReadOnlyList<BatesRun> PlannedRuns(
+        BatesNumberConfig config,
+        long documentCount,
+        int rollingCount,
+        RollingBatesMode rollingBatesMode)
     {
-        BigInteger last = config.Start;
-        if (count is > 0)
+        var runs = new List<BatesRun>(rollingCount);
+        BigInteger nextStart = config.Start;
+        var lastOffset = (BigInteger)Math.Max(documentCount - 1, 0) * config.Increment;
+
+        for (var i = 0; i < rollingCount; i++)
         {
-            last += ((BigInteger)count.Value - 1) * config.Increment;
+            BigInteger start = config.Starts is { } starts && i < starts.Count
+                ? starts[i]
+                : rollingBatesMode == RollingBatesMode.Restart ? config.Start : nextStart;
+            var prefix = config.Prefixes is { } prefixes && i < prefixes.Count ? prefixes[i] : config.Prefix;
+
+            runs.Add(new BatesRun(prefix, start, start + lastOffset));
+            nextStart = start + (BigInteger)documentCount * config.Increment;
         }
 
-        return last.ToString(CultureInfo.InvariantCulture).Length;
+        return runs;
     }
+
+    /// <summary>One Bates sequence that generation numbers: its prefix and its first and last Bates numbers.</summary>
+    private readonly record struct BatesRun(string Prefix, BigInteger First, BigInteger Last);
 }

@@ -754,18 +754,26 @@ internal static class CrossFormatAnomalyApplier
         }
         else
         {
-            // Duplicate/add a continuation page row
+            // Duplicate/add a continuation page row. The continuation extends the document Bates number,
+            // not a page-suffixed first-page key (REQ-239).
+            var documentKey = DocumentKeyOf(optDoc.DocKey, datRecordsByKey);
             int pageNumber = 2;
-            string extraKey = $"{optDoc.DocKey}_{pageNumber:D3}";
+            string extraKey = $"{documentKey}_{pageNumber:D3}";
             while (optDocsByKey.ContainsKey(extraKey))
             {
                 pageNumber++;
-                extraKey = $"{optDoc.DocKey}_{pageNumber:D3}";
+                extraKey = $"{documentKey}_{pageNumber:D3}";
             }
 
             string firstImg = optDoc.FirstImagePath;
             var ext = Path.GetExtension(firstImg);
-            string extraImg = $"{firstImg[..^ext.Length]}_{pageNumber:D3}{ext}";
+            var imageStem = firstImg[..^ext.Length];
+            if (documentKey != optDoc.DocKey && imageStem.EndsWith(FirstPageSuffix, StringComparison.OrdinalIgnoreCase))
+            {
+                imageStem = imageStem[..^FirstPageSuffix.Length];
+            }
+
+            string extraImg = $"{imageStem}_{pageNumber:D3}{ext}";
 
             string extraLine = $"{extraKey},{optDoc.Volume},{extraImg},,,,";
             var extraCols = extraLine.Split(',');
@@ -1532,6 +1540,19 @@ internal static class CrossFormatAnomalyApplier
             && datRecordsByKey.TryGetValue(optDocKey[..^FirstPageSuffix.Length], out datDocument)
                 ? datDocument
                 : null;
+    }
+
+    // Page-suffix mode keys a one-page document's first page as {Bates}_001 (REQ-239). The document key
+    // drops that suffix only when a DAT record carries the document Bates number.
+    private static string DocumentKeyOf(string optDocKey, IReadOnlyDictionary<string, DatRecordEntry> datRecordsByKey)
+    {
+        if (datRecordsByKey.ContainsKey(optDocKey) || !optDocKey.EndsWith(FirstPageSuffix, StringComparison.OrdinalIgnoreCase))
+        {
+            return optDocKey;
+        }
+
+        var documentKey = optDocKey[..^FirstPageSuffix.Length];
+        return datRecordsByKey.ContainsKey(documentKey) ? documentKey : optDocKey;
     }
 
     private static OptDocEntry? FindMatchingOptForDat(
