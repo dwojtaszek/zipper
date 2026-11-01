@@ -56,6 +56,23 @@ public class TiffRendererTests
         Assert.Equal(PackBits(expected), encoded);
     }
 
+    [Theory]
+    [InlineData(1280, "0000001010010")]
+    [InlineData(1728, "0000001100101")]
+    public void CompressGroup4_BlackRunAboveMakeupTable_UsesThirteenBitMakeupCode(int run, string makeupCode)
+    {
+        // Black make-up codes above 1216 are not covered by the other known-answer tests.
+        int width = run + 16;
+        var raster = BuildSingleRowRaster(width, blackStart: 0, blackEnd: run);
+
+        var encoded = TiffRenderer.CompressGroup4(raster, width, 1);
+
+        // Horizontal mode (001), white terminating 0 (00110101), black make-up (13 bits)
+        // + black terminating 0 (0000110111), vertical V0 (1) back to the right edge.
+        var expected = "001" + "00110101" + makeupCode + "0000110111" + "1" + EndOfFacsimileBlock;
+        Assert.Equal(PackBits(expected), encoded);
+    }
+
     [Fact]
     public void CreatePageRaster_WithLongBatesLabel_KeepsEveryCharacterOnPage()
     {

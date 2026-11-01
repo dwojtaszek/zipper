@@ -61,7 +61,7 @@ public class TiffModuleTests
     }
 
     [Fact]
-    public void TryBuild_WithWithTiffRealismFlag_SetsStandardConfig()
+    public void TryBuild_WithTiffRealismFlag_SetsStandardConfig()
     {
         var module = new TiffModule();
         Assert.False(module.TakesValue("--with-tiff-realism"));
@@ -108,6 +108,26 @@ public class TiffModuleTests
         Assert.True(module.TryApply("--tiff-realism", "uncompressed"));
         Assert.True(module.TryApply("--tiff-compression", "group4"));
         Assert.False(module.TryBuild(out _));
+    }
+
+    [Fact]
+    public void TryBuild_Group4RealismWithUncompressedCompression_ReturnsFalse()
+    {
+        var module = new TiffModule();
+        Assert.True(module.TryApply("--tiff-realism", "group4"));
+        Assert.True(module.TryApply("--tiff-compression", "uncompressed"));
+        Assert.False(module.TryBuild(out _));
+    }
+
+    [Fact]
+    public void TryBuild_StandardRealismWithUncompressedCompression_SetsUncompressed()
+    {
+        // standard names no encoding, so an explicit --tiff-compression applies without a conflict.
+        var module = new TiffModule();
+        Assert.True(module.TryApply("--tiff-realism", "standard"));
+        Assert.True(module.TryApply("--tiff-compression", "uncompressed"));
+        Assert.True(module.TryBuild(out var config));
+        Assert.Equal("uncompressed", config.Compression);
     }
 
     [Theory]

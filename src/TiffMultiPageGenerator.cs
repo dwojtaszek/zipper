@@ -10,19 +10,8 @@ internal static class TiffMultiPageGenerator
     private const int MaxPageCount = 1000;
 
     /// <summary>
-    /// Returns a pre-computed TIFF file.
-    /// The pageCount is tracked for metadata purposes only.
-    /// </summary>
-    /// <param name="pageCount">Number of pages (for metadata tracking).</param>
-    /// <param name="workItem">File work item for context.</param>
-    /// <returns>Byte array containing a TIFF file.</returns>
-    public static byte[] Generate(int pageCount, FileWorkItem workItem)
-    {
-        return Generate(pageCount, workItem, null, null);
-    }
-
-    /// <summary>
     /// Generates TIFF file content, either using pre-computed placeholder or realistic emission.
+    /// The placeholder path tracks the page count for metadata only.
     /// </summary>
     public static byte[] Generate(int pageCount, FileWorkItem workItem, Config.TiffConfig? tiffConfig, string? batesNumber = null)
     {

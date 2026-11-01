@@ -428,7 +428,7 @@ else
     fail "--with-tiff-realism generation failed in Standard mode"
 fi
 
-print_info "Test: Production Set with --with-tiff-realism emits distinct page images"
+print_info "Test: Production Set with --with-tiff-realism generates page images"
 PROD_REALISM_OUT="$TEST_OUTPUT_DIR/tiff-realism-prod"
 if zipper --production-set --count 2 --bates-prefix PROD --with-tiff-realism --output-path "$PROD_REALISM_OUT" > /dev/null 2>&1; then
     pass "Production Set with --with-tiff-realism generated successfully"
@@ -455,6 +455,13 @@ if zipper --type tiff --count 2 --tiff-realism uncompressed --tiff-compression g
     fail "Conflicting --tiff-realism uncompressed and --tiff-compression group4 should have failed validation"
 else
     pass "Conflicting --tiff-realism uncompressed and --tiff-compression group4 correctly failed validation"
+fi
+
+print_info "Test: --tiff-realism group4 with --tiff-compression uncompressed fails validation"
+if zipper --type tiff --count 2 --tiff-realism group4 --tiff-compression uncompressed --output-path "$TEST_OUTPUT_DIR/tiff-compression-conflict-g4" > /dev/null 2>&1; then
+    fail "Conflicting --tiff-realism group4 and --tiff-compression uncompressed should have failed validation"
+else
+    pass "Conflicting --tiff-realism group4 and --tiff-compression uncompressed correctly failed validation"
 fi
 
 # --- Summary ---

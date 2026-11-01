@@ -5,7 +5,7 @@ public record TiffConfig
     public (int Min, int Max)? PageRange { get; init; }
 
     /// <summary>
-    /// Opt-in realism mode for TIFF emission: "none" (default), "standard", "group4", or "uncompressed".
+    /// Opt-in realism mode for TIFF emission: null (default, same as "none"), "none", "standard", "group4", or "uncompressed".
     /// Selects whether realistic emission is on; the renderer reads <see cref="Compression"/> for strip encoding.
     /// </summary>
     public string? RealismMode { get; init; }

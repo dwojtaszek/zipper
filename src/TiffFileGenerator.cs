@@ -31,10 +31,13 @@ internal sealed class TiffFileGenerator : IFileGenerator
                 request.Tiff.PageRange!.Value, request.Metadata.Seed, workItem.Index)
             : 1;
 
-        var batesNumber = workItem.BatesNumberOverride
-            ?? (request.Bates is not null
-                ? BatesSequence.FromConfig(request.Bates).Format(workItem.Index - 1).ToString()
-                : workItem.ControlNumberOverride);
+        // The endorsement label only feeds realistic emission, so default output never evaluates it.
+        var batesNumber = !request.Tiff.IsRealistic
+            ? null
+            : workItem.BatesNumberOverride
+                ?? (request.Bates is not null
+                    ? BatesSequence.FromConfig(request.Bates).Format(workItem.Index - 1).ToString()
+                    : workItem.ControlNumberOverride);
 
         return new GeneratedFileContent
         {

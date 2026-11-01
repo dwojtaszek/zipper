@@ -85,14 +85,16 @@ public sealed class TiffModule : CliModule
 
         if (_compression is not null && _realismMode is (null or "none"))
         {
-            Console.Error.WriteLine("Error: --tiff-compression requires --tiff-realism or --with-tiff-realism.");
+            Console.Error.WriteLine("Error: --tiff-compression requires --tiff-realism, --with-tiff-realism, or --realistic-tiff.");
             config = default!;
             return false;
         }
 
-        if (_realismMode == "uncompressed" && _compression == "group4")
+        // A group4 or uncompressed realism mode names its encoding, so a different --tiff-compression is a conflict.
+        // standard names no encoding and accepts either compression.
+        if (_compression is not null && _realismMode is ("group4" or "uncompressed") && _compression != _realismMode)
         {
-            Console.Error.WriteLine("Error: --tiff-realism uncompressed conflicts with --tiff-compression group4.");
+            Console.Error.WriteLine($"Error: --tiff-realism {_realismMode} conflicts with --tiff-compression {_compression}.");
             config = default!;
             return false;
         }

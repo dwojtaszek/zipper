@@ -50,4 +50,21 @@ public class TiffFileGeneratorTests
 
         Assert.NotEqual(first.Content, second.Content);
     }
+
+    [Fact]
+    public void Generate_WithPageRangeAndRealismOff_DoesNotEvaluateBatesConfig()
+    {
+        // The endorsement label only feeds realistic emission, so an invalid Bates config must not
+        // fail default placeholder output.
+        var request = new FileGenerationRequest
+        {
+            Tiff = new Config.TiffConfig { PageRange = (3, 3) },
+            Bates = new Config.BatesNumberConfig { Digits = 0 },
+        };
+
+        var result = new TiffFileGenerator(request).Generate(new FileWorkItem { Index = 1 }, request);
+
+        Assert.Equal(PlaceholderFiles.GetContent("tiff"), result.Content);
+        Assert.Equal(3, result.PageCount);
+    }
 }

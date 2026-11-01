@@ -424,8 +424,8 @@ internal static class ProductionSetOrchestrator
                           LoremIpsum.GetParagraph(random);
         await materializer.WriteTextAsync(Path.Combine(productionPath, plan.TextRelPath), textContent, encoding, cancellationToken).ConfigureAwait(false);
 
-        // Write placeholder TIFF image (single-pixel stub or realistic page image)
-        await WritePlaceholderImagesAsync(
+        // Write TIFF page images (placeholder stub or realistic page image)
+        await WriteTiffImagesAsync(
             productionPath,
             plan.ImageRelPath,
             generated.PageCount,
@@ -487,7 +487,7 @@ internal static class ProductionSetOrchestrator
         return fileData;
     }
 
-    private static async Task WritePlaceholderImagesAsync(
+    private static async Task WriteTiffImagesAsync(
         string productionPath,
         string imageRelPath,
         int pageCount,

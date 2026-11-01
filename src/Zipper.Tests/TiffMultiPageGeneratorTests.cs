@@ -87,7 +87,7 @@ public class TiffMultiPageGeneratorTests
         var workItem = new FileWorkItem { Index = 1 };
 
         // Act
-        var result = TiffMultiPageGenerator.Generate(5, workItem);
+        var result = TiffMultiPageGenerator.Generate(5, workItem, null);
 
         // Assert - the pre-computed Native File must be a real TIFF: "II*\0" (little-endian) or "MM\0*" (big-endian).
         Assert.NotEmpty(result);
@@ -104,8 +104,8 @@ public class TiffMultiPageGeneratorTests
         var workItem = new FileWorkItem { Index = 1 };
 
         // Act
-        var result1 = TiffMultiPageGenerator.Generate(1, workItem);
-        var result2 = TiffMultiPageGenerator.Generate(10, workItem);
+        var result1 = TiffMultiPageGenerator.Generate(1, workItem, null);
+        var result2 = TiffMultiPageGenerator.Generate(10, workItem, null);
 
         // Assert - Page Count is tracked for Load File Metadata only (see the generator's class
         // documentation): both requests return the pre-computed Native File placeholder, so the

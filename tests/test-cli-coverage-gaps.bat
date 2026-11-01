@@ -435,6 +435,16 @@ if !ERRORLEVEL! neq 0 (
     set /a FAILED+=1
 )
 
+echo [ INFO ] Test: --tiff-realism group4 with --tiff-compression uncompressed fails validation
+%ZIPPER_CMD% --type tiff --count 2 --tiff-realism group4 --tiff-compression uncompressed --output-path "%TEST_OUTPUT_DIR%\tiff-compression-conflict-g4" >nul 2>&1
+if !ERRORLEVEL! neq 0 (
+    echo [ INFO ] PASS: Conflicting --tiff-realism group4 and --tiff-compression uncompressed correctly failed validation
+    set /a PASSED+=1
+) else (
+    echo [ ERROR ] FAIL: Conflicting --tiff-realism group4 and --tiff-compression uncompressed should have failed validation
+    set /a FAILED+=1
+)
+
 REM --- Cleanup ---
 if exist "%TEST_OUTPUT_DIR%" rmdir /s /q "%TEST_OUTPUT_DIR%"
 

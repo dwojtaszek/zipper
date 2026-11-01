@@ -79,8 +79,8 @@ internal static class TiffRenderer
             const int maxScale = 5;
             const int margin = 150; // 0.5 inch margin at 300 DPI
 
-            // Shrink the glyphs for labels too wide for the band at full size, so no character is clipped
-            // and consecutive page labels keep distinct endorsements. Default-length labels keep maxScale.
+            // Shrink the glyphs for labels too wide for the band at full size, so labels up to 400 characters
+            // are not clipped and consecutive page labels keep distinct endorsements. Default-length labels keep maxScale.
             int scale = Math.Clamp((width - (2 * margin)) / (batesNumber.Length * 6), 1, maxScale);
             int textWidth = batesNumber.Length * 6 * scale;
             int textHeight = 7 * scale;
