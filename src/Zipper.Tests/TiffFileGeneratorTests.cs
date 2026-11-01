@@ -67,4 +67,21 @@ public class TiffFileGeneratorTests
         Assert.Equal(PlaceholderFiles.GetContent("tiff"), result.Content);
         Assert.Equal(3, result.PageCount);
     }
+
+    [Fact]
+    public void Generate_WithRealismAndBatesConfigOnly_LabelsPageFromBatesSequence()
+    {
+        // With no per-file override, the endorsement label comes from the request's Bates config
+        // at the file's zero-based position.
+        var request = new FileGenerationRequest
+        {
+            Tiff = new Config.TiffConfig { RealismMode = "group4" },
+            Bates = new Config.BatesNumberConfig { Prefix = "PROD", Digits = 8 },
+        };
+        var workItem = new FileWorkItem { Index = 1 };
+
+        var result = new TiffFileGenerator(request).Generate(workItem, request);
+
+        Assert.Equal(TiffMultiPageGenerator.Generate(1, workItem, request.Tiff, "PROD00000001"), result.Content);
+    }
 }

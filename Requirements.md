@@ -152,7 +152,7 @@ The application operates in three distinct generation modes:
 - `--tiff-realism <none|standard|group4|uncompressed>`: (Optional) Opt-in realism mode for TIFF emission (REQ-238). Defaults to `none`.
 - `--with-tiff-realism`: (Optional) Convenience flag to enable standard realistic TIFF emission (alias for `--tiff-realism standard`).
 - `--realistic-tiff`: (Optional) Alias for `--with-tiff-realism`.
-- `--tiff-compression <group4|uncompressed>`: (Optional) Compression scheme for realistic TIFFs (REQ-238). Defaults to `group4`.
+- `--tiff-compression <group4|uncompressed>`: (Optional) Compression scheme for realistic TIFFs (REQ-238). Defaults to `group4`, or `uncompressed` under `--tiff-realism uncompressed`.
 - `--compression <store|deflate|deflate64|bzip2>`: (Optional) The compression method for output Archives. Defaults to `deflate`. `store` writes uncompressed entries; `deflate64` and `bzip2` are recognized but not yet supported.
 - `--archive-test-suite <smoke|compatibility|malformed|security|encoding|all>`: (Optional) Predefined Archive Test Fixture suite to generate. Requires `--output-path` pointing to a non-existent directory. Accepts only `--archive-test-suite`, `--archive-test-cases`, `--seed`, `--output-path`; all other generation flags rejected.
 - `--archive-test-cases <key,key,...>`: (Optional) Comma-separated list of Archive Test Case keys to filter fixture generation.

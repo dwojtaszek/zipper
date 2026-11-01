@@ -131,6 +131,18 @@ public class TiffModuleTests
     }
 
     [Theory]
+    [InlineData("group4", "group4")]
+    [InlineData("uncompressed", "uncompressed")]
+    public void TryBuild_MatchingRealismAndCompression_SetsCompression(string mode, string compression)
+    {
+        var module = new TiffModule();
+        Assert.True(module.TryApply("--tiff-realism", mode));
+        Assert.True(module.TryApply("--tiff-compression", compression));
+        Assert.True(module.TryBuild(out var config));
+        Assert.Equal(compression, config.Compression);
+    }
+
+    [Theory]
     [InlineData(null)]
     [InlineData("none")]
     public void TryBuild_TiffCompressionWithoutRealism_ReturnsFalse(string? mode)

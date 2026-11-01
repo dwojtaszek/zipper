@@ -5,7 +5,7 @@ namespace Zipper;
 
 /// <summary>
 /// Bitonal TIFF renderer that burns in Bates endorsement bands and emits standard
-/// Baseline (uncompressed) or Class F (CCITT Group 4) single-page and multi-page TIFFs.
+/// Baseline (uncompressed) or CCITT Group 4 (ITU-T T.6) single-page and multi-page TIFFs.
 /// </summary>
 internal static class TiffRenderer
 {

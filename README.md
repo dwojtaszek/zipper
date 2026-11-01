@@ -217,7 +217,7 @@ All command-line flags recognized by Zipper:
 | `--tiff-pages` | `1-1` | min-max range (e.g. `1-20`) | Page count range for TIFF files (controls OPT page count and profile-driven DAT `PAGECOUNT` in Loadfile-Only mode for TIFF output) |
 | `--tiff-realism` | `none` | `none`, `standard`, `group4`, `uncompressed` | Opt-in realistic TIFF emission with Bates endorsement band (aliases: `--with-tiff-realism`, `--realistic-tiff`) |
 | `--with-tiff-realism` | `false` | flag | Enable standard Group 4 realistic TIFF emission with Bates endorsement band |
-| `--tiff-compression` | `group4` | `group4`, `uncompressed` | Compression scheme for realistic TIFF emission. Requires realism (`--tiff-realism`, `--with-tiff-realism`, or `--realistic-tiff`); a `--tiff-realism` value of `group4` or `uncompressed` conflicts with the other compression value |
+| `--tiff-compression` | `group4` (`uncompressed` under `--tiff-realism uncompressed`) | `group4`, `uncompressed` | Compression scheme for realistic TIFF emission. Requires realism (`--tiff-realism`, `--with-tiff-realism`, or `--realistic-tiff`); a `--tiff-realism` value of `group4` or `uncompressed` conflicts with the other compression value |
 | `--column-profile` | none | `minimal`, `standard`, `litigation`, `full`, or file path | Metadata column profile |
 | `--seed` | none (42 for Archive Test) | integer (non-negative for Archive Test) | Random seed for reproducible runs |
 | `--date-format` | `yyyy-MM-dd` | format string | Override date format string |

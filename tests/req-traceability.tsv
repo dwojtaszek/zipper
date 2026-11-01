@@ -869,5 +869,8 @@ REQ-238	unit	TiffModuleTests.TryBuild_Group4RealismWithUncompressedCompression_R
 REQ-238	unit	TiffModuleTests.TryBuild_StandardRealismWithUncompressedCompression_SetsUncompressed	--tiff-realism standard accepts an explicit --tiff-compression value
 REQ-238	unit	TiffRendererTests.CompressGroup4_BlackRunAboveMakeupTable_UsesThirteenBitMakeupCode	Group 4 encoder emits the T.4 black make-up codes for 1280 and 1728 pixel runs
 REQ-238	unit	TiffFileGeneratorTests.Generate_WithPageRangeAndRealismOff_DoesNotEvaluateBatesConfig	Default TIFF output with a page range does not evaluate the Bates endorsement label
+REQ-238	unit	TiffFileGeneratorTests.Generate_WithRealismAndBatesConfigOnly_LabelsPageFromBatesSequence	Realistic TIFF labels the page from the request's Bates config when no per-file override is set
+REQ-238	unit	TiffRendererTests.CreatePageRaster_WithFourHundredCharacterLabel_KeepsLastCharacterOnPage	Labels up to 400 characters keep their last character on the endorsement band
+REQ-238	unit	TiffModuleTests.TryBuild_MatchingRealismAndCompression_SetsCompression	Matching --tiff-realism group4 or uncompressed with the same --tiff-compression is accepted
 REQ-238	e2e	test-cli-coverage-gaps.sh	E2E verification of --with-tiff-realism in Standard and Production Set modes
 REQ-238	e2e	test-cli-coverage-gaps.bat	Windows batch E2E verification of --with-tiff-realism

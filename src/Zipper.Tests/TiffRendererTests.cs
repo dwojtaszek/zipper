@@ -74,6 +74,19 @@ public class TiffRendererTests
     }
 
     [Fact]
+    public void CreatePageRaster_WithFourHundredCharacterLabel_KeepsLastCharacterOnPage()
+    {
+        // REQ-238 documents labels up to 400 characters as unclipped. At that length the last glyph is the
+        // last one that fits on the page, so changing only that character must change the raster.
+        var stem = new string('A', 399);
+
+        var underscore = TiffRenderer.CreatePageRaster(stem + "_", TiffRenderer.DefaultWidth, TiffRenderer.DefaultHeight);
+        var letterB = TiffRenderer.CreatePageRaster(stem + "B", TiffRenderer.DefaultWidth, TiffRenderer.DefaultHeight);
+
+        Assert.NotEqual(underscore, letterB);
+    }
+
+    [Fact]
     public void CreatePageRaster_WithLongBatesLabel_KeepsEveryCharacterOnPage()
     {
         // Labels wider than the endorsement band used to clip their trailing characters, so

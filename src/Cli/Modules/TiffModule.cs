@@ -85,7 +85,7 @@ public sealed class TiffModule : CliModule
 
         if (_compression is not null && _realismMode is (null or "none"))
         {
-            Console.Error.WriteLine("Error: --tiff-compression requires --tiff-realism, --with-tiff-realism, or --realistic-tiff.");
+            Console.Error.WriteLine("Error: --tiff-compression requires realism to be enabled (--tiff-realism standard, group4, or uncompressed, --with-tiff-realism, or --realistic-tiff).");
             config = default!;
             return false;
         }
