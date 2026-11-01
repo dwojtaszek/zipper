@@ -351,6 +351,24 @@ public class PipelineTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void Build_TiffPagesThousandToThousandWithPageSuffix_WarnsWithFourDigitPageOrdinal()
+    {
+        // Every document in a 1000-1000 range has page 1000, which the page suffix prints as _1000 (five characters).
+        var (ok, modules) = PipelineTestHelper.Parse(new[]
+        {
+            "--type", "tiff", "--count", "1", "--output-path", Directory.GetCurrentDirectory(),
+            "--bates-prefix", "CL001", "--bates-digits", "12", "--bates-page-suffix", "--tiff-pages", "1000-1000",
+        });
+        Assert.True(ok);
+
+        FileGenerationRequest? result = null;
+        var (_, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => result = PipelineTestHelper.Build(modules: modules));
+
+        Assert.NotNull(result);
+        Assert.Contains("Warning: Bates numbers are 17 characters including the page suffix", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Build_TiffPagesPast999WithPageSuffixOnDatOnly_PrintsNoPlatformWarningForPlainTiff()
     {
         // DAT keeps document-level Bates numbers, and a plain TIFF has no page endorsement, so no page label is written.
