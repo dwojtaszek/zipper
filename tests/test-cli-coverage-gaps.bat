@@ -318,8 +318,16 @@ echo [ INFO ] Test: --type eml with --chaos-mode in Standard mode succeeds
 set "EML_CHAOS_OUTPUT=%TEST_OUTPUT_DIR%\eml-chaos-standard"
 %ZIPPER_CMD% --type eml --count 20 --seed 42 --chaos-mode --chaos-amount 50%% --chaos-types "mime-boundary,encoded-word,header-fold,rf822-depth" --output-path "%EML_CHAOS_OUTPUT%" >nul 2>&1
 if !ERRORLEVEL! equ 0 (
-    echo [ INFO ] PASS: --type eml with --chaos-mode generated valid archive with MIME anomalies
-    set /a PASSED+=1
+    set "EML_CHAOS_PROPS="
+    for /r "%EML_CHAOS_OUTPUT%" %%F in (*_properties.json) do if not defined EML_CHAOS_PROPS set "EML_CHAOS_PROPS=%%F"
+    python "%~dp0validate_email_chaos_audit.py" standard "!EML_CHAOS_PROPS!" >nul 2>&1
+    if !ERRORLEVEL! equ 0 (
+        echo [ INFO ] PASS: --type eml with --chaos-mode generated valid archive with MIME anomalies
+        set /a PASSED+=1
+    ) else (
+        echo [ ERROR ] FAIL: --type eml with --chaos-mode did not audit the expected email anomalies
+        set /a FAILED+=1
+    )
 ) else (
     echo [ ERROR ] FAIL: --type eml with --chaos-mode generation failed
     set /a FAILED+=1
@@ -329,8 +337,16 @@ echo [ INFO ] Test: --type eml with --chaos-mode in Production Set mode succeeds
 set "EML_CHAOS_PROD_OUTPUT=%TEST_OUTPUT_DIR%\eml-chaos-prod"
 %ZIPPER_CMD% --production-set --type eml --count 10 --seed 42 --bates-prefix PROD --chaos-mode --chaos-types "encoded-word,header-fold" --output-path "%EML_CHAOS_PROD_OUTPUT%" >nul 2>&1
 if !ERRORLEVEL! equ 0 (
-    echo [ INFO ] PASS: --type eml with --chaos-mode generated production set successfully
-    set /a PASSED+=1
+    set "EML_CHAOS_PROD_PROPS="
+    for /r "%EML_CHAOS_PROD_OUTPUT%" %%F in (loadfile_properties.json) do if not defined EML_CHAOS_PROD_PROPS set "EML_CHAOS_PROD_PROPS=%%F"
+    python "%~dp0validate_email_chaos_audit.py" production "!EML_CHAOS_PROD_PROPS!" >nul 2>&1
+    if !ERRORLEVEL! equ 0 (
+        echo [ INFO ] PASS: --type eml with --chaos-mode generated production set successfully
+        set /a PASSED+=1
+    ) else (
+        echo [ ERROR ] FAIL: --type eml with --chaos-mode production set did not audit the expected email anomalies
+        set /a FAILED+=1
+    )
 ) else (
     echo [ ERROR ] FAIL: --type eml with --chaos-mode in production set failed
     set /a FAILED+=1

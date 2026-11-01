@@ -73,6 +73,7 @@
               "column":       { "type": "string" },
               "errorType":    { "type": "string", "minLength": 1 },
               "description":  { "type": "string" },
+              "location":     { "type": "string" },
               "peer": {
                 "type": "object",
                 "required": ["file", "lineNumber", "recordID", "column"],

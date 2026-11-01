@@ -410,7 +410,7 @@ internal static class ProductionSetOrchestrator
             SourceMetadata = request.SourceRecords?[(int)plan.Index].Metadata,
         };
         var generated = fileGenerators[plan.FileType].Generate(workItem, request);
-        if (emailChaosEngine is not null && string.Equals(plan.FileType, "eml", StringComparison.OrdinalIgnoreCase))
+        if (emailChaosEngine is not null)
         {
             generated = emailChaosEngine.ApplyEmailChaos(workItem, generated);
         }
@@ -616,6 +616,7 @@ internal static class ProductionSetOrchestrator
 
         if (request.Chaos.ChaosMode && ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario))
         {
+            // emailAnomalies is always null here: ChaosEngineBuilder.BuildForEmail returns no engine for cross-format scenarios.
             var datEncoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
             var optEncoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.IsEncodingExplicit ? request.LoadFile.Encoding : "ANSI");
 

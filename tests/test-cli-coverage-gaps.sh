@@ -371,10 +371,11 @@ if zipper --type eml --count 20 --seed 42 --chaos-mode --chaos-amount 50% \
     --chaos-types "mime-boundary,encoded-word,header-fold,rf822-depth" \
     --output-path "$eml_chaos_output" > /dev/null 2>&1; then
     eml_chaos_zip=$(find "$eml_chaos_output" -name "*.zip" -print -quit)
-    if [[ -n "$eml_chaos_zip" ]]; then
+    eml_chaos_props=$(find "$eml_chaos_output" -name "*_properties.json" -print -quit)
+    if [[ -n "$eml_chaos_zip" ]] && python3 "$(dirname "$0")/validate_email_chaos_audit.py" standard "$eml_chaos_props"; then
         pass "--type eml with --chaos-mode generated valid archive with MIME anomalies"
     else
-        fail "--type eml with --chaos-mode did not generate archive"
+        fail "--type eml with --chaos-mode did not generate archive with the expected email anomalies"
     fi
 else
     fail "--type eml with --chaos-mode generation failed"
@@ -386,10 +387,11 @@ if zipper --production-set --type eml --count 10 --seed 42 --bates-prefix PROD \
     --chaos-mode --chaos-types "encoded-word,header-fold" \
     --output-path "$eml_chaos_prod_output" > /dev/null 2>&1; then
     manifest_file=$(find "$eml_chaos_prod_output" -name "_manifest.json" -print -quit)
-    if [[ -n "$manifest_file" && -f "$manifest_file" ]]; then
+    prod_chaos_props=$(find "$eml_chaos_prod_output" -name "loadfile_properties.json" -print -quit)
+    if [[ -n "$manifest_file" && -f "$manifest_file" ]] && python3 "$(dirname "$0")/validate_email_chaos_audit.py" production "$prod_chaos_props"; then
         pass "--type eml with --chaos-mode generated production set successfully"
     else
-        fail "--type eml with --chaos-mode did not generate _manifest.json"
+        fail "--type eml with --chaos-mode production set did not generate _manifest.json with the expected email anomalies"
     fi
 else
     fail "--type eml with --chaos-mode in production set failed"

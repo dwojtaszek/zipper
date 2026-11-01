@@ -165,15 +165,8 @@ internal class ChaosEngine
         if (!string.IsNullOrEmpty(chaosTypes))
         {
             var resolvedTypes = new HashSet<string>(
-                chaosTypes.Split(',').Select(type => type.Trim().ToLowerInvariant()),
+                chaosTypes.Split(',').Select(type => ChaosAnomalyTypes.CanonicalEmailType(type.Trim().ToLowerInvariant())),
                 StringComparer.OrdinalIgnoreCase);
-
-            if (resolvedTypes.Contains("rfc822-depth"))
-            {
-                resolvedTypes.Remove("rfc822-depth");
-                resolvedTypes.Add("rf822-depth");
-            }
-
             resolvedTypes.IntersectWith(EmailChaosTypes);
             return resolvedTypes;
         }

@@ -107,9 +107,14 @@ internal static class ChaosAnomalyTypes
         };
 
     /// <summary>
+    /// Maps the <c>rfc822-depth</c> alias to its canonical <c>rf822-depth</c> name. Other names are returned unchanged.
+    /// </summary>
+    public static string CanonicalEmailType(string type) =>
+        string.Equals(type, "rfc822-depth", StringComparison.OrdinalIgnoreCase) ? "rf822-depth" : type;
+
+    /// <summary>
     /// Returns whether a type name selects an email anomaly. The <c>rfc822-depth</c> alias is accepted for <c>rf822-depth</c>.
     /// </summary>
     public static bool IsEmail(string type) =>
-        Email.Contains(type, StringComparer.OrdinalIgnoreCase)
-        || string.Equals(type, "rfc822-depth", StringComparison.OrdinalIgnoreCase);
+        Email.Contains(CanonicalEmailType(type), StringComparer.OrdinalIgnoreCase);
 }

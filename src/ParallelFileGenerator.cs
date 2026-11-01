@@ -473,7 +473,7 @@ public class ParallelFileGenerator
     internal FileData GenerateFileData(FileWorkItem workItem, long paddingPerFile, FileGenerationRequest request, IFileGenerator fileGenerator, ChaosEngine? emailChaosEngine = null)
     {
         var generated = fileGenerator.Generate(workItem, request);
-        if (emailChaosEngine is not null && string.Equals(workItem.EffectiveFileType(request), "eml", StringComparison.OrdinalIgnoreCase))
+        if (emailChaosEngine is not null)
         {
             generated = emailChaosEngine.ApplyEmailChaos(workItem, generated);
         }

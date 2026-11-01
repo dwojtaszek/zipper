@@ -258,9 +258,7 @@ public sealed class ChaosModule : CliModule
         foreach (var type in this._types.Split(','))
         {
             var trimmed = type.Trim();
-            var effectiveType = string.Equals(trimmed, "rfc822-depth", StringComparison.OrdinalIgnoreCase)
-                ? "rf822-depth"
-                : trimmed;
+            var effectiveType = ChaosAnomalyTypes.CanonicalEmailType(trimmed);
 
             if (!emailRun && ChaosAnomalyTypes.IsEmail(effectiveType))
             {

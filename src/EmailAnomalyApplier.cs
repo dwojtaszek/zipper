@@ -59,17 +59,20 @@ internal static class EmailAnomalyApplier
     /// </summary>
     internal static Random CreateItemRandom(long seed, long workItemIndex)
     {
-        ulong mixed = Mix(unchecked((ulong)seed) + (unchecked((ulong)workItemIndex) * 0x9E3779B97F4A7C15UL));
+        ulong mixed = Mix(unchecked((ulong)seed) + (unchecked((ulong)workItemIndex) * SplitMixGamma));
 
 #pragma warning disable S2245 // Pseudo-randomness is safe for mock metadata generation
         return new Random(unchecked((int)(mixed >> 33)));
 #pragma warning restore S2245
     }
 
+    // SplitMix64 golden-ratio increment. It also spreads consecutive work item indexes across the 64-bit space.
+    private const ulong SplitMixGamma = 0x9E3779B97F4A7C15UL;
+
     // SplitMix64 finalizer: a fixed bit mixer. Unlike HashCode, its output is stable across processes.
     private static ulong Mix(ulong value)
     {
-        ulong z = value + 0x9E3779B97F4A7C15UL;
+        ulong z = value + SplitMixGamma;
         z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9UL;
         z = (z ^ (z >> 27)) * 0x94D049BB133111EBUL;
         return z ^ (z >> 31);
@@ -182,11 +185,7 @@ internal static class EmailAnomalyApplier
 
     private static EmailAnomalyResult ApplyRfc822Depth(byte[] emlBytes, string fileName, string recordId, long workItemIndex)
     {
-        byte[] content = emlBytes;
-        for (int depth = RfC822NestingDepth; depth >= 1; depth--)
-        {
-            content = WrapInForwardedPart(content, depth, workItemIndex);
-        }
+        byte[] content = WrapInForwardedParts(emlBytes, workItemIndex);
 
         return new EmailAnomalyResult(
             content,
@@ -200,9 +199,28 @@ internal static class EmailAnomalyApplier
                 $"Content-Type: multipart/mixed (nested message/rfc822 depth {RfC822NestingDepth})"));
     }
 
-    private static byte[] WrapInForwardedPart(byte[] inner, int depth, long workItemIndex)
+    // Level 1 is the outermost part. Each level's head precedes the inner message and its tail follows it,
+    // so the message is copied once instead of once per nesting level.
+    private static byte[] WrapInForwardedParts(byte[] inner, long workItemIndex)
     {
-        string boundary = $"----=_Chaos_Depth_{workItemIndex}_{depth}";
+        using var wrapped = new MemoryStream(inner.Length);
+        for (int depth = 1; depth <= RfC822NestingDepth; depth++)
+        {
+            wrapped.Write(ForwardedPartHead(depth, workItemIndex));
+        }
+
+        wrapped.Write(inner);
+        for (int depth = RfC822NestingDepth; depth >= 1; depth--)
+        {
+            wrapped.Write(ForwardedPartTail(depth, workItemIndex));
+        }
+
+        return wrapped.ToArray();
+    }
+
+    private static byte[] ForwardedPartHead(int depth, long workItemIndex)
+    {
+        string boundary = ForwardedPartBoundary(depth, workItemIndex);
         string head =
             $"From: user{depth}@example.com{Crlf}" +
             $"To: recipient{depth}@example.com{Crlf}" +
@@ -219,15 +237,14 @@ internal static class EmailAnomalyApplier
             $"Content-Type: message/rfc822{Crlf}" +
             $"Content-Disposition: attachment; filename=\"forwarded_{depth}.eml\"{Crlf}" +
             Crlf;
-        byte[] headBytes = Lossless.GetBytes(head);
-        byte[] tailBytes = Lossless.GetBytes($"{Crlf}--{boundary}--{Crlf}");
-
-        var wrapped = new byte[headBytes.Length + inner.Length + tailBytes.Length];
-        headBytes.CopyTo(wrapped, 0);
-        inner.CopyTo(wrapped, headBytes.Length);
-        tailBytes.CopyTo(wrapped, headBytes.Length + inner.Length);
-        return wrapped;
+        return Lossless.GetBytes(head);
     }
+
+    private static byte[] ForwardedPartTail(int depth, long workItemIndex) =>
+        Lossless.GetBytes($"{Crlf}--{ForwardedPartBoundary(depth, workItemIndex)}--{Crlf}");
+
+    private static string ForwardedPartBoundary(int depth, long workItemIndex) =>
+        $"----=_Chaos_Depth_{workItemIndex}_{depth}";
 
     private static bool TryFindBoundary(EmlLines message, int contentType, out int lineIndex, out string boundary)
     {

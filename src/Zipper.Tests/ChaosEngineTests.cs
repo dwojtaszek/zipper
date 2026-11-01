@@ -1314,7 +1314,7 @@ public class ChaosEngineTests
             var content = new GeneratedFileContent { Content = emailBytes };
             var item = new FileWorkItem { Index = i, FileName = $"DOC{i:D4}.eml" };
             var result = engine.ApplyEmailChaos(item, content);
-            Assert.True(result.Content.Length > 0);
+            Assert.False(emailBytes.AsSpan().SequenceEqual(result.Content));
         }
 
         Assert.Equal(5, engine.Anomalies.Count);
