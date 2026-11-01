@@ -832,7 +832,10 @@ REQ-237	unit	ChaosEngineTests.EmailChaos_ShouldInterceptAndApplyAnomalies	ChaosE
 REQ-237	unit	ChaosEngineTests.ApplyEmailChaos_ConcurrentCalls_MatchSequentialOutputAndAudit	Concurrent email chaos calls produce the same output and audit as sequential calls
 REQ-237	unit	ChaosEngineTests.ApplyEmailChaos_ResultDoesNotDependOnCallOrder_ForSameSeed	Email chaos result for a seed does not depend on the order of calls
 REQ-237	unit	ChaosEngineTests.ApplyEmailChaos_WithItemIndexes_SamplesOnlyEligibleItems	Email chaos samples only the eligible work item indexes
+REQ-237	unit	ChaosEngineTests.ApplyEmailChaos_WithBatesSequence_AuditsBatesNumberAsRecordId	Email chaos audit names each record by its Bates Number when a Bates sequence is configured
+REQ-237	unit	ChaosEngineTests.ApplyEmailChaos_WithoutBatesSequence_AuditsControlNumberOverrideAsRecordId	Email chaos audit names each record by its Control Number when no Bates sequence applies
 REQ-237	unit	ChaosEngineBuilderTests.BuildForStandardEmail_WithMixedFileTypes_SamplesOnlyEmlWorkItems	Standard mode email chaos samples only work items whose effective type is eml
+REQ-237	unit	ChaosEngineBuilderTests.BuildForStandardEmail_WithBatesConfig_AuditsBatesNumberAsRecordId	Standard mode email chaos audit uses the run's Bates Number as the record ID
 REQ-237	unit	ChaosEngineBuilderTests.BuildForProductionEmail_WithMixedFileTypes_SamplesOnlyEmlPlans	Production Set email chaos samples only eml plans
 REQ-237	unit	ParallelFileGeneratorTests.GenerateFilesAsync_WithEmailChaos_MutatesEverySampledEmlAndAuditsIt	Standard mode mutates every sampled .eml and audits the anomalies
 REQ-237	unit	ProductionSetTests.GenerateAsync_WithEmailChaos_AuditsEmailAnomaliesOnEveryLoadFileAudit	Production Set email anomalies appear on every Load File audit

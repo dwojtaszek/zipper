@@ -338,7 +338,7 @@ set "EML_CHAOS_PROD_OUTPUT=%TEST_OUTPUT_DIR%\eml-chaos-prod"
 %ZIPPER_CMD% --production-set --type eml --count 10 --seed 42 --bates-prefix PROD --chaos-mode --chaos-types "encoded-word,header-fold" --output-path "%EML_CHAOS_PROD_OUTPUT%" >nul 2>&1
 if !ERRORLEVEL! equ 0 (
     set "EML_CHAOS_PROD_PROPS="
-    for /r "%EML_CHAOS_PROD_OUTPUT%" %%F in (loadfile_properties.json) do if not defined EML_CHAOS_PROD_PROPS set "EML_CHAOS_PROD_PROPS=%%F"
+    for /r "%EML_CHAOS_PROD_OUTPUT%" %%F in (loadfile_prop*.json) do if not defined EML_CHAOS_PROD_PROPS set "EML_CHAOS_PROD_PROPS=%%F"
     python "%~dp0validate_email_chaos_audit.py" production "!EML_CHAOS_PROD_PROPS!" >nul 2>&1
     if !ERRORLEVEL! equ 0 (
         echo [ INFO ] PASS: --type eml with --chaos-mode generated production set successfully

@@ -39,6 +39,7 @@ internal class ChaosEngine
 
     // Email chaos: the sampled work items, and one audit slot per sampled item in work item order.
     private readonly int emailSeed;
+    private readonly BatesSequence? emailBatesSequence;
     private readonly Dictionary<long, EmailSample>? emailSamples;
     private readonly ChaosAnomaly?[]? emailAnomalies;
 
@@ -123,12 +124,14 @@ internal class ChaosEngine
     /// Optional ascending 1-based indexes of the eligible work items. Its count must equal <paramref name="totalItems"/>.
     /// Null means work items 1 through <paramref name="totalItems"/> are all eligible.
     /// </param>
+    /// <param name="batesSequence">Optional Bates sequence of the run, used to name each audited record as its Load File record is named.</param>
     public ChaosEngine(
         long totalItems,
         string? chaosAmount,
         string? chaosTypes,
         int? seed = null,
-        IReadOnlyList<long>? itemIndexes = null)
+        IReadOnlyList<long>? itemIndexes = null,
+        BatesSequence? batesSequence = null)
     {
         this.format = LoadFileFormat.Dat;
         this.totalLines = totalItems;
@@ -143,6 +146,7 @@ internal class ChaosEngine
 #pragma warning restore S2245
 
         this.emailSeed = seed ?? random.Next();
+        this.emailBatesSequence = batesSequence;
         this.enabledTypes = ResolveEnabledEmailTypes(chaosTypes);
         var emailTypes = this.enabledTypes.OrderBy(type => type, StringComparer.Ordinal).ToArray();
 
@@ -492,7 +496,7 @@ internal class ChaosEngine
         var result = EmailAnomalyApplier.Apply(
             generated.Content,
             workItem.FileName,
-            workItem.ControlNumberOverride ?? $"DOC{workItem.Index:D8}",
+            DatComposerShared.ResolveParentId(workItem, this.emailBatesSequence),
             sample.Type,
             workItem.Index,
             EmailAnomalyApplier.CreateItemRandom(this.emailSeed, workItem.Index));

@@ -890,6 +890,11 @@ public class ProductionSetTests : WorkingDirectoryTestBase
             Assert.All(
                 chaosMode.GetProperty("injectedAnomalies").EnumerateArray(),
                 anomaly => Assert.Equal("encoded-word", anomaly.GetProperty("errorType").GetString()));
+
+            // The audit names each record by the Bates Number that its DAT DOCID carries.
+            Assert.All(
+                chaosMode.GetProperty("injectedAnomalies").EnumerateArray(),
+                anomaly => Assert.Matches(@"^ABC\d{6}$", anomaly.GetProperty("recordID").GetString()!));
         }
     }
 

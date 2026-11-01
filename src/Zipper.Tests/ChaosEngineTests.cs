@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Xunit;
+using Zipper.Config;
 using Zipper.LoadFiles;
 
 namespace Zipper.Tests;
@@ -1329,7 +1330,7 @@ public class ChaosEngineTests
     [Fact]
     public void EmailChaos_WhenAmountIsZero_DoesNotMutateAndKeepsOutputIdentical()
     {
-        var engine = new ChaosEngine(3, "0", "full-chaos", seed: 42);
+        var engine = new ChaosEngine(3, "0", null, seed: 42);
         byte[] emailBytes = Encoding.UTF8.GetBytes("From: a@b.com\r\nTo: c@d.com\r\nSubject: Hello\r\n\r\nBody\r\n");
 
         for (int i = 1; i <= 3; i++)
@@ -1527,5 +1528,28 @@ public class ChaosEngineTests
         var sortedTypes = ChaosAnomalyTypes.Email.OrderBy(t => t, StringComparer.Ordinal).ToArray();
         var expected = Enumerable.Range(0, 8).Select(i => sortedTypes[i % sortedTypes.Length]).ToArray();
         Assert.Equal(expected, engine.Anomalies.Select(a => a.ErrorType).ToArray());
+    }
+
+    [Fact]
+    public void ApplyEmailChaos_WithBatesSequence_AuditsBatesNumberAsRecordId()
+    {
+        var bates = BatesSequence.FromConfig(new BatesNumberConfig { Prefix = "PROD", Start = 1, Digits = 8 });
+        var engine = new ChaosEngine(2, "100%", null, seed: 4, batesSequence: bates);
+
+        engine.ApplyEmailChaos(EmlWorkItem(1), EmlContent());
+        engine.ApplyEmailChaos(EmlWorkItem(2), EmlContent());
+
+        Assert.Equal(new[] { "PROD00000001", "PROD00000002" }, engine.Anomalies.Select(a => a.RecordID));
+    }
+
+    [Fact]
+    public void ApplyEmailChaos_WithoutBatesSequence_AuditsControlNumberOverrideAsRecordId()
+    {
+        var engine = new ChaosEngine(1, "100%", null, seed: 4);
+        var item = new FileWorkItem { Index = 1, FileName = "DOC00000001.eml", ControlNumberOverride = "CTRL-001" };
+
+        engine.ApplyEmailChaos(item, EmlContent());
+
+        Assert.Equal("CTRL-001", Assert.Single(engine.Anomalies).RecordID);
     }
 }

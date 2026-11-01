@@ -140,7 +140,8 @@ internal static class ChaosEngineBuilder
             request.Chaos.ChaosAmount,
             request.Chaos.ChaosTypes,
             request.Metadata.Seed,
-            itemIndexes);
+            itemIndexes,
+            request.Bates is null ? null : BatesSequence.FromConfig(request.Bates));
     }
 
     private static bool IsEml(string? fileType) =>

@@ -515,6 +515,28 @@ public class ChaosEngineBuilderTests
     }
 
     [Fact]
+    public void BuildForStandardEmail_WithBatesConfig_AuditsBatesNumberAsRecordId()
+    {
+        // Arrange: the Load File names each eml by its Bates Number, so the audit must name it the same way.
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileCount = 2, FileType = "eml" },
+            Bates = new BatesNumberConfig { Prefix = "PROD", Start = 1, Digits = 8 },
+            Chaos = new ChaosConfig { ChaosMode = true, ChaosAmount = "100%", ChaosTypes = "encoded-word" },
+            Metadata = new MetadataConfig { Seed = 42 },
+        };
+
+        // Act
+        var engine = ChaosEngineBuilder.BuildForStandardEmail(request);
+        Assert.NotNull(engine);
+        engine.ApplyEmailChaos(new FileWorkItem { Index = 1, FileType = "eml", FileName = "00000001.eml" }, EmlContent());
+        engine.ApplyEmailChaos(new FileWorkItem { Index = 2, FileType = "eml", FileName = "00000002.eml" }, EmlContent());
+
+        // Assert
+        Assert.Equal(new[] { "PROD00000001", "PROD00000002" }, engine.Anomalies.Select(anomaly => anomaly.RecordID));
+    }
+
+    [Fact]
     public void BuildForStandardEmail_WithSourceRecords_UsesRecordFileTypeAndRequestFallback()
     {
         // Arrange: the empty File Type on the third record falls back to the request-level eml type.
