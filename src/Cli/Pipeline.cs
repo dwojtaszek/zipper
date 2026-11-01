@@ -61,11 +61,6 @@ public static class Pipeline
             return null;
         }
 
-        if (bates is not null)
-        {
-            BatesModule.WarnPlatformLimits(bates, production, output.FileCount);
-        }
-
         if (!modules.Metadata.TryBuild(output.HasFileType("eml"), modules.SourceInput.HasSourceInput, out var metadata))
         {
             return null;
@@ -135,6 +130,11 @@ public static class Pipeline
         {
             Console.Error.WriteLine("Error: Chaos scenario 'adversarial-values' requires DAT-only output. Image file types default to DAT and OPT; pass --loadfile-format dat explicitly.");
             return null;
+        }
+
+        if (bates is not null)
+        {
+            BatesModule.WarnPlatformLimits(bates, production, output.FileCount);
         }
 
         return new FileGenerationRequest

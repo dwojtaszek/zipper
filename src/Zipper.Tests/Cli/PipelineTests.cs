@@ -273,15 +273,17 @@ public class PipelineTests : WorkingDirectoryTestBase
         }
     }
 
-    [Fact]
-    public void Build_SourceInputOverDiscoRange_WarnsWithSourceRecordCount()
+    [Theory]
+    [InlineData(30_000, false)]
+    [InlineData(30_001, true)]
+    public void Build_SourceInputDiscoRange_WarnsOnlyAboveLimit(int recordCount, bool expectWarning)
     {
         // The range check needs the Source Record count, which exists only after source input loads.
         var tempCsv = Path.Combine(Directory.GetCurrentDirectory(), "source_" + Guid.NewGuid().ToString("N") + ".csv");
         try
         {
             var lines = new List<string> { "FilePath,FileType" };
-            lines.AddRange(Enumerable.Range(1, 30_001).Select(i => $"doc{i:D5}.pdf,pdf"));
+            lines.AddRange(Enumerable.Range(1, recordCount).Select(i => $"doc{i:D5}.pdf,pdf"));
             File.WriteAllLines(tempCsv, lines);
             var (ok, modules) = PipelineTestHelper.Parse(new[]
             {
@@ -295,7 +297,16 @@ public class PipelineTests : WorkingDirectoryTestBase
             var (_, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => result = PipelineTestHelper.Build(modules: modules));
 
             Assert.NotNull(result);
-            Assert.Contains("Warning: Bates range 1 through 30001 spans 30,001 Bates numbers", stderr, StringComparison.Ordinal);
+            Assert.Equal("CL001", result!.Bates!.Prefix);
+            Assert.Equal(1, result.Bates.Start);
+            if (expectWarning)
+            {
+                Assert.Contains($"Warning: Bates range 1 through {recordCount} spans", stderr, StringComparison.Ordinal);
+            }
+            else
+            {
+                Assert.DoesNotContain("Warning: Bates range", stderr, StringComparison.Ordinal);
+            }
         }
         finally
         {
@@ -318,5 +329,48 @@ public class PipelineTests : WorkingDirectoryTestBase
 
         Assert.NotNull(result);
         Assert.Contains("Warning: Bates numbers are 17 characters", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_WithoutBatesFlags_PrintsNoPlatformWarning()
+    {
+        var (ok, modules) = PipelineTestHelper.Parse(new[] { "--type", "pdf", "--count", "30001", "--output-path", Directory.GetCurrentDirectory() });
+        Assert.True(ok);
+
+        FileGenerationRequest? result = null;
+        var (_, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => result = PipelineTestHelper.Build(modules: modules));
+
+        Assert.NotNull(result);
+        Assert.Null(result!.Bates);
+        Assert.DoesNotContain("Warning: Bates", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_OverLimitBatesWithLaterValidationError_PrintsNoPlatformWarning()
+    {
+        // Platform warnings describe a configuration that builds, so a run that fails a later check prints none.
+        var tempCsv = Path.Combine(Directory.GetCurrentDirectory(), "source_" + Guid.NewGuid().ToString("N") + ".csv");
+        try
+        {
+            File.WriteAllText(tempCsv, "FilePath,FileType\nfolder/doc.pdf,pdf\n");
+            var (ok, modules) = PipelineTestHelper.Parse(new[]
+            {
+                "--loadfile-only", "--input-csv", tempCsv, "--count", "1", "--output-path", Directory.GetCurrentDirectory(),
+                "--chaos-mode", "--chaos-scenario", "adversarial-values", "--seed", "42",
+                "--bates-prefix", "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ABCDE",
+            });
+            Assert.True(ok);
+
+            FileGenerationRequest? result = null;
+            var (_, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => result = PipelineTestHelper.Build(modules: modules));
+
+            Assert.Null(result);
+            Assert.Contains("requires --with-metadata or a --column-profile", stderr, StringComparison.Ordinal);
+            Assert.DoesNotContain("Warning: Bates prefix", stderr, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (File.Exists(tempCsv)) File.Delete(tempCsv);
+        }
     }
 }

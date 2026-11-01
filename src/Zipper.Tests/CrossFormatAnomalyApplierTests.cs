@@ -300,6 +300,35 @@ public sealed class CrossFormatAnomalyApplierTests : IDisposable
     }
 
     [Fact]
+    public void Apply_DesyncPagecount_PageSuffixKeyAbsentFromDat_ExtendsDocumentBates()
+    {
+        // TEST00000002_001 has no DAT record, neither under its own key nor under its base TEST00000002.
+        // It is still the first-page key of a page-suffixed one-page document, so the continuation extends
+        // TEST00000002 rather than producing TEST00000002_001_002 (REQ-239).
+        var datLines = new List<string>
+        {
+            JoinDat("DOCID", "BATES_NUMBER", "IMAGE_PATH", "PAGECOUNT", "VOLUME"),
+            JoinDat("DOC00000001", "TEST00000001", "IMAGES\\VOL001\\TEST00000001.tif", "1", "VOL001"),
+        };
+        var optLines = new List<string>
+        {
+            "TEST00000002_001,VOL001,IMAGES\\VOL001\\TEST00000002_001.tif,Y,,,1",
+        };
+
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncPagecount,
+            chaosAmount: "1",
+            random: new FirstIndexRandom());
+
+        Assert.Contains(
+            result.OptLines,
+            line => line == "TEST00000002_002,VOL001,IMAGES\\VOL001\\TEST00000002_002.tif,,,,");
+        Assert.DoesNotContain(result.OptLines, line => line.Contains("_001_002", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Apply_DesyncPagecount_MultipageOptKeyEnding001_PairsWithBaseDatRecordAndProducesAccurateAudit()
     {
         var datLines = new List<string>

@@ -884,6 +884,7 @@ REQ-239	unit	OptComposingWriterLoadFileTests.LoadfileOnlyOptWriter_WithBatesPage
 REQ-239	unit	ProductionSetTests.ProductionSet_WithBatesPageSuffix_NamesEverySingleDocumentImageWithPageSuffix	Production Set images for one-page documents are named {Bates}_001.tif
 REQ-239	unit	TiffFileGeneratorTests.Generate_WithRealismPageSuffixAndSinglePage_EndorsesPageWithSuffixedBates	One-page realistic TIFF endorsement carries the page-level Bates number
 REQ-239	unit	CrossFormatAnomalyApplierTests.Apply_DesyncPagecount_PageSuffixOnePageDocument_ContinuesFromDocumentBates	Desync page-count continuation under page-suffix mode extends the document Bates number
+REQ-239	unit	CrossFormatAnomalyApplierTests.Apply_DesyncPagecount_PageSuffixKeyAbsentFromDat_ExtendsDocumentBates	Desync page-count continuation for a page-suffixed key with no DAT record extends the document Bates number
 REQ-239	unit	BatesAndDistributionPropertyTests.FormatPageBates_ForEveryDocumentAndPage_ShouldStripBackToItsDocumentAndStayUnique	Property: page-level Bates numbers strip back to their document and stay unique
 REQ-239	e2e	test-bates-numbering.sh	E2E: --bates-page-suffix keys one-page documents with _001 in the OPT Load File
 REQ-239	e2e	test-bates-numbering.bat	Windows batch E2E: --bates-page-suffix keys one-page documents with _001 in the OPT Load File
@@ -899,7 +900,9 @@ REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithListedRollingStartWiderThanLi
 REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithContinuousSetChainPastWidthLimit_WarnsForLaterSet	Continuous Rolling Production Sets that chain past the Bates number limit warn for the later set
 REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithContinuousSetsEachOverRangeLimit_WarnsForEachSet	Each over-limit continuous Rolling Production Set warns for its own DISCO range
 REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithListedPrefixUnusedByStandardRun_DoesNotWarn	Standard run ignores listed prefixes it does not number with
-REQ-240	unit	PipelineTests.Build_SourceInputOverDiscoRange_WarnsWithSourceRecordCount	Source-driven run is checked against its Source Record count for the DISCO range
+REQ-240	unit	PipelineTests.Build_SourceInputDiscoRange_WarnsOnlyAboveLimit	Source-driven run is checked against its Source Record count for the DISCO range, and 30,000 documents do not warn
 REQ-240	unit	PipelineTests.Build_ProductionSetRollingSetWiderThanLimit_WarnsForThatSet	Production Set build prints the rolling set Bates number limit warning
+REQ-240	unit	PipelineTests.Build_WithoutBatesFlags_PrintsNoPlatformWarning	Configurations without Bates flags print no platform warnings
+REQ-240	unit	PipelineTests.Build_OverLimitBatesWithLaterValidationError_PrintsNoPlatformWarning	A run that fails a later configuration check prints no platform warnings
 REQ-240	e2e	test-bates-numbering.sh	E2E: over-limit Bates prefix warns and still generates
 REQ-240	e2e	test-bates-numbering.bat	Windows batch E2E: over-limit Bates prefix warning

@@ -1542,8 +1542,8 @@ internal static class CrossFormatAnomalyApplier
                 : null;
     }
 
-    // Page-suffix mode keys a one-page document's first page as {Bates}_001 (REQ-239). The document key
-    // drops that suffix only when a DAT record carries the document Bates number.
+    // Page-suffix mode keys a one-page document's first page as {Bates}_001 (REQ-239). A key that a DAT
+    // record carries is a document Bates number of its own, so it is kept as is.
     private static string DocumentKeyOf(string optDocKey, IReadOnlyDictionary<string, DatRecordEntry> datRecordsByKey)
     {
         if (datRecordsByKey.ContainsKey(optDocKey) || !optDocKey.EndsWith(FirstPageSuffix, StringComparison.OrdinalIgnoreCase))
@@ -1551,8 +1551,7 @@ internal static class CrossFormatAnomalyApplier
             return optDocKey;
         }
 
-        var documentKey = optDocKey[..^FirstPageSuffix.Length];
-        return datRecordsByKey.ContainsKey(documentKey) ? documentKey : optDocKey;
+        return optDocKey[..^FirstPageSuffix.Length];
     }
 
     private static OptDocEntry? FindMatchingOptForDat(
