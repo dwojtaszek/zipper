@@ -188,6 +188,9 @@ internal static class CrossFormatAnomalyApplier
 
         int docIdIdx = headers.FindIndex(h => string.Equals(h, "DOCID", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "Control Number", StringComparison.OrdinalIgnoreCase));
         int batesIdx = headers.FindIndex(h => string.Equals(h, "BATES_NUMBER", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "BATES", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "Bates Number", StringComparison.OrdinalIgnoreCase));
+        // A record's Bates identity reads BEGBATES, which the standard profile writes, when no other Bates column
+        // exists. batesIdx stays the Bates column alone because it also names the desync-order audit column.
+        int batesIdentityIdx = batesIdx >= 0 ? batesIdx : headers.FindIndex(h => string.Equals(h, "BEGBATES", StringComparison.OrdinalIgnoreCase));
         int imageIdx = headers.FindIndex(h => string.Equals(h, "IMAGE_PATH", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "IMAGE", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "Image Path", StringComparison.OrdinalIgnoreCase));
         int pageCountIdx = headers.FindIndex(h => string.Equals(h, "PAGECOUNT", StringComparison.OrdinalIgnoreCase)
             || string.Equals(h, "PAGE_COUNT", StringComparison.OrdinalIgnoreCase)
@@ -209,7 +212,7 @@ internal static class CrossFormatAnomalyApplier
 
             var fields = ProductionSetPostValidator.ParseDatLine(line, colDelimChar, quoteDelimChar);
             string docId = docIdIdx >= 0 && docIdIdx < fields.Count ? fields[docIdIdx] : string.Empty;
-            string bates = batesIdx >= 0 && batesIdx < fields.Count ? fields[batesIdx] : string.Empty;
+            string bates = batesIdentityIdx >= 0 && batesIdentityIdx < fields.Count ? fields[batesIdentityIdx] : string.Empty;
             string img = imageIdx >= 0 && imageIdx < fields.Count ? fields[imageIdx] : string.Empty;
             string parent = parentIdIdx >= 0 && parentIdIdx < fields.Count ? fields[parentIdIdx] : string.Empty;
 
@@ -255,7 +258,9 @@ internal static class CrossFormatAnomalyApplier
 
         var datRecordsByKey = BuildDatRecordIndex(datRecords.OriginalOrder, includeBates: true);
         var datRecordsByDocId = BuildDatRecordIndex(datRecords.OriginalOrder, includeBates: false);
-        var datBatesNumbers = new HashSet<string>(datRecords.OriginalOrder.Select(record => record.Bates), StringComparer.OrdinalIgnoreCase);
+        var datDocumentKeys = new HashSet<string>(
+            datRecords.OriginalOrder.Select(record => string.IsNullOrEmpty(record.Bates) ? record.DocId : record.Bates),
+            StringComparer.OrdinalIgnoreCase);
         var optDocsByKey = BuildOptDocumentIndex(optDocs);
         var familyCandidates = datRecords.OriginalOrder
             .Where(record => record.IsFamilyCandidate)
@@ -304,7 +309,7 @@ internal static class CrossFormatAnomalyApplier
                     ApplyDesyncPagecount(
                         datRecords,
                         datRecordsByKey,
-                        datBatesNumbers,
+                        datDocumentKeys,
                         optDocs,
                         optDocsByKey,
                         targetedRecords,
@@ -695,7 +700,7 @@ internal static class CrossFormatAnomalyApplier
     private static void ApplyDesyncPagecount(
         ActiveDatRecords datRecords,
         IReadOnlyDictionary<string, DatRecordEntry> datRecordsByKey,
-        IReadOnlySet<string> datBatesNumbers,
+        IReadOnlySet<string> datDocumentKeys,
         List<OptDocEntry> optDocs,
         IReadOnlyDictionary<string, OptDocEntry> optDocsByKey,
         HashSet<DatRecordEntry> targetedRecords,
@@ -759,7 +764,7 @@ internal static class CrossFormatAnomalyApplier
         {
             // Duplicate/add a continuation page row. The continuation extends the document Bates number,
             // not a page-suffixed first-page key (REQ-239).
-            var documentKey = DocumentKeyOf(optDoc.DocKey, datBatesNumbers);
+            var documentKey = DocumentKeyOf(optDoc.DocKey, datDocumentKeys);
             int pageNumber = 2;
             string extraKey = $"{documentKey}_{pageNumber:D3}";
             while (optDocsByKey.ContainsKey(extraKey))
@@ -1482,13 +1487,20 @@ internal static class CrossFormatAnomalyApplier
     private static Dictionary<string, DatRecordEntry> BuildDatRecordIndex(IReadOnlyList<DatRecordEntry> records, bool includeBates)
     {
         var index = new Dictionary<string, DatRecordEntry>(StringComparer.OrdinalIgnoreCase);
+        if (includeBates)
+        {
+            // OPT keys are Bates numbers, so a Bates match takes precedence over a DocId that repeats it.
+            foreach (var record in records)
+            {
+                if (!string.IsNullOrEmpty(record.Bates))
+                {
+                    index.TryAdd(record.Bates, record);
+                }
+            }
+        }
+
         foreach (var record in records)
         {
-            if (includeBates && !string.IsNullOrEmpty(record.Bates))
-            {
-                index.TryAdd(record.Bates, record);
-            }
-
             if (!string.IsNullOrEmpty(record.DocId))
             {
                 index.TryAdd(record.DocId, record);
@@ -1545,13 +1557,13 @@ internal static class CrossFormatAnomalyApplier
                 : null;
     }
 
-    // Page-suffix mode keys a one-page document's first page as {Bates}_001 (REQ-239). A key that a DAT
-    // record carries as its Bates number is a document Bates number of its own, so it is kept as is. The
-    // check uses the Bates column alone: a DocId such as ABC_001 on a record with Bates ABC still names the
-    // first page of ABC.
-    private static string DocumentKeyOf(string optDocKey, IReadOnlySet<string> datBatesNumbers)
+    // Page-suffix mode keys a one-page document's first page as {Bates}_001 (REQ-239). A key that is a DAT
+    // record's document identity, its Bates number or its DocId when the record has no Bates, is that
+    // document's own key, so it is kept as is. A DocId such as ABC_001 on a record with Bates ABC is not an
+    // identity, so it still names the first page of ABC.
+    private static string DocumentKeyOf(string optDocKey, IReadOnlySet<string> datDocumentKeys)
     {
-        if (!optDocKey.EndsWith(FirstPageSuffix, StringComparison.OrdinalIgnoreCase) || datBatesNumbers.Contains(optDocKey))
+        if (!optDocKey.EndsWith(FirstPageSuffix, StringComparison.OrdinalIgnoreCase) || datDocumentKeys.Contains(optDocKey))
         {
             return optDocKey;
         }

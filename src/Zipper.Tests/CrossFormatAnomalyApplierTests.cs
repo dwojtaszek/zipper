@@ -328,10 +328,119 @@ public sealed class CrossFormatAnomalyApplierTests : IDisposable
     }
 
     [Fact]
+    public void Apply_DesyncPagecount_PageSuffixKeyDocIdWithoutBates_KeepsSuffixKey()
+    {
+        // The DAT record has no Bates number, so its DocId CASE_001 is its document identity. The OPT key CASE_001
+        // is that document's own key, so the continuation must extend CASE_001 rather than CASE (REQ-239).
+        var datLines = new List<string>
+        {
+            JoinDat("DOCID", "BATES_NUMBER", "IMAGE_PATH", "PAGECOUNT", "VOLUME"),
+            JoinDat("CASE_001", string.Empty, "IMAGES\\VOL001\\CASE_001.tif", "1", "VOL001"),
+        };
+        var optLines = new List<string>
+        {
+            "CASE_001,VOL001,IMAGES\\VOL001\\CASE_001.tif,Y,,,1",
+        };
+
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncPagecount,
+            chaosAmount: "1",
+            random: new FirstIndexRandom());
+
+        Assert.Contains(
+            result.OptLines,
+            line => line == "CASE_001_002,VOL001,IMAGES\\VOL001\\CASE_001_002.tif,,,,");
+        Assert.DoesNotContain(result.OptLines, line => line.StartsWith("CASE_002,", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Apply_DesyncPagecount_BegBatesControlOverride_ExtendsBatesNotDocId()
+    {
+        // The standard profile writes BEGBATES, not BATES_NUMBER. Here DOCID is a control-number override (ABC_001)
+        // and BEGBATES is the document Bates number ABC, so the continuation must extend ABC (REQ-239).
+        var datLines = new List<string>
+        {
+            JoinDat("DOCID", "BEGBATES", "IMAGE_PATH", "PAGECOUNT", "VOLUME"),
+            JoinDat("ABC_001", "ABC", "IMAGES\\VOL001\\ABC.tif", "1", "VOL001"),
+        };
+        var optLines = new List<string>
+        {
+            "ABC_001,VOL001,IMAGES\\VOL001\\ABC_001.tif,Y,,,1",
+        };
+
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncPagecount,
+            chaosAmount: "1",
+            random: new FirstIndexRandom());
+
+        Assert.Contains(
+            result.OptLines,
+            line => line == "ABC_002,VOL001,IMAGES\\VOL001\\ABC_002.tif,,,,");
+        Assert.DoesNotContain(result.OptLines, line => line.Contains("_001_002", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Apply_DesyncPagecount_BegBatesEqualToSuffixKey_KeepsSuffixKey()
+    {
+        // BEGBATES is the document Bates number ABC_001 itself, so its first-page key ABC_001 is the document's own key.
+        var datLines = new List<string>
+        {
+            JoinDat("DOCID", "BEGBATES", "IMAGE_PATH", "PAGECOUNT", "VOLUME"),
+            JoinDat("ABC_001", "ABC_001", "IMAGES\\VOL001\\ABC_001.tif", "1", "VOL001"),
+        };
+        var optLines = new List<string>
+        {
+            "ABC_001,VOL001,IMAGES\\VOL001\\ABC_001.tif,Y,,,1",
+        };
+
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncPagecount,
+            chaosAmount: "1",
+            random: new FirstIndexRandom());
+
+        Assert.Contains(
+            result.OptLines,
+            line => line == "ABC_001_002,VOL001,IMAGES\\VOL001\\ABC_001_002.tif,,,,");
+    }
+
+    [Fact]
+    public void Apply_DesyncPagecount_BatesColumnFirst_KeepsSuffixKeyThatIsTheBates()
+    {
+        // The Bates column is the first DAT column, so its index is 0. The OPT key ABC_001 is that record's Bates
+        // number, so it is the document's own key and the continuation must extend it (REQ-239).
+        var datLines = new List<string>
+        {
+            JoinDat("BATES_NUMBER", "DOCID", "IMAGE_PATH", "PAGECOUNT", "VOLUME"),
+            JoinDat("ABC_001", "DOC00000001", "IMAGES\\VOL001\\ABC_001.tif", "1", "VOL001"),
+        };
+        var optLines = new List<string>
+        {
+            "ABC_001,VOL001,IMAGES\\VOL001\\ABC_001.tif,Y,,,1",
+        };
+
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncPagecount,
+            chaosAmount: "1",
+            random: new FirstIndexRandom());
+
+        Assert.Contains(
+            result.OptLines,
+            line => line == "ABC_001_002,VOL001,IMAGES\\VOL001\\ABC_001_002.tif,,,,");
+    }
+
+    [Fact]
     public void Apply_DesyncPagecount_PageSuffixKeyBatesHiddenByEarlierDocId_KeepsSuffixKey()
     {
-        // R2's Bates number is ABC_001, a document Bates number of its own. R1's DocId ABC_001 is indexed first,
-        // so a key lookup alone resolves ABC_001 to R1. The continuation must still extend ABC_001 (REQ-239).
+        // R2's Bates number is ABC_001, a document Bates number of its own. R1's DocId is also ABC_001. The OPT key
+        // ABC_001 is R2's Bates number, so the audit must name R2, and the continuation must still extend ABC_001 (REQ-239).
         var datLines = new List<string>
         {
             JoinDat("DOCID", "BATES_NUMBER", "IMAGE_PATH", "PAGECOUNT", "VOLUME"),
@@ -354,6 +463,9 @@ public sealed class CrossFormatAnomalyApplierTests : IDisposable
             result.OptLines,
             line => line == "ABC_001_002,VOL001,IMAGES\\VOL001\\ABC_001_002.tif,,,,");
         Assert.DoesNotContain(result.OptLines, line => line.StartsWith("ABC_002,", StringComparison.Ordinal));
+        var datAnomaly = Assert.Single(result.DatAnomalies);
+        Assert.Equal("XYZ", datAnomaly.RecordID);
+        Assert.Equal("3", datAnomaly.LineNumber);
     }
 
     [Fact]
@@ -655,6 +767,39 @@ public sealed class CrossFormatAnomalyApplierTests : IDisposable
         Assert.Contains(result.OptLines, line => line.StartsWith($"{optAnomaly.RecordID},", StringComparison.Ordinal));
         Assert.Equal(optAnomaly.LineNumber, datAnomaly.Peer.LineNumber);
         Assert.Equal(datAnomaly.LineNumber, optAnomaly.Peer.LineNumber);
+    }
+
+    [Fact]
+    public void Apply_MissingChild_BegBatesControlOverride_EndAttachNamesChildBates()
+    {
+        // The standard profile writes BEGBATES, and DOCID is a control-number override. The removed child CN1 has
+        // Bates number AAA, so the surviving parent's ENDATTACH must name AAA, as it does for a BATES_NUMBER DAT.
+        var datLines = new List<string>
+        {
+            JoinDat("DOCID", "BEGBATES", "IMAGE_PATH", "PAGECOUNT", "VOLUME"),
+            JoinDat("CN1", "AAA", "IMAGES\\VOL001\\AAA.tif", "1", "VOL001"),
+            JoinDat("CN2", "BBB", "IMAGES\\VOL001\\BBB.tif", "1", "VOL001"),
+        };
+        var optLines = new List<string>
+        {
+            "AAA,VOL001,IMAGES\\VOL001\\AAA.tif,Y,,,1",
+            "BBB,VOL001,IMAGES\\VOL001\\BBB.tif,Y,,,1",
+        };
+
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.MissingChild,
+            chaosAmount: "1",
+            random: new FirstIndexRandom());
+
+        var header = ProductionSetPostValidator.ParseDatLine(result.DatLines[0], ColDelim, QuoteDelim);
+        int endAttachIndex = header.FindIndex(h => h == "ENDATTACH");
+        Assert.True(endAttachIndex >= 0);
+        var parent = Assert.Single(
+            result.DatLines.Skip(1).Select(line => ProductionSetPostValidator.ParseDatLine(line, ColDelim, QuoteDelim)));
+        Assert.Equal("CN2", parent[header.FindIndex(h => h == "DOCID")]);
+        Assert.Equal("AAA", parent[endAttachIndex]);
     }
 
     [Fact]
@@ -1132,6 +1277,41 @@ public sealed class CrossFormatAnomalyApplierTests : IDisposable
         // Because both OPT documents resolve to the same DAT record (DOC00000001), desync-order must be skipped
         Assert.Empty(result.Anomalies);
         Assert.Equal(optLines, result.OptLines);
+    }
+
+    [Fact]
+    public void Apply_DesyncOrder_BegBatesControlOverride_AuditsBatesMatchedRecord()
+    {
+        // The standard profile writes BEGBATES, and DOCID is a control-number override. The first OPT document CCC is
+        // the Bates number of CN3, so the audit must name CN3 rather than the DAT record at that position (CN1).
+        // The swap leaves OPT still out of DAT order (BBB, CCC, AAA), so the output remains a real desync.
+        var datLines = new List<string>
+        {
+            JoinDat("DOCID", "BEGBATES", "IMAGE_PATH", "PAGECOUNT", "VOLUME"),
+            JoinDat("CN1", "AAA", "IMAGES\\VOL001\\AAA.tif", "1", "VOL001"),
+            JoinDat("CN2", "BBB", "IMAGES\\VOL001\\BBB.tif", "1", "VOL001"),
+            JoinDat("CN3", "CCC", "IMAGES\\VOL001\\CCC.tif", "1", "VOL001"),
+        };
+        var optLines = new List<string>
+        {
+            "CCC,VOL001,IMAGES\\VOL001\\CCC.tif,Y,,,1",
+            "BBB,VOL001,IMAGES\\VOL001\\BBB.tif,Y,,,1",
+            "AAA,VOL001,IMAGES\\VOL001\\AAA.tif,Y,,,1",
+        };
+
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncOrder,
+            chaosAmount: "1",
+            random: new FirstIndexRandom());
+
+        var datAnomaly = Assert.Single(result.DatAnomalies);
+        Assert.Equal("CN3", datAnomaly.RecordID);
+        Assert.Equal("4", datAnomaly.LineNumber);
+        Assert.Equal(
+            new[] { "BBB", "CCC", "AAA" },
+            result.OptLines.Select(line => line.Split(',')[0]).ToArray());
     }
 
     [Fact]
