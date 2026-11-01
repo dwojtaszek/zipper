@@ -215,6 +215,9 @@ All command-line flags recognized by Zipper:
 | `--bates-start` | `1` | non-negative integer | Starting Bates number |
 | `--bates-digits` | `8` | `1` to `20` | Bates number digit padding count |
 | `--tiff-pages` | `1-1` | min-max range (e.g. `1-20`) | Page count range for TIFF files (controls OPT page count and profile-driven DAT `PAGECOUNT` in Loadfile-Only mode for TIFF output) |
+| `--tiff-realism` | `none` | `none`, `standard`, `group4`, `uncompressed` | Opt-in realistic TIFF emission with Bates endorsement band (aliases: `--with-tiff-realism`, `--realistic-tiff`) |
+| `--with-tiff-realism` | `false` | flag | Enable standard Group 4 realistic TIFF emission with Bates endorsement band |
+| `--tiff-compression` | `group4` | `group4`, `uncompressed` | Compression scheme for realistic TIFF emission |
 | `--column-profile` | none | `minimal`, `standard`, `litigation`, `full`, or file path | Metadata column profile |
 | `--seed` | none (42 for Archive Test) | integer (non-negative for Archive Test) | Random seed for reproducible runs |
 | `--date-format` | `yyyy-MM-dd` | format string | Override date format string |

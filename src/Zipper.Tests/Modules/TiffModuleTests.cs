@@ -45,4 +45,65 @@ public class TiffModuleTests
     {
         Assert.False(new TiffModule().TryApply("--unknown-flag", "x"));
     }
+
+    [Theory]
+    [InlineData("standard", true)]
+    [InlineData("group4", true)]
+    [InlineData("uncompressed", true)]
+    [InlineData("none", false)]
+    public void TryBuild_WithTiffRealism_SetsConfig(string mode, bool expectedRealistic)
+    {
+        var module = new TiffModule();
+        Assert.True(module.TryApply("--tiff-realism", mode));
+        Assert.True(module.TryBuild(out var config));
+        Assert.Equal(mode, config.RealismMode);
+        Assert.Equal(expectedRealistic, config.IsRealistic);
+        Assert.Equal(expectedRealistic, config.RealisticPageImages);
+    }
+
+    [Fact]
+    public void TryBuild_WithWithTiffRealismFlag_SetsStandardConfig()
+    {
+        var module = new TiffModule();
+        Assert.False(module.TakesValue("--with-tiff-realism"));
+        Assert.True(module.TryApply("--with-tiff-realism", null));
+        Assert.True(module.TryBuild(out var config));
+        Assert.Equal("standard", config.RealismMode);
+        Assert.True(config.IsRealistic);
+    }
+
+    [Fact]
+    public void TryBuild_WithRealisticTiffAlias_SetsStandardConfig()
+    {
+        var module = new TiffModule();
+        Assert.False(module.TakesValue("--realistic-tiff"));
+        Assert.True(module.TryApply("--realistic-tiff", null));
+        Assert.True(module.TryBuild(out var config));
+        Assert.Equal("standard", config.RealismMode);
+        Assert.True(config.IsRealistic);
+    }
+
+    [Fact]
+    public void TryBuild_WithTiffCompression_SetsCompression()
+    {
+        var module = new TiffModule();
+        Assert.True(module.TryApply("--with-tiff-realism", null));
+        Assert.True(module.TryApply("--tiff-compression", "uncompressed"));
+        Assert.True(module.TryBuild(out var config));
+        Assert.Equal("uncompressed", config.Compression);
+    }
+
+    [Fact]
+    public void TryApply_InvalidRealismMode_ReturnsFalse()
+    {
+        var module = new TiffModule();
+        Assert.False(module.TryApply("--tiff-realism", "invalid-mode"));
+    }
+
+    [Fact]
+    public void TryApply_InvalidCompression_ReturnsFalse()
+    {
+        var module = new TiffModule();
+        Assert.False(module.TryApply("--tiff-compression", "deflate"));
+    }
 }

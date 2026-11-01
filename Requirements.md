@@ -105,6 +105,12 @@ The application operates in three distinct generation modes:
 - **REQ-045**: When `--type tiff` is specified with `--tiff-pages`, each TIFF Native File shall have a random page count within the specified range.
 - **REQ-046**: When `--tiff-pages` is specified (with `--type tiff`), the Load File must include a `Page Count` column indicating the number of pages in each TIFF file. When `--tiff-pages` is omitted, no `Page Count` column is emitted, preserving backward-compatible output (see REQ-047).
 - **REQ-047**: The default page range shall be "1-1" (single page) for backward compatibility. Note: this default applies to Standard mode only. Loadfile-Only OPT defaults to random 1-10 per document when --tiff-pages is omitted.
+- **REQ-238**: An opt-in realistic TIFF emission mode shall be introduced via `--tiff-realism <mode>` (with values `none`, `standard`, `group4`, or `uncompressed`) and convenience flags `--with-tiff-realism` and `--realistic-tiff` (aliases for `--tiff-realism standard`), optionally accompanied by `--tiff-compression <group4|uncompressed>`:
+  - When realism is enabled, TIFF files and Production Set page images shall be emitted as valid bitonal (1-bit monochrome min-is-white) TIFF files conforming to baseline TIFF and ITU-T T.6 (CCITT Group 4 Fax) specifications at 300 DPI (2550 x 3300 US Letter standard), with compliant IFD tags (`ImageWidth=2550`, `ImageLength=3300`, `BitsPerSample=1`, `Compression=4` or `1`, `PhotometricInterpretation=0`, `StripOffsets`, `SamplesPerPixel=1`, `RowsPerStrip=3300`, `StripByteCounts`, `XResolution=300/1`, `YResolution=300/1`, `ResolutionUnit=2`, `PageNumber`, `Software="Zipper"`).
+  - Each page raster carries a burned-in Bates endorsement band in the bottom margin rendering the page's Bates number (or Control Number) via an embedded deterministic 5x7 glyph set.
+  - Multi-page documents emit distinct single-page TIFF files per page in Production Sets (e.g., `DOC001_001.tif`, `DOC001_002.tif`), each bearing its distinct page-specific Bates number (`DOC001_001`, `DOC001_002`), or chained IFDs in multi-page TIFF native files.
+  - Standard image viewers (including libtiff-based decoders) open and decode the images without errors or line-length desynchronization.
+  - When `--tiff-realism` is omitted or set to `none`, TIFF generation maintains 100% byte-identical output parity to legacy precomputed placeholder blobs (`PlaceholderFiles.GetContent("tiff")`), satisfying Critical Rule 6.
 
 ## 3. Technical Requirements
 
@@ -142,6 +148,10 @@ The application operates in three distinct generation modes:
 - `--bates-start <number>`: (Optional) Starting number for Bates numbering. Defaults to 1.
 - `--bates-digits <number>`: (Optional) Number of digits for Bates numbering. Defaults to 8.
 - `--tiff-pages <min-max>`: (Optional) Page count range for TIFF files (e.g., "1-20"). Defaults to "1-1".
+- `--tiff-realism <none|standard|group4|uncompressed>`: (Optional) Opt-in realism mode for TIFF emission (REQ-238). Defaults to `none`.
+- `--with-tiff-realism`: (Optional) Convenience flag to enable standard realistic TIFF emission (alias for `--tiff-realism standard`).
+- `--realistic-tiff`: (Optional) Alias for `--with-tiff-realism`.
+- `--tiff-compression <group4|uncompressed>`: (Optional) Compression scheme for realistic TIFFs (REQ-238). Defaults to `group4`.
 - `--compression <store|deflate|deflate64|bzip2>`: (Optional) The compression method for output Archives. Defaults to `deflate`. `store` writes uncompressed entries; `deflate64` and `bzip2` are recognized but not yet supported.
 - `--archive-test-suite <smoke|compatibility|malformed|security|encoding|all>`: (Optional) Predefined Archive Test Fixture suite to generate. Requires `--output-path` pointing to a non-existent directory. Accepts only `--archive-test-suite`, `--archive-test-cases`, `--seed`, `--output-path`; all other generation flags rejected.
 - `--archive-test-cases <key,key,...>`: (Optional) Comma-separated list of Archive Test Case keys to filter fixture generation.

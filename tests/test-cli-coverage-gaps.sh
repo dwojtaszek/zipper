@@ -418,6 +418,31 @@ else
     pass "email chaos types with --loadfile-only correctly failed validation"
 fi
 
+# --- REQ-238: TIFF Realism Mode ---
+
+print_info "Test: --type tiff with --with-tiff-realism in Standard mode emits realistic TIFF with Bates endorsement"
+TIFF_REALISM_OUT="$TEST_OUTPUT_DIR/tiff-realism-std"
+if zipper --type tiff --count 2 --tiff-pages 1-1 --bates-prefix REAL --with-tiff-realism --output-path "$TIFF_REALISM_OUT" > /dev/null 2>&1; then
+    pass "--with-tiff-realism generated successfully in Standard mode"
+else
+    fail "--with-tiff-realism generation failed in Standard mode"
+fi
+
+print_info "Test: Production Set with --with-tiff-realism emits distinct page images"
+PROD_REALISM_OUT="$TEST_OUTPUT_DIR/tiff-realism-prod"
+if zipper --production-set --count 2 --bates-prefix PROD --with-tiff-realism --output-path "$PROD_REALISM_OUT" > /dev/null 2>&1; then
+    pass "Production Set with --with-tiff-realism generated successfully"
+else
+    fail "Production Set with --with-tiff-realism failed"
+fi
+
+print_info "Test: Invalid --tiff-realism mode fails validation"
+if zipper --type tiff --count 2 --tiff-realism invalid-mode --output-path "$TEST_OUTPUT_DIR/tiff-invalid" > /dev/null 2>&1; then
+    fail "Invalid --tiff-realism mode should have failed validation"
+else
+    pass "Invalid --tiff-realism mode correctly failed validation"
+fi
+
 # --- Summary ---
 
 echo ""

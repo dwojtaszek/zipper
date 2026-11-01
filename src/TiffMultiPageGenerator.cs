@@ -18,8 +18,34 @@ internal static class TiffMultiPageGenerator
     /// <returns>Byte array containing a TIFF file.</returns>
     public static byte[] Generate(int pageCount, FileWorkItem workItem)
     {
-        // O(1): return pre-computed TIFF from PlaceholderFiles
-        return PlaceholderFiles.GetContent("tiff");
+        return Generate(pageCount, workItem, null, null);
+    }
+
+    /// <summary>
+    /// Generates TIFF file content, either using pre-computed placeholder or realistic emission.
+    /// </summary>
+    public static byte[] Generate(int pageCount, FileWorkItem workItem, Config.TiffConfig? tiffConfig, string? batesNumber = null)
+    {
+        if (tiffConfig?.IsRealistic != true)
+        {
+            return PlaceholderFiles.GetContent("tiff");
+        }
+
+        var bates = batesNumber ?? workItem.BatesNumberOverride ?? workItem.ControlNumberOverride ?? $"DOC{workItem.Index:D8}";
+        return TiffRenderer.RenderMultiPage(pageCount, bates, tiffConfig);
+    }
+
+    /// <summary>
+    /// Generates a single page image TIFF with an endorsement band.
+    /// </summary>
+    public static byte[] GeneratePage(string? batesNumber, int pageIndex = 1, int pageCount = 1, Config.TiffConfig? tiffConfig = null)
+    {
+        if (tiffConfig?.IsRealistic != true)
+        {
+            return PlaceholderFiles.GetContent("tiff");
+        }
+
+        return TiffRenderer.RenderPage(batesNumber, pageIndex, pageCount, tiffConfig);
     }
 
     /// <summary>

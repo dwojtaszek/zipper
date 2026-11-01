@@ -1737,6 +1737,83 @@ public class ProductionSetTests : WorkingDirectoryTestBase
         var actualBytes = await File.ReadAllBytesAsync(zipPath);
         Assert.Equal(sentinelBytes, actualBytes);
     }
+
+    [Fact]
+    public async Task ProductionSet_WithoutTiffRealism_PreservesPlaceholderBytes()
+    {
+        var request = this.CreateTestRequest(count: 3);
+        request.Tiff = new Config.TiffConfig { RealismMode = "none" };
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        var imageFiles = Directory.GetFiles(Path.Combine(result.ProductionPath, "IMAGES"), "*.tif", SearchOption.AllDirectories);
+        Assert.NotEmpty(imageFiles);
+
+        var placeholderBytes = PlaceholderFiles.GetContent("tiff");
+        foreach (var img in imageFiles)
+        {
+            var bytes = await File.ReadAllBytesAsync(img);
+            Assert.Equal(placeholderBytes, bytes);
+        }
+    }
+
+    [Fact]
+    public async Task ProductionSet_WithTiffRealism_GeneratesDistinctPageImagesWithBates()
+    {
+        var request = this.CreateTestRequest(count: 3, fileType: "tiff");
+        request.Tiff = new Config.TiffConfig
+        {
+            PageRange = (2, 2),
+            RealismMode = "group4",
+        };
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        var imageFiles = Directory.GetFiles(Path.Combine(result.ProductionPath, "IMAGES"), "*.tif", SearchOption.AllDirectories);
+        Assert.Equal(6, imageFiles.Length); // 3 docs * 2 pages each
+
+        var placeholderBytes = PlaceholderFiles.GetContent("tiff");
+        var hashes = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var img in imageFiles)
+        {
+            var bytes = await File.ReadAllBytesAsync(img);
+            Assert.NotEqual(placeholderBytes, bytes);
+
+            // Verify TIFF header and dimensions
+            Assert.Equal(0x49, bytes[0]);
+            Assert.Equal(0x49, bytes[1]);
+            Assert.Equal(42, BitConverter.ToUInt16(bytes, 2));
+
+            var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
+            hashes.Add(hash);
+        }
+
+        // Each page has a unique Bates number in its endorsement band, producing distinct images
+        Assert.Equal(imageFiles.Length, hashes.Count);
+    }
+
+    [Fact]
+    public async Task ProductionSet_WithTiffRealismUncompressed_EmitsValidUncompressedTiff()
+    {
+        var request = this.CreateTestRequest(count: 2, fileType: "tiff");
+        request.Tiff = new Config.TiffConfig
+        {
+            PageRange = (1, 1),
+            RealismMode = "uncompressed",
+            Compression = "uncompressed",
+        };
+        var result = await ProductionSetGenerator.GenerateAsync(request);
+
+        var imageFiles = Directory.GetFiles(Path.Combine(result.ProductionPath, "IMAGES"), "*.tif", SearchOption.AllDirectories);
+        Assert.Equal(2, imageFiles.Length);
+
+        foreach (var img in imageFiles)
+        {
+            var bytes = await File.ReadAllBytesAsync(img);
+            Assert.True(bytes.Length > 1_000_000); // Uncompressed 2550x3300 1-bit is ~1MB
+            Assert.Equal(0x49, bytes[0]);
+            Assert.Equal(0x49, bytes[1]);
+        }
+    }
 }
 
 
