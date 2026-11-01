@@ -94,6 +94,31 @@ public class BatesPlatformLimitsTests
     }
 
     [Fact]
+    public void Evaluate_WithPageCountPast999AndPageSuffix_CountsFourDigitPageOrdinal()
+    {
+        var warnings = Standard(new BatesNumberConfig { Prefix = "DOC", Digits = 12, PageSuffix = true }, 1, maxPagesPerDocument: 1000);
+
+        var warning = Assert.Single(warnings);
+        Assert.Contains("Bates numbers are 17 characters including the page suffix;", warning, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Evaluate_WithPageCountAt999AndPageSuffix_KeepsThreeDigitPageOrdinal()
+    {
+        var warnings = Standard(new BatesNumberConfig { Prefix = "DOC", Digits = 12, PageSuffix = true }, 1, maxPagesPerDocument: 999);
+
+        Assert.Empty(warnings);
+    }
+
+    [Fact]
+    public void Evaluate_WithPageCountPast999WithoutPageSuffix_IgnoresPageOrdinal()
+    {
+        var warnings = Standard(new BatesNumberConfig { Prefix = "DOC", Digits = 12 }, 1, maxPagesPerDocument: 1000);
+
+        Assert.Empty(warnings);
+    }
+
+    [Fact]
     public void Evaluate_WithLastNumberWiderThanDigits_UsesLastNumberWidth()
     {
         // Digits pads to 8, but the second number (10000000000000000) is 17 characters.
@@ -199,6 +224,6 @@ public class BatesPlatformLimitsTests
             () => BatesPlatformLimits.Evaluate(config, 1, rollingCount: 0, RollingBatesMode.Continuous));
     }
 
-    private static IReadOnlyList<string> Standard(BatesNumberConfig config, long documentCount) =>
-        BatesPlatformLimits.Evaluate(config, documentCount, rollingCount: 1, RollingBatesMode.Continuous);
+    private static IReadOnlyList<string> Standard(BatesNumberConfig config, long documentCount, int maxPagesPerDocument = 1) =>
+        BatesPlatformLimits.Evaluate(config, documentCount, rollingCount: 1, RollingBatesMode.Continuous, maxPagesPerDocument);
 }

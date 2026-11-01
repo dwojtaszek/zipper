@@ -156,15 +156,16 @@ public sealed class BatesModule : CliModule
 
     /// <summary>
     /// Prints the advisory platform limit warnings (REQ-240) for a built Bates configuration. Call it once the
-    /// Output count is known, so a source-driven run is checked against its Source Record count.
+    /// Output count is known, so a source-driven run is checked against its Source Record count. Pass the
+    /// largest page count a document can have (the --tiff-pages maximum) so the page suffix width is checked.
     /// </summary>
-    public static void WarnPlatformLimits(BatesNumberConfig config, ProductionConfig production, long documentCount)
+    public static void WarnPlatformLimits(BatesNumberConfig config, ProductionConfig production, long documentCount, int maxPagesPerDocument = 1)
     {
         ArgumentNullException.ThrowIfNull(production);
 
         // Only a Production Set generates its rolling sets; any other run numbers one sequence.
         var rollingCount = production.ProductionSet ? production.RollingCount : 1;
-        foreach (var warning in BatesPlatformLimits.Evaluate(config, documentCount, rollingCount, production.RollingBatesMode))
+        foreach (var warning in BatesPlatformLimits.Evaluate(config, documentCount, rollingCount, production.RollingBatesMode, maxPagesPerDocument))
         {
             Console.Error.WriteLine($"Warning: {warning}");
         }

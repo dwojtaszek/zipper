@@ -121,7 +121,7 @@ public sealed class BatesSequence
 
     /// <summary>
     /// Builds the page-level Bates Number for one page of a document (REQ-239): the document Bates
-    /// Number plus a three-digit page suffix, for example <c>ABC00000001_001</c>.
+    /// Number plus a page suffix of at least three digits (more past page 999), for example <c>ABC00000001_001</c>.
     /// </summary>
     public static string FormatPageBates(string documentBates, int pageNumber)
     {

@@ -332,6 +332,25 @@ public class PipelineTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void Build_TiffPagesPast999WithPageSuffix_WarnsWithFourDigitPageOrdinal()
+    {
+        // A page range can reach page 1000, which the page suffix prints as _1000 (five characters).
+        // The range's minimum is 1, so a build that reads the minimum instead of the maximum prints no warning.
+        var (ok, modules) = PipelineTestHelper.Parse(new[]
+        {
+            "--type", "tiff", "--count", "1", "--output-path", Directory.GetCurrentDirectory(),
+            "--bates-prefix", "CL001", "--bates-digits", "12", "--bates-page-suffix", "--tiff-pages", "1-1000",
+        });
+        Assert.True(ok);
+
+        FileGenerationRequest? result = null;
+        var (_, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => result = PipelineTestHelper.Build(modules: modules));
+
+        Assert.NotNull(result);
+        Assert.Contains("Warning: Bates numbers are 17 characters including the page suffix", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Build_WithoutBatesFlags_PrintsNoPlatformWarning()
     {
         var (ok, modules) = PipelineTestHelper.Parse(new[] { "--type", "pdf", "--count", "30001", "--output-path", Directory.GetCurrentDirectory() });

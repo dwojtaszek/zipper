@@ -20,19 +20,22 @@ public static class BatesPlatformLimits
     /// <summary>DISCO Bates range size that triggers its validation warning.</summary>
     public const int MaxRangeNumbers = 30_000;
 
-    // "_NNN" page suffix (REQ-239): three digits cover pages 1 through 999.
-    private const int PageSuffixCharacters = 4;
+    // "_NNN" page suffix (REQ-239): page ordinals have at least three digits and take more past page 999.
+    private const int MinPageOrdinalDigits = 3;
 
     /// <summary>
     /// Returns one warning per configured value that exceeds a documented platform limit. Each
     /// checked run is a Bates sequence that generation numbers: the Standard run, or each Production
     /// Set rolling set. <paramref name="documentCount"/> is the number of documents each run numbers.
+    /// <paramref name="maxPagesPerDocument"/> is the largest page count a document can have (the
+    /// <c>--tiff-pages</c> maximum, or 1 without a page range); it sets the width of the page suffix.
     /// </summary>
     public static IReadOnlyList<string> Evaluate(
         BatesNumberConfig config,
         long documentCount,
         int rollingCount,
-        RollingBatesMode rollingBatesMode)
+        RollingBatesMode rollingBatesMode,
+        int maxPagesPerDocument = 1)
     {
         ArgumentNullException.ThrowIfNull(config);
         ArgumentOutOfRangeException.ThrowIfLessThan(rollingCount, 1);
@@ -50,7 +53,10 @@ public static class BatesPlatformLimits
         }
 
         var widestNumber = runs.Max(run => run.Last.ToString(CultureInfo.InvariantCulture).Length);
-        var numberWidth = Math.Max(config.Digits, widestNumber) + (config.PageSuffix ? PageSuffixCharacters : 0);
+        var pageSuffixCharacters = config.PageSuffix
+            ? 1 + Math.Max(MinPageOrdinalDigits, maxPagesPerDocument.ToString(CultureInfo.InvariantCulture).Length)
+            : 0;
+        var numberWidth = Math.Max(config.Digits, widestNumber) + pageSuffixCharacters;
         if (numberWidth > MaxNumberCharacters)
         {
             var suffixNote = config.PageSuffix ? " including the page suffix" : string.Empty;

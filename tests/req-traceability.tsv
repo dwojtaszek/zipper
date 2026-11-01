@@ -891,6 +891,10 @@ REQ-239	e2e	test-bates-numbering.bat	Windows batch E2E: --bates-page-suffix keys
 REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithPrefixOverLimit_ReturnsPrefixWarning	Everlaw prefix limit (36 characters) warning
 REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithDigitsOverNumberLimit_ReturnsNumberWarning	Everlaw Bates number limit (16 characters) warning
 REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithPageSuffixOverNumberLimit_CountsSuffixInWidth	Page suffix counts toward the Bates number limit
+REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithPageCountPast999AndPageSuffix_CountsFourDigitPageOrdinal	Page 1000 widens the page suffix, so the suffix counts toward the Bates number limit
+REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithPageCountAt999AndPageSuffix_KeepsThreeDigitPageOrdinal	Page 999 keeps the three-digit page suffix width
+REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithPageCountPast999WithoutPageSuffix_IgnoresPageOrdinal	Page count does not widen Bates numbers without the page suffix
+REQ-240	unit	PipelineTests.Build_TiffPagesPast999WithPageSuffix_WarnsWithFourDigitPageOrdinal	--tiff-pages 1000 with --bates-page-suffix warns through the CLI build path
 REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithCountOverDiscoLimit_ReturnsRangeWarning	DISCO 30,000 Bates number range warning
 REQ-240	unit	BatesModuleTests.WarnPlatformLimits_PrefixOverPlatformLimit_WarnsAndKeepsBuiltConfig	Over-limit prefix warns once the document count is known
 REQ-240	unit	BatesModuleTests.WarnPlatformLimits_RangeOverDiscoLimit_Warns	Over-limit Bates range warns once the document count is known

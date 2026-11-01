@@ -134,7 +134,7 @@ public static class Pipeline
 
         if (bates is not null)
         {
-            BatesModule.WarnPlatformLimits(bates, production, output.FileCount);
+            BatesModule.WarnPlatformLimits(bates, production, output.FileCount, tiff.PageRange?.Max ?? 1);
         }
 
         return new FileGenerationRequest
