@@ -1812,7 +1812,33 @@ public class ProductionSetTests : WorkingDirectoryTestBase
             Assert.True(bytes.Length > 1_000_000); // Uncompressed 2550x3300 1-bit is ~1MB
             Assert.Equal(0x49, bytes[0]);
             Assert.Equal(0x49, bytes[1]);
+            Assert.Equal(1u, TiffTestHelpers.ReadFirstIfdTags(bytes)[259].Value); // Compression: 1 (Uncompressed)
         }
+    }
+
+    [Fact]
+    public async Task ProductionSet_WithTiffRealismAndSameSeed_EmitsIdenticalPageImages()
+    {
+        var runs = new List<List<(string RelativePath, string Hash)>>();
+        foreach (var run in new[] { "run-a", "run-b" })
+        {
+            var request = this.CreateTestRequest(count: 3, fileType: "tiff", seed: 42);
+            request.Output = request.Output with { OutputPath = Path.Combine(this.testOutputPath, run) };
+            request.Tiff = new Config.TiffConfig { PageRange = (1, 5), RealismMode = "group4" };
+            var result = await ProductionSetGenerator.GenerateAsync(request);
+
+            var imagesRoot = Path.Combine(result.ProductionPath, "IMAGES");
+            var images = Directory.GetFiles(imagesRoot, "*.tif", SearchOption.AllDirectories)
+                .OrderBy(path => path, StringComparer.Ordinal)
+                .Select(path => (
+                    RelativePath: Path.GetRelativePath(imagesRoot, path),
+                    Hash: Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(path)))))
+                .ToList();
+            Assert.NotEmpty(images);
+            runs.Add(images);
+        }
+
+        Assert.Equal(runs[0], runs[1]);
     }
 }
 

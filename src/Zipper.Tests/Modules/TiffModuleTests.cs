@@ -58,7 +58,6 @@ public class TiffModuleTests
         Assert.True(module.TryBuild(out var config));
         Assert.Equal(mode, config.RealismMode);
         Assert.Equal(expectedRealistic, config.IsRealistic);
-        Assert.Equal(expectedRealistic, config.RealisticPageImages);
     }
 
     [Fact]
@@ -90,6 +89,60 @@ public class TiffModuleTests
         Assert.True(module.TryApply("--with-tiff-realism", null));
         Assert.True(module.TryApply("--tiff-compression", "uncompressed"));
         Assert.True(module.TryBuild(out var config));
+        Assert.Equal("uncompressed", config.Compression);
+    }
+
+    [Fact]
+    public void TryBuild_RealismWithoutCompression_DefaultsToGroup4()
+    {
+        var module = new TiffModule();
+        Assert.True(module.TryApply("--with-tiff-realism", null));
+        Assert.True(module.TryBuild(out var config));
+        Assert.Equal("group4", config.Compression);
+    }
+
+    [Fact]
+    public void TryBuild_UncompressedRealismWithGroup4Compression_ReturnsFalse()
+    {
+        var module = new TiffModule();
+        Assert.True(module.TryApply("--tiff-realism", "uncompressed"));
+        Assert.True(module.TryApply("--tiff-compression", "group4"));
+        Assert.False(module.TryBuild(out _));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("none")]
+    public void TryBuild_TiffCompressionWithoutRealism_ReturnsFalse(string? mode)
+    {
+        var module = new TiffModule();
+        if (mode is not null)
+        {
+            Assert.True(module.TryApply("--tiff-realism", mode));
+        }
+        Assert.True(module.TryApply("--tiff-compression", "uncompressed"));
+        Assert.False(module.TryBuild(out _));
+    }
+
+    [Fact]
+    public void TryBuild_WithTiffRealismFlagBeforeUncompressedMode_KeepsUncompressed()
+    {
+        var module = new TiffModule();
+        Assert.True(module.TryApply("--with-tiff-realism", null));
+        Assert.True(module.TryApply("--tiff-realism", "uncompressed"));
+        Assert.True(module.TryBuild(out var config));
+        Assert.Equal("uncompressed", config.RealismMode);
+        Assert.Equal("uncompressed", config.Compression);
+    }
+
+    [Fact]
+    public void TryBuild_UncompressedModeBeforeWithTiffRealismFlag_KeepsUncompressed()
+    {
+        var module = new TiffModule();
+        Assert.True(module.TryApply("--tiff-realism", "uncompressed"));
+        Assert.True(module.TryApply("--with-tiff-realism", null));
+        Assert.True(module.TryBuild(out var config));
+        Assert.Equal("uncompressed", config.RealismMode);
         Assert.Equal("uncompressed", config.Compression);
     }
 

@@ -443,6 +443,20 @@ else
     pass "Invalid --tiff-realism mode correctly failed validation"
 fi
 
+print_info "Test: --tiff-compression without realism fails validation"
+if zipper --type tiff --count 2 --tiff-compression uncompressed --output-path "$TEST_OUTPUT_DIR/tiff-compression-no-realism" > /dev/null 2>&1; then
+    fail "--tiff-compression without realism should have failed validation"
+else
+    pass "--tiff-compression without realism correctly failed validation"
+fi
+
+print_info "Test: --tiff-realism uncompressed with --tiff-compression group4 fails validation"
+if zipper --type tiff --count 2 --tiff-realism uncompressed --tiff-compression group4 --output-path "$TEST_OUTPUT_DIR/tiff-compression-conflict" > /dev/null 2>&1; then
+    fail "Conflicting --tiff-realism uncompressed and --tiff-compression group4 should have failed validation"
+else
+    pass "Conflicting --tiff-realism uncompressed and --tiff-compression group4 correctly failed validation"
+fi
+
 # --- Summary ---
 
 echo ""

@@ -1,8 +1,8 @@
 namespace Zipper;
 
 /// <summary>
-/// Generates TIFF files for legal Native File testing
-/// Note: Currently generates single-page TIFF files with page count metadata.
+/// Generates TIFF files for legal Native File testing: the precomputed placeholder by default, or
+/// realistic bitonal page images with chained IFDs when TIFF Realism is enabled (REQ-238).
 /// </summary>
 internal static class TiffMultiPageGenerator
 {

@@ -49,7 +49,8 @@ public sealed class TiffModule : CliModule
 
             case "--with-tiff-realism":
             case "--realistic-tiff":
-                _realismMode = "standard";
+                // An explicit --tiff-realism wins regardless of flag order.
+                _realismMode ??= "standard";
                 return true;
 
             case "--tiff-compression":
@@ -78,6 +79,20 @@ public sealed class TiffModule : CliModule
         if (!string.IsNullOrEmpty(_pageRange) && TiffMultiPageGenerator.ParsePageRange(_pageRange!) is null)
         {
             Console.Error.WriteLine("Error: Invalid TIFF pages range. Use format: <min>-<max> (e.g., 1-20).");
+            config = default!;
+            return false;
+        }
+
+        if (_compression is not null && _realismMode is (null or "none"))
+        {
+            Console.Error.WriteLine("Error: --tiff-compression requires --tiff-realism or --with-tiff-realism.");
+            config = default!;
+            return false;
+        }
+
+        if (_realismMode == "uncompressed" && _compression == "group4")
+        {
+            Console.Error.WriteLine("Error: --tiff-realism uncompressed conflicts with --tiff-compression group4.");
             config = default!;
             return false;
         }

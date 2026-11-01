@@ -13,6 +13,11 @@ internal static class TiffRenderer
     public const int DefaultHeight = 3300;
     public const int DefaultDpi = 300;
 
+    private const int IfdEntryCount = 16;
+
+    // Image File Directory: 2-byte entry count + entries * 12 bytes + 4-byte next-IFD offset
+    private const int IfdSize = 2 + (IfdEntryCount * 12) + 4;
+
     private static readonly byte[] SoftwareBytes = Encoding.ASCII.GetBytes("Zipper\0");
 
     /// <summary>
@@ -20,11 +25,7 @@ internal static class TiffRenderer
     /// </summary>
     public static byte[] RenderPage(string? batesNumber, int pageIndex, int pageCount, TiffConfig? tiffConfig)
     {
-        bool useGroup4 = tiffConfig is null || !string.Equals(tiffConfig.Compression, "uncompressed", StringComparison.OrdinalIgnoreCase);
-        if (string.Equals(tiffConfig?.RealismMode, "uncompressed", StringComparison.OrdinalIgnoreCase))
-        {
-            useGroup4 = false;
-        }
+        bool useGroup4 = UseGroup4(tiffConfig);
 
         var raster = CreatePageRaster(batesNumber, DefaultWidth, DefaultHeight);
         var stripData = useGroup4
@@ -39,11 +40,7 @@ internal static class TiffRenderer
     /// </summary>
     public static byte[] RenderMultiPage(int pageCount, string? baseBates, TiffConfig? tiffConfig)
     {
-        bool useGroup4 = tiffConfig is null || !string.Equals(tiffConfig.Compression, "uncompressed", StringComparison.OrdinalIgnoreCase);
-        if (string.Equals(tiffConfig?.RealismMode, "uncompressed", StringComparison.OrdinalIgnoreCase))
-        {
-            useGroup4 = false;
-        }
+        bool useGroup4 = UseGroup4(tiffConfig);
 
         var pages = new List<(byte[] StripData, int PageIndex, int PageCount, bool IsGroup4)>(pageCount);
         for (int p = 1; p <= pageCount; p++)
@@ -62,6 +59,13 @@ internal static class TiffRenderer
     }
 
     /// <summary>
+    /// Group 4 unless the config asks for uncompressed strips. <see cref="TiffConfig.Compression"/> is the
+    /// only compression source; the module resolves --tiff-realism uncompressed into it.
+    /// </summary>
+    private static bool UseGroup4(TiffConfig? tiffConfig)
+        => tiffConfig is null || !string.Equals(tiffConfig.Compression, "uncompressed", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Creates a 1-bit monochrome raster (min-is-white: 0 = white, 1 = black)
     /// with the Bates endorsement text burned into the bottom-right margin.
     /// </summary>
@@ -72,10 +76,14 @@ internal static class TiffRenderer
 
         if (!string.IsNullOrEmpty(batesNumber))
         {
-            const int scale = 5;
+            const int maxScale = 5;
+            const int margin = 150; // 0.5 inch margin at 300 DPI
+
+            // Shrink the glyphs for labels too wide for the band at full size, so no character is clipped
+            // and consecutive page labels keep distinct endorsements. Default-length labels keep maxScale.
+            int scale = Math.Clamp((width - (2 * margin)) / (batesNumber.Length * 6), 1, maxScale);
             int textWidth = batesNumber.Length * 6 * scale;
             int textHeight = 7 * scale;
-            const int margin = 150; // 0.5 inch margin at 300 DPI
             int startX = Math.Max(margin, width - margin - textWidth);
             int startY = Math.Max(margin, height - margin - textHeight);
 
@@ -146,8 +154,7 @@ internal static class TiffRenderer
             var (stripData, pageNum, pageTotal, isGroup4) = pages[pageIdx];
             bool isLast = pageIdx == pages.Count - 1;
 
-            // IFD structure: 2 bytes count + 16 entries * 12 bytes + 4 bytes nextIfdOffset = 198 bytes
-            uint extraDataOffset = currentIfdOffset + 198;
+            uint extraDataOffset = currentIfdOffset + IfdSize;
             uint xResOffset = extraDataOffset;
             uint yResOffset = extraDataOffset + 8;
             uint swOffset = extraDataOffset + 16;
@@ -163,9 +170,8 @@ internal static class TiffRenderer
                 nextIfdOffset++;
             }
 
-            // 16 Directory entries sorted in strictly ascending tag order
-            ushort entryCount = 16;
-            bw.Write(entryCount);
+            // Directory entries sorted in strictly ascending tag order
+            bw.Write((ushort)IfdEntryCount);
 
             WriteEntry(bw, 254, 4, 1, 0);                               // NewSubfileType: 0
             WriteEntry(bw, 256, 4, 1, (uint)width);                     // ImageWidth
@@ -628,7 +634,7 @@ internal static class TiffRenderer
         (3, 0x0002), // 1
         (2, 0x0003), // 2
         (2, 0x0002), // 3
-        (3, 0x0001), // 4
+        (3, 0x0003), // 4
         (4, 0x0003), // 5
         (4, 0x0002), // 6
         (5, 0x0003), // 7
@@ -719,7 +725,7 @@ internal static class TiffRenderer
         (9, 0x0099), // 1536
         (9, 0x009A), // 1600
         (6, 0x0018), // 1664
-        (6, 0x0019), // 1728
+        (9, 0x009B), // 1728
         (11, 0x0008), // 1792
         (11, 0x000C), // 1856
         (11, 0x000D), // 1920
@@ -747,24 +753,24 @@ internal static class TiffRenderer
         (12, 0x0035), // 448
         (13, 0x006C), // 512
         (13, 0x006D), // 576
-        (13, 0x0031), // 640
-        (13, 0x0032), // 704
-        (13, 0x0026), // 768
-        (13, 0x0027), // 832
-        (13, 0x002A), // 896
-        (13, 0x002B), // 960
-        (13, 0x002C), // 1024
-        (13, 0x002D), // 1088
-        (13, 0x0034), // 1152
-        (13, 0x0035), // 1216
-        (13, 0x0038), // 1280
-        (13, 0x0039), // 1344
-        (13, 0x003A), // 1408
-        (13, 0x003B), // 1472
-        (13, 0x0025), // 1536
-        (13, 0x0028), // 1600
-        (13, 0x0029), // 1664
-        (13, 0x002A), // 1728
+        (13, 0x004A), // 640
+        (13, 0x004B), // 704
+        (13, 0x004C), // 768
+        (13, 0x004D), // 832
+        (13, 0x0072), // 896
+        (13, 0x0073), // 960
+        (13, 0x0074), // 1024
+        (13, 0x0075), // 1088
+        (13, 0x0076), // 1152
+        (13, 0x0077), // 1216
+        (13, 0x0052), // 1280
+        (13, 0x0053), // 1344
+        (13, 0x0054), // 1408
+        (13, 0x0055), // 1472
+        (13, 0x005A), // 1536
+        (13, 0x005B), // 1600
+        (13, 0x0064), // 1664
+        (13, 0x0065), // 1728
         (11, 0x0008), // 1792
         (11, 0x000C), // 1856
         (11, 0x000D), // 1920

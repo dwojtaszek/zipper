@@ -1,4 +1,5 @@
 using Xunit;
+using static Zipper.Tests.TestHelpers.TiffTestHelpers;
 
 namespace Zipper.Tests;
 
@@ -161,9 +162,10 @@ public class TiffMultiPageGeneratorTests
     [Fact]
     public void GeneratePage_WithDistinctBatesNumbers_ProducesDistinctImages()
     {
+        // Page index is held constant so only the endorsement Bates number differs between the images.
         var config = new Config.TiffConfig { RealismMode = "group4" };
         var page1 = TiffMultiPageGenerator.GeneratePage("PROD00000001_001", 1, 2, config);
-        var page2 = TiffMultiPageGenerator.GeneratePage("PROD00000001_002", 2, 2, config);
+        var page2 = TiffMultiPageGenerator.GeneratePage("PROD00000001_002", 1, 2, config);
 
         Assert.NotEqual(page1, page2);
     }
@@ -218,7 +220,7 @@ public class TiffMultiPageGeneratorTests
     [Fact]
     public void GeneratePage_WithUncompressedOption_EmitsCompressionOne()
     {
-        var config = new Config.TiffConfig { RealismMode = "uncompressed" };
+        var config = new Config.TiffConfig { RealismMode = "standard", Compression = "uncompressed" };
         var result = TiffMultiPageGenerator.GeneratePage("PROD00000001", 1, 1, config);
 
         var tags = ReadFirstIfdTags(result);
@@ -237,13 +239,11 @@ public class TiffMultiPageGeneratorTests
         Assert.Equal(3, CountTiffPages(result));
     }
 
-    [Fact]
+    [SkippableFact]
     public void GeneratePage_LibtiffVerification_DecompressesWithoutErrors()
     {
-        if (!File.Exists("/usr/bin/tiffinfo"))
-        {
-            return;
-        }
+        var tiffinfo = FindToolOnPath("tiffinfo");
+        Skip.If(tiffinfo is null, "libtiff tiffinfo is not installed");
 
         var config = new Config.TiffConfig { RealismMode = "group4" };
         var result = TiffMultiPageGenerator.GeneratePage("TEST-BATES-001_001", 1, 1, config);
@@ -252,20 +252,11 @@ public class TiffMultiPageGeneratorTests
         try
         {
             File.WriteAllBytes(tempPath, result);
-            var psi = new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = "/usr/bin/tiffinfo",
-                Arguments = $"-d {tempPath}",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-            };
-            using var proc = System.Diagnostics.Process.Start(psi)!;
-            var stdout = proc.StandardOutput.ReadToEnd();
-            var stderr = proc.StandardError.ReadToEnd();
-            proc.WaitForExit();
 
-            Assert.Equal(0, proc.ExitCode);
+            // -D reads the strip data so libtiff decodes every row and reports any bad code word on stderr.
+            var (exitCode, stdout, stderr) = RunTool(tiffinfo!, "-D", tempPath);
+
+            Assert.Equal(0, exitCode);
             Assert.Contains("Compression Scheme: CCITT Group 4", stdout);
             Assert.Empty(stderr);
         }
@@ -276,64 +267,5 @@ public class TiffMultiPageGeneratorTests
                 File.Delete(tempPath);
             }
         }
-    }
-
-    private static Dictionary<ushort, (ushort Type, uint Count, uint Value)> ReadFirstIfdTags(byte[] tiff)
-    {
-        bool littleEndian = tiff[0] == 0x49 && tiff[1] == 0x49;
-
-        ushort ReadUInt16(int offset) => littleEndian
-            ? (ushort)(tiff[offset] | (tiff[offset + 1] << 8))
-            : (ushort)((tiff[offset] << 8) | tiff[offset + 1]);
-
-        uint ReadUInt32(int offset) => littleEndian
-            ? (uint)(tiff[offset] | (tiff[offset + 1] << 8) | (tiff[offset + 2] << 16) | (tiff[offset + 3] << 24))
-            : ((uint)tiff[offset] << 24) | ((uint)tiff[offset + 1] << 16) | ((uint)tiff[offset + 2] << 8) | tiff[offset + 3];
-
-        var dict = new Dictionary<ushort, (ushort Type, uint Count, uint Value)>();
-        uint ifdOffset = ReadUInt32(4);
-        int entryCount = ReadUInt16((int)ifdOffset);
-        int current = (int)ifdOffset + 2;
-
-        for (int i = 0; i < entryCount; i++)
-        {
-            ushort tag = ReadUInt16(current);
-            ushort type = ReadUInt16(current + 2);
-            uint count = ReadUInt32(current + 4);
-            uint value = ReadUInt32(current + 8);
-            dict[tag] = (type, count, value);
-            current += 12;
-        }
-
-        return dict;
-    }
-
-    /// <summary>
-    /// Walks a TIFF's Image File Directory chain and counts its pages, reading offsets in the
-    /// endianness declared by the magic bytes. A cycle guard bounds malformed inputs.
-    /// </summary>
-    private static int CountTiffPages(byte[] tiff)
-    {
-        bool littleEndian = tiff[0] == 0x49 && tiff[1] == 0x49;
-
-        ushort ReadUInt16(int offset) => littleEndian
-            ? (ushort)(tiff[offset] | (tiff[offset + 1] << 8))
-            : (ushort)((tiff[offset] << 8) | tiff[offset + 1]);
-
-        uint ReadUInt32(int offset) => littleEndian
-            ? (uint)(tiff[offset] | (tiff[offset + 1] << 8) | (tiff[offset + 2] << 16) | (tiff[offset + 3] << 24))
-            : ((uint)tiff[offset] << 24) | ((uint)tiff[offset + 1] << 16) | ((uint)tiff[offset + 2] << 8) | tiff[offset + 3];
-
-        int pages = 0;
-        uint nextIfdOffset = ReadUInt32(4);
-        while (nextIfdOffset != 0)
-        {
-            int entryCount = ReadUInt16((int)nextIfdOffset);
-            nextIfdOffset = ReadUInt32((int)nextIfdOffset + 2 + (12 * entryCount));
-            pages++;
-            Assert.InRange(pages, 1, 1000); // Bound the walk if the IFD chain is cyclic.
-        }
-
-        return pages;
     }
 }

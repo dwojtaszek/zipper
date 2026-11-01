@@ -857,5 +857,13 @@ REQ-238	unit	TiffModuleTests.TryBuild_WithTiffRealism_SetsConfig	TiffModule pars
 REQ-238	unit	ProductionSetTests.ProductionSet_WithTiffRealism_GeneratesDistinctPageImagesWithBates	Production Set with realism emits distinct page images with per-page Bates
 REQ-238	unit	ProductionSetTests.ProductionSet_WithoutTiffRealism_PreservesPlaceholderBytes	Production Set without realism preserves byte-identical placeholder bytes
 REQ-238	unit	ProductionSetTests.ProductionSet_WithTiffRealismUncompressed_EmitsValidUncompressedTiff	Production Set realism supports uncompressed TIFF emission
+REQ-238	unit	TiffRendererTests.CompressGroup4_WhiteRunOf1728_UsesNineBitMakeupCode	Group 4 encoder emits the T.4 white make-up code for 1728-pixel runs
+REQ-238	unit	TiffRendererTests.CompressGroup4_BlackRunOf4_UsesThreeBitTerminatingCode	Group 4 encoder emits the T.4 black terminating code for short runs
+REQ-238	unit	TiffRendererTests.CompressGroup4_BlackRunOf640_UsesBlackMakeupCode	Group 4 encoder emits the T.4 black make-up code for long runs
+REQ-238	unit	TiffRendererTests.CreatePageRaster_WithLongBatesLabel_KeepsEveryCharacterOnPage	Long Bates labels are scaled so no endorsement character is clipped
+REQ-238	unit	TiffRendererTests.GeneratePage_WithLabelLength_DecodesToSamePixelsAsUncompressed	Group 4 endorsements decode to the same pixels as uncompressed output (ImageMagick, skipped when absent)
+REQ-238	unit	TiffModuleTests.TryBuild_UncompressedRealismWithGroup4Compression_ReturnsFalse	TiffModule rejects --tiff-compression group4 with --tiff-realism uncompressed
+REQ-238	unit	TiffModuleTests.TryBuild_TiffCompressionWithoutRealism_ReturnsFalse	TiffModule rejects --tiff-compression without realism enabled
+REQ-238	unit	TiffModuleTests.TryBuild_UncompressedModeBeforeWithTiffRealismFlag_KeepsUncompressed	Realism flags resolve to the same mode regardless of flag order
 REQ-238	e2e	test-cli-coverage-gaps.sh	E2E verification of --with-tiff-realism in Standard and Production Set modes
 REQ-238	e2e	test-cli-coverage-gaps.bat	Windows batch E2E verification of --with-tiff-realism
