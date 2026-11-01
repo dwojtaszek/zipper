@@ -14,6 +14,7 @@ internal static class TiffRenderer
     public const int DefaultDpi = 300;
 
     private const int IfdEntryCount = 16;
+    private const uint FirstIfdOffset = 8;
 
     // Image File Directory: 2-byte entry count + entries * 12 bytes + 4-byte next-IFD offset
     private const int IfdSize = 2 + (IfdEntryCount * 12) + 4;
@@ -35,7 +36,7 @@ internal static class TiffRenderer
         using var ms = new MemoryStream();
         using var bw = new BinaryWriter(ms);
         WriteTiffHeader(bw);
-        WritePage(bw, 8, stripData, pageIndex, pageCount, useGroup4, isLast: true);
+        WritePage(bw, FirstIfdOffset, stripData, pageIndex, pageCount, useGroup4, isLast: true);
         return ms.ToArray();
     }
 
@@ -49,7 +50,7 @@ internal static class TiffRenderer
         using var ms = new MemoryStream();
         using var bw = new BinaryWriter(ms);
         WriteTiffHeader(bw);
-        uint offset = 8;
+        uint offset = FirstIfdOffset;
 
         for (int p = 1; p <= pageCount; p++)
         {
@@ -145,7 +146,7 @@ internal static class TiffRenderer
         bw.Write((byte)'I');
         bw.Write((byte)'I');
         bw.Write((ushort)42);
-        bw.Write((uint)8);
+        bw.Write(FirstIfdOffset);
     }
 
     private static uint WritePage(
@@ -181,7 +182,7 @@ internal static class TiffRenderer
         WriteEntry(bw, 283, 5, 1, yResOffset);                      // YResolution -> 300/1
         WriteEntry(bw, 284, 3, 1, 1);                               // PlanarConfiguration: 1
         WriteEntry(bw, 296, 3, 1, 2);                               // ResolutionUnit: 2 (Inch)
-        WriteEntry(bw, 297, 3, 2, (uint)((pageCount << 16) | (pageIndex - 1))); // PageNumber
+        WriteEntry(bw, 297, 3, 2, (uint)((pageCount << 16) | ((pageIndex - 1) & 0xFFFF))); // PageNumber
         WriteEntry(bw, 305, 2, (uint)SoftwareBytes.Length, swOffset); // Software: "Zipper\0"
 
         bw.Write(nextIfdOffset);
@@ -322,7 +323,7 @@ internal static class TiffRenderer
                 bw.WriteBits(2, 6); // 000010
                 break;
             case -3:
-                bw.WriteBits(2, 7); // 00000010
+                bw.WriteBits(2, 7); // 0000010
                 break;
         }
     }
@@ -378,14 +379,16 @@ internal static class TiffRenderer
     private static int FindB1(byte[] refLine, int a0, int a0Color, int width)
     {
         int start = Math.Max(0, a0 + 1);
+        int prevColor = start == 0 ? 0 : GetBit(refLine, 0, start - 1);
         for (int x = start; x < width; x++)
         {
-            int prevColor = x == 0 ? 0 : GetBit(refLine, 0, x - 1);
             int curColor = GetBit(refLine, 0, x);
             if (curColor != prevColor && curColor != a0Color)
             {
                 return x;
             }
+
+            prevColor = curColor;
         }
 
         return width;

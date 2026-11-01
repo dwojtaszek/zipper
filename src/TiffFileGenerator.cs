@@ -10,10 +10,14 @@ internal sealed class TiffFileGenerator : IFileGenerator
     public bool IsPlaceholderBased => false;
 
     private readonly bool hasPageRange;
+    private readonly BatesSequence? batesSequence;
 
     public TiffFileGenerator(FileGenerationRequest request)
     {
         this.hasPageRange = request.Tiff.PageRange.HasValue;
+        this.batesSequence = request.Tiff.IsRealistic && request.Bates is not null
+            ? BatesSequence.FromConfig(request.Bates)
+            : null;
     }
 
     public GeneratedFileContent Generate(FileWorkItem workItem, FileGenerationRequest request)
@@ -32,7 +36,7 @@ internal sealed class TiffFileGenerator : IFileGenerator
             : 1;
 
         // The endorsement label only feeds realistic emission, so default output never evaluates it.
-        var batesNumber = !request.Tiff.IsRealistic ? null : ResolveEndorsementLabel(workItem, request);
+        var batesNumber = !request.Tiff.IsRealistic ? null : this.ResolveEndorsementLabel(workItem);
 
         return new GeneratedFileContent
         {
@@ -44,15 +48,15 @@ internal sealed class TiffFileGenerator : IFileGenerator
     /// <summary>
     /// Prefers the work item's Bates override, then the configured Bates sequence, then the Control Number.
     /// </summary>
-    private static string? ResolveEndorsementLabel(FileWorkItem workItem, FileGenerationRequest request)
+    private string? ResolveEndorsementLabel(FileWorkItem workItem)
     {
         if (workItem.BatesNumberOverride is not null)
         {
             return workItem.BatesNumberOverride;
         }
 
-        return request.Bates is not null
-            ? BatesSequence.FromConfig(request.Bates).Format(workItem.Index - 1).ToString()
+        return this.batesSequence is not null
+            ? this.batesSequence.Format(workItem.Index - 1).ToString()
             : workItem.ControlNumberOverride;
     }
 }

@@ -191,4 +191,14 @@ public class TiffModuleTests
         var module = new TiffModule();
         Assert.False(module.TryApply("--tiff-compression", "deflate"));
     }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void TryApply_WhitespaceValues_ReturnsFalse(string value)
+    {
+        var module = new TiffModule();
+        Assert.False(module.TryApply("--tiff-realism", value));
+        Assert.False(module.TryApply("--tiff-compression", value));
+    }
 }
