@@ -66,6 +66,34 @@ internal static class ChaosEngineBuilder
             GetDateColumnIndexes(request));
     }
 
+    /// <summary>
+    /// Builds a <see cref="ChaosEngine"/> for email/MIME anomaly generation,
+    /// or returns <c>null</c> when chaos is disabled or email chaos is not targeted.
+    /// </summary>
+    internal static ChaosEngine? BuildForEmail(FileGenerationRequest request, long totalEmails)
+    {
+        if (!request.Chaos.ChaosMode || totalEmails <= 0)
+        {
+            return null;
+        }
+
+        if (ChaosScenarios.GeneratesAdversarialValues(request.Chaos.ChaosScenario)
+            || ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario))
+        {
+            return null;
+        }
+
+        string? resolvedTypes = request.Chaos.ChaosTypes;
+        string? resolvedAmount = request.Chaos.ChaosAmount;
+
+        return new ChaosEngine(
+            totalEmails,
+            resolvedAmount,
+            resolvedTypes,
+            "eml",
+            request.Metadata.Seed);
+    }
+
     private static IReadOnlyCollection<string> GetDateColumnNames(FileGenerationRequest request)
     {
         var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

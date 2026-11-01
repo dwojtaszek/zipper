@@ -20,6 +20,7 @@ internal class ChaosEngine
     private static readonly string[] CsvChaosTypes = ChaosAnomalyTypes.Csv.ToArray();
     private static readonly string[] ConcordanceChaosTypes = ChaosAnomalyTypes.Concordance.ToArray();
     private static readonly string[] EdrmXmlChaosTypes = ChaosAnomalyTypes.EdrmXml.ToArray();
+    private static readonly string[] EmailChaosTypes = ChaosAnomalyTypes.Email.ToArray();
 
     private readonly HashSet<string> enabledTypes;
     private readonly List<ChaosAnomaly> anomalies = new();
@@ -100,6 +101,65 @@ internal class ChaosEngine
             dateColumnNames,
             sourceFilePaths,
             dateColumnIndexes);
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ChaosEngine"/> class for email or other non-delimited artifact types.
+    /// </summary>
+    /// <param name="totalItems">Total number of items (e.g. emails) to sample over.</param>
+    /// <param name="chaosAmount">Amount string: percentage (e.g., "1%") or exact count (e.g., "500").</param>
+    /// <param name="chaosTypes">Comma-separated type filter, null for defaults, or empty string for all types.</param>
+    /// <param name="artifactType">The artifact type being generated (e.g., "eml").</param>
+    /// <param name="seed">Optional random seed for reproducibility.</param>
+    public ChaosEngine(
+        long totalItems,
+        string? chaosAmount,
+        string? chaosTypes,
+        string artifactType,
+        int? seed = null)
+    {
+        this.format = LoadFileFormat.Dat;
+        this.totalLines = totalItems;
+
+#pragma warning disable S2245 // Pseudo-randomness is safe for mock metadata generation
+        Random random = seed.HasValue ? new Random(seed.Value) : new Random();
+#pragma warning restore S2245
+
+        ChaosSampler.ValidateTotalLines(totalItems);
+        this.sampler = new ChaosSampler(totalItems, chaosAmount, random);
+
+        if (string.Equals(artifactType, "eml", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(artifactType, "email", StringComparison.OrdinalIgnoreCase))
+        {
+            this.enabledTypes = ResolveEnabledEmailTypes(chaosTypes);
+            this.applier = new EmailAnomalyApplier(random);
+        }
+        else
+        {
+            this.enabledTypes = ResolveEnabledTypes(LoadFileFormat.Dat, chaosTypes);
+            this.applier = CreateApplier(LoadFileFormat.Dat, random, "|", "\"", "\r\n", null, null, null);
+        }
+    }
+
+    private static HashSet<string> ResolveEnabledEmailTypes(string? chaosTypes)
+    {
+        if (!string.IsNullOrEmpty(chaosTypes))
+        {
+            var resolvedTypes = new HashSet<string>(
+                chaosTypes.Split(',').Select(type => type.Trim().ToLowerInvariant()),
+                StringComparer.OrdinalIgnoreCase);
+
+            if (resolvedTypes.Contains("rfc822-depth"))
+            {
+                resolvedTypes.Remove("rfc822-depth");
+                resolvedTypes.Add("rf822-depth");
+            }
+
+            resolvedTypes.IntersectWith(EmailChaosTypes);
+            return resolvedTypes;
+        }
+
+        return new HashSet<string>(EmailChaosTypes, StringComparer.OrdinalIgnoreCase);
     }
 
     private static HashSet<string> ResolveEnabledTypes(LoadFileFormat format, string? chaosTypes)
@@ -396,6 +456,76 @@ internal class ChaosEngine
         }
 
         return this.applier.GetEncodingAnomaly(lineNumber, nextLineNumber, encoding, this.anomalies);
+    }
+
+    private readonly object lockObj = new();
+
+    /// <summary>
+    /// Applies email/MIME chaos anomalies to an email work item if sampled.
+    /// </summary>
+    public byte[] ApplyEmailChaos(
+        long workItemIndex,
+        byte[] emlBytes,
+        string fileName,
+        string? recordId = null)
+    {
+        if (this.enabledTypes.Count == 0 || this.applier is not EmailAnomalyApplier emailApplier)
+        {
+            return emlBytes;
+        }
+
+        if (!this.ShouldIntercept(workItemIndex))
+        {
+            return emlBytes;
+        }
+
+        lock (this.lockObj)
+        {
+            var typeList = this.enabledTypes.OrderBy(type => type, StringComparer.Ordinal).ToArray();
+            string chosenType = typeList[this.anomalyTypeIndex % typeList.Length];
+            this.anomalyTypeIndex++;
+
+            return emailApplier.ApplyToEmail(
+                emlBytes,
+                fileName,
+                recordId ?? fileName,
+                chosenType,
+                this.anomalies,
+                workItemIndex);
+        }
+    }
+
+    /// <summary>
+    /// Applies email/MIME chaos anomalies to a generated email work item content if sampled.
+    /// </summary>
+    public GeneratedFileContent ApplyEmailChaos(
+        FileWorkItem workItem,
+        GeneratedFileContent generated)
+    {
+        if (this.enabledTypes.Count == 0 || this.applier is not EmailAnomalyApplier)
+        {
+            return generated;
+        }
+
+        byte[] mutatedContent = ApplyEmailChaos(
+            workItem.Index,
+            generated.Content,
+            workItem.FileName,
+            workItem.ControlNumberOverride ?? workItem.FileName);
+
+        if (ReferenceEquals(mutatedContent, generated.Content))
+        {
+            return generated;
+        }
+
+        return new GeneratedFileContent
+        {
+            Content = mutatedContent,
+            Attachment = generated.Attachment,
+            Attachments = generated.Attachments,
+            Email = generated.Email,
+            PageCount = generated.PageCount,
+        };
     }
 
     /// <summary>

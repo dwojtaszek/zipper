@@ -1290,4 +1290,85 @@ public class ChaosEngineTests
 
         Assert.Contains(engine.Anomalies, anomaly => anomaly.ErrorType == "csv-bom");
     }
+
+    [Fact]
+    public void Constructor_EmailTotalItemsExceedsIntMax_ThrowsArgumentOutOfRangeException()
+    {
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => new ChaosEngine(
+            totalItems: (long)int.MaxValue + 1,
+            chaosAmount: "1%",
+            chaosTypes: null,
+            artifactType: "eml",
+            seed: 42));
+
+        Assert.Contains("Chaos Engine does not support load files larger than Int32.MaxValue lines", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EmailChaos_ShouldInterceptAndApplyAnomalies()
+    {
+        var engine = new ChaosEngine(5, "100%", "encoded-word,header-fold", "eml", seed: 42);
+        byte[] emailBytes = Encoding.UTF8.GetBytes("From: a@b.com\r\nTo: c@d.com\r\nSubject: Hello\r\n\r\nBody\r\n");
+
+        for (int i = 1; i <= 5; i++)
+        {
+            var content = new GeneratedFileContent { Content = emailBytes };
+            var item = new FileWorkItem { Index = i, FileName = $"DOC{i:D4}.eml" };
+            var result = engine.ApplyEmailChaos(item, content);
+            Assert.True(result.Content.Length > 0);
+        }
+
+        Assert.Equal(5, engine.Anomalies.Count);
+        Assert.All(engine.Anomalies, a =>
+        {
+            Assert.True(a.ErrorType is "encoded-word" or "header-fold");
+            Assert.NotNull(a.File);
+            Assert.NotNull(a.Location);
+        });
+    }
+
+    [Fact]
+    public void EmailChaos_WhenAmountIsZero_DoesNotMutateAndKeepsOutputIdentical()
+    {
+        var engine = new ChaosEngine(3, "0", "full-chaos", "eml", seed: 42);
+        byte[] emailBytes = Encoding.UTF8.GetBytes("From: a@b.com\r\nTo: c@d.com\r\nSubject: Hello\r\n\r\nBody\r\n");
+
+        for (int i = 1; i <= 3; i++)
+        {
+            var content = new GeneratedFileContent { Content = emailBytes };
+            var item = new FileWorkItem { Index = i, FileName = $"DOC{i:D4}.eml" };
+            var result = engine.ApplyEmailChaos(item, content);
+            Assert.Same(emailBytes, result.Content);
+        }
+
+        Assert.Empty(engine.Anomalies);
+    }
+
+    [Fact]
+    public void EmailChaos_IsDeterministicForSameSeed()
+    {
+        var engine1 = new ChaosEngine(10, "50%", null, "eml", seed: 99);
+        var engine2 = new ChaosEngine(10, "50%", null, "eml", seed: 99);
+        byte[] emailBytes = Encoding.UTF8.GetBytes("From: a@b.com\r\nTo: c@d.com\r\nSubject: Hello\r\n\r\nBody\r\n");
+
+        for (int i = 1; i <= 10; i++)
+        {
+            var c1 = new GeneratedFileContent { Content = (byte[])emailBytes.Clone() };
+            var c2 = new GeneratedFileContent { Content = (byte[])emailBytes.Clone() };
+            var item = new FileWorkItem { Index = i, FileName = $"DOC{i:D4}.eml" };
+
+            var r1 = engine1.ApplyEmailChaos(item, c1);
+            var r2 = engine2.ApplyEmailChaos(item, c2);
+
+            Assert.Equal(r1.Content, r2.Content);
+        }
+
+        Assert.Equal(engine1.Anomalies.Count, engine2.Anomalies.Count);
+        for (int i = 0; i < engine1.Anomalies.Count; i++)
+        {
+            Assert.Equal(engine1.Anomalies[i].ErrorType, engine2.Anomalies[i].ErrorType);
+            Assert.Equal(engine1.Anomalies[i].LineNumber, engine2.Anomalies[i].LineNumber);
+            Assert.Equal(engine1.Anomalies[i].Description, engine2.Anomalies[i].Description);
+        }
+    }
 }

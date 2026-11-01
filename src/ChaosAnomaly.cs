@@ -66,6 +66,12 @@ internal record ChaosAnomaly
     public string Description { get; init; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets an optional location description within the artifact (e.g. "Header: Subject" or "MIME Boundary").
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Location { get; init; }
+
+    /// <summary>
     /// Gets or sets an optional peer reference identifying the corresponding coordinated anomaly
     /// in the companion load file.
     /// </summary>

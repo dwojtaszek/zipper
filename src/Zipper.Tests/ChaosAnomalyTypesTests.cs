@@ -106,4 +106,24 @@ public class ChaosAnomalyTypesTests
         var types = ChaosAnomalyTypes.ForFormat(LoadFileFormat.EdrmXml);
         Assert.Equal(ChaosAnomalyTypes.EdrmXml, types);
     }
+
+    [Fact]
+    public void Email_ContainsExpectedTypes()
+    {
+        Assert.Contains("mime-boundary", ChaosAnomalyTypes.Email);
+        Assert.Contains("encoded-word", ChaosAnomalyTypes.Email);
+        Assert.Contains("header-fold", ChaosAnomalyTypes.Email);
+        Assert.Contains("rf822-depth", ChaosAnomalyTypes.Email);
+        Assert.Equal(4, ChaosAnomalyTypes.Email.Count);
+    }
+
+    [Theory]
+    [InlineData("eml")]
+    [InlineData("email")]
+    [InlineData("EML")]
+    public void ForFormat_String_ReturnsEmailTypes(string format)
+    {
+        var types = ChaosAnomalyTypes.ForFormat(format);
+        Assert.Equal(ChaosAnomalyTypes.Email, types);
+    }
 }

@@ -81,12 +81,13 @@ public sealed class ChaosModule : CliModule
         out ChaosConfig config,
         DelimiterConfig? delimiters = null,
         string? encoding = null,
-        bool productionSet = false)
+        bool productionSet = false,
+        bool hasEml = false)
     {
-        if (!this.TryValidateMode(loadfileOnly, productionSet)
+        if (!this.TryValidateMode(loadfileOnly, productionSet, hasEml)
             || !this.TryValidateScenario(formats, delimiters, encoding)
             || !this.TryValidateAmount()
-            || !this.TryNormalizeChaosTypes(formats, out var normalizedChaosTypes))
+            || !this.TryNormalizeChaosTypes(formats, hasEml, out var normalizedChaosTypes))
         {
             config = default!;
             return false;
@@ -102,19 +103,19 @@ public sealed class ChaosModule : CliModule
         return true;
     }
 
-    private bool TryValidateMode(bool loadfileOnly, bool productionSet)
+    private bool TryValidateMode(bool loadfileOnly, bool productionSet, bool hasEml)
     {
         if (this._mode)
         {
-            if (!loadfileOnly && !productionSet)
+            if (!loadfileOnly && !productionSet && !hasEml)
             {
-                Console.Error.WriteLine("Error: --chaos-mode requires --loadfile-only or --production-set.");
+                Console.Error.WriteLine("Error: --chaos-mode requires --loadfile-only, --production-set, or email (.eml) generation.");
                 return false;
             }
 
-            if (!loadfileOnly && !ChaosScenarios.IsCrossFormat(this._scenario))
+            if (!loadfileOnly && !hasEml && !ChaosScenarios.IsCrossFormat(this._scenario))
             {
-                Console.Error.WriteLine("Error: --chaos-mode with --production-set requires a cross-format chaos scenario ('cross-format-desync' or 'broken-families').");
+                Console.Error.WriteLine("Error: --chaos-mode with --production-set requires a cross-format chaos scenario ('cross-format-desync' or 'broken-families') or email (.eml) generation.");
                 return false;
             }
 
@@ -208,6 +209,7 @@ public sealed class ChaosModule : CliModule
 
     private bool TryNormalizeChaosTypes(
         IReadOnlyList<LoadFileFormat> formats,
+        bool hasEml,
         out string? normalizedChaosTypes)
     {
         // Defaults to the raw value so an unset/unparseable input is never silently widened.
@@ -219,6 +221,11 @@ public sealed class ChaosModule : CliModule
 
         // Build union of valid types for all formats.
         var validTypesUnion = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (hasEml)
+        {
+            validTypesUnion.UnionWith(ChaosAnomalyTypes.Email);
+        }
+
         if (formats is { Count: > 0 })
         {
             foreach (var format in formats)
@@ -235,13 +242,17 @@ public sealed class ChaosModule : CliModule
         foreach (var type in this._types.Split(','))
         {
             var trimmed = type.Trim();
-            if (!validTypesUnion.Contains(trimmed))
+            var effectiveType = string.Equals(trimmed, "rfc822-depth", StringComparison.OrdinalIgnoreCase)
+                ? "rf822-depth"
+                : trimmed;
+
+            if (!validTypesUnion.Contains(effectiveType))
             {
                 Console.Error.WriteLine($"Error: Invalid chaos type '{trimmed}'. Valid types for selected formats: {string.Join(", ", validTypesUnion.OrderBy(value => value))}");
                 return false;
             }
 
-            normalized.Add(trimmed);
+            normalized.Add(effectiveType);
         }
 
         // Store the trimmed names that were actually validated so downstream consumers

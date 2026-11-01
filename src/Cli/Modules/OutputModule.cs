@@ -130,6 +130,28 @@ public sealed class OutputModule : CliModule
     // Sibling-channel + test-facing raw state. CrossCuttingRules and other modules read these getters.
     public string? FileType => _fileType;
     public string? FileTypes => _fileTypes;
+
+    internal bool HasFileType(string type)
+    {
+        if (string.Equals(_fileType, type, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrEmpty(_fileTypes))
+        {
+            return _fileTypes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Any(t =>
+                {
+                    int colon = t.IndexOf(':', StringComparison.Ordinal);
+                    string name = colon >= 0 ? t[..colon] : t;
+                    return string.Equals(name, type, StringComparison.OrdinalIgnoreCase);
+                });
+        }
+
+        return false;
+    }
+
     public long? Count => _count;
 
     /// <summary>The raw --output-path value as typed: the Archive Test workflow resolves

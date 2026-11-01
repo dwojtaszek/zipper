@@ -332,4 +332,41 @@ public class ChaosModuleTests
         Assert.True(config.ChaosMode);
         Assert.Equal(scenario, config.ChaosScenario);
     }
+
+    [Fact]
+    public void TryBuild_StandardMode_WithEmail_AllowsChaosMode()
+    {
+        var module = new ChaosModule();
+        Assert.True(module.TryApply("--chaos-mode", null));
+        Assert.True(module.TryApply("--chaos-types", "mime-boundary,rfc822-depth"));
+
+        Assert.True(module.TryBuild(
+            loadfileOnly: false,
+            formats: new List<LoadFileFormat> { LoadFileFormat.Dat },
+            out var config,
+            productionSet: false,
+            hasEml: true));
+
+        Assert.True(config.ChaosMode);
+        // Note: rfc822-depth alias is normalized to rf822-depth
+        Assert.Equal("mime-boundary,rf822-depth", config.ChaosTypes);
+    }
+
+    [Fact]
+    public void TryBuild_ProductionSet_WithEmail_AllowsChaosMode()
+    {
+        var module = new ChaosModule();
+        Assert.True(module.TryApply("--chaos-mode", null));
+        Assert.True(module.TryApply("--chaos-types", "encoded-word,header-fold"));
+
+        Assert.True(module.TryBuild(
+            loadfileOnly: false,
+            formats: new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt },
+            out var config,
+            productionSet: true,
+            hasEml: true));
+
+        Assert.True(config.ChaosMode);
+        Assert.Equal("encoded-word,header-fold", config.ChaosTypes);
+    }
 }

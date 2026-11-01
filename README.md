@@ -94,6 +94,12 @@ zipper --production-set --type eml --count 1000 --output-path ./family-failures 
     --with-families --attachment-rate 100 --chaos-mode --chaos-scenario broken-families --seed 42
 ```
 
+For email/MIME parser resilience testing, inject MIME boundary mismatches, malformed RFC 2047 encoded-words, illegal header folding, and deep RFC 822 nesting into generated `.eml` files:
+```bash
+zipper --type eml --count 500 --output-path ./email-mime-failures \
+    --chaos-mode --chaos-types mime-boundary,encoded-word,header-fold,rf822-depth --seed 42
+```
+
 #### 7. Generate parser-valid adversarial DAT values
 Exercise DAT parsers with correctly escaped delimiters, the literal `Ã¾` lookalike, a 32,768-character value, and two trailing empty rows:
 ```bash
@@ -224,9 +230,9 @@ All command-line flags recognized by Zipper:
 | `--newline-delim` | ASCII 174 | `ascii:N` or `char:C` | Newline replacement (strict-prefix format) |
 | `--multi-delim` | `;` | `ascii:N` or `char:C` | Multi-value separator |
 | `--nested-delim` | `\` | `ascii:N` or `char:C` | Nested value separator |
-| `--chaos-mode` | `false` | flag | Enable Chaos Engine anomaly injection or `adversarial-values` generation |
+| `--chaos-mode` | `false` | flag | Enable Chaos Engine anomaly injection or `adversarial-values` generation (requires `--loadfile-only`, `--production-set`, or `--type eml` in Standard mode) |
 | `--chaos-amount` | `1%` | exact count `N` or percentage `N%` | Chaos target count/percentage |
-| `--chaos-types` | format defaults | comma-separated list | Filter anomaly types for the selected format: DAT (`mixed-delimiters`, `quotes`, `columns`, `eol`, `encoding`, `path-pointer`, `field-length`, `date-format`, `null-byte`, `trailing-empties`), OPT (`opt-boundary`, `opt-columns`, `opt-pagecount`, `opt-path`, `opt-batesnumber`, `opt-encoding`), CSV (`csv-quote-escape`, `csv-embedded-newline`, `csv-bom`), Concordance (`concordance-delimiter`, `concordance-quote-escape`), or EDRM-XML (`xml-unclosed-tag`, `xml-bad-entity`, `xml-encoding-lie`); the new DAT types are opt-in and `full-chaos` enables all types for the selected format |
+| `--chaos-types` | format defaults | comma-separated list | Filter anomaly types for the selected format/artifact: DAT (`mixed-delimiters`, `quotes`, `columns`, `eol`, `encoding`, `path-pointer`, `field-length`, `date-format`, `null-byte`, `trailing-empties`), OPT (`opt-boundary`, `opt-columns`, `opt-pagecount`, `opt-path`, `opt-batesnumber`, `opt-encoding`), CSV (`csv-quote-escape`, `csv-embedded-newline`, `csv-bom`), Concordance (`concordance-delimiter`, `concordance-quote-escape`), EDRM-XML (`xml-unclosed-tag`, `xml-bad-entity`, `xml-encoding-lie`), or Email (`mime-boundary`, `encoded-word`, `header-fold`, `rf822-depth`); the new DAT types are opt-in and `full-chaos` enables all types for the selected format |
 | `--chaos-scenario` | none | scenario name | Predefined chaos scenario (DAT `adversarial-values` emits valid edge-case values, not anomalies; `cross-format-desync` and `broken-families` coordinate DAT↔OPT consistency anomalies) |
 | `--chaos-list` | `false` | flag | Print available chaos scenarios and exit |
 | `--production-set` | `false` | flag | Structured Production Set output |

@@ -676,7 +676,7 @@ This section clarifies behavior when multiple arguments interact:
 
 ### FR-019: Deliberate Anomaly Injection
 
-- **REQ-094**: A new optional command-line argument `--chaos-mode` shall be introduced. Requires `--loadfile-only` or `--production-set` (when targeting coordinated cross-format scenarios). Supported for the `dat`, `opt`, `csv`, `concordance`, and `edrm-xml` Load File formats, each with its own anomaly catalog, as well as coordinated cross-format scenarios spanning DAT and OPT.
+- **REQ-094**: A new optional command-line argument `--chaos-mode` shall be introduced. Requires `--loadfile-only`, `--production-set` (when targeting coordinated cross-format scenarios or Email File Types), or Standard Mode when generating Email File Types (`--type eml` or `eml` participating in `--types`). Supported for the `dat`, `opt`, `csv`, `concordance`, and `edrm-xml` Load File formats, each with its own anomaly catalog, coordinated cross-format scenarios spanning DAT and OPT, and Email File Types (`eml`) with MIME-level anomalies.
 - **REQ-095**: A new optional argument `--chaos-amount <N|N%>` shall specify the number or percentage of records to corrupt. Requires `--chaos-mode`. Defaults to 1%.
 - **REQ-096**: A new optional argument `--chaos-types <type1,type2,...>` shall filter specific anomaly types. Requires `--chaos-mode`. When not specified, the original DAT types, all existing OPT types except `opt-encoding`, and every type in the selected CSV, Concordance, or EDRM-XML catalog are enabled; the new DAT record-level types are opt-in to preserve existing output. `full-chaos` enables every type for the selected format.
 - **REQ-097**: The following DAT chaos anomaly types shall be supported:
@@ -978,3 +978,18 @@ The encoding suite includes the #1283 policy-sensitive Case Key `encoding-local-
     - When `--mime-realism` is specified without `--type eml` (or `eml` participating in `--types`), a warning shall be written to standard error while execution proceeds.
   - When `--mime-realism` is omitted or disabled:
     - `EmailSerializer` and `EmlFileGenerator` shall preserve 100% byte-identical output parity to legacy runs (Critical Rule 6), retaining single-line bare-ASCII headers, `text/plain` 8-bit bodies, and at most one base64 attachment.
+
+## 26. Email/MIME Chaos Engine Anomaly Types
+
+### FR-033: Email MIME Deliberate Anomaly Injection (`--chaos-mode` with Email File Types)
+
+- **REQ-237**: When `--chaos-mode` is enabled for runs generating Email File Types (`--type eml` or `eml` in `--types`) in Standard Mode or Production Set Mode, the Chaos Engine shall support MIME-level anomaly injection into generated `.eml` files via `EmailAnomalyApplier`:
+  - When `--chaos-types` is specified with email anomaly types, or when omitted on an email generation run with `--chaos-mode`, the supported email anomaly types shall include:
+    - `mime-boundary`: Injects a boundary parameter in `Content-Type` that disagrees with actual body delimiters, or replaces the final closing boundary delimiter (`--{boundary}--` -> `--{boundary}`).
+    - `encoded-word`: Injects malformed RFC 2047 encoded-word sequences (`=?utf-8?B?...?=` with invalid base64 padding, embedded whitespace, or invalid syntax) into headers such as `Subject`.
+    - `header-fold`: Injects illegal folding at non-whitespace positions or bare CR/LF characters into message headers.
+    - `rf822-depth`: Wraps the email body in nested `message/rfc822` MIME parts exceeding common parser depth limits (25 levels deep) deterministically. The alias `rfc822-depth` shall be accepted and normalized to `rf822-depth`.
+  - Sampling of emails to corrupt shall respect `--chaos-amount <N|N%>` and configured `--seed` deterministically via `ChaosSampler`.
+  - Every injected email anomaly shall be audited in `_properties.json` (or Load File audit records) including the EML filename, 1-based line number in EML, affected header or delimiter column, error type, and description.
+  - When `--chaos-mode` is omitted or disabled, email generation shall preserve 100% byte-identical output parity to legacy runs (Critical Rule 6).
+

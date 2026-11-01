@@ -818,3 +818,14 @@ REQ-236	unit	MimeRealismTests.ToEml_WithHeaderFolding_FoldsLongReferencesHeader	
 REQ-236	unit	MimeRealismTests.EmlFileGenerator_WithNestedRfc822AndFullAttachmentRate_PreservesRateSelectedPlaceholder	Nested MIME realism preserves a rate-selected Attachment when multi-attachment is disabled
 REQ-236	e2e	test-cli-coverage-gaps.sh	E2E verifies warnings, standard/full body fidelity, multi-Attachment family records and text sidecars, and MIME parser output
 REQ-236	e2e	test-cli-coverage-gaps.bat	Windows E2E verifies warnings, standard/full body fidelity, multi-Attachment family records and text sidecars, and MIME parser output
+REQ-237	unit	EmailAnomalyApplierTests.ChaosAnomalyTypes_Email_ContainsExpectedFourAnomalyTypes	Email anomaly types catalog verification
+REQ-237	unit	EmailAnomalyApplierTests.Apply_MimeBoundary_InjectsBoundaryMismatchOrMissingClose	MIME boundary anomaly injection verification
+REQ-237	unit	EmailAnomalyApplierTests.Apply_EncodedWord_InjectsMalformedSequence	Encoded-word anomaly injection verification
+REQ-237	unit	EmailAnomalyApplierTests.Apply_HeaderFold_InjectsIllegalFoldingOrBareLfCr	Header-fold anomaly injection verification
+REQ-237	unit	EmailAnomalyApplierTests.Apply_Rfc822Depth_GeneratesDeeplyNestedMessageExceedingCommonLimits	RFC 822 nesting depth anomaly injection verification
+REQ-237	unit	ChaosEngineTests.EmailChaos_ShouldInterceptAndApplyAnomalies	ChaosEngine email anomaly dispatch and audit tracking
+REQ-237	unit	ChaosAndComparisonPropertyTests.EmailAnomalyApplier_ApplyToEmail_ShouldMutateAndAuditAnomaliesDeterministically	Property: EmailAnomalyApplier mutates and audits anomalies deterministically
+REQ-237	unit	ChaosModuleTests.TryBuild_StandardMode_WithEmail_AllowsChaosMode	ChaosModule allows chaos-mode in standard mode with email
+REQ-237	unit	ChaosModuleTests.TryBuild_ProductionSet_WithEmail_AllowsChaosMode	ChaosModule allows chaos-mode in production set mode with email
+REQ-237	e2e	test-cli-coverage-gaps.sh	E2E verification of email chaos mode in standard and production set modes
+REQ-237	e2e	test-cli-coverage-gaps.bat	Windows batch E2E verification of email chaos mode in standard and production set modes

@@ -254,6 +254,7 @@ internal static class LoadFileAuditWriter
                     Column = a.Column,
                     ErrorType = a.ErrorType,
                     Description = a.Description,
+                    Location = a.Location,
                     Peer = a.Peer is not null
                         ? new AuditPeerEntry
                         {
@@ -344,6 +345,9 @@ internal static class LoadFileAuditWriter
         public string ErrorType { get; init; } = string.Empty;
 
         public string Description { get; init; } = string.Empty;
+
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Location { get; init; }
 
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public AuditPeerEntry? Peer { get; init; }

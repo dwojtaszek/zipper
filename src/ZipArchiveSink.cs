@@ -26,7 +26,7 @@ internal class ZipArchiveSink : IArchiveSink
     /// <param name="onItemCommitted">Callback invoked when an item is committed and disposed.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The actual Load File path that was created (or original if included in Archive).</returns>
-    public async Task<string> CreateArchiveAsync(
+    public Task<string> CreateArchiveAsync(
         string zipFilePath,
         string loadFileName,
         string loadFilePath,
@@ -34,6 +34,20 @@ internal class ZipArchiveSink : IArchiveSink
         ChannelReader<FileData> fileDataReader,
         Action<FileData>? onItemCommitted = null,
         CancellationToken cancellationToken = default)
+        => CreateArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, fileDataReader, onItemCommitted, cancellationToken, anomalies: null);
+
+    /// <summary>
+    /// Creates a ZIP archive and streams files into it concurrently, optionally auditing injected anomalies.
+    /// </summary>
+    public async Task<string> CreateArchiveAsync(
+        string zipFilePath,
+        string loadFileName,
+        string loadFilePath,
+        FileGenerationRequest request,
+        ChannelReader<FileData> fileDataReader,
+        Action<FileData>? onItemCommitted,
+        CancellationToken cancellationToken,
+        IReadOnlyList<ChaosAnomaly>? anomalies)
     {
         var archiveStream = this.ArchiveStream;
         if (archiveStream is null)
@@ -108,7 +122,8 @@ internal class ZipArchiveSink : IArchiveSink
                         return (actualLoadFileName, actualLoadFileName + "_properties.json");
                     },
                     openTarget,
-                    CancellationToken.None).ConfigureAwait(false);
+                    CancellationToken.None,
+                    anomalies: anomalies).ConfigureAwait(false);
 
                 return request.Output.IncludeLoadFile
                     ? actualLoadFileTarget

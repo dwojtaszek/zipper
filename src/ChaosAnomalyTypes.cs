@@ -84,6 +84,16 @@ internal static class ChaosAnomalyTypes
     }
 
     /// <summary>
+    /// Email/MIME structural and parsing anomalies injected into generated EML files:
+    /// mismatched boundary strings, malformed RFC 2047 encoded-word sequences,
+    /// illegal header folding / bare CR/LF, and excessive RFC 822 nesting depth.
+    /// </summary>
+    public static readonly IReadOnlyList<string> Email = new[]
+    {
+        "mime-boundary", "encoded-word", "header-fold", "rf822-depth",
+    };
+
+    /// <summary>
     /// Returns the valid anomaly types for the given format.
     /// </summary>
     public static IReadOnlyList<string> ForFormat(LoadFileFormat format) =>
@@ -93,6 +103,20 @@ internal static class ChaosAnomalyTypes
             LoadFileFormat.Csv => Csv,
             LoadFileFormat.Concordance => Concordance,
             LoadFileFormat.EdrmXml => EdrmXml,
+            _ => Dat,
+        };
+
+    /// <summary>
+    /// Returns the valid anomaly types for the given format or artifact name.
+    /// </summary>
+    public static IReadOnlyList<string> ForFormat(string? formatOrType) =>
+        formatOrType?.Trim().ToLowerInvariant() switch
+        {
+            "eml" or "email" or "mime" => Email,
+            "opt" => Opt,
+            "csv" => Csv,
+            "concordance" => Concordance,
+            "edrmxml" or "edrm-xml" or "xml" => EdrmXml,
             _ => Dat,
         };
 }
