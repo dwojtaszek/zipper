@@ -226,6 +226,45 @@ fi
 
 print_success "Test Case 7: Page-suffix width warning passed"
 
+# --- Test Case 8: Page-suffix width warning needs a page label in the output ---
+
+print_info "Test Case 8: Page-suffix width warning needs a page label in the output"
+
+if ! plain_dat_output=$(zipper \
+  --type tiff \
+  --count 1 \
+  --output-path "$TEST_OUTPUT_DIR/test8-plain-dat" \
+  --bates-prefix "CL001" \
+  --bates-digits 12 \
+  --bates-page-suffix \
+  --tiff-pages 1000-1000 \
+  --loadfile-format dat 2>&1); then
+  print_error "Test 8: zipper failed on a plain TIFF DAT run with --tiff-pages 1000"
+fi
+
+if grep -q "Warning: Bates numbers are" <<< "$plain_dat_output"; then
+  print_error "Test 8: plain TIFF DAT run should not warn about a page suffix it never writes"
+fi
+
+if ! realistic_dat_output=$(zipper \
+  --type tiff \
+  --count 1 \
+  --output-path "$TEST_OUTPUT_DIR/test8-realistic-dat" \
+  --bates-prefix "CL001" \
+  --bates-digits 12 \
+  --bates-page-suffix \
+  --tiff-pages 1000-1000 \
+  --loadfile-format dat \
+  --with-tiff-realism 2>&1); then
+  print_error "Test 8: zipper failed on a realistic TIFF DAT run with --tiff-pages 1000"
+fi
+
+if ! grep -q "Warning: Bates numbers are 17 characters including the page suffix" <<< "$realistic_dat_output"; then
+  print_error "Test 8: realistic TIFF endorses page labels, so the page suffix width warning should print"
+fi
+
+print_success "Test Case 8: Page-suffix width warning needs a page label in the output passed"
+
 # --- All Tests Passed ---
 
 print_success "All Bates Numbering E2E tests passed!"

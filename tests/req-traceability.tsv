@@ -895,6 +895,9 @@ REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithPageCountPast999AndPageSuffix
 REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithPageCountAt999AndPageSuffix_KeepsThreeDigitPageOrdinal	Page 999 keeps the three-digit page suffix width
 REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithPageCountPast999WithoutPageSuffix_IgnoresPageOrdinal	Page count does not widen Bates numbers without the page suffix
 REQ-240	unit	PipelineTests.Build_TiffPagesPast999WithPageSuffix_WarnsWithFourDigitPageOrdinal	--tiff-pages 1000 with --bates-page-suffix warns through the CLI build path
+REQ-240	unit	PipelineTests.Build_TiffPagesPast999WithPageSuffixOnDatOnly_PrintsNoPlatformWarningForPlainTiff	Plain TIFF DAT run writes no page labels, so the page suffix width does not warn
+REQ-240	unit	PipelineTests.Build_TiffPagesPast999WithPageSuffixOnDatOnlyRealisticTiff_WarnsWithFourDigitPageOrdinal	Realistic TIFF endorses page labels, so a DAT-only run still warns on the page suffix width
+REQ-240	unit	PipelineTests.Build_ProductionSetTiffPastPage999WithDatFormat_WarnsWithFourDigitPageOrdinal	Production Set always writes OPT, so its page labels warn for the page suffix width even with DAT requested
 REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithCountOverDiscoLimit_ReturnsRangeWarning	DISCO 30,000 Bates number range warning
 REQ-240	unit	BatesModuleTests.WarnPlatformLimits_PrefixOverPlatformLimit_WarnsAndKeepsBuiltConfig	Over-limit prefix warns once the document count is known
 REQ-240	unit	BatesModuleTests.WarnPlatformLimits_RangeOverDiscoLimit_Warns	Over-limit Bates range warns once the document count is known
@@ -915,3 +918,5 @@ REQ-240	unit	PipelineTests.Build_TiffPagesPastMixThatAllocatesTiff_WarnsWithFour
 REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithPageSuffixAndLastNumberWiderThanDigits_AddsSuffixToLastNumberWidth	Page suffix adds to the widest generated number, not to --bates-digits
 REQ-240	e2e	test-bates-numbering.sh	E2E: over-limit Bates prefix warns and still generates
 REQ-240	e2e	test-bates-numbering.bat	Windows batch E2E: over-limit Bates prefix warning
+REQ-240	e2e	test-bates-numbering.sh	E2E: page-suffix width warning needs a page label in the output (plain TIFF DAT run silent, realistic TIFF DAT run warns)
+REQ-240	e2e	test-bates-numbering.bat	Windows batch E2E: same page-suffix width warning cases as the shell script

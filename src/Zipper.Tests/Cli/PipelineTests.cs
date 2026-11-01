@@ -351,6 +351,63 @@ public class PipelineTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void Build_TiffPagesPast999WithPageSuffixOnDatOnly_PrintsNoPlatformWarningForPlainTiff()
+    {
+        // DAT keeps document-level Bates numbers, and a plain TIFF has no page endorsement, so no page label is written.
+        var (ok, modules) = PipelineTestHelper.Parse(new[]
+        {
+            "--type", "tiff", "--count", "1", "--output-path", Directory.GetCurrentDirectory(),
+            "--bates-prefix", "CL001", "--bates-digits", "12", "--bates-page-suffix", "--tiff-pages", "1-1000",
+            "--loadfile-format", "dat",
+        });
+        Assert.True(ok);
+
+        FileGenerationRequest? result = null;
+        var (_, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => result = PipelineTestHelper.Build(modules: modules));
+
+        Assert.NotNull(result);
+        Assert.DoesNotContain("Warning: Bates numbers are", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_TiffPagesPast999WithPageSuffixOnDatOnlyRealisticTiff_WarnsWithFourDigitPageOrdinal()
+    {
+        // A realistic TIFF endorses each page with its _NNN label, so a DAT-only run still reaches page 1000.
+        var (ok, modules) = PipelineTestHelper.Parse(new[]
+        {
+            "--type", "tiff", "--count", "1", "--output-path", Directory.GetCurrentDirectory(),
+            "--bates-prefix", "CL001", "--bates-digits", "12", "--bates-page-suffix", "--tiff-pages", "1-1000",
+            "--loadfile-format", "dat", "--with-tiff-realism",
+        });
+        Assert.True(ok);
+
+        FileGenerationRequest? result = null;
+        var (_, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => result = PipelineTestHelper.Build(modules: modules));
+
+        Assert.NotNull(result);
+        Assert.Contains("Warning: Bates numbers are 17 characters including the page suffix", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_ProductionSetTiffPastPage999WithDatFormat_WarnsWithFourDigitPageOrdinal()
+    {
+        // A Production Set always writes an OPT Load File, so its page labels reach output even when DAT is requested.
+        var (ok, modules) = PipelineTestHelper.Parse(new[]
+        {
+            "--type", "tiff", "--count", "1", "--output-path", Directory.GetCurrentDirectory(), "--production-set",
+            "--bates-prefix", "CL001", "--bates-digits", "12", "--bates-page-suffix", "--tiff-pages", "1-1000",
+            "--loadfile-format", "dat",
+        });
+        Assert.True(ok);
+
+        FileGenerationRequest? result = null;
+        var (_, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => result = PipelineTestHelper.Build(modules: modules));
+
+        Assert.NotNull(result);
+        Assert.Contains("Warning: Bates numbers are 17 characters including the page suffix", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Build_TiffPagesPast999OnPdfWithPageSuffix_PrintsNoPlatformWarning()
     {
         // A PDF run numbers one page per document, so its page suffix stays _001 (four characters).

@@ -265,6 +265,55 @@ if errorlevel 1 (
 
 echo [ SUCCESS ] Test Case 7: Page-suffix width warning passed
 
+:: --- Test Case 8: Page-suffix width warning needs a page label in the output ---
+
+echo [ INFO ] Test Case 8: Page-suffix width warning needs a page label in the output
+
+%ZIPPER_CMD% ^
+  --type tiff ^
+  --count 1 ^
+  --output-path "%TEST_OUTPUT_DIR%\test8-plain-dat" ^
+  --bates-prefix "CL001" ^
+  --bates-digits 12 ^
+  --bates-page-suffix ^
+  --tiff-pages 1000-1000 ^
+  --loadfile-format dat > "%TEST_OUTPUT_DIR%\test8-plain-dat-output.txt" 2>&1
+
+if errorlevel 1 (
+  echo [ ERROR ] Test 8 failed: plain TIFF DAT run with --tiff-pages 1000 must not fail
+  exit /b 1
+)
+
+findstr /C:"Warning: Bates numbers are" "%TEST_OUTPUT_DIR%\test8-plain-dat-output.txt" >nul
+if not errorlevel 1 (
+  echo [ ERROR ] Test 8: plain TIFF DAT run should not warn about a page suffix it never writes
+  exit /b 1
+)
+
+%ZIPPER_CMD% ^
+  --type tiff ^
+  --count 1 ^
+  --output-path "%TEST_OUTPUT_DIR%\test8-realistic-dat" ^
+  --bates-prefix "CL001" ^
+  --bates-digits 12 ^
+  --bates-page-suffix ^
+  --tiff-pages 1000-1000 ^
+  --loadfile-format dat ^
+  --with-tiff-realism > "%TEST_OUTPUT_DIR%\test8-realistic-dat-output.txt" 2>&1
+
+if errorlevel 1 (
+  echo [ ERROR ] Test 8 failed: realistic TIFF DAT run with --tiff-pages 1000 must not fail
+  exit /b 1
+)
+
+findstr /C:"Warning: Bates numbers are 17 characters including the page suffix" "%TEST_OUTPUT_DIR%\test8-realistic-dat-output.txt" >nul
+if errorlevel 1 (
+  echo [ ERROR ] Test 8: realistic TIFF endorses page labels, so the page suffix width warning should print
+  exit /b 1
+)
+
+echo [ SUCCESS ] Test Case 8: Page-suffix width warning needs a page label in the output passed
+
 :: --- All Tests Passed ---
 
 echo [ SUCCESS ] All Bates Numbering E2E tests passed!
