@@ -910,6 +910,8 @@ REQ-240	unit	PipelineTests.Build_WithoutBatesFlags_PrintsNoPlatformWarning	Confi
 REQ-240	unit	PipelineTests.Build_OverLimitBatesWithLaterValidationError_PrintsNoPlatformWarning	A run that fails a later configuration check prints no platform warnings
 REQ-240	unit	PipelineTests.Build_TiffPagesPast999InLoadfileOnlyDat_PrintsNoPlatformWarning	DAT-only Loadfile-Only run has no page-level Bates to widen, so no page suffix warning
 REQ-240	unit	PipelineTests.Build_TiffPagesPast999InSourceDrivenLoadfileOnlyOpt_WarnsOnlyForTiffOutput	Source-driven Loadfile-Only OPT widens the suffix for TIFF output and keeps one page for PDF
+REQ-240	unit	PipelineTests.Build_TiffPagesPastMixThatAllocatesNoTiff_PrintsNoPlatformWarning	A --types mix whose --count allocates no TIFF document numbers no pages, so no page suffix warning
+REQ-240	unit	PipelineTests.Build_TiffPagesPastMixThatAllocatesTiff_WarnsWithFourDigitPageOrdinal	A --types mix that allocates a TIFF document widens the page suffix past page 999
 REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithPageSuffixAndLastNumberWiderThanDigits_AddsSuffixToLastNumberWidth	Page suffix adds to the widest generated number, not to --bates-digits
 REQ-240	e2e	test-bates-numbering.sh	E2E: over-limit Bates prefix warns and still generates
 REQ-240	e2e	test-bates-numbering.bat	Windows batch E2E: over-limit Bates prefix warning

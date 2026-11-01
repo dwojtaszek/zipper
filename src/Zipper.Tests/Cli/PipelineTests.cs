@@ -370,6 +370,42 @@ public class PipelineTests : WorkingDirectoryTestBase
         Assert.DoesNotContain("Warning: Bates numbers are", stderr, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Build_TiffPagesPastMixThatAllocatesNoTiff_PrintsNoPlatformWarning()
+    {
+        // --types declares TIFF, but a 1:1 mix at --count 1 allocates the only document to PDF, so no TIFF page is numbered.
+        var (ok, modules) = PipelineTestHelper.Parse(new[]
+        {
+            "--types", "pdf:1,tiff:1", "--count", "1", "--output-path", Directory.GetCurrentDirectory(),
+            "--bates-prefix", "CL001", "--bates-digits", "12", "--bates-page-suffix", "--tiff-pages", "1-1000",
+        });
+        Assert.True(ok);
+
+        FileGenerationRequest? result = null;
+        var (_, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => result = PipelineTestHelper.Build(modules: modules));
+
+        Assert.NotNull(result);
+        Assert.DoesNotContain("Warning: Bates numbers are", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_TiffPagesPastMixThatAllocatesTiff_WarnsWithFourDigitPageOrdinal()
+    {
+        // The same mix at --count 2 allocates one TIFF document, which numbers page 1000 and widens the page suffix.
+        var (ok, modules) = PipelineTestHelper.Parse(new[]
+        {
+            "--types", "pdf:1,tiff:1", "--count", "2", "--output-path", Directory.GetCurrentDirectory(),
+            "--bates-prefix", "CL001", "--bates-digits", "12", "--bates-page-suffix", "--tiff-pages", "1-1000",
+        });
+        Assert.True(ok);
+
+        FileGenerationRequest? result = null;
+        var (_, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => result = PipelineTestHelper.Build(modules: modules));
+
+        Assert.NotNull(result);
+        Assert.Contains("Warning: Bates numbers are 17 characters including the page suffix", stderr, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("pdf")]
     [InlineData("tiff")]
