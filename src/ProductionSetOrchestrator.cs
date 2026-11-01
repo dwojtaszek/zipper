@@ -431,9 +431,9 @@ internal static class ProductionSetOrchestrator
             generated.PageCount,
             materializer,
             cancellationToken,
+            request.Bates?.PageSuffix == true,
             plan.BatesNumber,
-            request.Tiff,
-            request.Bates?.PageSuffix == true).ConfigureAwait(false);
+            request.Tiff).ConfigureAwait(false);
 
         // Write redacted image/text files when redacted mode is on
         var (nativePathOverride, redactionReason) = await WriteRedactedDocumentFilesAsync(
@@ -494,9 +494,9 @@ internal static class ProductionSetOrchestrator
         int pageCount,
         IFileMaterializer materializer,
         CancellationToken cancellationToken,
+        bool pageSuffix,
         string? batesNumber = null,
-        Config.TiffConfig? tiffConfig = null,
-        bool pageSuffix = false)
+        Config.TiffConfig? tiffConfig = null)
     {
         // Page suffix mode names one-page documents' images with _001 too, matching their OPT page key (REQ-239).
         if (pageCount > 1 || pageSuffix)

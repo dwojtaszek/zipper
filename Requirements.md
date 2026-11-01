@@ -669,6 +669,8 @@ This section clarifies behavior when multiple arguments interact:
 | `--compare-production-manifests` | **Short-circuit**: bypasses normal file generation, post-generation validation, and generation flag validation (REQ-179); requires `--comparison-mode` and `--comparison-output` |
 | `--production-id` + `--production-set` | **Requires**: `--production-id` cannot be used without `--production-set`; each element must be a Safe Path Segment ≤ 250 UTF-8 bytes (REQ-170) |
 | `--bates-prefix` cap | Maximum 200 UTF-8 bytes per prefix element (REQ-225) |
+| `--bates-page-suffix` + `--bates-prefix` | **Requires**: `--bates-prefix`; the flag takes no value and is off by default (REQ-239) |
+| `--bates-prefix` / `--bates-digits` / `--count` + platform limits | Values beyond the Everlaw prefix (36 characters) or Bates number (16 characters) limit, or a Bates range over 30,000 numbers (DISCO), print a `Warning:` and still generate (REQ-240) |
 
 ---
 
