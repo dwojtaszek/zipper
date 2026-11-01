@@ -45,9 +45,9 @@ internal static class TiffRenderer
         var pages = new List<(byte[] StripData, int PageIndex, int PageCount, bool IsGroup4)>(pageCount);
         for (int p = 1; p <= pageCount; p++)
         {
-            var pageBates = string.IsNullOrEmpty(baseBates)
-                ? null
-                : (pageCount > 1 ? $"{baseBates}_{p:D3}" : baseBates);
+            var pageBates = string.IsNullOrEmpty(baseBates) || pageCount <= 1
+                ? baseBates
+                : $"{baseBates}_{p:D3}";
             var raster = CreatePageRaster(pageBates, DefaultWidth, DefaultHeight);
             var stripData = useGroup4
                 ? CompressGroup4(raster, DefaultWidth, DefaultHeight)
@@ -71,8 +71,7 @@ internal static class TiffRenderer
     /// </summary>
     public static byte[] CreatePageRaster(string? batesNumber, int width, int height)
     {
-        int bytesPerRow = (width + 7) / 8;
-        byte[] raster = new byte[bytesPerRow * height];
+        var bitmap = new BilevelBitmap(width, height);
 
         if (!string.IsNullOrEmpty(batesNumber))
         {
@@ -87,48 +86,46 @@ internal static class TiffRenderer
             int startX = Math.Max(margin, width - margin - textWidth);
             int startY = Math.Max(margin, height - margin - textHeight);
 
-            DrawText(raster, width, height, bytesPerRow, batesNumber, startX, startY, scale);
+            DrawText(bitmap, batesNumber, startX, startY, scale);
         }
 
-        return raster;
+        return bitmap.Pixels;
     }
 
-    private static void DrawText(byte[] raster, int width, int height, int bytesPerRow, string text, int startX, int startY, int scale)
+    private static void DrawText(BilevelBitmap bitmap, string text, int startX, int startY, int scale)
     {
         for (int charIdx = 0; charIdx < text.Length; charIdx++)
         {
-            char ch = text[charIdx];
-            int glyphIndex = ch >= 32 && ch <= 126 ? (ch - 32) * 5 : ('?' - 32) * 5;
-            for (int col = 0; col < 5; col++)
+            DrawGlyph(bitmap, text[charIdx], startX + charIdx * 6 * scale, startY, scale);
+        }
+    }
+
+    private static void DrawGlyph(BilevelBitmap bitmap, char ch, int originX, int originY, int scale)
+    {
+        int glyphIndex = ch >= 32 && ch <= 126 ? (ch - 32) * 5 : ('?' - 32) * 5;
+        for (int col = 0; col < 5; col++)
+        {
+            byte colBits = Font5X7[glyphIndex + col];
+            for (int row = 0; row < 7; row++)
             {
-                byte colBits = Font5X7[glyphIndex + col];
-                for (int row = 0; row < 7; row++)
+                if (((colBits >> row) & 1) != 0)
                 {
-                    if (((colBits >> row) & 1) != 0)
-                    {
-                        for (int dy = 0; dy < scale; dy++)
-                        {
-                            int py = startY + row * scale + dy;
-                            if (py < 0 || py >= height)
-                            {
-                                continue;
-                            }
-
-                            for (int dx = 0; dx < scale; dx++)
-                            {
-                                int px = startX + (charIdx * 6 + col) * scale + dx;
-                                if (px < 0 || px >= width)
-                                {
-                                    continue;
-                                }
-
-                                int byteOffset = py * bytesPerRow + (px >> 3);
-                                int bitOffset = 7 - (px & 7);
-                                raster[byteOffset] |= (byte)(1 << bitOffset);
-                            }
-                        }
-                    }
+                    FillCell(bitmap, originX + col * scale, originY + row * scale, scale);
                 }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Blackens a square cell of scale x scale pixels. Pixels outside the bitmap are skipped.
+    /// </summary>
+    private static void FillCell(BilevelBitmap bitmap, int x, int y, int scale)
+    {
+        for (int dy = 0; dy < scale; dy++)
+        {
+            for (int dx = 0; dx < scale; dx++)
+            {
+                bitmap.SetBlack(x + dx, y + dy);
             }
         }
     }
@@ -158,17 +155,8 @@ internal static class TiffRenderer
             uint xResOffset = extraDataOffset;
             uint yResOffset = extraDataOffset + 8;
             uint swOffset = extraDataOffset + 16;
-            uint stripOffset = swOffset + (uint)SoftwareBytes.Length;
-            if (stripOffset % 2 != 0)
-            {
-                stripOffset++;
-            }
-
-            uint nextIfdOffset = isLast ? 0 : stripOffset + (uint)stripData.Length;
-            if (nextIfdOffset % 2 != 0)
-            {
-                nextIfdOffset++;
-            }
+            uint stripOffset = AlignToWord(swOffset + (uint)SoftwareBytes.Length);
+            uint nextIfdOffset = isLast ? 0 : AlignToWord(stripOffset + (uint)stripData.Length);
 
             // Directory entries sorted in strictly ascending tag order
             bw.Write((ushort)IfdEntryCount);
@@ -199,28 +187,34 @@ internal static class TiffRenderer
             // YResolution: 300 / 1
             bw.Write((uint)DefaultDpi);
             bw.Write((uint)1);
-            // Software
+            // Software, padded so the strip starts at its word-aligned offset
             bw.Write(SoftwareBytes);
-            if ((uint)SoftwareBytes.Length % 2 != 0)
-            {
-                bw.Write((byte)0);
-            }
+            PadTo(bw, stripOffset);
 
-            // Strip data
+            // Strip data, padded up to the next IFD (the last page has none, so nothing is written)
             bw.Write(stripData);
-            if (!isLast && ms.Position < nextIfdOffset)
-            {
-                int pad = (int)(nextIfdOffset - ms.Position);
-                for (int p = 0; p < pad; p++)
-                {
-                    bw.Write((byte)0);
-                }
-            }
+            PadTo(bw, nextIfdOffset);
 
             currentIfdOffset = nextIfdOffset;
         }
 
         return ms.ToArray();
+    }
+
+    /// <summary>
+    /// Rounds an offset up to the next even byte. TIFF requires word-aligned IFD and strip offsets.
+    /// </summary>
+    private static uint AlignToWord(uint offset) => offset % 2 == 0 ? offset : offset + 1;
+
+    /// <summary>
+    /// Writes zero bytes until the stream reaches <paramref name="offset"/>. Does nothing when it is already there.
+    /// </summary>
+    private static void PadTo(BinaryWriter bw, uint offset)
+    {
+        while (bw.BaseStream.Position < offset)
+        {
+            bw.Write((byte)0);
+        }
     }
 
     private static void WriteEntry(BinaryWriter bw, ushort tag, ushort type, uint count, uint valOrOffset)
@@ -270,31 +264,7 @@ internal static class TiffRenderer
                 else if (Math.Abs(a1 - b1) <= 3)
                 {
                     // Vertical mode
-                    int d = a1 - b1;
-                    switch (d)
-                    {
-                        case 0:
-                            bw.WriteBits(1, 1);
-                            break;
-                        case 1:
-                            bw.WriteBits(3, 3); // 011
-                            break;
-                        case 2:
-                            bw.WriteBits(3, 6); // 000011
-                            break;
-                        case 3:
-                            bw.WriteBits(3, 7); // 0000011
-                            break;
-                        case -1:
-                            bw.WriteBits(2, 3); // 010
-                            break;
-                        case -2:
-                            bw.WriteBits(2, 6); // 000010
-                            break;
-                        case -3:
-                            bw.WriteBits(2, 7); // 00000010
-                            break;
-                    }
+                    WriteVerticalCode(bw, a1 - b1);
                     a0 = a1;
                     a0Color = 1 - a0Color; // toggles to a1's color
                 }
@@ -321,6 +291,37 @@ internal static class TiffRenderer
         bw.Flush();
 
         return bw.ToArray();
+    }
+
+    /// <summary>
+    /// Writes the T.6 vertical-mode codeword for a1 - b1 = <paramref name="d"/>, where |d| is at most 3.
+    /// </summary>
+    private static void WriteVerticalCode(BitStreamWriter bw, int d)
+    {
+        switch (d)
+        {
+            case 0:
+                bw.WriteBits(1, 1);
+                break;
+            case 1:
+                bw.WriteBits(3, 3); // 011
+                break;
+            case 2:
+                bw.WriteBits(3, 6); // 000011
+                break;
+            case 3:
+                bw.WriteBits(3, 7); // 0000011
+                break;
+            case -1:
+                bw.WriteBits(2, 3); // 010
+                break;
+            case -2:
+                bw.WriteBits(2, 6); // 000010
+                break;
+            case -3:
+                bw.WriteBits(2, 7); // 00000010
+                break;
+        }
     }
 
     private static int GetBit(byte[] data, int offset, int bitIndex)
@@ -420,6 +421,39 @@ internal static class TiffRenderer
 
         var (termLen, termCode) = term[length];
         bw.WriteBits(termCode, termLen);
+    }
+
+    /// <summary>
+    /// 1-bit min-is-white pixel buffer. Each row is padded to whole bytes.
+    /// </summary>
+    private sealed class BilevelBitmap
+    {
+        private readonly int _width;
+        private readonly int _height;
+        private readonly int _bytesPerRow;
+
+        public BilevelBitmap(int width, int height)
+        {
+            _width = width;
+            _height = height;
+            _bytesPerRow = (width + 7) / 8;
+            Pixels = new byte[_bytesPerRow * height];
+        }
+
+        public byte[] Pixels { get; }
+
+        /// <summary>
+        /// Sets the pixel to black (bit 1). Coordinates outside the bitmap are ignored.
+        /// </summary>
+        public void SetBlack(int x, int y)
+        {
+            if (x < 0 || x >= _width || y < 0 || y >= _height)
+            {
+                return;
+            }
+
+            Pixels[(y * _bytesPerRow) + (x >> 3)] |= (byte)(1 << (7 - (x & 7)));
+        }
     }
 
     private sealed class BitStreamWriter

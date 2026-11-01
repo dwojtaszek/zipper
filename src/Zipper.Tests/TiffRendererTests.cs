@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using Xunit;
 using Zipper.Config;
 using Zipper.Tests.TestHelpers;
@@ -73,6 +74,31 @@ public class TiffRendererTests
         Assert.Equal(PackBits(expected), encoded);
     }
 
+    [Theory]
+    [InlineData(-3, "0000010")]
+    [InlineData(-2, "000010")]
+    [InlineData(-1, "010")]
+    [InlineData(0, "1")]
+    [InlineData(1, "011")]
+    [InlineData(2, "000011")]
+    [InlineData(3, "0000011")]
+    public void CompressGroup4_BlackRunOffsetFromReferenceLine_UsesVerticalModeCode(int offset, string verticalCode)
+    {
+        // Row 0 has a black run at [10, 20). Row 1 starts that run `offset` pixels away, so its first
+        // changing element is coded in vertical mode against the reference line.
+        const int width = 40;
+        var raster = BuildSingleRowRaster(width, blackStart: 10, blackEnd: 20)
+            .Concat(BuildSingleRowRaster(width, blackStart: 10 + offset, blackEnd: 20))
+            .ToArray();
+
+        var encoded = TiffRenderer.CompressGroup4(raster, width, 2);
+
+        // Row 0: horizontal (001), white terminating 10 (00111), black terminating 10 (0000100), V0 (1).
+        // Row 1: the vertical code for the offset, V0 (1) at the end of the black run, V0 (1) at the right edge.
+        var expected = "001" + "00111" + "0000100" + "1" + verticalCode + "1" + "1" + EndOfFacsimileBlock;
+        Assert.Equal(PackBits(expected), encoded);
+    }
+
     [Fact]
     public void CreatePageRaster_WithFourHundredCharacterLabel_KeepsLastCharacterOnPage()
     {
@@ -97,6 +123,86 @@ public class TiffRendererTests
         var page2 = TiffRenderer.CreatePageRaster(prefix + "_002", TiffRenderer.DefaultWidth, TiffRenderer.DefaultHeight);
 
         Assert.NotEqual(page1, page2);
+    }
+
+    [Fact]
+    public void CreatePageRaster_WithNonAsciiCharacter_BurnsQuestionMarkGlyph()
+    {
+        // REQ-238: the endorsement font covers printable ASCII only. Any other character burns as '?'.
+        var questionMark = TiffRenderer.CreatePageRaster("?", TiffRenderer.DefaultWidth, TiffRenderer.DefaultHeight);
+        var blank = TiffRenderer.CreatePageRaster(null, TiffRenderer.DefaultWidth, TiffRenderer.DefaultHeight);
+        var eAcute = TiffRenderer.CreatePageRaster("\u00e9", TiffRenderer.DefaultWidth, TiffRenderer.DefaultHeight);
+
+        Assert.NotEqual(blank, questionMark);
+        Assert.Equal(questionMark, eAcute);
+    }
+
+    [Fact]
+    public void CreatePageRaster_WithAsciiBoundaryCharacters_BurnsFontGlyphs()
+    {
+        // Space (32) is printable but its glyph is empty, so it burns nothing. Tilde (126) is the last
+        // printable glyph and must not fall back to '?'.
+        Assert.Equal(Raster(null), Raster(" "));
+        Assert.NotEqual(Raster("?"), Raster("~"));
+    }
+
+    [Fact]
+    public void CreatePageRaster_WithLabelWiderThanPage_LeavesPaddingBitsWhite()
+    {
+        // REQ-238 documents 400 characters as the unclipped limit. One more character runs past the right edge,
+        // so its pixels must be dropped rather than written into the unused low bits of each row's last byte.
+        const int width = TiffRenderer.DefaultWidth;
+        const int height = TiffRenderer.DefaultHeight;
+        var raster = TiffRenderer.CreatePageRaster(new string('A', 401), width, height);
+
+        int bytesPerRow = (width + 7) / 8;
+        byte paddingMask = (byte)((1 << ((bytesPerRow * 8) - width)) - 1);
+        for (int y = 0; y < height; y++)
+        {
+            Assert.Equal(0, raster[((y + 1) * bytesPerRow) - 1] & paddingMask);
+        }
+    }
+
+    [Fact]
+    public void RenderMultiPage_SinglePageWithBates_EndorsesWithBatesNumberOnly()
+    {
+        // A one-page file carries the Bates number itself. Only multi-page files add the _NNN suffix.
+        var tiff = TiffRenderer.RenderMultiPage(1, "PROD00000001", new TiffConfig { Compression = "uncompressed" });
+
+        Assert.True(ContainsRaster(tiff, Raster("PROD00000001")));
+        Assert.False(ContainsRaster(tiff, Raster("PROD00000001_001")));
+    }
+
+    [Fact]
+    public void RenderMultiPage_MultiplePages_EndorsesEachPageWithPageSuffix()
+    {
+        var tiff = TiffRenderer.RenderMultiPage(2, "PROD", new TiffConfig { Compression = "uncompressed" });
+
+        Assert.True(ContainsRaster(tiff, Raster("PROD_001")));
+        Assert.True(ContainsRaster(tiff, Raster("PROD_002")));
+    }
+
+    [Fact]
+    public void RenderMultiPage_WithoutBatesNumber_LeavesPagesUnendorsed()
+    {
+        // A blank page is all white, so a labelled page would not contain its raster.
+        var tiff = TiffRenderer.RenderMultiPage(2, null, new TiffConfig { Compression = "uncompressed" });
+
+        Assert.True(ContainsRaster(tiff, Raster(null)));
+        Assert.False(ContainsRaster(tiff, Raster("_001")));
+    }
+
+    [Fact]
+    public void RenderMultiPage_UncompressedStrip_StartsAtWordAlignedOffset()
+    {
+        // The Software string is odd-length, so the strip is padded to an even offset before its raster.
+        var raster = Raster("PROD");
+        var tiff = TiffRenderer.RenderMultiPage(1, "PROD", new TiffConfig { Compression = "uncompressed" });
+
+        uint stripOffset = ReadStripOffset(tiff, ifdOffset: 8);
+
+        Assert.Equal(0u, stripOffset % 2);
+        Assert.True(tiff.AsSpan((int)stripOffset, raster.Length).SequenceEqual(raster));
     }
 
     [SkippableTheory]
@@ -135,6 +241,27 @@ public class TiffRendererTests
         {
             Directory.Delete(tempDir, recursive: true);
         }
+    }
+
+    private static byte[] Raster(string? label)
+        => TiffRenderer.CreatePageRaster(label, TiffRenderer.DefaultWidth, TiffRenderer.DefaultHeight);
+
+    private static bool ContainsRaster(byte[] tiff, byte[] raster) => tiff.AsSpan().IndexOf(raster) >= 0;
+
+    /// <summary>Reads the StripOffsets (tag 273) value from the little-endian IFD at <paramref name="ifdOffset"/>.</summary>
+    private static uint ReadStripOffset(byte[] tiff, int ifdOffset)
+    {
+        int entryCount = BinaryPrimitives.ReadUInt16LittleEndian(tiff.AsSpan(ifdOffset));
+        for (int i = 0; i < entryCount; i++)
+        {
+            int entry = ifdOffset + 2 + (i * 12);
+            if (BinaryPrimitives.ReadUInt16LittleEndian(tiff.AsSpan(entry)) == 273)
+            {
+                return BinaryPrimitives.ReadUInt32LittleEndian(tiff.AsSpan(entry + 8));
+            }
+        }
+
+        throw new InvalidDataException("StripOffsets (tag 273) not found.");
     }
 
     private static byte[] BuildSingleRowRaster(int width, int blackStart, int blackEnd)
