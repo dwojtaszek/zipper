@@ -300,6 +300,63 @@ public sealed class CrossFormatAnomalyApplierTests : IDisposable
     }
 
     [Fact]
+    public void Apply_DesyncPagecount_PageSuffixKeyMatchingOnlyDatDocId_ExtendsDocumentBates()
+    {
+        // DAT carries ABC_001 only as a DocId; its Bates number is ABC. The OPT key ABC_001 is the first-page key
+        // of document ABC, so the continuation must extend ABC rather than produce ABC_001_002 (REQ-239).
+        var datLines = new List<string>
+        {
+            JoinDat("DOCID", "BATES_NUMBER", "IMAGE_PATH", "PAGECOUNT", "VOLUME"),
+            JoinDat("ABC_001", "ABC", "IMAGES\\VOL001\\ABC.tif", "1", "VOL001"),
+        };
+        var optLines = new List<string>
+        {
+            "ABC_001,VOL001,IMAGES\\VOL001\\ABC_001.tif,Y,,,1",
+        };
+
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncPagecount,
+            chaosAmount: "1",
+            random: new FirstIndexRandom());
+
+        Assert.Contains(
+            result.OptLines,
+            line => line == "ABC_002,VOL001,IMAGES\\VOL001\\ABC_002.tif,,,,");
+        Assert.DoesNotContain(result.OptLines, line => line.Contains("_001_002", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Apply_DesyncPagecount_PageSuffixKeyBatesHiddenByEarlierDocId_KeepsSuffixKey()
+    {
+        // R2's Bates number is ABC_001, a document Bates number of its own. R1's DocId ABC_001 is indexed first,
+        // so a key lookup alone resolves ABC_001 to R1. The continuation must still extend ABC_001 (REQ-239).
+        var datLines = new List<string>
+        {
+            JoinDat("DOCID", "BATES_NUMBER", "IMAGE_PATH", "PAGECOUNT", "VOLUME"),
+            JoinDat("ABC_001", "ABC", "IMAGES\\VOL001\\ABC.tif", "1", "VOL001"),
+            JoinDat("XYZ", "ABC_001", "IMAGES\\VOL001\\ABC_001.tif", "1", "VOL001"),
+        };
+        var optLines = new List<string>
+        {
+            "ABC_001,VOL001,IMAGES\\VOL001\\ABC_001.tif,Y,,,1",
+        };
+
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncPagecount,
+            chaosAmount: "1",
+            random: new FirstIndexRandom());
+
+        Assert.Contains(
+            result.OptLines,
+            line => line == "ABC_001_002,VOL001,IMAGES\\VOL001\\ABC_001_002.tif,,,,");
+        Assert.DoesNotContain(result.OptLines, line => line.StartsWith("ABC_002,", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Apply_DesyncPagecount_PageSuffixKeyAbsentFromDat_ExtendsDocumentBates()
     {
         // TEST00000002_001 has no DAT record, neither under its own key nor under its base TEST00000002.

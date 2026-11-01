@@ -255,6 +255,7 @@ internal static class CrossFormatAnomalyApplier
 
         var datRecordsByKey = BuildDatRecordIndex(datRecords.OriginalOrder, includeBates: true);
         var datRecordsByDocId = BuildDatRecordIndex(datRecords.OriginalOrder, includeBates: false);
+        var datBatesNumbers = new HashSet<string>(datRecords.OriginalOrder.Select(record => record.Bates), StringComparer.OrdinalIgnoreCase);
         var optDocsByKey = BuildOptDocumentIndex(optDocs);
         var familyCandidates = datRecords.OriginalOrder
             .Where(record => record.IsFamilyCandidate)
@@ -303,6 +304,7 @@ internal static class CrossFormatAnomalyApplier
                     ApplyDesyncPagecount(
                         datRecords,
                         datRecordsByKey,
+                        datBatesNumbers,
                         optDocs,
                         optDocsByKey,
                         targetedRecords,
@@ -693,6 +695,7 @@ internal static class CrossFormatAnomalyApplier
     private static void ApplyDesyncPagecount(
         ActiveDatRecords datRecords,
         IReadOnlyDictionary<string, DatRecordEntry> datRecordsByKey,
+        IReadOnlySet<string> datBatesNumbers,
         List<OptDocEntry> optDocs,
         IReadOnlyDictionary<string, OptDocEntry> optDocsByKey,
         HashSet<DatRecordEntry> targetedRecords,
@@ -756,7 +759,7 @@ internal static class CrossFormatAnomalyApplier
         {
             // Duplicate/add a continuation page row. The continuation extends the document Bates number,
             // not a page-suffixed first-page key (REQ-239).
-            var documentKey = DocumentKeyOf(optDoc.DocKey, datRecordsByKey);
+            var documentKey = DocumentKeyOf(optDoc.DocKey, datBatesNumbers);
             int pageNumber = 2;
             string extraKey = $"{documentKey}_{pageNumber:D3}";
             while (optDocsByKey.ContainsKey(extraKey))
@@ -1543,10 +1546,12 @@ internal static class CrossFormatAnomalyApplier
     }
 
     // Page-suffix mode keys a one-page document's first page as {Bates}_001 (REQ-239). A key that a DAT
-    // record carries is a document Bates number of its own, so it is kept as is.
-    private static string DocumentKeyOf(string optDocKey, IReadOnlyDictionary<string, DatRecordEntry> datRecordsByKey)
+    // record carries as its Bates number is a document Bates number of its own, so it is kept as is. The
+    // check uses the Bates column alone: a DocId such as ABC_001 on a record with Bates ABC still names the
+    // first page of ABC.
+    private static string DocumentKeyOf(string optDocKey, IReadOnlySet<string> datBatesNumbers)
     {
-        if (datRecordsByKey.ContainsKey(optDocKey) || !optDocKey.EndsWith(FirstPageSuffix, StringComparison.OrdinalIgnoreCase))
+        if (!optDocKey.EndsWith(FirstPageSuffix, StringComparison.OrdinalIgnoreCase) || datBatesNumbers.Contains(optDocKey))
         {
             return optDocKey;
         }
