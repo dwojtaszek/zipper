@@ -37,6 +37,11 @@ internal sealed class TiffFileGenerator : IFileGenerator
 
         // The endorsement label only feeds realistic emission, so default output never evaluates it.
         var batesNumber = !request.Tiff.IsRealistic ? null : this.ResolveEndorsementLabel(workItem);
+        if (batesNumber is not null && pageCount == 1 && request.Bates?.PageSuffix == true)
+        {
+            // Multi-page renders label each page with _NNN; a one-page document needs its page labeled too (REQ-239).
+            batesNumber = BatesSequence.FormatPageBates(batesNumber, 1);
+        }
 
         return new GeneratedFileContent
         {

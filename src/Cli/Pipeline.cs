@@ -132,6 +132,20 @@ public static class Pipeline
             return null;
         }
 
+        if (bates is not null)
+        {
+            // Loadfile-Only OPT rows number pages from --tiff-pages for synthetic runs and for source-driven TIFF runs; a source-driven
+            // PDF keeps one page. Standard runs number pages only when a TIFF document is allocated (a --types mix can declare TIFF
+            // while a small --count allocates none) and a page label reaches output: an OPT row or a realistic TIFF endorsement.
+            // Production Set always writes OPT. Other runs have one page per document.
+            var allocatesTiff = output.FileTypePlan is { } typePlan ? typePlan.GetTypeCount("tiff") > 0 : output.HasFileType("tiff");
+            var numbersPages = modules.LoadFile.LoadfileOnly
+                ? resolvedLoadFile.Formats.Contains(LoadFileFormat.Opt) && (sourceRecords is null || output.HasFileType("tiff"))
+                : allocatesTiff && (production.ProductionSet || tiff.IsRealistic || resolvedLoadFile.Formats.Contains(LoadFileFormat.Opt));
+            var pagesPerDocument = numbersPages ? tiff.PageRange?.Max ?? 1 : 1;
+            BatesModule.WarnPlatformLimits(bates, production, output.FileCount, pagesPerDocument);
+        }
+
         return new FileGenerationRequest
         {
             Output = output,

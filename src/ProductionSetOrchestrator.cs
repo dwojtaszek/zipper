@@ -431,6 +431,7 @@ internal static class ProductionSetOrchestrator
             generated.PageCount,
             materializer,
             cancellationToken,
+            request.Bates?.PageSuffix == true,
             plan.BatesNumber,
             request.Tiff).ConfigureAwait(false);
 
@@ -493,10 +494,12 @@ internal static class ProductionSetOrchestrator
         int pageCount,
         IFileMaterializer materializer,
         CancellationToken cancellationToken,
+        bool pageSuffix,
         string? batesNumber = null,
         Config.TiffConfig? tiffConfig = null)
     {
-        if (pageCount > 1)
+        // Page suffix mode names one-page documents' images with _001 too, matching their OPT page key (REQ-239).
+        if (pageCount > 1 || pageSuffix)
         {
             var imageExt = Path.GetExtension(imageRelPath) ?? string.Empty;
             var imagePathWithoutExt = imageRelPath[..^imageExt.Length];
@@ -504,7 +507,7 @@ internal static class ProductionSetOrchestrator
             for (int pageIdx = 1; pageIdx <= pageCount; pageIdx++)
             {
                 var pageImageRelPath = $"{imagePathWithoutExt}_{pageIdx:D3}{imageExt}";
-                var pageBates = batesNumber is not null ? $"{batesNumber}_{pageIdx:D3}" : null;
+                var pageBates = batesNumber is not null ? BatesSequence.FormatPageBates(batesNumber, pageIdx) : null;
                 byte[] content = TiffMultiPageGenerator.GeneratePage(pageBates, pageIdx, pageCount, tiffConfig);
                 await materializer.WriteBytesAsync(Path.Combine(productionPath, pageImageRelPath), content, cancellationToken).ConfigureAwait(false);
             }

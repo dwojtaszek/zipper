@@ -3,7 +3,7 @@ using Zipper.Config;
 
 namespace Zipper.Cli.Modules;
 
-/// <summary>Owns --bates-prefix, --bates-start, --bates-digits: parse, validate, and build BatesNumberConfig.</summary>
+/// <summary>Owns --bates-prefix, --bates-start, --bates-digits, --bates-page-suffix: parse, validate, and build BatesNumberConfig.</summary>
 public sealed class BatesModule : CliModule
 {
     private const int MaxBatesPrefixBytes = 200;
@@ -13,13 +13,19 @@ public sealed class BatesModule : CliModule
     private int? _digits;
     private IReadOnlyList<string>? _prefixes;
     private IReadOnlyList<long>? _starts;
+    private bool _pageSuffix;
 
-    public override IReadOnlyCollection<string> OwnedFlags { get; } = new[] { "--bates-prefix", "--bates-start", "--bates-digits" };
+    public override IReadOnlyCollection<string> OwnedFlags { get; } = new[] { "--bates-prefix", "--bates-start", "--bates-digits", "--bates-page-suffix" };
+
+    public override bool TakesValue(string flag) => flag != "--bates-page-suffix";
 
     public override bool TryApply(string flag, string? value)
     {
         switch (flag)
         {
+            case "--bates-page-suffix":
+                _pageSuffix = true;
+                return true;
             case "--bates-prefix":
                 if (value is null)
                 {
@@ -113,6 +119,13 @@ public sealed class BatesModule : CliModule
             return false;
         }
 
+        if (_pageSuffix && !HasBatesPrefix)
+        {
+            Console.Error.WriteLine("Error: --bates-page-suffix requires --bates-prefix.");
+            config = null;
+            return false;
+        }
+
         if (_prefix is not null || _start is not null || _digits is not null)
         {
             var primaryPrefix = _prefixes is not null && _prefixes.Count > 0 ? _prefixes[0] : (_prefix ?? "DOC");
@@ -123,6 +136,7 @@ public sealed class BatesModule : CliModule
                 Digits = _digits ?? 8,
                 Prefixes = _prefixes,
                 Starts = _starts,
+                PageSuffix = _pageSuffix,
             };
             if (!BatesSequence.TryCreate(built, out _, out var error))
             {
@@ -138,6 +152,23 @@ public sealed class BatesModule : CliModule
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Prints the advisory platform limit warnings (REQ-240) for a built Bates configuration. Call it once the
+    /// Output count is known, so a source-driven run is checked against its Source Record count. Pass the
+    /// largest page count a document can have (the --tiff-pages maximum) so the page suffix width is checked.
+    /// </summary>
+    public static void WarnPlatformLimits(BatesNumberConfig config, ProductionConfig production, long documentCount, int maxPagesPerDocument = 1)
+    {
+        ArgumentNullException.ThrowIfNull(production);
+
+        // Only a Production Set generates its rolling sets; any other run numbers one sequence.
+        var rollingCount = production.ProductionSet ? production.RollingCount : 1;
+        foreach (var warning in BatesPlatformLimits.Evaluate(config, documentCount, rollingCount, production.RollingBatesMode, maxPagesPerDocument))
+        {
+            Console.Error.WriteLine($"Warning: {warning}");
+        }
     }
 
     private bool ValidateRollingBates(int rollingCount, string? rollingBatesMode, long? count)

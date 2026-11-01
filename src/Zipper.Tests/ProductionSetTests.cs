@@ -96,6 +96,42 @@ public class ProductionSetTests : WorkingDirectoryTestBase
         Assert.Equal("pdf", request.Output.FileType);
     }
 
+    [Fact]
+    public async Task ProductionSet_WithBatesPageSuffix_NamesEverySingleDocumentImageWithPageSuffix()
+    {
+        var args = new[]
+        {
+            "--production-set", "--count", "3", "--output-path", this.testOutputPath,
+            "--bates-prefix", "PSX", "--bates-page-suffix", "--type", "pdf",
+        };
+        var request = Cli.Pipeline.Build(args);
+        Assert.NotNull(request);
+
+        var result = await ProductionSetGenerator.GenerateAsync(request!);
+
+        var images = Directory.GetFiles(Path.Combine(result.ProductionPath, "IMAGES"), "*.tif", SearchOption.AllDirectories);
+        Assert.Equal(3, images.Length);
+        Assert.All(images, path => Assert.Matches(@"^PSX\d{8}_001\.tif$", Path.GetFileName(path)));
+    }
+
+    [Fact]
+    public async Task ProductionSet_WithoutBatesPageSuffix_NamesSingleDocumentImageWithoutPageSuffix()
+    {
+        var args = new[]
+        {
+            "--production-set", "--count", "3", "--output-path", this.testOutputPath,
+            "--bates-prefix", "PSX", "--type", "pdf",
+        };
+        var request = Cli.Pipeline.Build(args);
+        Assert.NotNull(request);
+
+        var result = await ProductionSetGenerator.GenerateAsync(request!);
+
+        var images = Directory.GetFiles(Path.Combine(result.ProductionPath, "IMAGES"), "*.tif", SearchOption.AllDirectories);
+        Assert.Equal(3, images.Length);
+        Assert.All(images, path => Assert.Matches(@"^PSX\d{8}\.tif$", Path.GetFileName(path)));
+    }
+
     // === End-to-End Generation Tests ===
     [Fact]
     public async Task ProductionSet_GeneratesDirectoryStructure()

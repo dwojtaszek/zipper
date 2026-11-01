@@ -874,3 +874,49 @@ REQ-238	unit	TiffRendererTests.CreatePageRaster_WithFourHundredCharacterLabel_Ke
 REQ-238	unit	TiffModuleTests.TryBuild_MatchingRealismAndCompression_SetsCompression	Matching --tiff-realism group4 or uncompressed with the same --tiff-compression is accepted
 REQ-238	e2e	test-cli-coverage-gaps.sh	E2E verification of --with-tiff-realism in Standard and Production Set modes
 REQ-238	e2e	test-cli-coverage-gaps.bat	Windows batch E2E verification of --with-tiff-realism
+REQ-239	unit	BatesSequenceTests.FormatPageBates_WithDocumentBatesAndPageNumber_AppendsAtLeastThreeDigitPageSuffix	Page-level Bates numbers append a three-digit page suffix
+REQ-239	unit	BatesModuleTests.TakesValue_BatesPageSuffix_IsParameterless	--bates-page-suffix is a parameterless flag
+REQ-239	unit	BatesModuleTests.TryBuild_PageSuffixWithPrefix_BuildsConfigWithPageSuffix	--bates-page-suffix sets the page-level Bates config
+REQ-239	unit	BatesModuleTests.TryBuild_PageSuffixWithoutPrefix_ReturnsFalseWithError	--bates-page-suffix requires --bates-prefix
+REQ-239	unit	HelpTextGeneratorTests.Show_DisplaysUsageInformation	Usage text lists --bates-page-suffix
+REQ-239	unit	OptComposingWriterLoadFileTests.OptWriter_WithBatesPageSuffix_SuffixesSinglePageDocumentsToo	Standard OPT keys one-page documents with _001 in page-suffix mode
+REQ-239	unit	OptComposingWriterLoadFileTests.LoadfileOnlyOptWriter_WithBatesPageSuffix_SuffixesEveryDocumentsFirstPage	Loadfile-only OPT keys every document with _001 in page-suffix mode
+REQ-239	unit	ProductionSetTests.ProductionSet_WithBatesPageSuffix_NamesEverySingleDocumentImageWithPageSuffix	Production Set images for one-page documents are named {Bates}_001.tif
+REQ-239	unit	TiffFileGeneratorTests.Generate_WithRealismPageSuffixAndSinglePage_EndorsesPageWithSuffixedBates	One-page realistic TIFF endorsement carries the page-level Bates number
+REQ-239	unit	CrossFormatAnomalyApplierTests.Apply_DesyncPagecount_PageSuffixOnePageDocument_ContinuesFromDocumentBates	Desync page-count continuation under page-suffix mode extends the document Bates number
+REQ-239	unit	CrossFormatAnomalyApplierTests.Apply_DesyncPagecount_PageSuffixKeyAbsentFromDat_ExtendsDocumentBates	Desync page-count continuation for a page-suffixed key with no DAT record extends the document Bates number
+REQ-239	unit	BatesAndDistributionPropertyTests.FormatPageBates_ForEveryDocumentAndPage_ShouldStripBackToItsDocumentAndStayUnique	Property: page-level Bates numbers strip back to their document and stay unique
+REQ-239	e2e	test-bates-numbering.sh	E2E: --bates-page-suffix keys one-page documents with _001 in the OPT Load File
+REQ-239	e2e	test-bates-numbering.bat	Windows batch E2E: --bates-page-suffix keys one-page documents with _001 in the OPT Load File
+REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithPrefixOverLimit_ReturnsPrefixWarning	Everlaw prefix limit (36 characters) warning
+REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithDigitsOverNumberLimit_ReturnsNumberWarning	Everlaw Bates number limit (16 characters) warning
+REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithPageSuffixOverNumberLimit_CountsSuffixInWidth	Page suffix counts toward the Bates number limit
+REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithPageCountPast999AndPageSuffix_CountsFourDigitPageOrdinal	Page 1000 widens the page suffix, so the suffix counts toward the Bates number limit
+REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithPageCountAt999AndPageSuffix_KeepsThreeDigitPageOrdinal	Page 999 keeps the three-digit page suffix width
+REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithPageCountPast999WithoutPageSuffix_IgnoresPageOrdinal	Page count does not widen Bates numbers without the page suffix
+REQ-240	unit	PipelineTests.Build_TiffPagesPast999WithPageSuffix_WarnsWithFourDigitPageOrdinal	--tiff-pages 1000 with --bates-page-suffix warns through the CLI build path
+REQ-240	unit	PipelineTests.Build_TiffPagesPast999WithPageSuffixOnDatOnly_PrintsNoPlatformWarningForPlainTiff	Plain TIFF DAT run writes no page labels, so the page suffix width does not warn
+REQ-240	unit	PipelineTests.Build_TiffPagesPast999WithPageSuffixOnDatOnlyRealisticTiff_WarnsWithFourDigitPageOrdinal	Realistic TIFF endorses page labels, so a DAT-only run still warns on the page suffix width
+REQ-240	unit	PipelineTests.Build_ProductionSetTiffPastPage999WithDatFormat_WarnsWithFourDigitPageOrdinal	Production Set always writes OPT, so its page labels warn for the page suffix width even with DAT requested
+REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithCountOverDiscoLimit_ReturnsRangeWarning	DISCO 30,000 Bates number range warning
+REQ-240	unit	BatesModuleTests.WarnPlatformLimits_PrefixOverPlatformLimit_WarnsAndKeepsBuiltConfig	Over-limit prefix warns once the document count is known
+REQ-240	unit	BatesModuleTests.WarnPlatformLimits_RangeOverDiscoLimit_Warns	Over-limit Bates range warns once the document count is known
+REQ-240	unit	BatesModuleTests.WarnPlatformLimits_ProductionSetRollingSetWiderThanLimit_WarnsForThatSet	Production Set rolling set past the Bates number limit warns for that set
+REQ-240	unit	BatesModuleTests.WarnPlatformLimits_NonProductionSetIgnoresUngeneratedRollingSets	Rolling count without --production-set is not checked
+REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithListedRollingStartWiderThanLimit_WarnsForThatSetOnly	Rolling Production Set with a listed start past the Bates number limit warns for that set only
+REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithContinuousSetChainPastWidthLimit_WarnsForLaterSet	Continuous Rolling Production Sets that chain past the Bates number limit warn for the later set
+REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithContinuousSetsEachOverRangeLimit_WarnsForEachSet	Each over-limit continuous Rolling Production Set warns for its own DISCO range
+REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithListedPrefixUnusedByStandardRun_DoesNotWarn	Standard run ignores listed prefixes it does not number with
+REQ-240	unit	PipelineTests.Build_SourceInputDiscoRange_WarnsOnlyAboveLimit	Source-driven run is checked against its Source Record count for the DISCO range, and 30,000 documents do not warn
+REQ-240	unit	PipelineTests.Build_ProductionSetRollingSetWiderThanLimit_WarnsForThatSet	Production Set build prints the rolling set Bates number limit warning
+REQ-240	unit	PipelineTests.Build_WithoutBatesFlags_PrintsNoPlatformWarning	Configurations without Bates flags print no platform warnings
+REQ-240	unit	PipelineTests.Build_OverLimitBatesWithLaterValidationError_PrintsNoPlatformWarning	A run that fails a later configuration check prints no platform warnings
+REQ-240	unit	PipelineTests.Build_TiffPagesPast999InLoadfileOnlyDat_PrintsNoPlatformWarning	DAT-only Loadfile-Only run has no page-level Bates to widen, so no page suffix warning
+REQ-240	unit	PipelineTests.Build_TiffPagesPast999InSourceDrivenLoadfileOnlyOpt_WarnsOnlyForTiffOutput	Source-driven Loadfile-Only OPT widens the suffix for TIFF output and keeps one page for PDF
+REQ-240	unit	PipelineTests.Build_TiffPagesPastMixThatAllocatesNoTiff_PrintsNoPlatformWarning	A --types mix whose --count allocates no TIFF document numbers no pages, so no page suffix warning
+REQ-240	unit	PipelineTests.Build_TiffPagesPastMixThatAllocatesTiff_WarnsWithFourDigitPageOrdinal	A --types mix that allocates a TIFF document widens the page suffix past page 999
+REQ-240	unit	BatesPlatformLimitsTests.Evaluate_WithPageSuffixAndLastNumberWiderThanDigits_AddsSuffixToLastNumberWidth	Page suffix adds to the widest generated number, not to --bates-digits
+REQ-240	e2e	test-bates-numbering.sh	E2E: over-limit Bates prefix warns and still generates
+REQ-240	e2e	test-bates-numbering.bat	Windows batch E2E: over-limit Bates prefix warning
+REQ-240	e2e	test-bates-numbering.sh	E2E: page-suffix width warning needs a page label in the output (plain TIFF DAT run silent, realistic TIFF DAT run warns)
+REQ-240	e2e	test-bates-numbering.bat	Windows batch E2E: same page-suffix width warning cases as the shell script

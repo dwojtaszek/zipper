@@ -214,6 +214,7 @@ All command-line flags recognized by Zipper:
 | `--bates-prefix` | none | string (or comma-separated list), maximum 200 UTF-8 bytes per element | Bates Number prefix |
 | `--bates-start` | `1` | non-negative integer | Starting Bates number |
 | `--bates-digits` | `8` | `1` to `20` | Bates number digit padding count |
+| `--bates-page-suffix` | off | flag (requires `--bates-prefix`) | Page-level Bates numbers (`{Bates}_NNN`) for every document, including one-page documents, so platforms such as Everlaw group pages of one document |
 | `--tiff-pages` | `1-1` | min-max range (e.g. `1-20`) | Page count range for TIFF files (controls OPT page count and profile-driven DAT `PAGECOUNT` in Loadfile-Only mode for TIFF output) |
 | `--tiff-realism` | `none` | `none`, `standard`, `group4`, `uncompressed` | Opt-in realistic TIFF emission with Bates endorsement band (aliases: `--with-tiff-realism`, `--realistic-tiff`) |
 | `--with-tiff-realism` | `false` | flag | Enable standard Group 4 realistic TIFF emission with Bates endorsement band |
@@ -265,6 +266,8 @@ Chaos requires `--loadfile-only`, `--production-set` (for cross-format scenarios
 `--with-threading` is meaningful when EML participates in the File Type selection; otherwise Zipper warns and continues. It adds RFC 5322 `Message-ID`, `In-Reply-To`, and `References` headers to generated Emails, plus Thread ID, Inclusive, and Thread Parent Columns in DAT, CSV, and Concordance Load Files. The default-off mode preserves legacy EML bytes.
 
 `--mime-realism` is meaningful when EML participates in the File Type selection; otherwise Zipper warns and continues. It configures realistic MIME structures on generated EML files including RFC 2047 encoded-word non-ASCII subjects, header folding, Quoted-Printable/Base64 body encodings, `multipart/alternative` plain/HTML representations, multi-attachment emails, and bounded nested `message/rfc822` emails. The default-off mode preserves legacy EML bytes. The singular Email Metadata `Attachment` column continues to show the first Attachment's filename. When `--with-families` is enabled, each emitted MIME Attachment is included as its own family child; `--with-text` creates a unique Extracted Text sidecar for each Attachment. With custom `nested-rfc822` tokens and without `multi-attachment`, a placeholder Attachment selected by `--attachment-rate` is kept and no nested Email is added to that message.
+
+`--bates-page-suffix` requires `--bates-prefix`; Zipper rejects the run without it. The flag writes page-level Bates numbers (for example `ABC00000001_001`) to every OPT record and page image, including one-page documents. DAT, CSV, Concordance, and EDRM-XML files keep document-level Bates numbers. Bates prefixes over 36 characters and Bates numbers over 16 characters (Everlaw limits), or Bates ranges over 30,000 numbers (DISCO), print a `Warning:` before generation starts and still generate.
 
 ### Standard Load File Columns
 

@@ -13,6 +13,43 @@ public sealed class BatesAndDistributionPropertyTests
     private static readonly string[] OrderedMixTypes = ["pdf", "jpg", "eml", "tiff"];
 
     [Property]
+    public void FormatPageBates_ForEveryDocumentAndPage_ShouldStripBackToItsDocumentAndStayUnique(
+        BatesPropertyInput input,
+        byte pageSeed)
+    {
+        var suffixed = BatesSequence.FromConfig(new BatesNumberConfig
+        {
+            Prefix = input.Prefix,
+            Start = input.Start,
+            Digits = input.Digits,
+            PageSuffix = true,
+        });
+        var unsuffixed = BatesSequence.FromConfig(new BatesNumberConfig
+        {
+            Prefix = input.Prefix,
+            Start = input.Start,
+            Digits = input.Digits,
+        });
+
+        var pageKeys = new HashSet<string>(StringComparer.Ordinal);
+        for (int i = 0; i < input.Count; i++)
+        {
+            var document = suffixed.Format(i).ToString();
+            Assert.Equal(unsuffixed.Format(i).ToString(), document);
+
+            var pageCount = 1 + ((i + pageSeed) % 4);
+            for (int page = 1; page <= pageCount; page++)
+            {
+                var pageBates = BatesSequence.FormatPageBates(document, page);
+
+                Assert.Equal(document, pageBates[..^4]);
+                Assert.Matches(@"^.+_\d{3}$", pageBates);
+                Assert.True(pageKeys.Add(pageBates), $"Page Bates '{pageBates}' is not unique across documents and pages.");
+            }
+        }
+    }
+
+    [Property]
     public void BatesSequence_NextAndFormat_ShouldBeStrictlyMonotonicAndPreservePrefix(
         BatesPropertyInput input,
         byte rawIncrement)
