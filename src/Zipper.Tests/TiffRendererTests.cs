@@ -243,6 +243,95 @@ public class TiffRendererTests
         }
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void CalculateUncompressedTiffSize_MatchesRenderedOutput(int pageCount)
+    {
+        long expectedSize = TiffRenderer.CalculateUncompressedTiffSize(pageCount);
+        var tiff = TiffRenderer.RenderMultiPage(pageCount, "PROD00000001", new TiffConfig { Compression = "uncompressed" });
+
+        Assert.Equal(expectedSize, tiff.Length);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void CalculateUncompressedTiffSize_NonPositive_ReturnsZero(int pageCount)
+    {
+        Assert.Equal(0, TiffRenderer.CalculateUncompressedTiffSize(pageCount));
+    }
+
+    [Theory]
+    [InlineData("group4")]
+    [InlineData("uncompressed")]
+    public void RenderMultiPage_ToStream_MatchesByteArrayOutput(string compression)
+    {
+        var config = new TiffConfig { RealismMode = "standard", Compression = compression };
+        var directBytes = TiffRenderer.RenderMultiPage(2, "PROD00000001", config);
+
+        using var ms = new MemoryStream();
+        TiffRenderer.RenderMultiPage(ms, 2, "PROD00000001", config);
+
+        Assert.Equal(directBytes, ms.ToArray());
+    }
+
+    [Theory]
+    [InlineData("group4")]
+    [InlineData("uncompressed")]
+    public void RenderPage_ToStream_MatchesByteArrayOutput(string compression)
+    {
+        var config = new TiffConfig { RealismMode = "standard", Compression = compression };
+        var directBytes = TiffRenderer.RenderPage("PROD00000001", 1, 1, config);
+
+        using var ms = new MemoryStream();
+        TiffRenderer.RenderPage(ms, "PROD00000001", 1, 1, config);
+
+        Assert.Equal(directBytes, ms.ToArray());
+    }
+
+    [Fact]
+    public void RenderMultiPage_ExorbitantUncompressedPageCount_ThrowsInvalidOperationException()
+    {
+        const int tooManyPages = 3000; // 3000 * 1,052,922 > Array.MaxLength
+        var config = new TiffConfig { RealismMode = "standard", Compression = "uncompressed" };
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            TiffRenderer.RenderMultiPage(tooManyPages, "PROD", config));
+
+        Assert.Contains("exceeds maximum supported buffer size", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void TiffMultiPageGenerator_GenerateToStream_MatchesByteArrayOutput(bool isRealistic)
+    {
+        var config = isRealistic ? new TiffConfig { RealismMode = "standard", Compression = "group4" } : null;
+        var workItem = new FileWorkItem { Index = 1 };
+        var directBytes = TiffMultiPageGenerator.Generate(2, workItem, config, "PROD00000001");
+
+        using var ms = new MemoryStream();
+        TiffMultiPageGenerator.Generate(ms, 2, workItem, config, "PROD00000001");
+
+        Assert.Equal(directBytes, ms.ToArray());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void TiffMultiPageGenerator_GeneratePageToStream_MatchesByteArrayOutput(bool isRealistic)
+    {
+        var config = isRealistic ? new TiffConfig { RealismMode = "standard", Compression = "group4" } : null;
+        var directBytes = TiffMultiPageGenerator.GeneratePage("PROD00000001", 1, 1, config);
+
+        using var ms = new MemoryStream();
+        TiffMultiPageGenerator.GeneratePage(ms, "PROD00000001", 1, 1, config);
+
+        Assert.Equal(directBytes, ms.ToArray());
+    }
+
     private static byte[] Raster(string? label)
         => TiffRenderer.CreatePageRaster(label, TiffRenderer.DefaultWidth, TiffRenderer.DefaultHeight);
 

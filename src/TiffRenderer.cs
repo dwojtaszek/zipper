@@ -22,9 +22,24 @@ internal static class TiffRenderer
     private static readonly byte[] SoftwareBytes = Encoding.ASCII.GetBytes("Zipper\0");
 
     /// <summary>
-    /// Renders a single-page TIFF image with a burned-in Bates endorsement band in the bottom margin.
+    /// Calculates the exact byte length of an uncompressed multi-page TIFF file.
     /// </summary>
-    public static byte[] RenderPage(string? batesNumber, int pageIndex, int pageCount, TiffConfig? tiffConfig)
+    public static long CalculateUncompressedTiffSize(int pageCount)
+    {
+        if (pageCount <= 0)
+        {
+            return 0;
+        }
+
+        // 8-byte TIFF header + per page: 198-byte IFD + 24-byte extra metadata + 1,052,700-byte uncompressed strip
+        const long bytesPerPage = (long)IfdSize + 24L + (((long)DefaultWidth + 7L) / 8L * (long)DefaultHeight);
+        return (long)FirstIfdOffset + ((long)pageCount * bytesPerPage);
+    }
+
+    /// <summary>
+    /// Streams a single-page TIFF image with a burned-in Bates endorsement band in the bottom margin directly to the destination stream.
+    /// </summary>
+    public static void RenderPage(Stream destination, string? batesNumber, int pageIndex, int pageCount, TiffConfig? tiffConfig)
     {
         bool useGroup4 = UseGroup4(tiffConfig);
 
@@ -33,22 +48,43 @@ internal static class TiffRenderer
             ? CompressGroup4(raster, DefaultWidth, DefaultHeight)
             : raster;
 
-        using var ms = new MemoryStream();
-        using var bw = new BinaryWriter(ms);
+        using var bw = new BinaryWriter(destination, Encoding.UTF8, leaveOpen: true);
         WriteTiffHeader(bw);
         WritePage(bw, FirstIfdOffset, stripData, pageIndex, pageCount, useGroup4, isLast: true);
+    }
+
+    /// <summary>
+    /// Renders a single-page TIFF image with a burned-in Bates endorsement band in the bottom margin.
+    /// For uncompressed output, exact buffer size is precalculated to avoid memory stream doubling and ToArray duplication.
+    /// </summary>
+    public static byte[] RenderPage(string? batesNumber, int pageIndex, int pageCount, TiffConfig? tiffConfig)
+    {
+        bool useGroup4 = UseGroup4(tiffConfig);
+        if (!useGroup4)
+        {
+            long expectedSize = CalculateUncompressedTiffSize(1);
+            var buffer = new byte[expectedSize];
+            using (var bufferStream = new MemoryStream(buffer, 0, buffer.Length, writable: true, publiclyVisible: true))
+            {
+                RenderPage(bufferStream, batesNumber, pageIndex, pageCount, tiffConfig);
+            }
+
+            return buffer;
+        }
+
+        using var ms = new MemoryStream(1024);
+        RenderPage(ms, batesNumber, pageIndex, pageCount, tiffConfig);
         return ms.ToArray();
     }
 
     /// <summary>
-    /// Renders a multi-page TIFF file with chained IFDs for each page.
-    /// Pages are streamed directly to the writer to avoid retaining uncompressed rasters in memory.
+    /// Streams a multi-page TIFF file with chained IFDs for each page directly to the destination stream.
+    /// Pages are rendered and emitted sequentially to avoid retaining uncompressed rasters in memory.
     /// </summary>
-    public static byte[] RenderMultiPage(int pageCount, string? baseBates, TiffConfig? tiffConfig)
+    public static void RenderMultiPage(Stream destination, int pageCount, string? baseBates, TiffConfig? tiffConfig)
     {
         bool useGroup4 = UseGroup4(tiffConfig);
-        using var ms = new MemoryStream();
-        using var bw = new BinaryWriter(ms);
+        using var bw = new BinaryWriter(destination, Encoding.UTF8, leaveOpen: true);
         WriteTiffHeader(bw);
         uint offset = FirstIfdOffset;
 
@@ -64,7 +100,36 @@ internal static class TiffRenderer
 
             offset = WritePage(bw, offset, stripData, p, pageCount, useGroup4, isLast: p == pageCount);
         }
+    }
 
+    /// <summary>
+    /// Renders a multi-page TIFF file with chained IFDs for each page.
+    /// Pages are streamed directly to the writer to avoid retaining uncompressed rasters in memory.
+    /// For uncompressed output, exact buffer size is precalculated to avoid memory stream doubling and ToArray duplication.
+    /// </summary>
+    public static byte[] RenderMultiPage(int pageCount, string? baseBates, TiffConfig? tiffConfig)
+    {
+        bool useGroup4 = UseGroup4(tiffConfig);
+        if (!useGroup4)
+        {
+            long expectedSize = CalculateUncompressedTiffSize(pageCount);
+            if (expectedSize > Array.MaxLength)
+            {
+                throw new InvalidOperationException(
+                    $"Requested uncompressed multi-page TIFF with {pageCount} pages ({expectedSize:N0} bytes) exceeds maximum supported buffer size.");
+            }
+
+            var buffer = new byte[expectedSize];
+            using (var bufferStream = new MemoryStream(buffer, 0, buffer.Length, writable: true, publiclyVisible: true))
+            {
+                RenderMultiPage(bufferStream, pageCount, baseBates, tiffConfig);
+            }
+
+            return buffer;
+        }
+
+        using var ms = new MemoryStream(Math.Max(1024, pageCount * 512));
+        RenderMultiPage(ms, pageCount, baseBates, tiffConfig);
         return ms.ToArray();
     }
 

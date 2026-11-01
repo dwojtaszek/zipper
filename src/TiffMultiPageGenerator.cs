@@ -12,6 +12,8 @@ internal static class TiffMultiPageGenerator
     /// <summary>
     /// Generates TIFF file content, either using pre-computed placeholder or realistic emission.
     /// The placeholder path tracks the page count for metadata only.
+    /// Realistic emission streams pages sequentially and preallocates uncompressed buffers to avoid
+    /// holding duplicate byte arrays in memory.
     /// </summary>
     public static byte[] Generate(int pageCount, FileWorkItem workItem, Config.TiffConfig? tiffConfig, string? batesNumber = null)
     {
@@ -25,6 +27,22 @@ internal static class TiffMultiPageGenerator
     }
 
     /// <summary>
+    /// Generates TIFF file content directly into the destination stream.
+    /// </summary>
+    public static void Generate(Stream destination, int pageCount, FileWorkItem workItem, Config.TiffConfig? tiffConfig, string? batesNumber = null)
+    {
+        if (tiffConfig?.IsRealistic != true)
+        {
+            var placeholder = PlaceholderFiles.GetContent("tiff");
+            destination.Write(placeholder, 0, placeholder.Length);
+            return;
+        }
+
+        var bates = batesNumber ?? workItem.BatesNumberOverride ?? workItem.ControlNumberOverride ?? $"DOC{workItem.Index:D8}";
+        TiffRenderer.RenderMultiPage(destination, pageCount, bates, tiffConfig);
+    }
+
+    /// <summary>
     /// Generates a single page image TIFF with an endorsement band.
     /// </summary>
     public static byte[] GeneratePage(string? batesNumber, int pageIndex = 1, int pageCount = 1, Config.TiffConfig? tiffConfig = null)
@@ -35,6 +53,21 @@ internal static class TiffMultiPageGenerator
         }
 
         return TiffRenderer.RenderPage(batesNumber, pageIndex, pageCount, tiffConfig);
+    }
+
+    /// <summary>
+    /// Generates a single page image TIFF directly into the destination stream.
+    /// </summary>
+    public static void GeneratePage(Stream destination, string? batesNumber, int pageIndex = 1, int pageCount = 1, Config.TiffConfig? tiffConfig = null)
+    {
+        if (tiffConfig?.IsRealistic != true)
+        {
+            var placeholder = PlaceholderFiles.GetContent("tiff");
+            destination.Write(placeholder, 0, placeholder.Length);
+            return;
+        }
+
+        TiffRenderer.RenderPage(destination, batesNumber, pageIndex, pageCount, tiffConfig);
     }
 
     /// <summary>
