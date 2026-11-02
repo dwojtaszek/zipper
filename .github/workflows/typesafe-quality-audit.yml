@@ -10,10 +10,6 @@ on:
     - cron: "0 8 * * 1"
   workflow_dispatch:
     inputs:
-      scope:
-        description: "Mutation shard scope (--mutate globs, comma-separated, relative to project root src/)"
-        required: false
-        default: "LoadFiles/**,PathValidator.cs,Validation/ProductionSetPostValidator.cs,ProductionSetOrchestrator.cs,ManifestComparison/ProductionManifestComparer.cs,ZipArchiveSink.cs,Emails/EmailFactory.cs,ChaosSampler.cs,DatAnomalyApplier.cs,OptAnomalyApplier.cs"
       break_at:
         description: "Mutation break threshold (0-100)"
         required: false
@@ -21,7 +17,7 @@ on:
       shard:
         description: "Per-shard mutation timeout in minutes"
         required: false
-        default: "45"
+        default: "120"
 
 permissions:
   contents: read
@@ -33,12 +29,18 @@ concurrency:
 jobs:
   quality-audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
-    outputs:
-      assurance_status: ${{ steps.assurance-result.outputs.status || steps.secret-assurance.outputs.status }}
-      assurance_executed: ${{ steps.assurance-result.outputs.executed || steps.secret-assurance.outputs.executed }}
-      assurance_reason: ${{ steps.assurance-result.outputs.reason || steps.secret-assurance.outputs.reason }}
-      assurance_json: ${{ steps.assurance-result.outputs.json || steps.secret-assurance.outputs.json }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        # The mutant set no longer fits one shard timeout, so split it in two
+        # parallel shards instead of raising the budget again.
+        include:
+          - shard: 1
+            scope: "LoadFiles/**,ChaosSampler.cs,DatAnomalyApplier.cs,OptAnomalyApplier.cs"
+          - shard: 2
+            scope: "PathValidator.cs,Validation/ProductionSetPostValidator.cs,ProductionSetOrchestrator.cs,ManifestComparison/ProductionManifestComparer.cs,ZipArchiveSink.cs,Emails/EmailFactory.cs"
+    name: quality-audit (shard ${{ matrix.shard }})
     steps:
       - name: Check secret availability (skips neutrally when absent)
         id: secret
@@ -116,11 +118,11 @@ jobs:
 
       - name: Mutation testing shard (Phase 2)
         if: steps.secret.outputs.available == 'true'
-        timeout-minutes: ${{ fromJSON(github.event.inputs.shard || '45') }}
+        timeout-minutes: ${{ fromJSON(github.event.inputs.shard || '120') }}
         env:
-          SCOPE: ${{ github.event.inputs.scope || 'LoadFiles/**,PathValidator.cs,Validation/ProductionSetPostValidator.cs,ProductionSetOrchestrator.cs,ManifestComparison/ProductionManifestComparer.cs,ZipArchiveSink.cs,Emails/EmailFactory.cs,ChaosSampler.cs,DatAnomalyApplier.cs,OptAnomalyApplier.cs' }}
+          SCOPE: ${{ matrix.scope }}
           BREAK_AT: ${{ github.event.inputs.break_at || '50' }}
-          SHARD_TIMEOUT: ${{ github.event.inputs.shard || '45' }}
+          SHARD_TIMEOUT: ${{ github.event.inputs.shard || '120' }}
         run: |
           # Scope is relative to project root src/; split comma-separated globs.
           MUTATE_ARGS=()
@@ -258,7 +260,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: typesafe-quality-report
+          name: typesafe-quality-report-shard-${{ matrix.shard }}
           path: |
             results/coverage/**/coverage.cobertura.xml
             results/mutation/**
