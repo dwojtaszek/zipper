@@ -265,7 +265,8 @@ jobs:
       - name: Install Droid CLI
         id: install-droid
         if: steps.qa-scope.outputs.cli_affected == 'true' && (steps.droid-key.outputs.available == 'true' || github.event_name == 'workflow_dispatch')
-        run: npm install --global --ignore-scripts --no-audit --no-fund @factory/cli@0.226.2
+        # 0.226.2 reported every API failure as a bare "Exec failed"; 1.1.0 surfaces the real error.
+        run: npm install --global --ignore-scripts --no-audit --no-fund @factory/cli@1.1.0
 
       - name: Register pinned Droid Control marketplace
         id: marketplace

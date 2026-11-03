@@ -1179,11 +1179,15 @@ class WorkflowWiringTests(unittest.TestCase):
         self.assertNotIn("--max-concurrent-test-runs", self.wf)
 
     def test_workflow_scope_relative_to_project_root(self):
-        self.assertIn('default: "LoadFiles/**', self.wf)
-        self.assertNotIn('default: "src/LoadFiles/**', self.wf)
+        self.assertIn('scope: "LoadFiles/**', self.wf)
+        self.assertNotIn('scope: "src/LoadFiles/**', self.wf)
+
+    def test_workflow_splits_mutation_scope_across_matrix_shards(self):
+        self.assertIn("SCOPE: ${{ matrix.scope }}", self.wf)
+        self.assertIn("name: typesafe-quality-report-shard-${{ matrix.shard }}", self.wf)
 
     def test_workflow_wires_shard_timeout(self):
-        self.assertIn("timeout-minutes: ${{ fromJSON(github.event.inputs.shard || '45') }}", self.wf)
+        self.assertIn("timeout-minutes: ${{ fromJSON(github.event.inputs.shard || '120') }}", self.wf)
 
     def test_workflow_upload_runs_on_failure_or_timeout(self):
         self.assertIn("always() && steps.secret.outputs.available == 'true'", self.wf)
