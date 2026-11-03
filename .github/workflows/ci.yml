@@ -383,11 +383,15 @@ jobs:
       - name: Run full E2E suite (Unix)
         if: runner.os != 'Windows'
         shell: bash
+        env:
+          BUILD_VERSION: ${{ inputs.version }}
         run: ZIPPER_EXECUTABLE="$PWD/src/bin/Release/net10.0/Zipper" bash ./tests/run-tests.sh
 
       - name: Run full E2E suite (Windows)
         if: runner.os == 'Windows'
         shell: cmd
+        env:
+          BUILD_VERSION: ${{ inputs.version }}
         run: |
           set "ZIPPER_EXECUTABLE=%CD%\src\bin\Release\net10.0\Zipper.exe"
           call tests\run-tests.bat

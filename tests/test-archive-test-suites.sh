@@ -468,9 +468,18 @@ fi
 mkdir -p "$TEST_OUTPUT_DIR/dotnet-reference"
 DOTNET_REPORT_DIR="$(cd "$TEST_OUTPUT_DIR/dotnet-reference" && pwd)"
 DOTNET_REPORT_LOG="$TEST_OUTPUT_DIR/dotnet-reference-tests.log"
+# The reference harness regenerates the same fixtures, so it must be built with
+# the same version as the CLI that produced the catalogue; a differing
+# generatorVersion changes the Expectation File bytes and fails the hash check.
+DOTNET_VERSION_FLAG=""
+if [[ -n "${BUILD_VERSION:-}" ]]; then
+  DOTNET_VERSION_FLAG="-p:Version=${BUILD_VERSION}"
+fi
+# shellcheck disable=SC2086  # deliberate word-splitting: an empty flag must expand to zero arguments.
 if ZIPPER_ATC_DOTNET_REPORT_DIR="$DOTNET_REPORT_DIR" \
      dotnet test src/Zipper.Tests/Zipper.Tests.csproj \
        --filter 'FullyQualifiedName~ArchiveReferenceReaderTests.ReadOperations_AllCases_OutcomesMatchExpectationFile' \
+       $DOTNET_VERSION_FLAG \
        --nologo >"$DOTNET_REPORT_LOG" 2>&1; then
   check 0 ".NET reference Reader Adapter Profile produced per-fixture outcomes"
 else
