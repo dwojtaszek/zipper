@@ -564,7 +564,11 @@ set "DOTNET_REPORT_DIR=%CD%\results\archive-test-suites\dotnet-reference"
 mkdir "%DOTNET_REPORT_DIR%" >nul 2>&1
 set "ZIPPER_ATC_DOTNET_REPORT_DIR=%DOTNET_REPORT_DIR%"
 set "DOTNET_TEST_EXIT=0"
-dotnet test src\Zipper.Tests\Zipper.Tests.csproj --filter "FullyQualifiedName~ArchiveReferenceReaderTests.ReadOperations_AllCases_OutcomesMatchExpectationFile" --nologo >"%TEST_OUTPUT_DIR%\dotnet-reference-tests.log" 2>&1
+REM The reference harness regenerates the same fixtures, so it must be built with
+REM the same version as the CLI that produced the catalogue (see the .sh twin).
+set "DOTNET_VERSION_FLAG="
+if defined BUILD_VERSION set "DOTNET_VERSION_FLAG=-p:Version=%BUILD_VERSION%"
+dotnet test src\Zipper.Tests\Zipper.Tests.csproj --filter "FullyQualifiedName~ArchiveReferenceReaderTests.ReadOperations_AllCases_OutcomesMatchExpectationFile" %DOTNET_VERSION_FLAG% --nologo >"%TEST_OUTPUT_DIR%\dotnet-reference-tests.log" 2>&1
 if errorlevel 1 set "DOTNET_TEST_EXIT=1"
 set "ZIPPER_ATC_DOTNET_REPORT_DIR="
 if "!DOTNET_TEST_EXIT!"=="1" (
