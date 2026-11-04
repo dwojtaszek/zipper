@@ -920,3 +920,42 @@ REQ-240	e2e	test-bates-numbering.sh	E2E: over-limit Bates prefix warns and still
 REQ-240	e2e	test-bates-numbering.bat	Windows batch E2E: over-limit Bates prefix warning
 REQ-240	e2e	test-bates-numbering.sh	E2E: page-suffix width warning needs a page label in the output (plain TIFF DAT run silent, realistic TIFF DAT run warns)
 REQ-240	e2e	test-bates-numbering.bat	Windows batch E2E: same page-suffix width warning cases as the shell script
+REQ-241	unit	TiffAnomalyApplierTests.Apply_SameSeed_ReturnsIdenticalBytesAndAudit	Same seed and work item produce identical TIFF bytes and audit entries
+REQ-241	unit	TiffAnomalyApplierTests.Apply_EachType_AuditsFileRecordTypeAndDirectoryLocation	Each TIFF anomaly audits its file, record ID, type, and IFD 1 location
+REQ-241	unit	TiffAnomalyApplierTests.Apply_DimensionLie_WritesMaximumLongValueToTheAuditedDimension	tiff-dimension-lie writes 4294967295 to the audited dimension tag
+REQ-241	unit	TiffAnomalyApplierTests.Apply_TruncatedIfd_KeepsPrefixAndEndsInsideFirstDirectory	tiff-truncated-ifd cuts the file inside the first Image File Directory
+REQ-241	unit	TiffAnomalyApplierTests.Apply_TagCountLie_DeclaresMoreEntriesAndChangesNothingElse	tiff-tag-count-lie raises the entry count without adding entries
+REQ-241	unit	TiffAnomalyApplierTests.Apply_StripLie_RunsTheStripPastTheEndOfTheFile	tiff-strip-offset places the image strip past the end of the file
+REQ-241	unit	TiffAnomalyApplierTests.Apply_PlaceholderTiff_MutatesEveryType	Every TIFF anomaly type changes a placeholder TIFF
+REQ-241	unit	TiffPreflightValidatorTests.Validate_EachChaosType_IsCaughtAcrossSeedsPageCountsAndByteOrders	Preflight catches every TIFF anomaly type across seeds, page counts, and byte orders
+REQ-241	unit	TiffPreflightValidatorTests.Validate_ChaosType_ReportsTheFailureItInjects	Each TIFF anomaly type reports the failure it injects
+REQ-241	unit	TiffPreflightValidatorTests.Validate_RenderedTiff_ReportsNoFindings	Rendered TIFFs in both byte orders pass preflight without findings
+REQ-241	unit	TiffRendererTests.RenderMultiPage_BigEndian_WritesMmHeaderAndSameFieldsAsLittleEndian	Big-endian TIFF writes the MM header and the same tags as little-endian
+REQ-241	unit	TiffRendererTests.RenderPage_PageNumberField_PacksPageIndexAndCountInEachByteOrder	Page number tag packs page index and count in each byte order
+REQ-241	unit	TiffRendererTests.GeneratePage_BigEndian_DecodesToSamePixelsAsLittleEndian	Big-endian and little-endian TIFFs decode to the same pixels in ImageMagick
+REQ-241	unit	TiffMultiPageGeneratorTests.Generate_BigEndianRealisticMode_EmitsMmHeaderAndChainedIfds	Realistic big-endian TIFF emits the MM header and a chained IFD sequence
+REQ-241	unit	TiffMultiPageGeneratorTests.Generate_DefaultByteOrder_MatchesExplicitLittleEndianOutput	Omitting --tiff-byte-order matches explicit little-endian output byte for byte
+REQ-241	unit	TiffModuleTests.TryBuild_Default_ByteOrderIsLittleEndian	Default TIFF byte order is ii
+REQ-241	unit	TiffModuleTests.TryBuild_TiffByteOrderWithRealism_SetsByteOrder	--tiff-byte-order with realism sets the byte order, case-insensitively
+REQ-241	unit	TiffModuleTests.TryBuild_TiffByteOrderWithoutRealism_ReturnsFalse	--tiff-byte-order without realism fails validation
+REQ-241	unit	TiffModuleTests.TryApply_InvalidByteOrder_ReturnsFalse	Invalid --tiff-byte-order value fails validation
+REQ-241	unit	ChaosAnomalyTypesTests.Tiff_ContainsExpectedTypes	TIFF anomaly type catalog contains the four canonical TIFF types
+REQ-241	unit	ChaosAnomalyTypesTests.IsTiff_TiffTypeName_ReturnsTrue	TIFF anomaly type names are classified as TIFF types
+REQ-241	unit	ChaosEngineTests.ApplyTiffChaos_ResultDoesNotDependOnCallOrder_ForSameSeed	TIFF chaos result for a seed does not depend on the order of calls
+REQ-241	unit	ChaosEngineTests.ApplyTiffChaos_ConcurrentCalls_MatchSequentialOutputAndAudit	Concurrent TIFF chaos calls produce the same output and audit as sequential calls
+REQ-241	unit	ChaosEngineTests.ApplyTiffChaos_WithItemIndexes_SamplesOnlyEligibleItems	TIFF chaos samples only the eligible work item indexes
+REQ-241	unit	ChaosEngineTests.ApplyTiffChaos_WithBatesSequence_AuditsBatesNumberAsRecordId	TIFF chaos audit names each record by its Bates Number when a Bates sequence is configured
+REQ-241	unit	ChaosEngineBuilderTests.BuildForStandardTiff_WithMixedFileTypes_SamplesOnlyTiffWorkItems	Standard mode TIFF chaos samples only work items whose effective type is tiff
+REQ-241	unit	ChaosEngineBuilderTests.BuildForProductionTiff_WithMixedFileTypes_SamplesOnlyTiffPlans	Production Set TIFF chaos samples only tiff plans
+REQ-241	unit	ChaosEngineBuilderTests.BuildForProductionTiff_WithInterleavedFileTypes_SamplesEachTiffPlanAtItsOwnIndex	Production Set TIFF chaos keeps each sampled TIFF plan at its own index when file types interleave
+REQ-241	unit	ParallelFileGeneratorTests.GenerateFilesAsync_WithTiffChaos_MutatesEverySampledTiffAndAuditsIt	Standard mode mutates every sampled .tiff and audits the anomalies
+REQ-241	unit	ChaosAndComparisonPropertyTests.TiffAnomalyApplier_Apply_ShouldMutateAndAuditAnomaliesDeterministically	Property: TIFF anomaly application mutates and audits deterministically
+REQ-241	unit	ChaosModuleTests.TryBuild_StandardTiffRun_AllowsChaosMode	ChaosModule allows chaos-mode in Standard mode with TIFF generation
+REQ-241	unit	ChaosModuleTests.TryBuild_ProductionSetTiffRun_AllowsChaosModeWithoutTypes	ChaosModule allows chaos-mode in Production Set mode with TIFF generation and no types
+REQ-241	unit	ChaosModuleTests.TryBuild_TiffRunWithDatType_ReturnsFalseWithTiffScope	Load File types are rejected on a TIFF run with a message naming TIFF scope
+REQ-241	unit	ChaosModuleTests.TryBuild_TiffRunWithEmailType_ReturnsFalseWithTiffTarget	Email chaos types are rejected on a TIFF run
+REQ-241	unit	ChaosModuleTests.TryBuild_EmailRunWithTiffType_ReturnsFalseWithEmailTarget	TIFF chaos types are rejected on an email run
+REQ-241	unit	ChaosModuleTests.TryBuild_LoadfileOnlyWithTiffType_ReturnsFalseWithMessage	TIFF chaos types are rejected with --loadfile-only
+REQ-241	unit	ChaosModuleTests.TryBuild_StandardTiffRunWithCrossFormatScenario_ReturnsFalseWithTiffMessage	--chaos-scenario is rejected on a Standard TIFF run
+REQ-241	e2e	test-cli-coverage-gaps.sh	E2E verification of TIFF byte order, TIFF chaos in Standard and Production Set modes, and its rejection rules
+REQ-241	e2e	test-cli-coverage-gaps.bat	Windows batch E2E verification of TIFF byte order, TIFF chaos in Standard and Production Set modes, and its rejection rules

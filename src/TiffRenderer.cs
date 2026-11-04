@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Text;
 using Zipper.Config;
 
@@ -48,9 +49,10 @@ internal static class TiffRenderer
             ? CompressGroup4(raster, DefaultWidth, DefaultHeight)
             : raster;
 
+        bool bigEndian = UseBigEndian(tiffConfig);
         using var bw = new BinaryWriter(destination, Encoding.UTF8, leaveOpen: true);
-        WriteTiffHeader(bw);
-        WritePage(bw, FirstIfdOffset, stripData, pageIndex, pageCount, useGroup4, isLast: true);
+        WriteTiffHeader(bw, bigEndian);
+        WritePage(bw, FirstIfdOffset, stripData, pageIndex, pageCount, useGroup4, isLast: true, bigEndian);
     }
 
     /// <summary>
@@ -84,8 +86,9 @@ internal static class TiffRenderer
     public static void RenderMultiPage(Stream destination, int pageCount, string? baseBates, TiffConfig? tiffConfig)
     {
         bool useGroup4 = UseGroup4(tiffConfig);
+        bool bigEndian = UseBigEndian(tiffConfig);
         using var bw = new BinaryWriter(destination, Encoding.UTF8, leaveOpen: true);
-        WriteTiffHeader(bw);
+        WriteTiffHeader(bw, bigEndian);
         uint offset = FirstIfdOffset;
 
         for (int p = 1; p <= pageCount; p++)
@@ -98,7 +101,7 @@ internal static class TiffRenderer
                 ? CompressGroup4(raster, DefaultWidth, DefaultHeight)
                 : raster;
 
-            offset = WritePage(bw, offset, stripData, p, pageCount, useGroup4, isLast: p == pageCount);
+            offset = WritePage(bw, offset, stripData, p, pageCount, useGroup4, isLast: p == pageCount, bigEndian);
         }
     }
 
@@ -139,6 +142,12 @@ internal static class TiffRenderer
     /// </summary>
     private static bool UseGroup4(TiffConfig? tiffConfig)
         => tiffConfig is null || !string.Equals(tiffConfig.Compression, "uncompressed", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Big-endian ("MM") only when the config asks for it. Every other value, and a null config, writes little-endian ("II").
+    /// </summary>
+    private static bool UseBigEndian(TiffConfig? tiffConfig)
+        => tiffConfig is not null && string.Equals(tiffConfig.ByteOrder, "mm", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Creates a 1-bit monochrome raster (min-is-white: 0 = white, 1 = black)
@@ -205,13 +214,13 @@ internal static class TiffRenderer
         }
     }
 
-    private static void WriteTiffHeader(BinaryWriter bw)
+    private static void WriteTiffHeader(BinaryWriter bw, bool bigEndian)
     {
-        // Header: "II", magic 42, offset to first IFD (8)
-        bw.Write((byte)'I');
-        bw.Write((byte)'I');
-        bw.Write((ushort)42);
-        bw.Write(FirstIfdOffset);
+        // Header: "II" or "MM", magic 42, offset to first IFD (8)
+        bw.Write(bigEndian ? (byte)'M' : (byte)'I');
+        bw.Write(bigEndian ? (byte)'M' : (byte)'I');
+        WriteUInt16(bw, 42, bigEndian);
+        WriteUInt32(bw, FirstIfdOffset, bigEndian);
     }
 
     private static uint WritePage(
@@ -221,7 +230,8 @@ internal static class TiffRenderer
         int pageIndex,
         int pageCount,
         bool isGroup4,
-        bool isLast)
+        bool isLast,
+        bool bigEndian)
     {
         uint extraDataOffset = currentIfdOffset + IfdSize;
         uint xResOffset = extraDataOffset;
@@ -231,34 +241,39 @@ internal static class TiffRenderer
         uint nextIfdOffset = isLast ? 0 : AlignToWord(stripOffset + (uint)stripData.Length);
 
         // Directory entries sorted in strictly ascending tag order
-        bw.Write((ushort)IfdEntryCount);
+        WriteUInt16(bw, IfdEntryCount, bigEndian);
 
-        WriteEntry(bw, 254, 4, 1, 0);                               // NewSubfileType: 0
-        WriteEntry(bw, 256, 4, 1, (uint)DefaultWidth);              // ImageWidth
-        WriteEntry(bw, 257, 4, 1, (uint)DefaultHeight);             // ImageLength
-        WriteEntry(bw, 258, 3, 1, 1);                               // BitsPerSample: 1
-        WriteEntry(bw, 259, 3, 1, (uint)(isGroup4 ? 4 : 1));        // Compression: 4 (G4) or 1 (None)
-        WriteEntry(bw, 262, 3, 1, 0);                               // Photometric: 0 (WhiteIsZero)
-        WriteEntry(bw, 273, 4, 1, stripOffset);                     // StripOffsets
-        WriteEntry(bw, 277, 3, 1, 1);                               // SamplesPerPixel: 1
-        WriteEntry(bw, 278, 4, 1, (uint)DefaultHeight);             // RowsPerStrip
-        WriteEntry(bw, 279, 4, 1, (uint)stripData.Length);          // StripByteCounts
-        WriteEntry(bw, 282, 5, 1, xResOffset);                      // XResolution -> 300/1
-        WriteEntry(bw, 283, 5, 1, yResOffset);                      // YResolution -> 300/1
-        WriteEntry(bw, 284, 3, 1, 1);                               // PlanarConfiguration: 1
-        WriteEntry(bw, 296, 3, 1, 2);                               // ResolutionUnit: 2 (Inch)
-        WriteEntry(bw, 297, 3, 2, (uint)((pageCount << 16) | ((pageIndex - 1) & 0xFFFF))); // PageNumber
-        WriteEntry(bw, 305, 2, (uint)SoftwareBytes.Length, swOffset); // Software: "Zipper\0"
+        WriteEntry(bw, 254, 4, 1, 0, bigEndian);                               // NewSubfileType: 0
+        WriteEntry(bw, 256, 4, 1, (uint)DefaultWidth, bigEndian);              // ImageWidth
+        WriteEntry(bw, 257, 4, 1, (uint)DefaultHeight, bigEndian);             // ImageLength
+        WriteEntry(bw, 258, 3, 1, 1, bigEndian);                               // BitsPerSample: 1
+        WriteEntry(bw, 259, 3, 1, (uint)(isGroup4 ? 4 : 1), bigEndian);        // Compression: 4 (G4) or 1 (None)
+        WriteEntry(bw, 262, 3, 1, 0, bigEndian);                               // Photometric: 0 (WhiteIsZero)
+        WriteEntry(bw, 273, 4, 1, stripOffset, bigEndian);                     // StripOffsets
+        WriteEntry(bw, 277, 3, 1, 1, bigEndian);                               // SamplesPerPixel: 1
+        WriteEntry(bw, 278, 4, 1, (uint)DefaultHeight, bigEndian);             // RowsPerStrip
+        WriteEntry(bw, 279, 4, 1, (uint)stripData.Length, bigEndian);          // StripByteCounts
+        WriteEntry(bw, 282, 5, 1, xResOffset, bigEndian);                      // XResolution -> 300/1
+        WriteEntry(bw, 283, 5, 1, yResOffset, bigEndian);                      // YResolution -> 300/1
+        WriteEntry(bw, 284, 3, 1, 1, bigEndian);                               // PlanarConfiguration: 1
+        WriteEntry(bw, 296, 3, 1, 2, bigEndian);                               // ResolutionUnit: 2 (Inch)
 
-        bw.Write(nextIfdOffset);
+        // PageNumber holds two SHORT values, the page index then the page count, each in the file's byte order.
+        WriteEntryHead(bw, 297, 3, 2, bigEndian);
+        WriteUInt16(bw, (ushort)(pageIndex - 1), bigEndian);
+        WriteUInt16(bw, (ushort)pageCount, bigEndian);
+
+        WriteEntry(bw, 305, 2, (uint)SoftwareBytes.Length, swOffset, bigEndian); // Software: "Zipper\0"
+
+        WriteUInt32(bw, nextIfdOffset, bigEndian);
 
         // Extra data
         // XResolution: 300 / 1
-        bw.Write((uint)DefaultDpi);
-        bw.Write((uint)1);
+        WriteUInt32(bw, (uint)DefaultDpi, bigEndian);
+        WriteUInt32(bw, 1, bigEndian);
         // YResolution: 300 / 1
-        bw.Write((uint)DefaultDpi);
-        bw.Write((uint)1);
+        WriteUInt32(bw, (uint)DefaultDpi, bigEndian);
+        WriteUInt32(bw, 1, bigEndian);
         // Software, padded so the strip starts at its word-aligned offset
         bw.Write(SoftwareBytes);
         WritePadding(bw, stripOffset - (swOffset + (uint)SoftwareBytes.Length));
@@ -289,20 +304,62 @@ internal static class TiffRenderer
         }
     }
 
-    private static void WriteEntry(BinaryWriter bw, ushort tag, ushort type, uint count, uint valOrOffset)
+    private static void WriteEntry(BinaryWriter bw, ushort tag, ushort type, uint count, uint valOrOffset, bool bigEndian)
     {
-        bw.Write(tag);
-        bw.Write(type);
-        bw.Write(count);
+        WriteEntryHead(bw, tag, type, count, bigEndian);
         if (type == 3 && count == 1)
         {
-            bw.Write((ushort)valOrOffset);
-            bw.Write((ushort)0);
+            // A single SHORT sits in the first two bytes of the value field, so it is left-justified in either byte order.
+            WriteUInt16(bw, (ushort)valOrOffset, bigEndian);
+            WriteUInt16(bw, 0, bigEndian);
         }
         else
         {
-            bw.Write(valOrOffset);
+            WriteUInt32(bw, valOrOffset, bigEndian);
         }
+    }
+
+    private static void WriteEntryHead(BinaryWriter bw, ushort tag, ushort type, uint count, bool bigEndian)
+    {
+        WriteUInt16(bw, tag, bigEndian);
+        WriteUInt16(bw, type, bigEndian);
+        WriteUInt32(bw, count, bigEndian);
+    }
+
+    /// <summary>
+    /// Writes a 16-bit value in the file's byte order. Little-endian matches <see cref="BinaryWriter.Write(ushort)"/>.
+    /// </summary>
+    private static void WriteUInt16(BinaryWriter bw, ushort value, bool bigEndian)
+    {
+        Span<byte> bytes = stackalloc byte[2];
+        if (bigEndian)
+        {
+            BinaryPrimitives.WriteUInt16BigEndian(bytes, value);
+        }
+        else
+        {
+            BinaryPrimitives.WriteUInt16LittleEndian(bytes, value);
+        }
+
+        bw.Write(bytes);
+    }
+
+    /// <summary>
+    /// Writes a 32-bit value in the file's byte order. Little-endian matches <see cref="BinaryWriter.Write(uint)"/>.
+    /// </summary>
+    private static void WriteUInt32(BinaryWriter bw, uint value, bool bigEndian)
+    {
+        Span<byte> bytes = stackalloc byte[4];
+        if (bigEndian)
+        {
+            BinaryPrimitives.WriteUInt32BigEndian(bytes, value);
+        }
+        else
+        {
+            BinaryPrimitives.WriteUInt32LittleEndian(bytes, value);
+        }
+
+        bw.Write(bytes);
     }
 
     /// <summary>

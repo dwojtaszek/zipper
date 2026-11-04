@@ -164,6 +164,7 @@ The application operates in three distinct generation modes:
 - `--with-tiff-realism`: (Optional) Convenience flag to enable standard realistic TIFF emission (alias for `--tiff-realism standard`).
 - `--realistic-tiff`: (Optional) Alias for `--with-tiff-realism`.
 - `--tiff-compression <group4|uncompressed>`: (Optional) Compression scheme for realistic TIFFs (REQ-238). Defaults to `group4`, or `uncompressed` under `--tiff-realism uncompressed`.
+- `--tiff-byte-order <ii|mm>`: (Optional) Byte order of realistic TIFFs (REQ-241): `ii` (little-endian) or `mm` (big-endian). Defaults to `ii`. Requires realism.
 - `--compression <store|deflate|deflate64|bzip2>`: (Optional) The compression method for output Archives. Defaults to `deflate`. `store` writes uncompressed entries; `deflate64` and `bzip2` are recognized but not yet supported.
 - `--archive-test-suite <smoke|compatibility|malformed|security|encoding|all>`: (Optional) Predefined Archive Test Fixture suite to generate. Requires `--output-path` pointing to a non-existent directory. Accepts only `--archive-test-suite`, `--archive-test-cases`, `--seed`, `--output-path`; all other generation flags rejected.
 - `--archive-test-cases <key,key,...>`: (Optional) Comma-separated list of Archive Test Case keys to filter fixture generation.
@@ -653,9 +654,11 @@ This section clarifies behavior when multiple arguments interact:
 | `--production-zip` + `--production-set` | **Requires**: `--production-zip` cannot be used without `--production-set` |
 | `--volume-size` + `--production-set` | **Requires**: `--volume-size` cannot be used without `--production-set` |
 | `--col-delim`, `--quote-delim`, etc. | Supported in all modes; use `ascii:N` or `char:C` prefix |
-| `--chaos-mode` | Requires `--loadfile-only`, `--production-set`, or Standard Mode generating `--type eml` (REQ-094, REQ-237) |
-| `--chaos-mode` + `--production-set` | Permitted with cross-format scenarios (`cross-format-desync`, `broken-families`) or when generating `eml` (email anomalies); requires `--loadfile-only` for other single-format chaos modes |
+| `--chaos-mode` | Requires `--loadfile-only`, `--production-set`, or Standard Mode generating `--type eml` or `--type tiff` (REQ-094, REQ-237, REQ-241) |
+| `--chaos-mode` + `--production-set` | Permitted with cross-format scenarios (`cross-format-desync`, `broken-families`) or when generating `eml` (email anomalies) or `tiff` (TIFF anomalies); requires `--loadfile-only` for other single-format chaos modes |
 | `--chaos-mode` + `--type eml` (no `--loadfile-only`) | Permitted; `--chaos-types` selects email types only (`mime-boundary`, `encoded-word`, `header-fold`, `rf822-depth`); `--chaos-scenario` is rejected except for Production Set cross-format scenarios (REQ-237) |
+| `--chaos-mode` + `--type tiff` (no `--loadfile-only`) | Permitted; `--chaos-types` selects TIFF types only (`tiff-dimension-lie`, `tiff-truncated-ifd`, `tiff-tag-count-lie`, `tiff-strip-offset`); `--chaos-scenario` is rejected except for Production Set cross-format scenarios (REQ-241) |
+| `--tiff-byte-order` | Requires realism (`--tiff-realism`, `--with-tiff-realism`, or `--realistic-tiff`); accepts `ii` or `mm` (REQ-241) |
 | `--chaos-amount`, `--chaos-types` | Require `--chaos-mode` |
 | `--chaos-scenario` | Requires `--chaos-mode`; conflicts with `--chaos-types` |
 | `--chaos-scenario` + format | Some scenarios require specific `--loadfile-format` |
@@ -701,7 +704,7 @@ This section clarifies behavior when multiple arguments interact:
 
 ### FR-019: Deliberate Anomaly Injection
 
-- **REQ-094**: A new optional command-line argument `--chaos-mode` shall be introduced. Requires `--loadfile-only`, `--production-set` (when targeting coordinated cross-format scenarios or generating **Emails**), or Standard Mode when generating **Emails** (`--type eml` or `eml` in a File Type mix). Supported for the `dat`, `opt`, `csv`, `concordance`, and `edrm-xml` Load File formats, each with its own anomaly catalog, coordinated cross-format scenarios spanning DAT and OPT, and **Email** MIME anomalies (REQ-237).
+- **REQ-094**: A new optional command-line argument `--chaos-mode` shall be introduced. Requires `--loadfile-only`, `--production-set` (when targeting coordinated cross-format scenarios or generating **Emails** or **TIFF** natives), or Standard Mode when generating **Emails** or **TIFF** natives (`--type eml` or `--type tiff`, or `eml` or `tiff` in a File Type mix). Supported for the `dat`, `opt`, `csv`, `concordance`, and `edrm-xml` Load File formats, each with its own anomaly catalog, coordinated cross-format scenarios spanning DAT and OPT, **Email** MIME anomalies (REQ-237), and **TIFF** structural anomalies (REQ-241).
 - **REQ-095**: A new optional argument `--chaos-amount <N|N%>` shall specify the number or percentage of records to corrupt. Requires `--chaos-mode`. Defaults to 1%.
 - **REQ-096**: A new optional argument `--chaos-types <type1,type2,...>` shall filter specific anomaly types. Requires `--chaos-mode`. When not specified, the original DAT types, all existing OPT types except `opt-encoding`, and every type in the selected CSV, Concordance, or EDRM-XML catalog are enabled; the new DAT record-level types are opt-in to preserve existing output. `full-chaos` enables every type for the selected format.
 - **REQ-097**: The following DAT chaos anomaly types shall be supported:
@@ -1021,4 +1024,24 @@ The encoding suite includes the #1283 policy-sensitive Case Key `encoding-local-
   - Every injected email anomaly shall be audited in the Audit File (`_properties.json`) with the EML filename, the **Record Id** of the **Load File Record** for that **Email** (its Bates Number when one is assigned, otherwise its Control Number or `DOC` index), 1-based line number in the EML, affected header or delimiter column, error type, description, and location. In Production Set mode, the DAT and OPT Audit Files both list the email anomalies. In Standard Mode, the Load File's Audit File lists them.
   - Load File lines are not changed by email anomalies. Load File chaos (REQ-094 through REQ-096) keeps its existing behavior.
   - When `--chaos-mode` is omitted or disabled, email generation shall preserve 100% byte-identical output parity to legacy runs (Critical Rule 6).
+
+## 27. TIFF Byte Order and TIFF Chaos Engine Anomaly Types
+
+### FR-034: TIFF Byte Order and TIFF Deliberate Anomaly Injection
+
+- **REQ-241**: An opt-in byte order option shall be introduced via `--tiff-byte-order <ii|mm>`, and the Chaos Engine shall inject header and Image File Directory anomalies into generated **TIFF** natives:
+  - `ii` (little-endian, Intel order) and `mm` (big-endian, Motorola order) are accepted case-insensitively. `ii` is the default. `--tiff-byte-order` requires realism (`--tiff-realism`, `--with-tiff-realism`, or `--realistic-tiff`) and is rejected without it, because placeholder TIFF output has no byte order to choose. On a `--loadfile-only` run it has no effect, because that run emits no native files (REQ-238).
+  - Both byte orders emit the same tags, values, and IFD chain. A big-endian TIFF decodes to the same pixels as its little-endian counterpart in ImageMagick (libtiff-based decoding).
+  - When `--tiff-byte-order` is omitted and realism is off, TIFF generation shall preserve 100% byte-identical output parity to legacy placeholder blobs (Critical Rule 6). With realism on, `ii` output is byte-identical to the realistic output produced before this requirement.
+  - The TIFF anomaly types are `tiff-dimension-lie`, `tiff-truncated-ifd`, `tiff-tag-count-lie`, and `tiff-strip-offset`:
+    - `tiff-dimension-lie`: sets `ImageWidth` or `ImageLength` in the first Image File Directory to 4294967295, far beyond the image data in the strip.
+    - `tiff-truncated-ifd`: cuts the file inside the first Image File Directory, so its entries or next-directory offset run past the end of the file.
+    - `tiff-tag-count-lie`: raises the entry count of the first Image File Directory by 1 to 4 without adding entries.
+    - `tiff-strip-offset`: sets `StripOffsets` or `StripByteCounts` in the first Image File Directory to the file length, placing the image strip past the end of the file.
+  - `--chaos-mode` applies TIFF anomalies to `.tiff` work items in Standard mode (`--type tiff`, or `tiff` in a File Type mix) and to TIFF natives in Production Set mode. `--chaos-amount <N|N%>` (default `1%`) selects the TIFFs to corrupt through `ChaosSampler`, deterministically per `--seed`. Each selected TIFF receives exactly one anomaly. Types rotate over the selected TIFFs in work item order, with the enabled types sorted by name.
+  - On a TIFF run, `--chaos-types` shall name TIFF types only. An email type shall be rejected on a TIFF run, and a TIFF type shall be rejected on an email run and on a `--loadfile-only` run. `--chaos-scenario` shall be rejected on a TIFF run, except for a Production Set cross-format scenario (`cross-format-desync` or `broken-families`), which injects its coordinated DAT/OPT anomalies and no TIFF anomalies.
+  - Each mutation is derived from the run `--seed` and the TIFF's work item index, and every mutation targets the first Image File Directory. The output and audit do not depend on worker scheduling or concurrency.
+  - Every injected TIFF anomaly shall be audited in the Audit File (`_properties.json`) with the TIFF filename, the **Record Id** of the **Load File Record** for that TIFF (its Bates Number when one is assigned, otherwise its Control Number or `DOC` index), line number `1` (a TIFF is a whole-file artifact), the affected column or `N/A`, error type, description, and a location that starts with `IFD 1`. In Production Set mode, the DAT and OPT Audit Files both list the TIFF anomalies. In Standard Mode, the Load File's Audit File lists them.
+  - Load File lines are not changed by TIFF anomalies. Load File chaos (REQ-094 through REQ-096) keeps its existing behavior.
+  - `TiffPreflightValidator` (`src/Validation/`) shall report the malformations that TIFF anomalies inject, as TIFF preflight findings: a missing or unknown byte-order mark, a wrong magic number, an Image File Directory that runs past the end of the file or loops, entries that are out of tag order or use an invalid field type, missing required tags, dimensions outside 1 to 65535 pixels, and strips that run past the end of the file. Every TIFF anomaly type produces at least one finding. The preflight is a standalone validation check: generation does not invoke it.
 

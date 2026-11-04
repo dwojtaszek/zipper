@@ -318,6 +318,49 @@ public sealed class ChaosAndComparisonPropertyTests
         Assert.False(string.IsNullOrEmpty(anomaly.Description));
     }
 
+    // Rendering is the expensive step, so each byte order is rendered once and every case mutates a copy of the same bytes.
+    private static readonly byte[][] RealisticTiffsByByteOrder =
+    [
+        RenderRealisticTiff("ii"),
+        RenderRealisticTiff("mm"),
+    ];
+
+    [Property]
+    public void TiffAnomalyApplier_Apply_ShouldMutateAndAuditAnomaliesDeterministically(
+        byte rawTypeIndex,
+        bool bigEndian,
+        ChaosSeedPropertyInput seedInput)
+    {
+        string[] chaosTypes = [.. ChaosAnomalyTypes.Tiff];
+        string chosenType = chaosTypes[rawTypeIndex % chaosTypes.Length];
+
+        string recordId = $"DOC{seedInput.RecordOrdinal.ToString("D4", CultureInfo.InvariantCulture)}";
+        string fileName = $"{recordId}.tiff";
+        byte[] originalBytes = RealisticTiffsByByteOrder[bigEndian ? 1 : 0];
+
+        var first = TiffAnomalyApplier.Apply(originalBytes, fileName, recordId, chosenType, new Random(seedInput.Seed));
+        var second = TiffAnomalyApplier.Apply(originalBytes, fileName, recordId, chosenType, new Random(seedInput.Seed));
+
+        // Determinism invariant
+        Assert.Equal(first.Content, second.Content);
+        Assert.Equal(first.Anomaly, second.Anomaly);
+
+        // Mutation invariant
+        Assert.False(originalBytes.SequenceEqual(first.Content));
+
+        // Audit contract
+        ChaosAnomaly anomaly = first.Anomaly;
+        Assert.Equal(fileName, anomaly.File);
+        Assert.Equal(recordId, anomaly.RecordID);
+        Assert.Equal(chosenType, anomaly.ErrorType);
+        Assert.False(string.IsNullOrEmpty(anomaly.Location));
+        Assert.False(string.IsNullOrEmpty(anomaly.LineNumber));
+        Assert.False(string.IsNullOrEmpty(anomaly.Description));
+    }
+
+    private static byte[] RenderRealisticTiff(string byteOrder) =>
+        TiffRenderer.RenderMultiPage(1, "DOC00000001", new TiffConfig { RealismMode = "standard", ByteOrder = byteOrder, Compression = "group4" });
+
     [Property]
     public void DatAnomalyApplier_ApplyRecord_ShouldBeDeterministicAndAuditTheColumn(
         byte rawTypeIndex,

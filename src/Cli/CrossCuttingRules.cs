@@ -59,8 +59,8 @@ internal static class CrossCuttingRules
                     .Where(t => !string.IsNullOrEmpty(t))
                     .ToList();
 
-                // Email types apply to generated .eml files and are validated by ChaosModule, not against load file formats.
-                var loadFileTypes = requestedTypes.Where(t => !ChaosAnomalyTypes.IsEmail(t)).ToList();
+                // Email and TIFF types apply to generated native files and are validated by ChaosModule, not against load file formats.
+                var loadFileTypes = requestedTypes.Where(t => !ChaosAnomalyTypes.IsEmail(t) && !ChaosAnomalyTypes.IsTiff(t)).ToList();
                 if (requestedTypes.Count > 0 && loadFileTypes.Count == 0)
                 {
                     return true;

@@ -1552,4 +1552,195 @@ public class ChaosEngineTests
 
         Assert.Equal("CTRL-001", Assert.Single(engine.Anomalies).RecordID);
     }
+
+    private static ChaosEngine TiffEngine(
+        long count,
+        string chaosAmount,
+        string? chaosTypes = null,
+        int? seed = null,
+        IReadOnlyList<long>? itemIndexes = null,
+        BatesSequence? batesSequence = null) =>
+        new(count, chaosAmount, chaosTypes, ChaosAnomalyTypes.Tiff, seed, itemIndexes, batesSequence);
+
+    private static FileWorkItem TiffWorkItem(long index) =>
+        new() { Index = index, FileName = $"DOC{index:D8}.tiff" };
+
+    private static GeneratedFileContent TiffContent() =>
+        new() { Content = PlaceholderFiles.GetContent("tiff") };
+
+    [Fact]
+    public void ApplyTiffChaos_ResultDoesNotDependOnCallOrder_ForSameSeed()
+    {
+        const int count = 40;
+        var forward = TiffEngine(count, "50%", seed: 7);
+        var reverse = TiffEngine(count, "50%", seed: 7);
+
+        var forwardOutputs = new byte[count + 1][];
+        for (int i = 1; i <= count; i++)
+        {
+            forwardOutputs[i] = forward.ApplyTiffChaos(TiffWorkItem(i), TiffContent()).Content;
+        }
+
+        var reverseOutputs = new byte[count + 1][];
+        for (int i = count; i >= 1; i--)
+        {
+            reverseOutputs[i] = reverse.ApplyTiffChaos(TiffWorkItem(i), TiffContent()).Content;
+        }
+
+        for (int i = 1; i <= count; i++)
+        {
+            Assert.Equal(forwardOutputs[i], reverseOutputs[i]);
+        }
+
+        Assert.Equal(forward.Anomalies, reverse.Anomalies);
+    }
+
+    [Fact]
+    public void ApplyTiffChaos_ConcurrentCalls_MatchSequentialOutputAndAudit()
+    {
+        const int count = 200;
+        var sequential = TiffEngine(count, "30%", seed: 11);
+        var concurrent = TiffEngine(count, "30%", seed: 11);
+
+        var expected = new byte[count + 1][];
+        for (int i = 1; i <= count; i++)
+        {
+            expected[i] = sequential.ApplyTiffChaos(TiffWorkItem(i), TiffContent()).Content;
+        }
+
+        var actual = new byte[count + 1][];
+        Parallel.For(1, count + 1, new ParallelOptions { MaxDegreeOfParallelism = 8 }, i =>
+        {
+            actual[i] = concurrent.ApplyTiffChaos(TiffWorkItem(i), TiffContent()).Content;
+        });
+
+        for (int i = 1; i <= count; i++)
+        {
+            Assert.Equal(expected[i], actual[i]);
+        }
+
+        Assert.Equal(sequential.Anomalies, concurrent.Anomalies);
+    }
+
+    [Fact]
+    public void ApplyTiffChaos_Anomalies_AreAuditedInWorkItemOrderWithWholeFileLine()
+    {
+        const int count = 25;
+        var engine = TiffEngine(count, "100%", seed: 3);
+
+        for (int i = count; i >= 1; i--)
+        {
+            engine.ApplyTiffChaos(TiffWorkItem(i), TiffContent());
+        }
+
+        var expectedFiles = Enumerable.Range(1, count).Select(i => $"DOC{i:D8}.tiff").ToList();
+        Assert.Equal(expectedFiles, engine.Anomalies.Select(a => a.File));
+        Assert.All(engine.Anomalies, anomaly => Assert.Equal("1", anomaly.LineNumber));
+    }
+
+    [Fact]
+    public void ApplyTiffChaos_UnsampledItems_ReturnTheInputBytesUnchanged()
+    {
+        var engine = TiffEngine(10, "2", seed: 5);
+        var inputs = new List<GeneratedFileContent>();
+        var results = new List<GeneratedFileContent>();
+
+        for (int i = 1; i <= 10; i++)
+        {
+            var input = TiffContent();
+            inputs.Add(input);
+            results.Add(engine.ApplyTiffChaos(TiffWorkItem(i), input));
+        }
+
+        int untouched = results.Zip(inputs).Count(pair => ReferenceEquals(pair.First.Content, pair.Second.Content));
+        Assert.Equal(8, untouched);
+        Assert.Equal(2, engine.Anomalies.Count);
+    }
+
+    [Fact]
+    public void ApplyTiffChaos_WhenNoTiffTypeIsSelected_LeavesEveryItemUnchanged()
+    {
+        var engine = TiffEngine(5, "100%", chaosTypes: "quotes", seed: 1);
+        var input = TiffContent();
+
+        for (int i = 1; i <= 5; i++)
+        {
+            Assert.Same(input.Content, engine.ApplyTiffChaos(TiffWorkItem(i), input).Content);
+        }
+
+        Assert.Empty(engine.Anomalies);
+    }
+
+    [Fact]
+    public void ApplyTiffChaos_FullSample_ExercisesEveryTiffTypeRoundRobinInWorkItemOrder()
+    {
+        const int count = 8;
+        var engine = TiffEngine(count, "100%", seed: 9);
+
+        for (int i = 1; i <= count; i++)
+        {
+            engine.ApplyTiffChaos(TiffWorkItem(i), TiffContent());
+        }
+
+        var sortedTypes = ChaosAnomalyTypes.Tiff.OrderBy(t => t, StringComparer.Ordinal).ToArray();
+        var expected = Enumerable.Range(0, count).Select(i => sortedTypes[i % sortedTypes.Length]).ToArray();
+        Assert.Equal(expected, engine.Anomalies.Select(a => a.ErrorType).ToArray());
+    }
+
+    [Fact]
+    public void ApplyTiffChaos_WithItemIndexes_SamplesOnlyEligibleItems()
+    {
+        IReadOnlyList<long> eligible = new long[] { 2, 5, 9 };
+        var engine = TiffEngine(eligible.Count, "100%", seed: 4, itemIndexes: eligible);
+        var input = TiffContent();
+
+        var mutatedIndexes = new List<long>();
+        for (int i = 1; i <= 10; i++)
+        {
+            var result = engine.ApplyTiffChaos(TiffWorkItem(i), input);
+            if (!ReferenceEquals(result.Content, input.Content))
+            {
+                mutatedIndexes.Add(i);
+            }
+        }
+
+        Assert.Equal(eligible, mutatedIndexes);
+        Assert.Equal(eligible.Select(i => $"DOC{i:D8}.tiff"), engine.Anomalies.Select(a => a.File));
+    }
+
+    [Fact]
+    public void ApplyTiffChaos_WithBatesSequence_AuditsBatesNumberAsRecordId()
+    {
+        var bates = BatesSequence.FromConfig(new BatesNumberConfig { Prefix = "PROD", Start = 1, Digits = 8 });
+        var engine = TiffEngine(2, "100%", seed: 4, batesSequence: bates);
+
+        engine.ApplyTiffChaos(TiffWorkItem(1), TiffContent());
+        engine.ApplyTiffChaos(TiffWorkItem(2), TiffContent());
+
+        Assert.Equal(new[] { "PROD00000001", "PROD00000002" }, engine.Anomalies.Select(a => a.RecordID));
+    }
+
+    [Fact]
+    public void NativeAnomalies_WithEmailAndTiffEngines_ListsEmailEntriesThenTiffEntries()
+    {
+        var email = new ChaosEngine(1, "100%", null, seed: 4);
+        var tiff = TiffEngine(1, "100%", seed: 4);
+        email.ApplyEmailChaos(EmlWorkItem(1), EmlContent());
+        tiff.ApplyTiffChaos(TiffWorkItem(1), TiffContent());
+
+        var combined = ChaosEngine.NativeAnomalies(email, tiff);
+
+        Assert.Equal(
+            new[] { email.Anomalies[0].File, tiff.Anomalies[0].File },
+            combined.Select(a => a.File));
+        Assert.Equal(
+            new[] { email.Anomalies[0].ErrorType, tiff.Anomalies[0].ErrorType },
+            combined.Select(a => a.ErrorType));
+    }
+
+    [Fact]
+    public void NativeAnomalies_WithNullEngines_ReturnsEmpty()
+    {
+        Assert.Empty(ChaosEngine.NativeAnomalies(null, null));
+    }
 }

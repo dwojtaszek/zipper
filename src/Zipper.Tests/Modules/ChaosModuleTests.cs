@@ -465,4 +465,175 @@ public class ChaosModuleTests
         Assert.False(result);
         Assert.Contains("Error: Chaos type 'mime-boundary' applies only to email (.eml) generation, not to load file output.", stderr, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void TryBuild_StandardTiffRun_AllowsChaosMode()
+    {
+        var module = new ChaosModule();
+        Assert.True(module.TryApply("--chaos-mode", null));
+        Assert.True(module.TryApply("--chaos-types", "tiff-dimension-lie,tiff-strip-offset"));
+
+        Assert.True(module.TryBuild(
+            loadfileOnly: false,
+            formats: new List<LoadFileFormat> { LoadFileFormat.Dat },
+            out var config,
+            productionSet: false,
+            hasEml: false,
+            hasTiff: true));
+
+        Assert.True(config.ChaosMode);
+        Assert.Equal("tiff-dimension-lie,tiff-strip-offset", config.ChaosTypes);
+    }
+
+    [Fact]
+    public void TryBuild_ProductionSetTiffRun_AllowsChaosModeWithoutTypes()
+    {
+        var module = new ChaosModule();
+        Assert.True(module.TryApply("--chaos-mode", null));
+
+        Assert.True(module.TryBuild(
+            loadfileOnly: false,
+            formats: new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt },
+            out var config,
+            productionSet: true,
+            hasEml: false,
+            hasTiff: true));
+
+        Assert.True(config.ChaosMode);
+        Assert.Null(config.ChaosTypes);
+    }
+
+    [Fact]
+    public void TryBuild_MixedEmailAndTiffRun_AcceptsTypesOfBothFamilies()
+    {
+        var module = new ChaosModule();
+        Assert.True(module.TryApply("--chaos-mode", null));
+        Assert.True(module.TryApply("--chaos-types", "mime-boundary,tiff-strip-offset"));
+
+        Assert.True(module.TryBuild(
+            loadfileOnly: false,
+            formats: new List<LoadFileFormat> { LoadFileFormat.Dat },
+            out var config,
+            productionSet: false,
+            hasEml: true,
+            hasTiff: true));
+
+        Assert.Equal("mime-boundary,tiff-strip-offset", config.ChaosTypes);
+    }
+
+    [Fact]
+    public void TryBuild_TiffRunWithDatType_ReturnsFalseWithTiffScope()
+    {
+        var module = new ChaosModule();
+        Assert.True(module.TryApply("--chaos-mode", null));
+        Assert.True(module.TryApply("--chaos-types", "path-pointer"));
+
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => module.TryBuild(
+            loadfileOnly: false,
+            formats: new List<LoadFileFormat> { LoadFileFormat.Dat },
+            out _,
+            productionSet: false,
+            hasEml: false,
+            hasTiff: true));
+
+        Assert.False(result);
+        Assert.Contains(
+            "Error: Invalid chaos type 'path-pointer'. Valid types for TIFF (.tiff) generation: tiff-dimension-lie, tiff-strip-offset, tiff-tag-count-lie, tiff-truncated-ifd",
+            stderr,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryBuild_TiffRunWithEmailType_ReturnsFalseWithTiffTarget()
+    {
+        var module = new ChaosModule();
+        Assert.True(module.TryApply("--chaos-mode", null));
+        Assert.True(module.TryApply("--chaos-types", "mime-boundary"));
+
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => module.TryBuild(
+            loadfileOnly: false,
+            formats: new List<LoadFileFormat> { LoadFileFormat.Dat },
+            out _,
+            productionSet: false,
+            hasEml: false,
+            hasTiff: true));
+
+        Assert.False(result);
+        Assert.Contains("Error: Chaos type 'mime-boundary' applies only to email (.eml) generation, not to TIFF (.tiff) generation.", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryBuild_EmailRunWithTiffType_ReturnsFalseWithEmailTarget()
+    {
+        var module = new ChaosModule();
+        Assert.True(module.TryApply("--chaos-mode", null));
+        Assert.True(module.TryApply("--chaos-types", "tiff-strip-offset"));
+
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => module.TryBuild(
+            loadfileOnly: false,
+            formats: new List<LoadFileFormat> { LoadFileFormat.Dat },
+            out _,
+            productionSet: false,
+            hasEml: true,
+            hasTiff: false));
+
+        Assert.False(result);
+        Assert.Contains("Error: Chaos type 'tiff-strip-offset' applies only to TIFF (.tiff) generation, not to email (.eml) generation.", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryBuild_LoadfileOnlyWithTiffType_ReturnsFalseWithMessage()
+    {
+        var module = new ChaosModule();
+        Assert.True(module.TryApply("--chaos-mode", null));
+        Assert.True(module.TryApply("--chaos-types", "tiff-strip-offset"));
+
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => module.TryBuild(
+            loadfileOnly: true,
+            formats: new List<LoadFileFormat> { LoadFileFormat.Dat },
+            out _,
+            productionSet: false,
+            hasEml: false,
+            hasTiff: true));
+
+        Assert.False(result);
+        Assert.Contains("Error: Chaos type 'tiff-strip-offset' applies only to TIFF (.tiff) generation, not to load file output.", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryBuild_StandardTiffRunWithCrossFormatScenario_ReturnsFalseWithTiffMessage()
+    {
+        var module = new ChaosModule();
+        Assert.True(module.TryApply("--chaos-mode", null));
+        Assert.True(module.TryApply("--chaos-scenario", "cross-format-desync"));
+
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => module.TryBuild(
+            loadfileOnly: false,
+            formats: new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt },
+            out _,
+            productionSet: false,
+            hasEml: false,
+            hasTiff: true));
+
+        Assert.False(result);
+        Assert.Contains("Error: --chaos-scenario does not apply to TIFF (.tiff) chaos.", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryBuild_ProductionSetTiffRunWithCrossFormatScenario_BuildsConfig()
+    {
+        var module = new ChaosModule();
+        Assert.True(module.TryApply("--chaos-mode", null));
+        Assert.True(module.TryApply("--chaos-scenario", "cross-format-desync"));
+
+        Assert.True(module.TryBuild(
+            loadfileOnly: false,
+            formats: new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt },
+            out var config,
+            productionSet: true,
+            hasEml: false,
+            hasTiff: true));
+
+        Assert.Equal("cross-format-desync", config.ChaosScenario);
+    }
 }

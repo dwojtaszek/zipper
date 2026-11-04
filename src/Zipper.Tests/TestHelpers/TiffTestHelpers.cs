@@ -1,4 +1,7 @@
+using System.Buffers.Binary;
 using System.Diagnostics;
+using System.Globalization;
+using System.Text;
 using Xunit;
 
 namespace Zipper.Tests.TestHelpers;
@@ -38,6 +41,55 @@ internal static class TiffTestHelpers
 
         return dict;
     }
+
+    /// <summary>
+    /// Decodes every entry of the first Image File Directory as "type:count:values", honoring the byte order from
+    /// the magic bytes. SHORT values are read from their own two bytes, so a little-endian and a big-endian file
+    /// with the same content decode to the same fields.
+    /// </summary>
+    public static Dictionary<ushort, string> ReadFirstIfdFields(byte[] tiff)
+    {
+        bool bigEndian = tiff[0] == (byte)'M';
+        var fields = new Dictionary<ushort, string>();
+        uint ifdOffset = ReadUInt32(tiff, 4, bigEndian);
+        int entryCount = ReadUInt16(tiff, (int)ifdOffset, bigEndian);
+
+        for (int i = 0; i < entryCount; i++)
+        {
+            int entry = (int)ifdOffset + 2 + (12 * i);
+            ushort tag = ReadUInt16(tiff, entry, bigEndian);
+            ushort type = ReadUInt16(tiff, entry + 2, bigEndian);
+            uint count = ReadUInt32(tiff, entry + 4, bigEndian);
+            int unitSize = type switch
+            {
+                2 => 1,
+                3 => 2,
+                4 => 4,
+                5 => 8,
+                _ => throw new NotSupportedException($"Field type {type} is not decoded by this helper."),
+            };
+
+            // Values of four bytes or less sit inline in the entry; larger values are stored at the offset they name.
+            int valueAt = (long)unitSize * count <= 4 ? entry + 8 : (int)ReadUInt32(tiff, entry + 8, bigEndian);
+            string summary = type switch
+            {
+                2 => Encoding.ASCII.GetString(tiff, valueAt, (int)count),
+                3 => string.Join(",", Enumerable.Range(0, (int)count).Select(v => ReadUInt16(tiff, valueAt + (2 * v), bigEndian).ToString(CultureInfo.InvariantCulture))),
+                4 => string.Join(",", Enumerable.Range(0, (int)count).Select(v => ReadUInt32(tiff, valueAt + (4 * v), bigEndian).ToString(CultureInfo.InvariantCulture))),
+                _ => string.Join(",", Enumerable.Range(0, (int)count).Select(v =>
+                    $"{ReadUInt32(tiff, valueAt + (8 * v), bigEndian)}/{ReadUInt32(tiff, valueAt + (8 * v) + 4, bigEndian)}")),
+            };
+            fields[tag] = $"{type}:{count}:{summary}";
+        }
+
+        return fields;
+    }
+
+    private static ushort ReadUInt16(byte[] bytes, int offset, bool bigEndian) =>
+        bigEndian ? BinaryPrimitives.ReadUInt16BigEndian(bytes.AsSpan(offset)) : BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(offset));
+
+    private static uint ReadUInt32(byte[] bytes, int offset, bool bigEndian) =>
+        bigEndian ? BinaryPrimitives.ReadUInt32BigEndian(bytes.AsSpan(offset)) : BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(offset));
 
     /// <summary>
     /// Walks a TIFF's Image File Directory chain and counts its pages, reading offsets in the

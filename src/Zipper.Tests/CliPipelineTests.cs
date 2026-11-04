@@ -538,7 +538,7 @@ public class CliPipelineTests : WorkingDirectoryTestBase
         var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         Assert.Null(result);
-        Assert.Contains("Error: --chaos-mode requires --loadfile-only, --production-set, or email (.eml) generation.", stderr, StringComparison.Ordinal);
+        Assert.Contains("Error: --chaos-mode requires --loadfile-only, --production-set, email (.eml), or TIFF (.tiff) generation.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]

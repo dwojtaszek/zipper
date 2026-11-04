@@ -54,7 +54,7 @@ public class ParallelFileGenerator
         try
         {
             // Validate inputs
-            if (request.Chaos.ChaosMode && !request.LoadfileOnly && !request.Output.HasFileType("eml"))
+            if (request.Chaos.ChaosMode && !request.LoadfileOnly && !request.Output.HasFileType("eml") && !request.Output.HasFileType("tiff"))
             {
                 throw new InvalidOperationException("Chaos mode requires loadfile-only mode at the generation layer.");
             }
@@ -70,6 +70,7 @@ public class ParallelFileGenerator
             }
 
             ChaosEngine? emailChaosEngine = ChaosEngineBuilder.BuildForStandardEmail(request);
+            ChaosEngine? tiffChaosEngine = ChaosEngineBuilder.BuildForStandardTiff(request);
 
             var generators = this.customGenerators ?? BuildGenerators(request);
 
@@ -164,7 +165,9 @@ public class ParallelFileGenerator
 
             // Start the consumer task to write the archive concurrently. The anomaly provider is read by the
             // consumer after the producers finish, so the audit sees every anomaly.
-            Func<IReadOnlyList<ChaosAnomaly>>? anomalyProvider = emailChaosEngine is null ? null : () => emailChaosEngine.Anomalies;
+            Func<IReadOnlyList<ChaosAnomaly>>? anomalyProvider = emailChaosEngine is null && tiffChaosEngine is null
+                ? null
+                : () => ChaosEngine.NativeAnomalies(emailChaosEngine, tiffChaosEngine);
             Task<string> consumerTask;
             if (this.archiveSink is ZipArchiveSink zipSink)
             {
@@ -189,7 +192,8 @@ public class ParallelFileGenerator
                     request,
                     generators,
                     pipelineCts,
-                    emailChaosEngine);
+                    emailChaosEngine,
+                    tiffChaosEngine);
 
                 var producerTasks = Enumerable.Range(0, request.Output.Concurrency)
                     .Select(i => Task.Run(() => this.ProcessFileWorkAsync(workerContext, cancellationToken), cancellationToken))
@@ -427,7 +431,7 @@ public class ParallelFileGenerator
                 await context.OrderingWindow.WaitForPermitAsync(workItem.Index, context.PipelineCts.Token).ConfigureAwait(false);
 
                 var fileGenerator = context.Generators[workItem.EffectiveFileType(context.Request)];
-                var fileData = this.GenerateFileData(workItem, context.PaddingPerFile, context.Request, fileGenerator, context.EmailChaosEngine);
+                var fileData = this.GenerateFileData(workItem, context.PaddingPerFile, context.Request, fileGenerator, context.EmailChaosEngine, context.TiffChaosEngine);
                 try
                 {
                     await context.Writer.WriteAsync(fileData, context.PipelineCts.Token).ConfigureAwait(false);
@@ -468,14 +472,26 @@ public class ParallelFileGenerator
         FileGenerationRequest Request,
         IReadOnlyDictionary<string, IFileGenerator> Generators,
         CancellationTokenSource PipelineCts,
-        ChaosEngine? EmailChaosEngine = null);
+        ChaosEngine? EmailChaosEngine = null,
+        ChaosEngine? TiffChaosEngine = null);
 
-    internal FileData GenerateFileData(FileWorkItem workItem, long paddingPerFile, FileGenerationRequest request, IFileGenerator fileGenerator, ChaosEngine? emailChaosEngine = null)
+    internal FileData GenerateFileData(
+        FileWorkItem workItem,
+        long paddingPerFile,
+        FileGenerationRequest request,
+        IFileGenerator fileGenerator,
+        ChaosEngine? emailChaosEngine = null,
+        ChaosEngine? tiffChaosEngine = null)
     {
         var generated = fileGenerator.Generate(workItem, request);
         if (emailChaosEngine is not null)
         {
             generated = emailChaosEngine.ApplyEmailChaos(workItem, generated);
+        }
+
+        if (tiffChaosEngine is not null)
+        {
+            generated = tiffChaosEngine.ApplyTiffChaos(workItem, generated);
         }
         var fileContent = generated.Content;
         var attachmentPayloads = generated.GetAttachments();

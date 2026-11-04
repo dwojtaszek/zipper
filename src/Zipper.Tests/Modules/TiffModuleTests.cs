@@ -192,6 +192,49 @@ public class TiffModuleTests
         Assert.False(module.TryApply("--tiff-compression", "deflate"));
     }
 
+    [Fact]
+    public void TryBuild_Default_ByteOrderIsLittleEndian()
+    {
+        var config = Build(null);
+        Assert.Equal("ii", config.ByteOrder);
+    }
+
+    [Theory]
+    [InlineData("mm", "mm")]
+    [InlineData("MM", "mm")]
+    [InlineData("ii", "ii")]
+    public void TryBuild_TiffByteOrderWithRealism_SetsByteOrder(string value, string expected)
+    {
+        var module = new TiffModule();
+        Assert.True(module.TryApply("--tiff-realism", "standard"));
+        Assert.True(module.TryApply("--tiff-byte-order", value));
+        Assert.True(module.TryBuild(out var config));
+        Assert.Equal(expected, config.ByteOrder);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("none")]
+    public void TryBuild_TiffByteOrderWithoutRealism_ReturnsFalse(string? mode)
+    {
+        var module = new TiffModule();
+        if (mode is not null)
+        {
+            Assert.True(module.TryApply("--tiff-realism", mode));
+        }
+        Assert.True(module.TryApply("--tiff-byte-order", "mm"));
+        Assert.False(module.TryBuild(out _));
+    }
+
+    [Theory]
+    [InlineData("le")]
+    [InlineData("big")]
+    public void TryApply_InvalidByteOrder_ReturnsFalse(string value)
+    {
+        var module = new TiffModule();
+        Assert.False(module.TryApply("--tiff-byte-order", value));
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
@@ -200,5 +243,6 @@ public class TiffModuleTests
         var module = new TiffModule();
         Assert.False(module.TryApply("--tiff-realism", value));
         Assert.False(module.TryApply("--tiff-compression", value));
+        Assert.False(module.TryApply("--tiff-byte-order", value));
     }
 }

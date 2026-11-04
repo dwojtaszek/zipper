@@ -9,7 +9,8 @@ namespace Zipper;
 /// </summary>
 /// <remarks>
 /// Line-level chaos is not thread-safe. Instances used for line-level chaos should not be shared across threads.
-/// Email chaos (<see cref="ApplyEmailChaos(FileWorkItem, GeneratedFileContent)"/>) is safe for concurrent calls
+/// Work item chaos (<see cref="ApplyEmailChaos(FileWorkItem, GeneratedFileContent)"/> and
+/// <see cref="ApplyTiffChaos(FileWorkItem, GeneratedFileContent)"/>) is safe for concurrent calls
 /// as long as each work item is applied once.
 /// </remarks>
 internal class ChaosEngine
@@ -22,7 +23,6 @@ internal class ChaosEngine
     private static readonly string[] CsvChaosTypes = ChaosAnomalyTypes.Csv.ToArray();
     private static readonly string[] ConcordanceChaosTypes = ChaosAnomalyTypes.Concordance.ToArray();
     private static readonly string[] EdrmXmlChaosTypes = ChaosAnomalyTypes.EdrmXml.ToArray();
-    private static readonly string[] EmailChaosTypes = ChaosAnomalyTypes.Email.ToArray();
 
     private readonly HashSet<string> enabledTypes;
     private readonly List<ChaosAnomaly> anomalies = new();
@@ -37,13 +37,13 @@ internal class ChaosEngine
     private readonly bool noDatRecords;
     private readonly ChaosSampler sampler;
 
-    // Email chaos: the sampled work items, and one audit slot per sampled item in work item order.
-    private readonly int emailSeed;
-    private readonly BatesSequence? emailBatesSequence;
-    private readonly Dictionary<long, EmailSample>? emailSamples;
-    private readonly ChaosAnomaly?[]? emailAnomalies;
+    // Work item chaos: the sampled work items, and one audit slot per sampled item in work item order.
+    private readonly int workItemSeed;
+    private readonly BatesSequence? workItemBatesSequence;
+    private readonly Dictionary<long, WorkItemSample>? workItemSamples;
+    private readonly ChaosAnomaly?[]? workItemAnomalies;
 
-    private readonly record struct EmailSample(int Slot, string Type);
+    private readonly record struct WorkItemSample(int Slot, string Type);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ChaosEngine"/> class.
@@ -132,6 +132,31 @@ internal class ChaosEngine
         int? seed = null,
         IReadOnlyList<long>? itemIndexes = null,
         BatesSequence? batesSequence = null)
+        : this(totalItems, chaosAmount, chaosTypes, ChaosAnomalyTypes.Email, seed, itemIndexes, batesSequence)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ChaosEngine"/> class for the work items of one native file family.
+    /// </summary>
+    /// <param name="totalItems">Number of eligible work items to sample over.</param>
+    /// <param name="chaosAmount">Amount string: percentage (e.g., "1%") or exact count (e.g., "500").</param>
+    /// <param name="chaosTypes">Comma-separated type filter, or null or empty for every type of the family.</param>
+    /// <param name="workItemTypes">The family's anomaly types. Only these types are sampled, so every work item gets a type of its own family.</param>
+    /// <param name="seed">Optional run seed. Each work item derives its own random sequence from this seed and its index.</param>
+    /// <param name="itemIndexes">
+    /// Optional ascending 1-based indexes of the eligible work items. Its count must equal <paramref name="totalItems"/>.
+    /// Null means work items 1 through <paramref name="totalItems"/> are all eligible.
+    /// </param>
+    /// <param name="batesSequence">Optional Bates sequence of the run, used to name each audited record as its Load File record is named.</param>
+    internal ChaosEngine(
+        long totalItems,
+        string? chaosAmount,
+        string? chaosTypes,
+        IReadOnlyList<string> workItemTypes,
+        int? seed,
+        IReadOnlyList<long>? itemIndexes,
+        BatesSequence? batesSequence)
     {
         this.format = LoadFileFormat.Dat;
         this.totalLines = totalItems;
@@ -145,37 +170,38 @@ internal class ChaosEngine
         Random random = seed.HasValue ? new Random(seed.Value) : new Random();
 #pragma warning restore S2245
 
-        this.emailSeed = seed ?? random.Next();
-        this.emailBatesSequence = batesSequence;
-        this.enabledTypes = ResolveEnabledEmailTypes(chaosTypes);
-        var emailTypes = this.enabledTypes.OrderBy(type => type, StringComparer.Ordinal).ToArray();
+        this.workItemSeed = seed ?? random.Next();
+        this.workItemBatesSequence = batesSequence;
+        this.enabledTypes = ResolveEnabledWorkItemTypes(chaosTypes, workItemTypes);
+        var sampledTypes = this.enabledTypes.OrderBy(type => type, StringComparer.Ordinal).ToArray();
 
         this.sampler = new ChaosSampler(totalItems, chaosAmount, random);
-        long[] sampledOrdinals = emailTypes.Length == 0 ? [] : this.sampler.TargetLines.Order().ToArray();
+        long[] sampledOrdinals = sampledTypes.Length == 0 ? [] : this.sampler.TargetLines.Order().ToArray();
 
         // Ordinals are ascending, so audit slots follow work item order. Types rotate over the sampled items.
-        this.emailSamples = new Dictionary<long, EmailSample>(sampledOrdinals.Length);
-        this.emailAnomalies = new ChaosAnomaly?[sampledOrdinals.Length];
+        this.workItemSamples = new Dictionary<long, WorkItemSample>(sampledOrdinals.Length);
+        this.workItemAnomalies = new ChaosAnomaly?[sampledOrdinals.Length];
         for (int slot = 0; slot < sampledOrdinals.Length; slot++)
         {
             long ordinal = sampledOrdinals[slot];
             long workItemIndex = itemIndexes is null ? ordinal : itemIndexes[(int)(ordinal - 1)];
-            this.emailSamples.Add(workItemIndex, new EmailSample(slot, emailTypes[slot % emailTypes.Length]));
+            this.workItemSamples.Add(workItemIndex, new WorkItemSample(slot, sampledTypes[slot % sampledTypes.Length]));
         }
     }
 
-    private static HashSet<string> ResolveEnabledEmailTypes(string? chaosTypes)
+    private static HashSet<string> ResolveEnabledWorkItemTypes(string? chaosTypes, IReadOnlyList<string> workItemTypes)
     {
         if (!string.IsNullOrEmpty(chaosTypes))
         {
+            // The rfc822-depth alias is the only alias; it is not an email-only name, and TIFF names pass through unchanged.
             var resolvedTypes = new HashSet<string>(
                 chaosTypes.Split(',').Select(type => ChaosAnomalyTypes.CanonicalEmailType(type.Trim().ToLowerInvariant())),
                 StringComparer.OrdinalIgnoreCase);
-            resolvedTypes.IntersectWith(EmailChaosTypes);
+            resolvedTypes.IntersectWith(workItemTypes);
             return resolvedTypes;
         }
 
-        return new HashSet<string>(EmailChaosTypes, StringComparer.OrdinalIgnoreCase);
+        return new HashSet<string>(workItemTypes, StringComparer.OrdinalIgnoreCase);
     }
 
     private static HashSet<string> ResolveEnabledTypes(LoadFileFormat format, string? chaosTypes)
@@ -272,9 +298,29 @@ internal class ChaosEngine
     /// <summary>
     /// Gets the list of injected anomalies for audit output.
     /// </summary>
-    public IReadOnlyList<ChaosAnomaly> Anomalies => this.emailAnomalies is null
+    public IReadOnlyList<ChaosAnomaly> Anomalies => this.workItemAnomalies is null
         ? this.anomalies
-        : this.emailAnomalies.OfType<ChaosAnomaly>().ToList();
+        : this.workItemAnomalies.OfType<ChaosAnomaly>().ToList();
+
+    /// <summary>
+    /// Gets the audit entries of the native-file engines of one run: email entries first, then TIFF entries.
+    /// Either engine may be null.
+    /// </summary>
+    internal static IReadOnlyList<ChaosAnomaly> NativeAnomalies(ChaosEngine? emailEngine, ChaosEngine? tiffEngine)
+    {
+        var all = new List<ChaosAnomaly>();
+        if (emailEngine is not null)
+        {
+            all.AddRange(emailEngine.Anomalies);
+        }
+
+        if (tiffEngine is not null)
+        {
+            all.AddRange(tiffEngine.Anomalies);
+        }
+
+        return all;
+    }
 
     /// <summary>
     /// Determines if a line should be intercepted by the chaos engine.
@@ -483,12 +529,13 @@ internal class ChaosEngine
     /// <remarks>
     /// The anomaly depends only on the seed, the work item index, and the content, so the output and audit
     /// match regardless of call order or concurrency. Each work item must be applied at most once.
+    /// Call this only on an engine built for email work items.
     /// </remarks>
     public GeneratedFileContent ApplyEmailChaos(
         FileWorkItem workItem,
         GeneratedFileContent generated)
     {
-        if (this.emailSamples is null || !this.emailSamples.TryGetValue(workItem.Index, out var sample))
+        if (!TryGetWorkItemSample(workItem, out var sample))
         {
             return generated;
         }
@@ -496,15 +543,52 @@ internal class ChaosEngine
         var result = EmailAnomalyApplier.Apply(
             generated.Content,
             workItem.FileName,
-            DatComposerShared.ResolveParentId(workItem, this.emailBatesSequence),
+            DatComposerShared.ResolveParentId(workItem, this.workItemBatesSequence),
             sample.Type,
             workItem.Index,
-            EmailAnomalyApplier.CreateItemRandom(this.emailSeed, workItem.Index));
-        this.emailAnomalies![sample.Slot] = result.Anomaly;
+            EmailAnomalyApplier.CreateItemRandom(this.workItemSeed, workItem.Index));
+        return RecordWorkItemAnomaly(sample, generated, result.Content, result.Anomaly);
+    }
+
+    /// <summary>
+    /// Applies the TIFF anomaly sampled for a work item and records its audit entry.
+    /// Returns the content unchanged when the work item was not sampled.
+    /// </summary>
+    /// <remarks>
+    /// Same determinism and audit contract as <see cref="ApplyEmailChaos(FileWorkItem, GeneratedFileContent)"/>.
+    /// Call this only on an engine built for TIFF work items.
+    /// </remarks>
+    public GeneratedFileContent ApplyTiffChaos(
+        FileWorkItem workItem,
+        GeneratedFileContent generated)
+    {
+        if (!TryGetWorkItemSample(workItem, out var sample))
+        {
+            return generated;
+        }
+
+        var result = TiffAnomalyApplier.Apply(
+            generated.Content,
+            workItem.FileName,
+            DatComposerShared.ResolveParentId(workItem, this.workItemBatesSequence),
+            sample.Type,
+            EmailAnomalyApplier.CreateItemRandom(this.workItemSeed, workItem.Index));
+        return RecordWorkItemAnomaly(sample, generated, result.Content, result.Anomaly);
+    }
+
+    private bool TryGetWorkItemSample(FileWorkItem workItem, out WorkItemSample sample)
+    {
+        sample = default;
+        return this.workItemSamples is not null && this.workItemSamples.TryGetValue(workItem.Index, out sample);
+    }
+
+    private GeneratedFileContent RecordWorkItemAnomaly(WorkItemSample sample, GeneratedFileContent generated, byte[] content, ChaosAnomaly anomaly)
+    {
+        this.workItemAnomalies![sample.Slot] = anomaly;
 
         return new GeneratedFileContent
         {
-            Content = result.Content,
+            Content = content,
             Attachment = generated.Attachment,
             Attachments = generated.Attachments,
             Email = generated.Email,
