@@ -154,6 +154,40 @@ if errorlevel 1 (
     call :pass "validator accepts the single-line 'if errorlevel 1 exit /b 1' form"
 )
 
+REM --- Negative: run-tests.bat missing goto :main must be caught (#1405) ---
+
+copy /y "%RUNNER_BAT%" "%SANDBOX%\run-tests.bat" >nul
+powershell -NoProfile -Command "$p='%SANDBOX%\run-tests.bat'; $s=[IO.File]::ReadAllText($p); $old=\"goto :main`r`n\"; if (-not $s.Contains($old)) { $old=\"goto :main`n\" }; if (-not $s.Contains($old)) { Write-Error 'goto :main not found'; exit 1 }; [IO.File]::WriteAllText($p, $s.Replace($old, ''))"
+if errorlevel 1 (
+    call :fail "could not remove goto :main in sandbox"
+    goto :summary
+)
+
+bash "%SANDBOX%\validate-e2e-parity.sh" --strict > "%SANDBOX%.nogotomain.out" 2>&1
+if errorlevel 1 (
+    call :pass "validator fails when run-tests.bat is missing 'goto :main'"
+) else (
+    call :fail "validator passed a run-tests.bat with no 'goto :main'"
+    type "%SANDBOX%.nogotomain.out"
+)
+
+REM --- Negative: run-tests.bat missing :main label must be caught (#1405) ---
+
+copy /y "%RUNNER_BAT%" "%SANDBOX%\run-tests.bat" >nul
+powershell -NoProfile -Command "$p='%SANDBOX%\run-tests.bat'; $s=[IO.File]::ReadAllText($p); $old=\"`r`n:main`r`n\"; if (-not $s.Contains($old)) { $old=\"`n:main`n\"; $rep=\"`n\" } else { $rep=\"`r`n\" }; if (-not $s.Contains($old)) { Write-Error ':main not found'; exit 1 }; [IO.File]::WriteAllText($p, $s.Replace($old, $rep))"
+if errorlevel 1 (
+    call :fail "could not remove :main in sandbox"
+    goto :summary
+)
+
+bash "%SANDBOX%\validate-e2e-parity.sh" --strict > "%SANDBOX%.nomainlabel.out" 2>&1
+if errorlevel 1 (
+    call :pass "validator fails when run-tests.bat is missing ':main' label"
+) else (
+    call :fail "validator passed a run-tests.bat with no ':main' label"
+    type "%SANDBOX%.nomainlabel.out"
+)
+
 call :cleanup
 
 :summary
@@ -168,7 +202,7 @@ exit /b 1
 
 :cleanup
 if exist "%SANDBOX%" rd /s /q "%SANDBOX%"
-for %%F in (clean unguarded noexit errlevel echofake oneline) do (
+for %%F in (clean unguarded noexit errlevel echofake oneline nogotomain nomainlabel) do (
     if exist "%SANDBOX%.%%F.out" del /q "%SANDBOX%.%%F.out"
 )
 goto :eof

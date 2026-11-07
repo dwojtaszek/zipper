@@ -318,5 +318,59 @@ public class DocsDriftTests
         var testsReadme = File.ReadAllText(testsReadmePath);
         Assert.DoesNotContain("test-compute-version.sh", testsReadme);
     }
+
+    [Fact]
+    public void RunTestsBat_HasExplicitEntryPointBeforeHelperSubroutines()
+    {
+        var runTestsBatPath = Path.Combine(RepoRoot, "tests", "run-tests.bat");
+        var lines = File.ReadAllLines(runTestsBatPath);
+
+        int firstLabelIndex = -1;
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var trimmed = lines[i].TrimStart();
+            if (trimmed.StartsWith(':') && !trimmed.StartsWith("::", StringComparison.Ordinal))
+            {
+                firstLabelIndex = i;
+                break;
+            }
+        }
+
+        Assert.True(firstLabelIndex > 0, "run-tests.bat must have at least one subroutine label.");
+
+        bool hasGotoMain = false;
+        for (int i = 0; i < firstLabelIndex; i++)
+        {
+            if (System.Text.RegularExpressions.Regex.IsMatch(lines[i], @"^\s*goto\s+:?main\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)))
+            {
+                hasGotoMain = true;
+                break;
+            }
+        }
+
+        Assert.True(hasGotoMain, $"run-tests.bat must contain 'goto :main' before label '{lines[firstLabelIndex].Trim()}' at line {firstLabelIndex + 1} (#1405).");
+
+        int mainLabelIndex = -1;
+        int firstCaseIndex = -1;
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var trimmed = lines[i].TrimStart();
+            if (System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^:main\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)))
+            {
+                mainLabelIndex = i;
+            }
+            if (System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"call\s+:run_test_case\s+""Test Case 1:", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)))
+            {
+                if (firstCaseIndex < 0)
+                {
+                    firstCaseIndex = i;
+                }
+            }
+        }
+
+        Assert.True(mainLabelIndex >= 0, "run-tests.bat must contain a ':main' label.");
+        Assert.True(firstCaseIndex >= 0, "run-tests.bat must contain 'Test Case 1'.");
+        Assert.True(mainLabelIndex < firstCaseIndex, "':main' label must appear before Test Case 1 in run-tests.bat.");
+    }
 }
 

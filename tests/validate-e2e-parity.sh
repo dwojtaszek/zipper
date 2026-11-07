@@ -268,8 +268,23 @@ elif ! grep -qiE 'call[[:space:]]+\.\\tests\\[A-Za-z0-9._-]+\.bat' "$BAT_RUNNER"
 fi
 rm -f "$SANDBOX_REPORT" "$SANDBOX_RAW"
 
+# #1405: run-tests.bat must have an explicit entry point: `goto :main` before any subroutine label,
+# and a matching `:main` label before test cases. Without this, batch execution falls straight into
+# the first helper (:print_success) and exits 0 in ~0.02s without running any tests.
+first_label_line=$(awk '/^[ \t]*:[a-zA-Z0-9_]/ && !/^[ \t]*::/ { print NR; exit }' "$BAT_RUNNER")
+if [[ -n "$first_label_line" ]]; then
+    if ! head -n "$first_label_line" "$BAT_RUNNER" | grep -qiE '^[[:space:]]*goto[[:space:]]+:?main\b'; then
+        DRIFT=1
+        echo "Entry point missing in run-tests.bat: label at line $first_label_line without 'goto :main' before it (#1405)."
+    fi
+fi
+if ! grep -qiE '^[[:space:]]*:main\b' "$BAT_RUNNER"; then
+    DRIFT=1
+    echo "Entry point missing in run-tests.bat: no ':main' label found (#1405)."
+fi
+
 if [[ $DRIFT -eq 0 ]]; then
-    echo "OK: run-tests.sh and run-tests.bat are in sync (${#SH_CASES[@]} inline cases, ${#SH_SCRIPTS[@]} sub-script suites, every .bat child call guarded)."
+    echo "OK: run-tests.sh and run-tests.bat are in sync (${#SH_CASES[@]} inline cases, ${#SH_SCRIPTS[@]} sub-script suites, every .bat child call guarded, .bat entry point valid)."
     exit 0
 fi
 
