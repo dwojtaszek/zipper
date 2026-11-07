@@ -260,13 +260,24 @@ updated-dependencies:
         ts = runner._fetch_upstream_publish_timestamp("actions/checkout", "4.2.0", "github-actions")
         self.assertEqual(ts, datetime(2026, 10, 18, 12, 0, 0, tzinfo=timezone.utc))
 
-        # Tag without release -> None (fail closed)
+        # Tag without release or commit -> None (fail closed)
         mock_run_cmd.side_effect = [
             (1, "", "Not Found"),  # v4 tag release 404
+            (1, "", "Not Found"),  # v4 commit 404
             (1, "", "Not Found"),  # 4 tag release 404
+            (1, "", "Not Found"),  # 4 commit 404
         ]
         ts_none = runner._fetch_upstream_publish_timestamp("actions/checkout", "4", "github-actions")
         self.assertIsNone(ts_none)
+
+        # Fallback to commit timestamp when release metadata is missing
+        mock_run_cmd.side_effect = [
+            (1, "", "Not Found"),  # v7 tag release 404
+            (1, "", "Not Found"),  # 7 tag release 404
+            (0, json.dumps({"commit": {"committer": {"date": "2026-07-17T18:45:11Z"}}}), ""),  # v7 commit
+        ]
+        ts_commit = runner._fetch_upstream_publish_timestamp("actions/checkout", "7", "github-actions")
+        self.assertEqual(ts_commit, datetime(2026, 7, 17, 18, 45, 11, tzinfo=timezone.utc))
 
         # Draft release or missing published_at -> None (fail closed, no created_at fallback)
         mock_run_cmd.side_effect = [
