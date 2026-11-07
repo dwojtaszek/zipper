@@ -205,6 +205,12 @@ Bot infra errors — retry, don't block merge.
 
 `dynamic/agents/github-advanced-security` ("Code scanning AI findings on PR #N") is GitHub-owned infrastructure, not a repo workflow — it cannot be edited from this repo, so no `concurrency:` group and no retry policy can be added to it, and it re-runs on every `pull_request` event regardless of repo-level cancellation. It is **not** in `ci-gate`'s needs, not in branch protection (required: `ci-gate` only), and not even surfaced in `gh pr checks`. Its failures are Copilot agent runtime flakes (proxy/runtime download, sandbox setup) and, when the monthly Copilot quota is exhausted, `SessionModelError: You have exceeded your monthly quota` — both outside this repository's control. Treat exactly like factory-droid: advisory noise, never a merge blocker, never worth chasing. Do not investigate its logs during PR closeout; if curious, re-run the workflow instead. The only in-repo lever is a repo setting (disable the dynamic agent), which is an admin action, not a PR.
 
+## Pullfrog
+
+[`pullfrog.yml`](.github/workflows/pullfrog.yml) is an external-app check, not a repo gate: the workflow file only declares the manual `workflow_dispatch` entry point, while the PR check is posted by the Pullfrog service (`https://pullfrog.com/repo/<owner>/<repo>/workflow-run/...`). It is **not** in `ci-gate`'s needs and **not** in branch protection (required: `ci-gate` only), so it never blocks a merge.
+
+It has failed every observed run with the external `provider error: Not Found`, which is the service's upstream dependency, not this repository. Treat it like `factory-droid`: advisory noise, never worth chasing. Do not investigate its logs during PR closeout; re-running the workflow is the only in-repo lever.
+
 ## Goldens
 
 Regenerate with:
