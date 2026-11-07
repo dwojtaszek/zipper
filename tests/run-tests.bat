@@ -5,6 +5,7 @@ REM --- Test Configuration ---
 REM The directory where test output will be generated.
 set TEST_OUTPUT_DIR=.\test_output
 set FAILED=0
+set PYTHONIOENCODING=utf-8
 
 REM The .NET project to run.
 set PROJECT=src\Zipper.csproj
@@ -108,19 +109,19 @@ REM --- Helper Functions ---
     call :print_info ".zip file count for .%file_type% is correct (%zip_file_count%)."
 
     REM Verify text file count if required
-    if "%check_text%" == "true" (
-        if "%file_type%" == "eml" (
-            powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = @($z.Entries | Where { $_.Name -match '\.txt$' -and $_.Name -notmatch 'attachment' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\zip_txt_count.txt"
-        ) else (
-            powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = @($z.Entries | Where { $_.Name -match '\.txt$' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\zip_txt_count.txt"
-        )
-        set "txt_count="
-        set /p txt_count=<"%temp%\zip_txt_count.txt"
-        if "%txt_count%" neq "%expected_count%" (
-            call :print_error "Incorrect .txt file count in .zip file. Expected %expected_count%, found %txt_count%."
-        )
-        call :print_info ".zip file count for .txt is correct (%txt_count%)."
+    if not "%check_text%" == "true" goto :skip_text_verify
+    if "%file_type%" == "eml" (
+        powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = @($z.Entries | Where { $_.Name -match '\.txt$' -and $_.Name -notmatch 'attachment' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\zip_txt_count.txt"
+    ) else (
+        powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = @($z.Entries | Where { $_.Name -match '\.txt$' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\zip_txt_count.txt"
     )
+    set "txt_count="
+    set /p txt_count=<"%temp%\zip_txt_count.txt"
+    if "%txt_count%" neq "%expected_count%" (
+        call :print_error "Incorrect .txt file count in .zip file. Expected %expected_count%, found %txt_count%."
+    )
+    call :print_info ".zip file count for .txt is correct (%txt_count%)."
+:skip_text_verify
     goto :eof
 
 REM Verifies the size of the generated zip file.
@@ -199,15 +200,15 @@ REM %2: Target size in MB
     call :print_info "Found %dat_attachment_count% attachments in .dat file."
 
     REM Verify attachment text files if text extraction enabled
-    if "%check_text%" == "true" (
-        powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = @($z.Entries | Where { $_.Name -match 'attachment.*\.txt$' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\att_txt_count.txt"
-        set "attachment_text_files="
-        set /p attachment_text_files=<"%temp%\att_txt_count.txt"
-        if "%attachment_text_files%" neq "%expected_attachment_count%" (
-            call :print_error "Expected exactly %expected_attachment_count% attachment text files, but found %attachment_text_files%."
-        )
-        call :print_info "Found %attachment_text_files% attachment text files in ZIP archive."
+    if not "%check_text%" == "true" goto :skip_eml_text_verify
+    powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = @($z.Entries | Where { $_.Name -match 'attachment.*\.txt$' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\att_txt_count.txt"
+    set "attachment_text_files="
+    set /p attachment_text_files=<"%temp%\att_txt_count.txt"
+    if "%attachment_text_files%" neq "%expected_attachment_count%" (
+        call :print_error "Expected exactly %expected_attachment_count% attachment text files, but found %attachment_text_files%."
     )
+    call :print_info "Found %attachment_text_files% attachment text files in ZIP archive."
+:skip_eml_text_verify
     goto :eof
 
 :verify_load_file_included

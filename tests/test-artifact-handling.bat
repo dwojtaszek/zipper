@@ -19,6 +19,7 @@ if not defined PYCMD (
     exit /b 1
 )
 
+set "PYTHONIOENCODING=utf-8"
 %PYCMD% "%REPO_ROOT%\tools\typesafe-audit\workflow_validator.py" --artifacts %*
 if errorlevel 1 (
     echo [ ERROR ] Artifact handling validation failed.
