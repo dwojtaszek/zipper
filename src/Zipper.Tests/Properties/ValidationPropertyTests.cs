@@ -24,6 +24,7 @@ public sealed class ValidationPropertyTests : IDisposable
     private const string PriorPrefix = "SUPP";
     private const int PriorDigits = 8;
     private const int BatesDigits = 8;
+    private const string TiffFilePath = "NATIVES/001/DOC00000001.tif";
 
     /// <summary>
     /// Shared temp root: a 100-case property allocates one sub-directory per iteration, so
@@ -473,6 +474,54 @@ public sealed class ValidationPropertyTests : IDisposable
                     break;
             }
         }
+    }
+
+    // ------------------------------------------------------------------
+    // 6. TiffPreflightValidator — arbitrary bytes never throw
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Bounds safety of the TIFF preflight: arbitrary bytes always produce findings instead of
+    /// an exception, every finding carries the TIFF category, and content that cannot be a TIFF
+    /// (shorter than the header or without an II/MM byte-order mark) always yields a finding.
+    /// </summary>
+    [Property]
+    public void Validate_ArbitraryBytes_ShouldReportFindingsWithoutThrowing(TiffBytesPropertyInput input)
+    {
+        var result = new ValidationResult();
+
+        var exception = Record.Exception(() => new TiffPreflightValidator().Validate(input.Content, TiffFilePath, result));
+
+        Assert.Null(exception);
+        Assert.All(result.Findings, finding => Assert.Equal(TiffPreflightValidator.Category, finding.Category));
+
+        bool hasByteOrderMark = input.Content.Length >= 2
+            && ((input.Content[0] == (byte)'I' && input.Content[1] == (byte)'I')
+                || (input.Content[0] == (byte)'M' && input.Content[1] == (byte)'M'));
+        if (input.Content.Length < 8 || !hasByteOrderMark)
+        {
+            Assert.NotEmpty(result.Findings);
+        }
+    }
+
+    /// <summary>
+    /// Chaos ↔ validator agreement: every TIFF anomaly type, applied to a valid TIFF with an
+    /// arbitrary seed, produces at least one TIFF preflight finding with the file path recorded.
+    /// </summary>
+    [Property]
+    public void Validate_ChaosMutatedTiff_ShouldReportFindings(TiffChaosPropertyInput input)
+    {
+        string chaosType = ChaosAnomalyTypes.Tiff[input.ChaosTypeIndex];
+        var mutated = TiffAnomalyApplier
+            .Apply(PlaceholderFiles.GetContent("tiff"), TiffFilePath, "DOC00000001", chaosType, new Random(input.Seed))
+            .Content;
+
+        var result = new ValidationResult();
+        new TiffPreflightValidator().Validate(mutated, TiffFilePath, result);
+
+        Assert.True(result.HasErrors, $"{chaosType} with seed {input.Seed} was not caught.");
+        Assert.All(result.Findings, finding => Assert.Equal(TiffPreflightValidator.Category, finding.Category));
+        Assert.All(result.Findings, finding => Assert.Equal(TiffFilePath, finding.FilePath));
     }
 
     // ------------------------------------------------------------------

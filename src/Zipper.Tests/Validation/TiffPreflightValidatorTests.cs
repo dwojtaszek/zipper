@@ -75,6 +75,17 @@ public class TiffPreflightValidatorTests
         }
     }
 
+    // Removes one directory entry and shifts the rest, including the next-directory offset, left by one entry.
+    private static void DropEntry(byte[] tiff, ushort tag)
+    {
+        int ifd = FirstIfdOffset(tiff);
+        int count = ReadUInt16(tiff, ifd);
+        int entry = EntryPosition(tiff, tag);
+        int afterEntries = ifd + 2 + (12 * count);
+        Array.Copy(tiff, entry + 12, tiff, entry, afterEntries + 4 - (entry + 12));
+        WriteUInt16(tiff, ifd, (ushort)(count - 1));
+    }
+
     [Theory]
     [InlineData("ii", "group4", 1)]
     [InlineData("ii", "uncompressed", 3)]
@@ -205,6 +216,24 @@ public class TiffPreflightValidatorTests
         var result = Validate(tiff);
 
         Assert.Contains(result.Findings, finding => finding.Message.Contains("missing required tag StripOffsets", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(258, "BitsPerSample")]
+    [InlineData(259, "Compression")]
+    [InlineData(262, "PhotometricInterpretation")]
+    [InlineData(278, "RowsPerStrip")]
+    [InlineData(282, "XResolution")]
+    [InlineData(283, "YResolution")]
+    [InlineData(296, "ResolutionUnit")]
+    public void Validate_MissingBaselineTag_ReportsRequiredTagFinding(ushort tag, string name)
+    {
+        var tiff = RenderTiff("ii");
+        DropEntry(tiff, tag);
+
+        var result = Validate(tiff);
+
+        Assert.Contains(result.Findings, finding => finding.Message.Contains($"missing required tag {name}", StringComparison.Ordinal));
     }
 
     [Fact]

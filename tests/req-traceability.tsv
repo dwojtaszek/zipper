@@ -930,6 +930,9 @@ REQ-241	unit	TiffAnomalyApplierTests.Apply_PlaceholderTiff_MutatesEveryType	Ever
 REQ-241	unit	TiffPreflightValidatorTests.Validate_EachChaosType_IsCaughtAcrossSeedsPageCountsAndByteOrders	Preflight catches every TIFF anomaly type across seeds, page counts, and byte orders
 REQ-241	unit	TiffPreflightValidatorTests.Validate_ChaosType_ReportsTheFailureItInjects	Each TIFF anomaly type reports the failure it injects
 REQ-241	unit	TiffPreflightValidatorTests.Validate_RenderedTiff_ReportsNoFindings	Rendered TIFFs in both byte orders pass preflight without findings
+REQ-241	unit	TiffPreflightValidatorTests.Validate_MissingBaselineTag_ReportsRequiredTagFinding	Every missing baseline TIFF field is reported
+REQ-241	unit	ValidationPropertyTests.Validate_ArbitraryBytes_ShouldReportFindingsWithoutThrowing	Property: arbitrary TIFF bytes produce findings without throwing
+REQ-241	unit	ValidationPropertyTests.Validate_ChaosMutatedTiff_ShouldReportFindings	Property: every TIFF anomaly type is caught by the preflight
 REQ-241	unit	TiffRendererTests.RenderMultiPage_BigEndian_WritesMmHeaderAndSameFieldsAsLittleEndian	Big-endian TIFF writes the MM header and the same tags as little-endian
 REQ-241	unit	TiffRendererTests.RenderPage_PageNumberField_PacksPageIndexAndCountInEachByteOrder	Page number tag packs page index and count in each byte order
 REQ-241	unit	TiffRendererTests.GeneratePage_BigEndian_DecodesToSamePixelsAsLittleEndian	Big-endian and little-endian TIFFs decode to the same pixels in ImageMagick

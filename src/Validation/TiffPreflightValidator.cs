@@ -27,18 +27,33 @@ public sealed class TiffPreflightValidator
 
     private const ushort ImageWidthTag = 256;
     private const ushort ImageLengthTag = 257;
+    private const ushort BitsPerSampleTag = 258;
+    private const ushort CompressionTag = 259;
+    private const ushort PhotometricInterpretationTag = 262;
     private const ushort StripOffsetsTag = 273;
+    private const ushort RowsPerStripTag = 278;
     private const ushort StripByteCountsTag = 279;
+    private const ushort XResolutionTag = 282;
+    private const ushort YResolutionTag = 283;
+    private const ushort ResolutionUnitTag = 296;
 
     private const ushort ShortType = 3;
     private const ushort LongType = 4;
 
+    // The baseline TIFF fields a bilevel reader needs. SamplesPerPixel, PageNumber, and Software are optional.
     private static readonly (ushort Tag, string Name)[] RequiredTags =
     [
         (ImageWidthTag, "ImageWidth"),
         (ImageLengthTag, "ImageLength"),
+        (BitsPerSampleTag, "BitsPerSample"),
+        (CompressionTag, "Compression"),
+        (PhotometricInterpretationTag, "PhotometricInterpretation"),
         (StripOffsetsTag, "StripOffsets"),
+        (RowsPerStripTag, "RowsPerStrip"),
         (StripByteCountsTag, "StripByteCounts"),
+        (XResolutionTag, "XResolution"),
+        (YResolutionTag, "YResolution"),
+        (ResolutionUnitTag, "ResolutionUnit"),
     ];
 
     /// <summary>
@@ -290,14 +305,18 @@ public sealed class TiffPreflightValidator
         _ => 0,
     };
 
-    private static string TagName(ushort tag) => tag switch
+    private static string TagName(ushort tag)
     {
-        ImageWidthTag => "ImageWidth",
-        ImageLengthTag => "ImageLength",
-        StripOffsetsTag => "StripOffsets",
-        StripByteCountsTag => "StripByteCounts",
-        _ => $"tag {tag.ToString(CultureInfo.InvariantCulture)}",
-    };
+        foreach (var (requiredTag, name) in RequiredTags)
+        {
+            if (requiredTag == tag)
+            {
+                return name;
+            }
+        }
+
+        return $"tag {tag.ToString(CultureInfo.InvariantCulture)}";
+    }
 
     private static ushort ReadUInt16(byte[] bytes, long offset, bool bigEndian) =>
         bigEndian
