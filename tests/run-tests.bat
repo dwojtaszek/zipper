@@ -230,6 +230,11 @@ REM %2: Target size in MB
     if not defined encoding set "encoding=UTF-8"
     set "zip_file="
     set "dat_file="
+    set "extracted_dat="
+    set "first_bytes="
+    set "has_nl="
+    set "line_count="
+    set "header="
 
     call :print_info "Verifying load file included in zip archive (Encoding: %encoding%)"
 
