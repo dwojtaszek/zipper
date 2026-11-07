@@ -44,9 +44,9 @@ call :assert_accepted "--with-collection-metadata in loadfile-only (silently ign
 
 call :assert_rejected "invalid --hash-mode" --type pdf --count 5 --output-path ".\results\zi_test" --hash-mode invalid
 call :assert_rejected "--hash-algorithms without --hash-mode" --type pdf --count 5 --output-path ".\results\zi_test" --hash-algorithms md5
-call :assert_rejected "invalid --hash-algorithms" --type pdf --count 5 --output-path ".\results\zi_test" --hash-mode actual --hash-algorithms md5,sha512
+call :assert_rejected "invalid --hash-algorithms" --type pdf --count 5 --output-path ".\results\zi_test" --hash-mode actual --hash-algorithms "md5,sha512"
 call :assert_rejected "--hash-mode actual + --loadfile-only" --loadfile-only --count 5 --output-path ".\results\zi_test" --hash-mode actual
-call :assert_accepted "valid --hash-mode actual" --type pdf --count 5 --output-path ".\results\zi_test" --hash-mode actual --hash-algorithms md5,sha256
+call :assert_accepted "valid --hash-mode actual" --type pdf --count 5 --output-path ".\results\zi_test" --hash-mode actual --hash-algorithms "md5,sha256"
 call :assert_accepted "valid --hash-mode simulated" --loadfile-only --count 5 --output-path ".\results\zi_test" --hash-mode simulated
 call :assert_accepted "--loadfile-only + --load-file-format csv" --loadfile-only --count 5 --output-path ".\results\zi_test" --load-file-format csv
 call :assert_accepted "--loadfile-only + --load-file-format xml" --loadfile-only --count 5 --output-path ".\results\zi_test" --load-file-format xml
