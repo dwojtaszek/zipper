@@ -279,13 +279,25 @@ if [[ -n "$first_label_line" ]]; then
     fi
 fi
 main_line=$(grep -n -i -E '^[[:space:]]*:main([[:space:]]|$)' "$BAT_RUNNER" | head -n1 | cut -d: -f1 || true)
-first_case_line=$(grep -n -E 'call[[:space:]]+:run_test_case[[:space:]]+"Test Case' "$BAT_RUNNER" | head -n1 | cut -d: -f1 || true)
+first_case_line=$(grep -n -i -E 'call[[:space:]]+:run_test_case[[:space:]]+"Test Case' "$BAT_RUNNER" | head -n1 | cut -d: -f1 || true)
+end_of_tests_line=$(grep -n -i -E '^[[:space:]]*:end_of_tests([[:space:]]|$)' "$BAT_RUNNER" | head -n1 | cut -d: -f1 || true)
 if [[ -z "$main_line" ]]; then
     DRIFT=1
     echo "Entry point missing in run-tests.bat: no ':main' label found (#1405)."
 elif [[ -n "$first_case_line" && "$main_line" -ge "$first_case_line" ]]; then
     DRIFT=1
     echo "Entry point misplaced in run-tests.bat: ':main' at line $main_line appears after first test case at line $first_case_line (#1405)."
+fi
+
+if [[ -n "$main_line" && -n "$end_of_tests_line" && "$main_line" -lt "$end_of_tests_line" ]]; then
+    terminating_sub=$(sed -n "$((main_line + 1)),$((end_of_tests_line - 1))p" "$BAT_RUNNER" | awk '
+        /^[ \t]*:[a-zA-Z0-9_]/ && !/^[ \t]*::/ { in_sub = 1; label = $0 }
+        in_sub && /^[ \t]*(goto[ \t]+:eof|exit[ \t]+\/b)/ { print label; in_sub = 0 }
+    ')
+    if [[ -n "$terminating_sub" ]]; then
+        DRIFT=1
+        echo "Terminating helper subroutine found between :main and :end_of_tests in run-tests.bat: $terminating_sub (#1405)."
+    fi
 fi
 
 if [[ $DRIFT -eq 0 ]]; then

@@ -33,6 +33,9 @@ REM --- Helper Functions ---
     set "file_type=%~4"
     set "check_text=%~5"
     set "encoding=%~6"
+    if not defined encoding set "encoding=UTF-8"
+    set "zip_file="
+    set "dat_file="
 
     call :print_info "Verifying output in %test_dir% (Encoding: %encoding%)"
 
@@ -125,6 +128,7 @@ REM %2: Target size in MB
 :verify_zip_size
     set "test_dir=%~1"
     set "target_size_mb=%~2"
+    set "zip_file="
     set /a target_size_bytes=target_size_mb * 1024 * 1024
     set /a tolerance_bytes=target_size_bytes / 10
 
@@ -158,6 +162,8 @@ REM %2: Target size in MB
     set "check_text=%~5"
     set "encoding=%~6"
     set "expected_attachment_count=%~7"
+    set "zip_file="
+    set "dat_file="
 
     call :verify_output "%test_dir%" "%expected_count%" "%expected_header_str%" "%file_type%" "%check_text%" "%encoding%"
 
@@ -205,6 +211,9 @@ REM %2: Target size in MB
     set "expected_header_str=%~3"
     set "file_type=%~4"
     set "encoding=%~5"
+    if not defined encoding set "encoding=UTF-8"
+    set "zip_file="
+    set "dat_file="
 
     call :print_info "Verifying load file included in zip archive (Encoding: %encoding%)"
 
@@ -303,7 +312,7 @@ REM %2: Target size in MB
     set "test_args="
     shift
 :run_test_case_loop
-    if "%~1"=="" goto :run_test_case_exec
+    if [%1]==[] goto :run_test_case_exec
     set "test_args=%test_args% %1"
     shift
     goto :run_test_case_loop
@@ -344,7 +353,7 @@ call :print_success "Test Case 1 passed."
 
 REM Test Case 2: JPG generation with different encoding
 call :run_test_case "Test Case 2: JPG generation with UTF-16 encoding" --type jpg --count 10 --output-path "%TEST_OUTPUT_DIR%\jpg_encoding" --encoding UTF-16
-call :verify_output "%TEST_OUTPUT_DIR%\jpg_encoding" 10 "Control Number,File Path" "jpg" "false"
+call :verify_output "%TEST_OUTPUT_DIR%\jpg_encoding" 10 "Control Number,File Path" "jpg" "false" "UTF-16"
 call :print_success "Test Case 2 passed."
 
 REM Test Case 3: TIFF generation with multiple folders and proportional distribution
@@ -369,7 +378,7 @@ call :print_success "Test Case 6 passed."
 
 REM Test Case 7: All options combined
 call :run_test_case "Test Case 7: All options combined" --type tiff --count 15 --output-path "%TEST_OUTPUT_DIR%\all_options" --folders 5 --encoding ANSI --distribution gaussian --with-metadata
-call :verify_output "%TEST_OUTPUT_DIR%\all_options" 15 "Control Number,File Path,Custodian,Date Sent,Author,File Size,Compression Method" "tiff" "false"
+call :verify_output "%TEST_OUTPUT_DIR%\all_options" 15 "Control Number,File Path,Custodian,Date Sent,Author,File Size,Compression Method" "tiff" "false" "ANSI"
 call :print_success "Test Case 7 passed."
 
 REM Test Case 8: With text
