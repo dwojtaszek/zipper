@@ -2,7 +2,7 @@
 REM Test script to validate the new unified build-and-test.yml workflow
 REM This script validates that the new unified workflow functions correctly
 
-setlocal enabledelayedexpansion
+setlocal disabledelayedexpansion
 
 echo.
 echo === Unified Workflow Validation Test (Windows) ===

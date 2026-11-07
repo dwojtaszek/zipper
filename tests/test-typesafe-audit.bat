@@ -14,6 +14,16 @@ if errorlevel 1 (
     exit /b 1
 )
 
+set "PYCMD="
+python3 --version >nul 2>&1 && set "PYCMD=python3"
+if not defined PYCMD python --version >nul 2>&1 && set "PYCMD=python"
+if not defined PYCMD py -3 --version >nul 2>&1 && set "PYCMD=py -3"
+if not defined PYCMD (
+    echo [ ERROR ] Python interpreter not found.
+    exit /b 1
+)
+set "PYTHONIOENCODING=utf-8"
+
 set WORKFLOW_FILE=%SCRIPT_DIR%..\.github\workflows\typesafe-audit.yml
 
 REM --- Part 1: Python unit tests (no network) ---
@@ -21,7 +31,7 @@ REM --- Part 1: Python unit tests (no network) ---
 set TYPESAFE_UNIT_LOG=%TEMP_DIR%\typesafe-unit.log
 
 echo Running TypeSafe runner unit tests...
-python3 -m unittest discover -s "%TOOL_DIR%\tests" >"%TYPESAFE_UNIT_LOG%" 2>&1
+%PYCMD% -m unittest discover -s "%TOOL_DIR%\tests" >"%TYPESAFE_UNIT_LOG%" 2>&1
 if errorlevel 1 (
     echo [ ERROR ] TypeSafe runner unit tests failed.
     type "%TYPESAFE_UNIT_LOG%" >&2
@@ -43,7 +53,7 @@ if errorlevel 1 (
     exit /b 1
 )
 set FIXTURE_LOG=%TEMP_DIR%\fixture.log
-python3 "%TOOL_DIR%\record_sample_fixture.py" "%FIXTURE_DIR%" >"%FIXTURE_LOG%" 2>&1
+%PYCMD% "%TOOL_DIR%\record_sample_fixture.py" "%FIXTURE_DIR%" >"%FIXTURE_LOG%" 2>&1
 if errorlevel 1 (
     echo [ ERROR ] Sample fixture recording failed.
     type "%FIXTURE_LOG%" >&2
@@ -53,7 +63,7 @@ if errorlevel 1 (
 set JSON_OUT=%TEMP_DIR%\report.json
 set MD_OUT=%TEMP_DIR%\report.md
 set RUNNER_LOG=%TEMP_DIR%\runner1.log
-python3 "%TOOL_DIR%\runner.py" --mode fixture --fixture-dir "%FIXTURE_DIR%" --files "%TOOL_DIR%\questions\files-sample.list" --questions "%TOOL_DIR%\questions\example.json" --json-out "%JSON_OUT%" --md-out "%MD_OUT%" >"%RUNNER_LOG%" 2>&1
+%PYCMD% "%TOOL_DIR%\runner.py" --mode fixture --fixture-dir "%FIXTURE_DIR%" --files "%TOOL_DIR%\questions\files-sample.list" --questions "%TOOL_DIR%\questions\example.json" --json-out "%JSON_OUT%" --md-out "%MD_OUT%" >"%RUNNER_LOG%" 2>&1
 if errorlevel 1 (
     echo [ ERROR ] Fixture-mode audit run failed.
     type "%RUNNER_LOG%" >&2
@@ -82,7 +92,7 @@ REM Deterministic: a second identical run produces byte-identical JSON and Markd
 set JSON_OUT2=%TEMP_DIR%\report2.json
 set MD_OUT2=%TEMP_DIR%\report2.md
 set RUNNER_LOG2=%TEMP_DIR%\runner2.log
-python3 "%TOOL_DIR%\runner.py" --mode fixture --fixture-dir "%FIXTURE_DIR%" --files "%TOOL_DIR%\questions\files-sample.list" --questions "%TOOL_DIR%\questions\example.json" --json-out "%JSON_OUT2%" --md-out "%MD_OUT2%" >"%RUNNER_LOG2%" 2>&1
+%PYCMD% "%TOOL_DIR%\runner.py" --mode fixture --fixture-dir "%FIXTURE_DIR%" --files "%TOOL_DIR%\questions\files-sample.list" --questions "%TOOL_DIR%\questions\example.json" --json-out "%JSON_OUT2%" --md-out "%MD_OUT2%" >"%RUNNER_LOG2%" 2>&1
 if errorlevel 1 (
     echo [ ERROR ] Fixture-mode deterministic rerun failed.
     type "%RUNNER_LOG2%" >&2
@@ -125,12 +135,12 @@ echo [ SUCCESS ] Fixture-mode audit is deterministic and secret-free.
 REM Architecture corpus replay
 set ARCH_FIXTURE_DIR=%TEMP_DIR%\fixtures-arch
 mkdir "%ARCH_FIXTURE_DIR%"
-python3 "%TOOL_DIR%\checks\architecture\record_corpus_fixtures.py" "%ARCH_FIXTURE_DIR%" >nul 2>&1
+%PYCMD% "%TOOL_DIR%\checks\architecture\record_corpus_fixtures.py" "%ARCH_FIXTURE_DIR%" >nul 2>&1
 if errorlevel 1 (
     echo [ ERROR ] Architecture corpus fixture recording failed.
     exit /b 1
 )
-python3 "%TOOL_DIR%\checks\architecture\run_check.py" --corpus "%SCRIPT_DIR%typesafe-audit-fixtures\architecture" --mode fixture --fixture-dir "%ARCH_FIXTURE_DIR%" --json-out "%TEMP_DIR%\arch.json" --md-out "%TEMP_DIR%\arch.md" >nul 2>&1
+%PYCMD% "%TOOL_DIR%\checks\architecture\run_check.py" --corpus "%SCRIPT_DIR%typesafe-audit-fixtures\architecture" --mode fixture --fixture-dir "%ARCH_FIXTURE_DIR%" --json-out "%TEMP_DIR%\arch.json" --md-out "%TEMP_DIR%\arch.md" >nul 2>&1
 if errorlevel 1 (
     echo [ ERROR ] Architecture corpus replay failed.
     exit /b 1
@@ -139,12 +149,12 @@ if errorlevel 1 (
 REM Domain language corpus replay
 set DL_FIXTURE_DIR=%TEMP_DIR%\fixtures-dl
 mkdir "%DL_FIXTURE_DIR%"
-python3 "%TOOL_DIR%\checks\domain_language\record_corpus_fixtures.py" "%DL_FIXTURE_DIR%" >nul 2>&1
+%PYCMD% "%TOOL_DIR%\checks\domain_language\record_corpus_fixtures.py" "%DL_FIXTURE_DIR%" >nul 2>&1
 if errorlevel 1 (
     echo [ ERROR ] Domain language corpus fixture recording failed.
     exit /b 1
 )
-python3 "%TOOL_DIR%\checks\domain_language\run_check.py" --corpus "%SCRIPT_DIR%typesafe-audit-fixtures\domain-language" --mode fixture --fixture-dir "%DL_FIXTURE_DIR%" --json-out "%TEMP_DIR%\dl.json" --md-out "%TEMP_DIR%\dl.md" >nul 2>&1
+%PYCMD% "%TOOL_DIR%\checks\domain_language\run_check.py" --corpus "%SCRIPT_DIR%typesafe-audit-fixtures\domain-language" --mode fixture --fixture-dir "%DL_FIXTURE_DIR%" --json-out "%TEMP_DIR%\dl.json" --md-out "%TEMP_DIR%\dl.md" >nul 2>&1
 if errorlevel 1 (
     echo [ ERROR ] Domain language corpus replay failed.
     exit /b 1
@@ -225,7 +235,7 @@ if not errorlevel 1 (
 echo [ SUCCESS ] Workflow check: advisory (no --strict)
 
 REM YAML-aware workflow validation (validates all typesafe-*.yml workflows)
-python3 "%TOOL_DIR%\workflow_validator.py"
+%PYCMD% "%TOOL_DIR%\workflow_validator.py"
 if errorlevel 1 (
     echo [ ERROR ] YAML-aware workflow validation failed.
     exit /b 1
