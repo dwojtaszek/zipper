@@ -34,7 +34,7 @@ call :assert_accepted "valid standard --loadfile-only with --col-delim" --loadfi
 call :assert_accepted "valid standard --production-set" --production-set --count 5 --bates-prefix TEST --type pdf --output-path ".\results\zi_test"
 call :assert_accepted "--loadfile-only + --chaos-mode + --chaos-amount" --loadfile-only --count 5 --chaos-mode --chaos-amount "5%%" --output-path ".\results\zi_test"
 call :assert_accepted "--production-set + --bates-prefix + --volume-size" --production-set --count 5 --bates-prefix TEST --volume-size 100 --output-path ".\results\zi_test"
-call :assert_accepted "--loadfile-only + --col-delim + --quote-delim" --loadfile-only --count 5 --col-delim "char:|" --quote-delim "char:\"" --output-path ".\results\zi_test"
+call :assert_accepted "--loadfile-only + --col-delim + --quote-delim" --loadfile-only --count 5 --col-delim "char:|" --quote-delim "char:'" --output-path ".\results\zi_test"
 
 REM --- Collection metadata interaction tests (REQ-181 through REQ-189) ---
 call :assert_accepted "--with-collection-metadata in Standard mode" --type pdf --count 5 --with-collection-metadata --output-path ".\results\zi_test"
@@ -66,8 +66,8 @@ exit /b 0
 
 :assert_rejected
 set "DESC=%~1"
-set "ARGS=%*"
-set "ARGS=!ARGS:%1 =!"
+set ARGS=%*
+set ARGS=!ARGS:%1 =!
 set "TEMP_DIR=.\results\test-interactions-%RANDOM%"
 mkdir "%TEMP_DIR%" 2>nul
 set "STDERR_FILE=%TEMP_DIR%\stderr.txt"
@@ -92,8 +92,8 @@ goto :eof
 
 :assert_accepted
 set "DESC=%~1"
-set "ARGS=%*"
-set "ARGS=!ARGS:%1 =!"
+set ARGS=%*
+set ARGS=!ARGS:%1 =!
 %ZIPPER_CMD% !ARGS! >nul 2>&1
 if not errorlevel 1 (
     echo [ INFO ] PASS: %DESC%
