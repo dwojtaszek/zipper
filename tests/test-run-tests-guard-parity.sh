@@ -368,6 +368,40 @@ else
     cat "$SANDBOX/misplaced_main_label.out"
 fi
 
+# --- Negative: run-tests.bat with terminating subroutine between :main and :end_of_tests must be caught (#1405) ---
+
+cp "$RUNNER_BAT" "$SANDBOX_REPO/tests/run-tests.bat"
+python3 - "$SANDBOX_REPO/tests/run-tests.bat" <<'PY'
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8-sig") as handle:
+    text = handle.read()
+
+target = "\n:main\n"
+if target not in text:
+    sys.exit("could not find ':main' to insert terminating subroutine")
+
+rogue = "\n:main\n:rogue_helper\ngoto :eof\n"
+text = text.replace(target, rogue, 1)
+
+with open(path, "w", encoding="utf-8") as handle:
+    handle.write(text)
+PY
+
+if bash "$SANDBOX_REPO/tests/validate-e2e-parity.sh" --strict > "$SANDBOX/terminating_sub.out" 2>&1; then
+    fail "validator passed a run-tests.bat with terminating subroutine between :main and :end_of_tests"
+else
+    pass "validator fails when run-tests.bat has terminating subroutine between :main and :end_of_tests"
+fi
+
+if grep -q "Terminating helper subroutine found between :main and :end_of_tests" "$SANDBOX/terminating_sub.out"; then
+    pass "validator reports terminating subroutine between :main and :end_of_tests"
+else
+    fail "validator does not report terminating subroutine between :main and :end_of_tests"
+    cat "$SANDBOX/terminating_sub.out"
+fi
+
 # --- Summary ---
 
 echo ""

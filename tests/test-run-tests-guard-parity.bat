@@ -226,6 +226,30 @@ if errorlevel 1 (
     call :pass "validator reports misplaced ':main' label"
 )
 
+REM --- Negative: run-tests.bat terminating subroutine between :main and :end_of_tests must be caught (#1405) ---
+
+copy /y "%RUNNER_BAT%" "%SANDBOX%\run-tests.bat" >nul
+powershell -NoProfile -Command "$p='%SANDBOX%\run-tests.bat'; $s=[IO.File]::ReadAllText($p); $old=\"`r`n:main`r`n\"; if (-not $s.Contains($old)) { $old=\"`n:main`n\"; $nl=\"`n\" } else { $nl=\"`r`n\" }; if (-not $s.Contains($old)) { Write-Error ':main not found'; exit 1 }; $rogue=$nl + ':main' + $nl + ':rogue_helper' + $nl + 'goto :eof' + $nl; $s=$s.Replace($old, $rogue); [IO.File]::WriteAllText($p, $s)"
+if errorlevel 1 (
+    call :fail "could not insert terminating subroutine between :main and :end_of_tests in sandbox"
+    goto :summary
+)
+
+bash "%SANDBOX%\validate-e2e-parity.sh" --strict > "%SANDBOX%.terminatingsub.out" 2>&1
+if errorlevel 1 (
+    call :pass "validator fails when run-tests.bat has terminating subroutine between :main and :end_of_tests"
+) else (
+    call :fail "validator passed a run-tests.bat with terminating subroutine between :main and :end_of_tests"
+    type "%SANDBOX%.terminatingsub.out"
+)
+findstr /C:"Terminating helper subroutine found between :main and :end_of_tests" "%SANDBOX%.terminatingsub.out" >nul
+if errorlevel 1 (
+    call :fail "validator does not report terminating subroutine between :main and :end_of_tests"
+    type "%SANDBOX%.terminatingsub.out"
+) else (
+    call :pass "validator reports terminating subroutine between :main and :end_of_tests"
+)
+
 call :cleanup
 
 :summary
@@ -240,7 +264,7 @@ exit /b 1
 
 :cleanup
 if exist "%SANDBOX%" rd /s /q "%SANDBOX%"
-for %%F in (clean unguarded noexit errlevel echofake oneline nogotomain nomainlabel misplacedmain) do (
+for %%F in (clean unguarded noexit errlevel echofake oneline nogotomain nomainlabel misplacedmain terminatingsub) do (
     if exist "%SANDBOX%.%%F.out" del /q "%SANDBOX%.%%F.out"
 )
 goto :eof

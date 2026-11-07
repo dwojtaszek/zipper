@@ -180,6 +180,7 @@ REM %2: Target size in MB
 
     REM Count attachment files in zip (attachment*.pdf, .jpg, .tiff)
     powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = @($z.Entries | Where { $_.Name -match 'attachment.*\.(pdf|jpg|tiff)$' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\att_count.txt"
+    set "attachment_files="
     set /p attachment_files=<"%temp%\att_count.txt"
 
     if "%attachment_files%" neq "%expected_attachment_count%" (
@@ -187,9 +188,10 @@ REM %2: Target size in MB
     )
     call :print_info "Found %attachment_files% attachment files in ZIP archive (expected exactly %expected_attachment_count%)."
 
-    REM Check attachments in .dat file
-    set "att_cmd=$enc = [System.Text.UTF8Encoding]::new($false); if ('%encoding%' -eq 'UTF-16') { $enc = [System.Text.Encoding]::Unicode } elseif ('%encoding%' -eq 'ANSI') { $enc = [System.Text.Encoding]::GetEncoding(1252) }; $lines = [System.IO.File]::ReadAllLines('%dat_file%', $enc); Write-Host @($lines | Where-Object { $_ -match 'attachment' }).Count"
+    REM Check attachments in .dat file (case-sensitive to ignore header column 'Attachment')
+    set "att_cmd=$enc = [System.Text.UTF8Encoding]::new($false); if ('%encoding%' -eq 'UTF-16') { $enc = [System.Text.Encoding]::Unicode } elseif ('%encoding%' -eq 'ANSI') { $enc = [System.Text.Encoding]::GetEncoding(1252) }; $lines = [System.IO.File]::ReadAllLines('%dat_file%', $enc); Write-Host @($lines | Where-Object { $_ -cmatch 'attachment' }).Count"
     powershell -Command "%att_cmd%" > "%temp%\dat_att_count.txt"
+    set "dat_attachment_count="
     set /p dat_attachment_count=<"%temp%\dat_att_count.txt"
     if "%dat_attachment_count%" neq "%expected_attachment_count%" (
         call :print_error "Expected exactly %expected_attachment_count% attachments in .dat file, found %dat_attachment_count%."
@@ -199,6 +201,7 @@ REM %2: Target size in MB
     REM Verify attachment text files if text extraction enabled
     if "%check_text%" == "true" (
         powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = @($z.Entries | Where { $_.Name -match 'attachment.*\.txt$' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\att_txt_count.txt"
+        set "attachment_text_files="
         set /p attachment_text_files=<"%temp%\att_txt_count.txt"
         if "%attachment_text_files%" neq "%expected_attachment_count%" (
             call :print_error "Expected exactly %expected_attachment_count% attachment text files, but found %attachment_text_files%."
@@ -299,6 +302,7 @@ REM %2: Target size in MB
 
     REM Verify file count in zip (excluding .dat file)
     powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = @($z.Entries | Where { $_.Name -match '\.%file_type%$' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\zip_count2.txt"
+    set "zip_file_count="
     set /p zip_file_count=<"%temp%\zip_count2.txt"
     if "%zip_file_count%" neq "%expected_count%" (
         call :print_error "Incorrect file count in .zip file. Expected %expected_count%, found %zip_file_count%."
@@ -395,7 +399,7 @@ call :print_success "Test Case 9 passed."
 
 REM Test Case 10: EML generation with attachments
 call :run_test_case "Test Case 10: EML generation with attachments" --type eml --count 20 --output-path "%TEST_OUTPUT_DIR%\eml_attachments" --attachment-rate 50 --seed 42
-call :verify_eml_output "%TEST_OUTPUT_DIR%\eml_attachments" 20 "Control Number,File Path,To,From,Subject,Sent Date,Attachment" "eml" "false" "UTF-8"
+call :verify_eml_output "%TEST_OUTPUT_DIR%\eml_attachments" 20 "Control Number,File Path,To,From,Subject,Sent Date,Attachment" "eml" "false" "UTF-8" 14
 call :print_success "Test Case 10 passed."
 
 REM Test Case 11: EML generation with metadata
