@@ -5,7 +5,7 @@ REM --- Test Configuration ---
 REM The directory where test output will be generated.
 set TEST_OUTPUT_DIR=.\test_output
 set FAILED=0
-set PYTHONIOENCODING=utf-8
+set "PYTHONIOENCODING=utf-8"
 
 REM The .NET project to run.
 set PROJECT=src\Zipper.csproj
@@ -37,6 +37,10 @@ REM --- Helper Functions ---
     if not defined encoding set "encoding=UTF-8"
     set "zip_file="
     set "dat_file="
+    set "first_bytes="
+    set "has_nl="
+    set "line_count="
+    set "header="
 
     call :print_info "Verifying output in %test_dir% (Encoding: %encoding%)"
 
@@ -48,6 +52,7 @@ REM --- Helper Functions ---
     )
     if not defined dat_file (
         call :print_error "No .dat file found in %test_dir%"
+        goto :skip_dat_verify
     )
 
     set "bom_cmd=$bytes = [System.IO.File]::ReadAllBytes('%dat_file%'); $hex = [System.BitConverter]::ToString($bytes, 0, [Math]::Min($bytes.Length, 3)) -replace '-',''; Write-Host $hex"
@@ -99,7 +104,9 @@ REM --- Helper Functions ---
     )
     call :print_info ".dat file header is correct."
 
+:skip_dat_verify
     REM Verify file count in zip using PowerShell
+    if not defined zip_file goto :skip_text_verify
     powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = @($z.Entries | Where { $_.Name -match '\.%file_type%$' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\zip_count.txt"
     set "zip_file_count="
     set /p zip_file_count=<"%temp%\zip_count.txt"
@@ -140,6 +147,7 @@ REM %2: Target size in MB
 
     if not defined zip_file (
         call :print_error "No .zip file found in %test_dir%"
+        goto :eof
     )
 
     REM Get file size
@@ -178,6 +186,8 @@ REM %2: Target size in MB
     if not defined dat_file (
         call :print_error "No .dat file found in %test_dir%"
     )
+    if not defined zip_file goto :eof
+    if not defined dat_file goto :eof
 
     REM Count attachment files in zip (attachment*.pdf, .jpg, .tiff)
     powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = @($z.Entries | Where { $_.Name -match 'attachment.*\.(pdf|jpg|tiff)$' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\att_count.txt"
@@ -226,6 +236,7 @@ REM %2: Target size in MB
     for %%F in ("%test_dir%\*.zip") do set "zip_file=%%F"
     if not defined zip_file (
         call :print_error "No .zip file found in %test_dir%"
+        goto :eof
     )
 
     REM Verify no separate .dat file in output directory
@@ -250,6 +261,7 @@ REM %2: Target size in MB
     for %%F in ("%temp_extract%\*.dat") do set "extracted_dat=%%F"
     if not defined extracted_dat (
         call :print_error "Failed to extract .dat file from zip archive"
+        goto :skip_extracted_dat_verify
     )
 
     set "bom_cmd=$bytes = [System.IO.File]::ReadAllBytes('%extracted_dat%'); $hex = [System.BitConverter]::ToString($bytes, 0, [Math]::Min($bytes.Length, 3)) -replace '-',''; Write-Host $hex"
@@ -301,6 +313,7 @@ REM %2: Target size in MB
     )
     call :print_info ".dat file header is correct."
 
+:skip_extracted_dat_verify
     REM Verify file count in zip (excluding .dat file)
     powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = @($z.Entries | Where { $_.Name -match '\.%file_type%$' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\zip_count2.txt"
     set "zip_file_count="

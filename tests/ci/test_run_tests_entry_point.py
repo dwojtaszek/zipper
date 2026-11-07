@@ -48,7 +48,8 @@ class RunTestsBatEntryPointTests(unittest.TestCase):
         for idx, line in enumerate(self.lines):
             stripped = line.strip()
             if re.match(r"^:main\b", stripped, re.IGNORECASE):
-                main_label_idx = idx
+                if main_label_idx is None:
+                    main_label_idx = idx
             if re.search(r'call\s+:run_test_case\s+"Test Case 1:', stripped, re.IGNORECASE):
                 if first_case_idx is None:
                     first_case_idx = idx
@@ -92,7 +93,7 @@ class RunTestsBatEntryPointTests(unittest.TestCase):
                     f_stripped = forward_line.strip()
                     if f_stripped.startswith(":") and not f_stripped.startswith("::"):
                         break
-                    if re.match(r"^(goto\s+:eof|exit\s+/b)\b", f_stripped, re.IGNORECASE):
+                    if re.match(r"^(goto\s*:?eof|exit\s*/b|exit\s+[0-9]+)\b", f_stripped, re.IGNORECASE):
                         has_terminator = True
                         break
                 if has_terminator:

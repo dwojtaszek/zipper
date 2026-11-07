@@ -292,7 +292,7 @@ fi
 if [[ -n "$main_line" && -n "$end_of_tests_line" && "$main_line" -lt "$end_of_tests_line" ]]; then
     terminating_sub=$(sed -n "$((main_line + 1)),$((end_of_tests_line - 1))p" "$BAT_RUNNER" | awk '
         /^[ \t]*:[a-zA-Z0-9_]/ && !/^[ \t]*::/ { in_sub = 1; label = $0 }
-        in_sub && /^[ \t]*(goto[ \t]+:eof|exit[ \t]+\/b)/ { print label; in_sub = 0 }
+        in_sub && /^[ \t]*(goto[ \t]*:?eof|exit[ \t]*\/b|exit[ \t]+[0-9]+)/ { print label; in_sub = 0 }
     ')
     if [[ -n "$terminating_sub" ]]; then
         DRIFT=1

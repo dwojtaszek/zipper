@@ -398,7 +398,7 @@ public class DocsDriftTests
                     {
                         break;
                     }
-                    if (System.Text.RegularExpressions.Regex.IsMatch(forwardTrimmed, @"^(goto\s+:eof|exit\s+/b)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)))
+                    if (System.Text.RegularExpressions.Regex.IsMatch(forwardTrimmed, @"^(goto\s*:?eof|exit\s*/b|exit\s+[0-9]+)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)))
                     {
                         terminatingSubroutines.Add(trimmed);
                         break;

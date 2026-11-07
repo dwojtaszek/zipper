@@ -1,5 +1,5 @@
 @echo off
-setlocal enabledelayedexpansion
+setlocal disabledelayedexpansion
 
 REM Test script to validate artifact handling in current workflows (Windows wrapper)
 REM Invokes shared deterministic YAML-aware structural validation in workflow_validator.py (#1112)
