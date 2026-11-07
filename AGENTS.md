@@ -30,6 +30,7 @@
 - Always root cause bugs. Never fix just the symptom. Never implement a workaround.
 - If you cannot find the root cause, stop and compile what you've learned.
 - **Property-Based Testing (`FsCheck.Xunit`):** When adding or modifying serializers/parsers, path/metadata sanitizers, Bates/distribution/volume planners, Chaos Engine appliers, or Production Manifest Comparison logic, add or update `[Property]` tests in `src/Zipper.Tests/Properties/` following [docs/property-based-testing.md](docs/property-based-testing.md). Verify real production seams (never copy-paste production logic into test helpers), draw seed ranges in the arbitraries with `Gen.Choose` (fall back to `Math.Abs((long)seed)` only for raw `int` seeds) to avoid `int.MinValue` overflow during shrinking, and keep each property's 100 cases under 500 ms.
+- **Catalog growth:** When proposing or adding a Chaos Engine Anomaly Type or an Archive Test Case Key, follow [Catalog governance](docs/archive-test-suites.md#catalog-governance): cite a documented real-world failure in the issue, and turn every fixed real-world parse/import defect into a pinned Case Key or Anomaly Type with a minimized regression seed and a test.
 
 **See also:** [docs/property-based-testing.md](docs/property-based-testing.md), `.claude/skills/test-driven-development/SKILL.md`, `.claude/skills/testing-anti-patterns/SKILL.md`, `.claude/skills/systematic-debugging/SKILL.md`, `.claude/skills/root-cause-tracing/SKILL.md`
 

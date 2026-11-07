@@ -154,6 +154,44 @@ The entry-level compression method and codec fields defined in `tests/fixtures/a
 }
 ```
 
+## Catalog governance
+
+The Archive Test catalog (`ArchiveTestCatalog`) and the Chaos Engine Anomaly Type catalog (`ChaosAnomalyTypes`) grow by method, not ad hoc. Two rules apply to every proposal that adds a Case Key or an Anomaly Type.
+
+### Fault-mining rule
+
+Every new Anomaly Type or Case Key must cite a documented real-world failure in its issue: a platform import error, a CVE, or a parser or reader issue report. The citation names the affected implementation and links the source. A defect that is only plausible, with no observed failure behind it, does not enter the catalog. The catalog is a taxonomy of faults mined from real failures, following [TeXFix-Bench](https://arxiv.org/abs/2603.00311) (a 168-fault taxonomy mined from real failures) and the PDF Association's [UNSAFE-DOCS](https://pdfa.org/unsafe-docs-a-new-safedocs-corpus-including-the-voice-of-the-offense/) corpus ([pdf-association/pdf-corpora](https://github.com/pdf-association/pdf-corpora)). Recent catalog growth (#1292, #1297, #1300) already follows this rule.
+
+### Regression-seed rule
+
+Every fixed real-world parse or import defect becomes a pinned Case Key or Anomaly Type with a test, never just a code fix. Each fixed defect gets a minimized regression seed: the smallest Archive Test Fixture or Chaos Engine input that still reproduces the failure, pinned by Case Key (or Anomaly Type) and Seed so it replays byte-for-byte. The precedent is MimeKit's [FuzzingPlan](https://github.com/jstedfast/mimekit/blob/72ab0e2018ef483f102248c926715e9eeac81e21/FuzzingPlan.md), which keeps "a minimized regression seed per fixed bug" as a standing corpus policy.
+
+### Case Key naming
+
+A Case Key is lowercase ASCII kebab-case and names the structure under test and the defect (for example `missing-eocd`, `zip64-eocd-offset-disagreement`, `encoding-cp932-trail-backslash`). Healthy controls start with `valid-`. A variant of an existing Case Key keeps its base name and appends a suffix (`crc-both-mismatch` → `crc-both-mismatch-deflate`). A Case Key names the scenario, never the source issue or the instance. Because the Case Key is part of the canonical descriptor, renaming it changes every Fixture ID it produces: a behavior change bumps the Case Revision or Expectation Revision instead.
+
+### Case Key or Anomaly Type
+
+- Prefer a **Case Key** when the fault lives in ZIP Archive bytes (headers, central directory, payload, entry names) and is consumed by unzip implementations. Case Keys are built by the Archive Test workflow's own byte-level writer and carry an Expectation File.
+- Prefer an **Anomaly Type** when the fault lives in a Load File or a generated Email and is consumed by an ingestion platform. Anomaly Types are injected by the Chaos Engine and recorded in the Audit File.
+- A fault that spans both surfaces gets one entry per surface, each citing the same real-world failure.
+
+### Issue template
+
+Paste this into the issue body when proposing catalog growth:
+
+```markdown
+## Real-world evidence
+- Failure: <platform import error, CVE, or parser issue report>
+- Source: <link>
+- Affected implementation(s): <reader, parser, or platform and version>
+
+## Catalog entry
+- [ ] Case Key or Anomaly Type name: `<name>` (see Catalog governance in docs/archive-test-suites.md)
+- [ ] Minimized regression seed pinned by Case Key or Anomaly Type and Seed
+- [ ] Test that replays the seed and asserts the expected outcome
+```
+
 ## Architecture
 
 The Archive Test workflow is a dedicated Program short-circuit dispatched before `Pipeline.Build`, analogous to the comparison module. It is **not a fourth `IGenerationMode`** and does not extend `FileGenerationRequest` — see [ADR-0008](adr/ADR-0008-archive-test-dispatch.md). Production code lives under `src/ArchiveTests/`. Standard and Production Set output, `ZipArchiveSink`, `SourcePathSanitizer`, `ChaosEngine`, and the Composer → Serializer → Emitter seam are never altered to produce intentional defects: fixtures are built by their own byte-level writer.
