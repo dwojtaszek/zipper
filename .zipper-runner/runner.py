@@ -272,6 +272,14 @@ QUOTA_EXHAUSTION_KEYWORDS = [
     '"error_code":429',
     '"error_code": 429',
     "429 too many requests",
+    "payment required",
+    "status 402",
+    "code 402",
+    '"status":402',
+    '"status": 402',
+    "monthly droid core usage limit",
+    "extra usage credits",
+    "droid core usage limit",
 ]
 
 def is_quota_exhausted(output: str, stderr: str = "") -> bool:
@@ -279,7 +287,7 @@ def is_quota_exhausted(output: str, stderr: str = "") -> bool:
     combined = (output + "\n" + stderr).lower()
     if any(kw in combined for kw in QUOTA_EXHAUSTION_KEYWORDS):
         return True
-    if re.search(r"\b429\b", combined) and any(w in combined for w in ("quota", "rate", "limit", "exhaust", "credit", "subscription", "resource")):
+    if re.search(r"\b(429|402)\b", combined) and any(w in combined for w in ("quota", "rate", "limit", "exhaust", "credit", "subscription", "resource", "payment")):
         return True
     return False
 
@@ -2260,6 +2268,11 @@ _CODERABBIT_LIMIT_PHRASES = (
     "included review",
     "review limit",
     "review capacity",
+    "reauthentication_required",
+    "coderabbit auth login",
+    "could not be authenticated",
+    "login required",
+    "authentication required",
 )
 
 
@@ -2362,9 +2375,14 @@ def _coderabbit_rate_limited(out: str, err: str, code: int) -> tuple[bool, int, 
         error_type = str(data.get("errorType") or "")
         metadata = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
         wait_time = str(metadata.get("waitTime") or "")
-        if error_type == "rate_limit" or "rate limit" in f"{message} {wait_time}".lower():
+        error_code = str(data.get("code") or "")
+        if (error_type in ("rate_limit", "auth") or
+                error_code == "reauthentication_required" or
+                any(phrase in f"{message} {wait_time}".lower() for phrase in _CODERABBIT_LIMIT_PHRASES)):
             evidence = line
             wait_seconds = _coderabbit_wait_seconds(f"{wait_time} {message}")
+            if wait_seconds is None:
+                wait_seconds = CODERABBIT_RATE_LIMIT_MINUTES * 60
             break
 
     if not evidence and code != 0:
@@ -3518,7 +3536,10 @@ def _ci_status_from_rollup(rollup):
         if typename == "CheckRun":
             status = check.get("status")
             conclusion = check.get("conclusion")
-            name = check.get("name")
+            name = check.get("name") or ""
+            # Advisory / external bot review check runs do not block CI readiness
+            if name.lower() in ("pullfrog",):
+                continue
             if status == "COMPLETED":
                 if conclusion not in ("SUCCESS", "NEUTRAL", "SKIPPED"):
                     ci_failures.append(f"{name} ({conclusion})")
@@ -5690,10 +5711,12 @@ def _fetch_upstream_publish_timestamp(name: str, version: str, ecosystem: str) -
         else:
             tag_candidates.extend([f"v{version}", version])
 
+        release_found = False
         for tag in tag_candidates:
             quoted_tag = urllib.parse.quote(tag, safe="")
             code, out, _ = run_cmd(["gh", "api", f"repos/{name}/releases/tags/{quoted_tag}"], cwd=REPO_PATH)
             if code == 0 and out.strip():
+                release_found = True
                 try:
                     rel = json.loads(out)
                     if rel.get("draft"):
@@ -5703,6 +5726,20 @@ def _fetch_upstream_publish_timestamp(name: str, version: str, ecosystem: str) -
                         return _parse_publish_timestamp(pub)
                 except Exception:
                     pass
+
+        if not release_found:
+            # Fallback to commit timestamp for git tags without release metadata
+            for tag in tag_candidates:
+                quoted_tag = urllib.parse.quote(tag, safe="")
+                code, out, _ = run_cmd(["gh", "api", f"repos/{name}/commits/{quoted_tag}"], cwd=REPO_PATH)
+                if code == 0 and out.strip():
+                    try:
+                        cdata = json.loads(out)
+                        pub = cdata.get("commit", {}).get("committer", {}).get("date")
+                        if pub:
+                            return _parse_publish_timestamp(pub)
+                    except Exception:
+                        pass
         return None
 
     elif ecosystem == "npm":

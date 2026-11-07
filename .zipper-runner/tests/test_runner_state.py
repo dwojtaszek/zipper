@@ -429,6 +429,27 @@ class CodeRabbitRateLimitTests(unittest.TestCase):
         self.assertTrue(gate.ok)
         self.assertTrue(gate.skipped, "a usage-limit refusal is the same refusal")
 
+    def test_authRequiredWording_isAlsoSkipped(self):
+        self._create_fake_cr('echo "Run coderabbit auth login, then retry the review." >&2', exit_code=1)
+
+        gate = runner._run_coderabbit_pre_pr_check(self.temp_dir)
+
+        self.assertTrue(gate.ok)
+        self.assertTrue(gate.skipped)
+        self.assertIn("rate limited", gate.detail)
+
+    def test_reauthenticationRequiredRecord_isAlsoSkipped(self):
+        self._create_fake_cr(
+            'echo \'{"type":"error","errorType":"auth","code":"reauthentication_required","message":"Your CodeRabbit session or Git provider access could not be authenticated. Run `coderabbit auth login`, then retry the review."}\'',
+            exit_code=1,
+        )
+
+        gate = runner._run_coderabbit_pre_pr_check(self.temp_dir)
+
+        self.assertTrue(gate.ok)
+        self.assertTrue(gate.skipped)
+        self.assertIn("rate limited", gate.detail)
+
     def test_nonRateLimitFailure_isStillAGateFailure(self):
         """The skip must not swallow real failures: an auth error is not a rate limit."""
         self._create_fake_cr('echo "authentication failed" >&2', exit_code=1)
