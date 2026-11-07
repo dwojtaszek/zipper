@@ -268,8 +268,28 @@ elif ! grep -qiE 'call[[:space:]]+\.\\tests\\[A-Za-z0-9._-]+\.bat' "$BAT_RUNNER"
 fi
 rm -f "$SANDBOX_REPORT" "$SANDBOX_RAW"
 
+# #1405: run-tests.bat must have an explicit entry point: `goto :main` before any subroutine label,
+# and a matching `:main` label before test cases. Without this, batch execution falls straight into
+# the first helper (:print_success) and exits 0 in ~0.02s without running any tests.
+first_label_line=$(awk '/^[ \t]*:[a-zA-Z0-9_]/ && !/^[ \t]*::/ { print NR; exit }' "$BAT_RUNNER")
+if [[ -n "$first_label_line" ]]; then
+    if ! head -n "$first_label_line" "$BAT_RUNNER" | grep -qiE '^[[:space:]]*goto[[:space:]]+:?main\b'; then
+        DRIFT=1
+        echo "Entry point missing in run-tests.bat: label at line $first_label_line without 'goto :main' before it (#1405)."
+    fi
+fi
+main_line=$(grep -n -i -E '^[[:space:]]*:main([[:space:]]|$)' "$BAT_RUNNER" | head -n1 | cut -d: -f1 || true)
+first_case_line=$(grep -n -E 'call[[:space:]]+:run_test_case[[:space:]]+"Test Case' "$BAT_RUNNER" | head -n1 | cut -d: -f1 || true)
+if [[ -z "$main_line" ]]; then
+    DRIFT=1
+    echo "Entry point missing in run-tests.bat: no ':main' label found (#1405)."
+elif [[ -n "$first_case_line" && "$main_line" -ge "$first_case_line" ]]; then
+    DRIFT=1
+    echo "Entry point misplaced in run-tests.bat: ':main' at line $main_line appears after first test case at line $first_case_line (#1405)."
+fi
+
 if [[ $DRIFT -eq 0 ]]; then
-    echo "OK: run-tests.sh and run-tests.bat are in sync (${#SH_CASES[@]} inline cases, ${#SH_SCRIPTS[@]} sub-script suites, every .bat child call guarded)."
+    echo "OK: run-tests.sh and run-tests.bat are in sync (${#SH_CASES[@]} inline cases, ${#SH_SCRIPTS[@]} sub-script suites, every .bat child call guarded, .bat entry point valid)."
     exit 0
 fi
 

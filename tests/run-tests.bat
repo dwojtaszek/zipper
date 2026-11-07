@@ -9,6 +9,8 @@ set FAILED=0
 REM The .NET project to run.
 set PROJECT=src\Zipper.csproj
 
+goto :main
+
 REM --- Helper Functions ---
 
 :print_success
@@ -296,6 +298,26 @@ REM %2: Target size in MB
     rmdir /s /q "%temp_extract%"
     goto :eof
 
+:run_test_case
+    set "test_name=%~1"
+    set "test_args="
+    shift
+:run_test_case_loop
+    if "%~1"=="" goto :run_test_case_exec
+    set "test_args=%test_args% %1"
+    shift
+    goto :run_test_case_loop
+:run_test_case_exec
+    call :print_info "START: %test_name% at %DATE% %TIME%"
+    %ZIPPER_CMD%%test_args%
+    set "_exit_code=%errorlevel%"
+    if %_exit_code% neq 0 (
+        call :print_error "%test_name% failed with exit code %_exit_code%"
+    )
+    call :print_info "END: %test_name% at %DATE% %TIME%"
+    goto :eof
+
+:main
 REM --- Test Cases ---
 
 if "%~1"=="--meta-test-fail-only" (
@@ -307,23 +329,13 @@ call :print_info "Starting test suite..."
 
 REM Resolve the Zipper binary once (shared helper). Sets %ZIPPER_CMD%.
 call "%~dp0_zipper-cli.bat"
+if errorlevel 1 exit /b 1
 
 REM Create a temporary directory for test output.
 if exist "%TEST_OUTPUT_DIR%" (
     rmdir /s /q "%TEST_OUTPUT_DIR%"
 )
 mkdir "%TEST_OUTPUT_DIR%"
-
-:run_test_case
-    set "test_name=%~1"
-    shift
-    call :print_info "START: %test_name% at %DATE% %TIME%"
-    %ZIPPER_CMD% %*
-    if errorlevel 1 (
-        call :print_error "%test_name% failed with exit code %errorlevel%"
-    )
-    call :print_info "END: %test_name% at %DATE% %TIME%"
-    goto :eof
 
 REM Test Case 1: Basic PDF generation
 call :run_test_case "Test Case 1: Basic PDF generation" --type pdf --count 10 --output-path "%TEST_OUTPUT_DIR%\pdf_basic"
@@ -717,3 +729,4 @@ if %FAILED% gtr 0 (
     exit /b 1
 )
 call :print_success "All tests passed successfully!"
+exit /b 0
