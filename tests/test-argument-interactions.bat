@@ -21,7 +21,7 @@ call :assert_accepted "--col-delim in standard mode" --type pdf --count 5 --outp
 call :assert_accepted "--quote-delim in standard mode" --type pdf --count 5 --output-path ".\results\zi_test" --quote-delim "char:~"
 call :assert_accepted "--newline-delim in standard mode" --type pdf --count 5 --output-path ".\results\zi_test" --newline-delim "char:^"
 call :assert_accepted "--multi-delim in standard mode" --type pdf --count 5 --output-path ".\results\zi_test" --multi-delim "char:;"
-call :assert_accepted "--nested-delim in standard mode" --type pdf --count 5 --output-path ".\results\zi_test" --nested-delim "char:\"
+call :assert_accepted "--nested-delim in standard mode" --type pdf --count 5 --output-path ".\results\zi_test" --nested-delim "char:\\"
 call :assert_accepted "--col-delim in production-set mode" --production-set --count 5 --bates-prefix PS --type pdf --output-path ".\results\zi_test" --col-delim "char:|"
 call :assert_accepted "--quote-delim in production-set mode" --production-set --count 5 --bates-prefix PS --type pdf --output-path ".\results\zi_test" --quote-delim "char:~"
 call :assert_rejected "--production-set without --bates-prefix" --production-set --count 5 --output-path ".\results\zi_test"
@@ -66,23 +66,17 @@ exit /b 0
 
 :assert_rejected
 set "DESC=%~1"
-set "ARGS="
-shift
-:assert_rejected_loop
-if [%1]==[] goto :assert_rejected_exec
-set "ARGS=%ARGS% %1"
-shift
-goto :assert_rejected_loop
-:assert_rejected_exec
+set "ARGS=%*"
+set "ARGS=!ARGS:%1 =!"
 set "TEMP_DIR=.\results\test-interactions-%RANDOM%"
 mkdir "%TEMP_DIR%" 2>nul
 set "STDERR_FILE=%TEMP_DIR%\stderr.txt"
-%ZIPPER_CMD% %ARGS% >nul 2>"%STDERR_FILE%"
+%ZIPPER_CMD% !ARGS! >nul 2>"!STDERR_FILE!"
 if errorlevel 1 (
-    findstr /i /c:"Unhandled exception" /c:"NullReferenceException" /c:"Exception:" "%STDERR_FILE%" >nul
+    findstr /i /c:"Unhandled exception" /c:"NullReferenceException" /c:"Exception:" "!STDERR_FILE!" >nul
     if not errorlevel 1 (
         echo [ ERROR ] FAIL: %DESC% ^(expected validation error, got crash^)
-        type "%STDERR_FILE%"
+        type "!STDERR_FILE!"
         set /a FAILED+=1
     ) else (
         echo [ INFO ] PASS: %DESC%
@@ -92,21 +86,15 @@ if errorlevel 1 (
     echo [ ERROR ] FAIL: %DESC% ^(expected rejection^)
     set /a FAILED+=1
 )
-del /f /q "%STDERR_FILE%" 2>nul
+del /f /q "!STDERR_FILE!" 2>nul
 if exist "%TEMP_DIR%" rmdir /s /q "%TEMP_DIR%" 2>nul
 goto :eof
 
 :assert_accepted
 set "DESC=%~1"
-set "ARGS="
-shift
-:assert_accepted_loop
-if [%1]==[] goto :assert_accepted_exec
-set "ARGS=%ARGS% %1"
-shift
-goto :assert_accepted_loop
-:assert_accepted_exec
-%ZIPPER_CMD% %ARGS% >nul 2>&1
+set "ARGS=%*"
+set "ARGS=!ARGS:%1 =!"
+%ZIPPER_CMD% !ARGS! >nul 2>&1
 if not errorlevel 1 (
     echo [ INFO ] PASS: %DESC%
     set /a PASSED+=1
