@@ -55,6 +55,7 @@ call :assert_accepted "--loadfile-only + --load-file-format concordance" --loadf
 
 echo.
 set /a TOTAL=!PASSED!+!FAILED!
+if exist ".\results\zi_test" rmdir /s /q ".\results\zi_test" 2>nul
 if !FAILED! equ 0 (
     echo [ SUCCESS ] All argument interaction tests passed! ^(!PASSED!/!TOTAL!^)
 ) else (
@@ -65,17 +66,23 @@ exit /b 0
 
 :assert_rejected
 set "DESC=%~1"
-set "ARGS=%*"
-set "ARGS=!ARGS:%1 =!"
+set "ARGS="
+shift
+:assert_rejected_loop
+if [%1]==[] goto :assert_rejected_exec
+set "ARGS=%ARGS% %1"
+shift
+goto :assert_rejected_loop
+:assert_rejected_exec
 set "TEMP_DIR=.\results\test-interactions-%RANDOM%"
 mkdir "%TEMP_DIR%" 2>nul
 set "STDERR_FILE=%TEMP_DIR%\stderr.txt"
-%ZIPPER_CMD% !ARGS! >nul 2>"!STDERR_FILE!"
+%ZIPPER_CMD% %ARGS% >nul 2>"%STDERR_FILE%"
 if errorlevel 1 (
-    findstr /i /c:"Unhandled exception" /c:"NullReferenceException" /c:"Exception:" "!STDERR_FILE!" >nul
+    findstr /i /c:"Unhandled exception" /c:"NullReferenceException" /c:"Exception:" "%STDERR_FILE%" >nul
     if not errorlevel 1 (
         echo [ ERROR ] FAIL: %DESC% ^(expected validation error, got crash^)
-        type "!STDERR_FILE!"
+        type "%STDERR_FILE%"
         set /a FAILED+=1
     ) else (
         echo [ INFO ] PASS: %DESC%
@@ -85,14 +92,21 @@ if errorlevel 1 (
     echo [ ERROR ] FAIL: %DESC% ^(expected rejection^)
     set /a FAILED+=1
 )
-del /f /q "!STDERR_FILE!" 2>nul
+del /f /q "%STDERR_FILE%" 2>nul
+if exist "%TEMP_DIR%" rmdir /s /q "%TEMP_DIR%" 2>nul
 goto :eof
 
 :assert_accepted
 set "DESC=%~1"
-set "ARGS=%*"
-set "ARGS=!ARGS:%1 =!"
-%ZIPPER_CMD% !ARGS! >nul 2>&1
+set "ARGS="
+shift
+:assert_accepted_loop
+if [%1]==[] goto :assert_accepted_exec
+set "ARGS=%ARGS% %1"
+shift
+goto :assert_accepted_loop
+:assert_accepted_exec
+%ZIPPER_CMD% %ARGS% >nul 2>&1
 if not errorlevel 1 (
     echo [ INFO ] PASS: %DESC%
     set /a PASSED+=1
