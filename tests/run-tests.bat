@@ -69,7 +69,7 @@ REM --- Helper Functions ---
         )
     )
 
-    set "ps_cmd=$enc = [System.Text.UTF8Encoding]::new($false); if ('%encoding%' -eq 'UTF-16') { $enc = [System.Text.Encoding]::Unicode } elseif ('%encoding%' -eq 'ANSI') { $enc = [System.Text.Encoding]::GetEncoding(1252) }; $c = [System.IO.File]::ReadAllText('%dat_file%', $enc); $nl = $c.EndsWith(\"`n\"); $lines = [regex]::Matches($c, \"`n\").Count; $header = ''; if ($c -match '^([^\r\n]+)') { $header = $matches[1] }; Write-Host \"$nl|$lines|$header\""
+    set "ps_cmd=$enc = [System.Text.UTF8Encoding]::new($false); if ('%encoding%' -eq 'UTF-16') { $enc = [System.Text.Encoding]::Unicode } elseif ('%encoding%' -eq 'ANSI') { $enc = [System.Text.Encoding]::GetEncoding(1252) }; $c = [System.IO.File]::ReadAllText('%dat_file%', $enc); $nl = $c.EndsWith([string][char]10); $lines = [regex]::Matches($c, '\n').Count; $header = ''; if ($c -match '^([^\r\n]+)') { $header = $matches[1] }; Write-Host ($nl.ToString() + '|' + $lines + '|' + $header)"
     powershell -Command "%ps_cmd%" > "%temp%\dat_info.txt"
     for /f "tokens=1,2,* delims=|" %%A in (%temp%\dat_info.txt) do (
         set "has_nl=%%A"
@@ -220,7 +220,7 @@ REM %2: Target size in MB
     )
 
     REM Verify .dat file exists in zip
-    powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = ($z.Entries | Where { $_.Name -match '\.dat$' }).Count; $z.Dispose(); exit ($c -eq 1 ? 0 : 1) } catch { exit 1 }"
+    powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = ($z.Entries | Where { $_.Name -match '\.dat$' }).Count; $z.Dispose(); if ($c -eq 1) { exit 0 } else { exit 1 } } catch { exit 1 }"
     if errorlevel 1 (
         call :print_error "Expected 1 .dat file in zip archive"
     )
@@ -260,7 +260,7 @@ REM %2: Target size in MB
         )
     )
 
-    set "ps_cmd=$enc = [System.Text.UTF8Encoding]::new($false); if ('%encoding%' -eq 'UTF-16') { $enc = [System.Text.Encoding]::Unicode } elseif ('%encoding%' -eq 'ANSI') { $enc = [System.Text.Encoding]::GetEncoding(1252) }; $c = [System.IO.File]::ReadAllText('%extracted_dat%', $enc); $nl = $c.EndsWith(\"`n\"); $lines = [regex]::Matches($c, \"`n\").Count; $header = ''; if ($c -match '^([^\r\n]+)') { $header = $matches[1] }; Write-Host \"$nl|$lines|$header\""
+    set "ps_cmd=$enc = [System.Text.UTF8Encoding]::new($false); if ('%encoding%' -eq 'UTF-16') { $enc = [System.Text.Encoding]::Unicode } elseif ('%encoding%' -eq 'ANSI') { $enc = [System.Text.Encoding]::GetEncoding(1252) }; $c = [System.IO.File]::ReadAllText('%extracted_dat%', $enc); $nl = $c.EndsWith([string][char]10); $lines = [regex]::Matches($c, '\n').Count; $header = ''; if ($c -match '^([^\r\n]+)') { $header = $matches[1] }; Write-Host ($nl.ToString() + '|' + $lines + '|' + $header)"
     powershell -Command "%ps_cmd%" > "%temp%\dat_info.txt"
     for /f "tokens=1,2,* delims=|" %%A in (%temp%\dat_info.txt) do (
         set "has_nl=%%A"
@@ -287,7 +287,7 @@ REM %2: Target size in MB
     call :print_info ".dat file header is correct."
 
     REM Verify file count in zip (excluding .dat file)
-    powershell -Command "try { $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = ($z.Entries | Where { $_.Name -match '\.%file_type%$' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\zip_count2.txt"
+    powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = @($z.Entries | Where { $_.Name -match '\.%file_type%$' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\zip_count2.txt"
     set /p zip_file_count=<"%temp%\zip_count2.txt"
     if "%zip_file_count%" neq "%expected_count%" (
         call :print_error "Incorrect file count in .zip file. Expected %expected_count%, found %zip_file_count%."
