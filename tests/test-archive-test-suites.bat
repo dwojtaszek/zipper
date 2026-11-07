@@ -516,8 +516,9 @@ if errorlevel 1 (
 )
 
 REM 12. Verifier self-test module (tamper reasons, sleeper deadline, prerequisites).
-%PYCMD% tests\archive-tests\test_verify_fixtures.py >nul 2>&1
+%PYCMD% tests\archive-tests\test_verify_fixtures.py > "%TEST_OUTPUT_DIR%\verifier-self-test.log" 2>&1
 if errorlevel 1 (
+    type "%TEST_OUTPUT_DIR%\verifier-self-test.log"
     call :fail "verifier self-test module must pass"
 ) else (
     call :pass "verifier self-test module passed"

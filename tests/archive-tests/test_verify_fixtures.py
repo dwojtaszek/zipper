@@ -2254,7 +2254,7 @@ class SubprocessDeadlineTests(unittest.TestCase):
             [sys.executable, "-c", "print('alive')"], timeout=10)
         self.assertFalse(timed_out2)
         self.assertEqual(0, code2)
-        self.assertEqual(b"alive\n", out2)
+        self.assertEqual(b"alive\n", out2.replace(b"\r\n", b"\n"))
 
     def test_missing_command_is_reported_not_raised(self):
         code, _out, err, timed_out = vf.run_checked(
