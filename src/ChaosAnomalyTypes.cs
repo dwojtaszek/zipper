@@ -94,6 +94,15 @@ internal static class ChaosAnomalyTypes
     };
 
     /// <summary>
+    /// TIFF header and Image File Directory anomalies injected into generated TIFF files: a dimension lie,
+    /// a directory cut short, an entry count that overstates the entries, and a strip that runs past the end of the file.
+    /// </summary>
+    public static readonly IReadOnlyList<string> Tiff = new[]
+    {
+        "tiff-dimension-lie", "tiff-truncated-ifd", "tiff-tag-count-lie", "tiff-strip-offset",
+    };
+
+    /// <summary>
     /// Returns the valid anomaly types for the given format.
     /// </summary>
     public static IReadOnlyList<string> ForFormat(LoadFileFormat format) =>
@@ -117,4 +126,10 @@ internal static class ChaosAnomalyTypes
     /// </summary>
     public static bool IsEmail(string type) =>
         Email.Contains(CanonicalEmailType(type), StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Returns whether a type name selects a TIFF anomaly.
+    /// </summary>
+    public static bool IsTiff(string type) =>
+        Tiff.Contains(type, StringComparer.OrdinalIgnoreCase);
 }

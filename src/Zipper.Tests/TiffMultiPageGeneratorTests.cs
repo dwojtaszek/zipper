@@ -239,6 +239,28 @@ public class TiffMultiPageGeneratorTests
         Assert.Equal(3, CountTiffPages(result));
     }
 
+    [Fact]
+    public void Generate_BigEndianRealisticMode_EmitsMmHeaderAndChainedIfds()
+    {
+        var workItem = new FileWorkItem { Index = 1 };
+        var config = new Config.TiffConfig { RealismMode = "group4", ByteOrder = "mm" };
+        var result = TiffMultiPageGenerator.Generate(3, workItem, config, "PROD00000001");
+
+        Assert.Equal("MM", System.Text.Encoding.ASCII.GetString(result, 0, 2));
+        Assert.Equal(3, CountTiffPages(result));
+    }
+
+    [Fact]
+    public void Generate_DefaultByteOrder_MatchesExplicitLittleEndianOutput()
+    {
+        // Default TIFF emission is little-endian, so an unset byte order must not change the bytes.
+        var workItem = new FileWorkItem { Index = 1 };
+        var defaulted = TiffMultiPageGenerator.Generate(2, workItem, new Config.TiffConfig { RealismMode = "group4" }, "PROD00000001");
+        var explicitLittle = TiffMultiPageGenerator.Generate(2, workItem, new Config.TiffConfig { RealismMode = "group4", ByteOrder = "ii" }, "PROD00000001");
+
+        Assert.Equal(explicitLittle, defaulted);
+    }
+
     [SkippableFact]
     public void GeneratePage_LibtiffVerification_DecompressesWithoutErrors()
     {

@@ -136,4 +136,33 @@ public class ChaosAnomalyTypesTests
     {
         Assert.False(ChaosAnomalyTypes.IsEmail(type));
     }
+
+    [Fact]
+    public void Tiff_ContainsExpectedTypes()
+    {
+        Assert.Equal(
+            new[] { "tiff-dimension-lie", "tiff-truncated-ifd", "tiff-tag-count-lie", "tiff-strip-offset" },
+            ChaosAnomalyTypes.Tiff);
+    }
+
+    [Theory]
+    [InlineData("tiff-dimension-lie")]
+    [InlineData("tiff-truncated-ifd")]
+    [InlineData("tiff-tag-count-lie")]
+    [InlineData("tiff-strip-offset")]
+    [InlineData("TIFF-STRIP-OFFSET")]
+    public void IsTiff_TiffTypeName_ReturnsTrue(string type)
+    {
+        Assert.True(ChaosAnomalyTypes.IsTiff(type));
+        Assert.False(ChaosAnomalyTypes.IsEmail(type));
+    }
+
+    [Theory]
+    [InlineData("mime-boundary")]
+    [InlineData("quotes")]
+    [InlineData("")]
+    public void IsTiff_OtherTypeName_ReturnsFalse(string type)
+    {
+        Assert.False(ChaosAnomalyTypes.IsTiff(type));
+    }
 }

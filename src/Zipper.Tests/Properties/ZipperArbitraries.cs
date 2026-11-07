@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Runtime.InteropServices;
 using FsCheck;
 using FsCheck.Fluent;
@@ -282,6 +283,21 @@ public readonly record struct FileDataPropertyInput(
 public readonly record struct HashPropertyInput(
     HashAlgorithm Algorithm,
     byte[] Data,
+    int Seed);
+
+/// <summary>
+/// Bounded arbitrary TIFF bytes for the TiffPreflightValidator bounds-safety property.
+/// </summary>
+[StructLayout(LayoutKind.Auto)]
+public readonly record struct TiffBytesPropertyInput(
+    byte[] Content);
+
+/// <summary>
+/// Bounded TIFF anomaly type and seed for the TiffPreflightValidator chaos property.
+/// </summary>
+[StructLayout(LayoutKind.Auto)]
+public readonly record struct TiffChaosPropertyInput(
+    int ChaosTypeIndex,
     int Seed);
 
 /// <summary>
@@ -808,6 +824,54 @@ public static class ZipperArbitraries
         return Arb.From(gen, ShrinkHashInput);
     }
 
+    public static Arbitrary<TiffBytesPropertyInput> TiffBytesPropertyInputArb()
+    {
+        var rawBytes =
+            from length in Gen.Choose(0, 256)
+            from content in Gen.ArrayOf(Gen.Choose(0, 255).Select(x => (byte)x), length)
+            select new TiffBytesPropertyInput(content);
+
+        // A valid header with a random first-IFD offset and tail drives the directory parser past its early returns.
+        var randomDirectory =
+            from bigEndian in Gen.Elements(false, true)
+            from tailLength in Gen.Choose(0, 256)
+            from tail in Gen.ArrayOf(Gen.Choose(0, 255).Select(x => (byte)x), tailLength)
+            from ifdOffset in Gen.Choose(0, 512).Select(x => (uint)x)
+            select new TiffBytesPropertyInput(HeaderWithRandomDirectory(bigEndian, ifdOffset, tail));
+
+        return Arb.From(Gen.OneOf(rawBytes, randomDirectory), ShrinkTiffBytesInput);
+    }
+
+    public static Arbitrary<TiffChaosPropertyInput> TiffChaosPropertyInputArb()
+    {
+        var gen =
+            from chaosTypeIndex in Gen.Choose(0, ChaosAnomalyTypes.Tiff.Count - 1)
+            from seed in Gen.Choose(0, 100_000)
+            select new TiffChaosPropertyInput(chaosTypeIndex, seed);
+
+        return Arb.From(gen, ShrinkTiffChaosInput);
+    }
+
+    private static byte[] HeaderWithRandomDirectory(bool bigEndian, uint ifdOffset, byte[] tail)
+    {
+        var content = new byte[8 + tail.Length];
+        content[0] = bigEndian ? (byte)'M' : (byte)'I';
+        content[1] = content[0];
+        if (bigEndian)
+        {
+            BinaryPrimitives.WriteUInt16BigEndian(content.AsSpan(2), 42);
+            BinaryPrimitives.WriteUInt32BigEndian(content.AsSpan(4), ifdOffset);
+        }
+        else
+        {
+            BinaryPrimitives.WriteUInt16LittleEndian(content.AsSpan(2), 42);
+            BinaryPrimitives.WriteUInt32LittleEndian(content.AsSpan(4), ifdOffset);
+        }
+
+        tail.CopyTo(content, 8);
+        return content;
+    }
+
     public static Arbitrary<StrictDelimiterPropertyInput> StrictDelimiterPropertyInputArb()
     {
         var gen =
@@ -1222,6 +1286,24 @@ public static class ZipperArbitraries
             yield return input with { Data = [] };
         }
 
+        if (input.Seed > 0)
+        {
+            yield return input with { Seed = input.Seed / 2 };
+            yield return input with { Seed = 0 };
+        }
+    }
+
+    private static IEnumerable<TiffBytesPropertyInput> ShrinkTiffBytesInput(TiffBytesPropertyInput input)
+    {
+        if (input.Content.Length > 0)
+        {
+            yield return input with { Content = input.Content[..(input.Content.Length / 2)] };
+            yield return input with { Content = [] };
+        }
+    }
+
+    private static IEnumerable<TiffChaosPropertyInput> ShrinkTiffChaosInput(TiffChaosPropertyInput input)
+    {
         if (input.Seed > 0)
         {
             yield return input with { Seed = input.Seed / 2 };

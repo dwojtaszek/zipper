@@ -82,16 +82,18 @@ public sealed class ChaosModule : CliModule
         DelimiterConfig? delimiters = null,
         string? encoding = null,
         bool productionSet = false,
-        bool hasEml = false)
+        bool hasEml = false,
+        bool hasTiff = false)
     {
-        // An email run generates .eml work items in Standard or Production Set mode. Its chaos types
+        // An email or TIFF run generates .eml or .tiff work items in Standard or Production Set mode. Its chaos types
         // apply to those work items, not to load file lines.
         bool emailRun = hasEml && !loadfileOnly;
-        if (!this.TryValidateMode(loadfileOnly, productionSet, hasEml)
-            || !this.TryValidateEmailScenario(emailRun, productionSet)
+        bool tiffRun = hasTiff && !loadfileOnly;
+        if (!this.TryValidateMode(loadfileOnly, productionSet, hasEml, hasTiff)
+            || !this.TryValidateNativeScenario(emailRun, tiffRun, productionSet)
             || !this.TryValidateScenario(formats, delimiters, encoding)
             || !this.TryValidateAmount()
-            || !this.TryNormalizeChaosTypes(formats, emailRun, out var normalizedChaosTypes))
+            || !this.TryNormalizeChaosTypes(formats, emailRun, tiffRun, out var normalizedChaosTypes))
         {
             config = default!;
             return false;
@@ -107,19 +109,20 @@ public sealed class ChaosModule : CliModule
         return true;
     }
 
-    private bool TryValidateMode(bool loadfileOnly, bool productionSet, bool hasEml)
+    private bool TryValidateMode(bool loadfileOnly, bool productionSet, bool hasEml, bool hasTiff)
     {
         if (this._mode)
         {
-            if (!loadfileOnly && !productionSet && !hasEml)
+            bool nativeRun = hasEml || hasTiff;
+            if (!loadfileOnly && !productionSet && !nativeRun)
             {
-                Console.Error.WriteLine("Error: --chaos-mode requires --loadfile-only, --production-set, or email (.eml) generation.");
+                Console.Error.WriteLine("Error: --chaos-mode requires --loadfile-only, --production-set, email (.eml), or TIFF (.tiff) generation.");
                 return false;
             }
 
-            if (!loadfileOnly && !hasEml && !ChaosScenarios.IsCrossFormat(this._scenario))
+            if (!loadfileOnly && !nativeRun && !ChaosScenarios.IsCrossFormat(this._scenario))
             {
-                Console.Error.WriteLine("Error: --chaos-mode with --production-set requires a cross-format chaos scenario ('cross-format-desync' or 'broken-families') or email (.eml) generation.");
+                Console.Error.WriteLine("Error: --chaos-mode with --production-set requires a cross-format chaos scenario ('cross-format-desync' or 'broken-families') or email (.eml) or TIFF (.tiff) generation.");
                 return false;
             }
 
@@ -147,13 +150,24 @@ public sealed class ChaosModule : CliModule
         return true;
     }
 
-    private bool TryValidateEmailScenario(bool emailRun, bool productionSet)
+    private bool TryValidateNativeScenario(bool emailRun, bool tiffRun, bool productionSet)
     {
-        // Production Set cross-format scenarios still drive load file chaos next to the .eml files.
+        // Production Set cross-format scenarios still drive load file chaos next to the native files.
         bool loadFileScenario = productionSet && ChaosScenarios.IsCrossFormat(this._scenario);
-        if (emailRun && !string.IsNullOrEmpty(this._scenario) && !loadFileScenario)
+        if (string.IsNullOrEmpty(this._scenario) || loadFileScenario)
+        {
+            return true;
+        }
+
+        if (emailRun)
         {
             Console.Error.WriteLine("Error: --chaos-scenario does not apply to email (.eml) chaos. Use --chaos-types with email types.");
+            return false;
+        }
+
+        if (tiffRun)
+        {
+            Console.Error.WriteLine("Error: --chaos-scenario does not apply to TIFF (.tiff) chaos. Use --chaos-types with TIFF types.");
             return false;
         }
 
@@ -227,6 +241,7 @@ public sealed class ChaosModule : CliModule
     private bool TryNormalizeChaosTypes(
         IReadOnlyList<LoadFileFormat> formats,
         bool emailRun,
+        bool tiffRun,
         out string? normalizedChaosTypes)
     {
         // Defaults to the raw value so an unset/unparseable input is never silently widened.
@@ -236,22 +251,32 @@ public sealed class ChaosModule : CliModule
             return true;
         }
 
-        // Build union of valid types for all formats, or only the email types for an email run.
+        // Build union of valid types for all formats, or only the native types of an email or TIFF run.
+        bool nativeRun = emailRun || tiffRun;
         var validTypesUnion = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (emailRun)
         {
             validTypesUnion.UnionWith(ChaosAnomalyTypes.Email);
         }
-        else if (formats is { Count: > 0 })
+
+        if (tiffRun)
         {
-            foreach (var format in formats)
-            {
-                validTypesUnion.UnionWith(ChaosAnomalyTypes.ForFormat(format));
-            }
+            validTypesUnion.UnionWith(ChaosAnomalyTypes.Tiff);
         }
-        else
+
+        if (!nativeRun)
         {
-            validTypesUnion.UnionWith(ChaosAnomalyTypes.ForFormat(LoadFileFormat.Dat));
+            if (formats is { Count: > 0 })
+            {
+                foreach (var format in formats)
+                {
+                    validTypesUnion.UnionWith(ChaosAnomalyTypes.ForFormat(format));
+                }
+            }
+            else
+            {
+                validTypesUnion.UnionWith(ChaosAnomalyTypes.ForFormat(LoadFileFormat.Dat));
+            }
         }
 
         var normalized = new List<string>();
@@ -262,13 +287,27 @@ public sealed class ChaosModule : CliModule
 
             if (!emailRun && ChaosAnomalyTypes.IsEmail(effectiveType))
             {
-                Console.Error.WriteLine($"Error: Chaos type '{trimmed}' applies only to email (.eml) generation, not to load file output.");
+                string target = tiffRun ? "TIFF (.tiff) generation" : "load file output";
+                Console.Error.WriteLine($"Error: Chaos type '{trimmed}' applies only to email (.eml) generation, not to {target}.");
+                return false;
+            }
+
+            if (!tiffRun && ChaosAnomalyTypes.IsTiff(effectiveType))
+            {
+                string target = emailRun ? "email (.eml) generation" : "load file output";
+                Console.Error.WriteLine($"Error: Chaos type '{trimmed}' applies only to TIFF (.tiff) generation, not to {target}.");
                 return false;
             }
 
             if (!validTypesUnion.Contains(effectiveType))
             {
-                string scope = emailRun ? "email (.eml) generation" : "selected formats";
+                string scope = (emailRun, tiffRun) switch
+                {
+                    (true, true) => "email (.eml) or TIFF (.tiff) generation",
+                    (true, false) => "email (.eml) generation",
+                    (false, true) => "TIFF (.tiff) generation",
+                    _ => "selected formats",
+                };
                 Console.Error.WriteLine($"Error: Invalid chaos type '{trimmed}'. Valid types for {scope}: {string.Join(", ", validTypesUnion.OrderBy(value => value))}");
                 return false;
             }

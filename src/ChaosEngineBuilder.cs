@@ -70,7 +70,31 @@ internal static class ChaosEngineBuilder
     /// Builds a <see cref="ChaosEngine"/> that samples the eml work items of a Standard run,
     /// or returns <c>null</c> when chaos is disabled or no work item is an eml.
     /// </summary>
-    internal static ChaosEngine? BuildForStandardEmail(FileGenerationRequest request)
+    internal static ChaosEngine? BuildForStandardEmail(FileGenerationRequest request) =>
+        BuildForStandardWorkItems(request, "eml", ChaosAnomalyTypes.Email);
+
+    /// <summary>
+    /// Builds a <see cref="ChaosEngine"/> that samples the tiff work items of a Standard run,
+    /// or returns <c>null</c> when chaos is disabled or no work item is a tiff.
+    /// </summary>
+    internal static ChaosEngine? BuildForStandardTiff(FileGenerationRequest request) =>
+        BuildForStandardWorkItems(request, "tiff", ChaosAnomalyTypes.Tiff);
+
+    /// <summary>
+    /// Builds a <see cref="ChaosEngine"/> that samples the eml work items of a Production Set,
+    /// or returns <c>null</c> when chaos is disabled or no work item is an eml.
+    /// </summary>
+    internal static ChaosEngine? BuildForProductionEmail(FileGenerationRequest request, IReadOnlyList<ProductionNativeFilePlan> plans) =>
+        BuildForProductionWorkItems(request, plans, "eml", ChaosAnomalyTypes.Email);
+
+    /// <summary>
+    /// Builds a <see cref="ChaosEngine"/> that samples the tiff work items of a Production Set,
+    /// or returns <c>null</c> when chaos is disabled or no work item is a tiff.
+    /// </summary>
+    internal static ChaosEngine? BuildForProductionTiff(FileGenerationRequest request, IReadOnlyList<ProductionNativeFilePlan> plans) =>
+        BuildForProductionWorkItems(request, plans, "tiff", ChaosAnomalyTypes.Tiff);
+
+    private static ChaosEngine? BuildForStandardWorkItems(FileGenerationRequest request, string fileType, IReadOnlyList<string> workItemTypes)
     {
         if (!request.Chaos.ChaosMode)
         {
@@ -82,8 +106,8 @@ internal static class ChaosEngineBuilder
         if (sourceRecords is null && output.FileTypePlan is null)
         {
             // One File Type for every work item: sample all of them, or none.
-            return IsEml(output.FileTypeLower)
-                ? BuildForEmail(request, output.FileCount, itemIndexes: null)
+            return IsFileType(output.FileTypeLower, fileType)
+                ? BuildForWorkItems(request, output.FileCount, itemIndexes: null, workItemTypes)
                 : null;
         }
 
@@ -97,20 +121,20 @@ internal static class ChaosEngineBuilder
         var indexes = new List<long>();
         for (long index = 1; index <= output.FileCount; index++)
         {
-            if (IsEml(FileTypeAt(index)))
+            if (IsFileType(FileTypeAt(index), fileType))
             {
                 indexes.Add(index);
             }
         }
 
-        return BuildForEmail(request, indexes.Count, indexes);
+        return BuildForWorkItems(request, indexes.Count, indexes, workItemTypes);
     }
 
-    /// <summary>
-    /// Builds a <see cref="ChaosEngine"/> that samples the eml work items of a Production Set,
-    /// or returns <c>null</c> when chaos is disabled or no work item is an eml.
-    /// </summary>
-    internal static ChaosEngine? BuildForProductionEmail(FileGenerationRequest request, IReadOnlyList<ProductionNativeFilePlan> plans)
+    private static ChaosEngine? BuildForProductionWorkItems(
+        FileGenerationRequest request,
+        IReadOnlyList<ProductionNativeFilePlan> plans,
+        string fileType,
+        IReadOnlyList<string> workItemTypes)
     {
         if (!request.Chaos.ChaosMode)
         {
@@ -118,11 +142,15 @@ internal static class ChaosEngineBuilder
         }
 
         // Production plans are 0-based; work item indexes are 1-based.
-        var indexes = plans.Where(plan => IsEml(plan.FileType)).Select(plan => plan.Index + 1).ToList();
-        return BuildForEmail(request, indexes.Count, indexes.Count == plans.Count ? null : indexes);
+        var indexes = plans.Where(plan => IsFileType(plan.FileType, fileType)).Select(plan => plan.Index + 1).ToList();
+        return BuildForWorkItems(request, indexes.Count, indexes.Count == plans.Count ? null : indexes, workItemTypes);
     }
 
-    private static ChaosEngine? BuildForEmail(FileGenerationRequest request, long totalItems, IReadOnlyList<long>? itemIndexes)
+    private static ChaosEngine? BuildForWorkItems(
+        FileGenerationRequest request,
+        long totalItems,
+        IReadOnlyList<long>? itemIndexes,
+        IReadOnlyList<string> workItemTypes)
     {
         if (totalItems <= 0)
         {
@@ -139,13 +167,14 @@ internal static class ChaosEngineBuilder
             totalItems,
             request.Chaos.ChaosAmount,
             request.Chaos.ChaosTypes,
+            workItemTypes,
             request.Metadata.Seed,
             itemIndexes,
             request.Bates is null ? null : BatesSequence.FromConfig(request.Bates));
     }
 
-    private static bool IsEml(string? fileType) =>
-        string.Equals(fileType, "eml", StringComparison.OrdinalIgnoreCase);
+    private static bool IsFileType(string? fileType, string expected) =>
+        string.Equals(fileType, expected, StringComparison.OrdinalIgnoreCase);
 
     private static IReadOnlyCollection<string> GetDateColumnNames(FileGenerationRequest request)
     {

@@ -105,7 +105,8 @@ public static class Pipeline
             delimiters,
             loadFile.Encoding,
             production.ProductionSet,
-            output.HasFileType("eml")))
+            output.HasFileType("eml"),
+            output.HasFileType("tiff")))
         {
             return null;
         }

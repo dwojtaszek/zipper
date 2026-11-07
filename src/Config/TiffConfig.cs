@@ -17,6 +17,12 @@ public record TiffConfig
     public string Compression { get; init; } = "group4";
 
     /// <summary>
+    /// Byte order of realistic TIFF emission: "ii" (little-endian, default) or "mm" (big-endian).
+    /// Only the renderer reads it; the default keeps TIFF output byte-identical to earlier releases.
+    /// </summary>
+    public string ByteOrder { get; init; } = "ii";
+
+    /// <summary>
     /// True when realistic per-page TIFF emission is enabled.
     /// </summary>
     public bool IsRealistic => !string.IsNullOrEmpty(RealismMode) && !string.Equals(RealismMode, "none", StringComparison.OrdinalIgnoreCase);

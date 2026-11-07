@@ -464,6 +464,108 @@ else
     pass "Conflicting --tiff-realism group4 and --tiff-compression uncompressed correctly failed validation"
 fi
 
+# --- REQ-241: TIFF Byte Order and TIFF Chaos Types ---
+
+print_info "Test: realistic TIFF defaults to little-endian (II) in Standard mode"
+TIFF_BO_DEFAULT_OUT="$TEST_OUTPUT_DIR/tiff-byte-order-default"
+if zipper --type tiff --count 2 --tiff-pages 1-1 --bates-prefix REAL --with-tiff-realism --output-path "$TIFF_BO_DEFAULT_OUT" > /dev/null 2>&1; then
+    tiff_default_zip=$(find "$TIFF_BO_DEFAULT_OUT" -name "*.zip" -print -quit)
+    if [[ -n "$tiff_default_zip" ]] && python3 "$(dirname "$0")/validate_tiff_output.py" byte-order "$tiff_default_zip" II; then
+        pass "Default realistic TIFF output is little-endian"
+    else
+        fail "Default realistic TIFF output is not little-endian"
+    fi
+else
+    fail "Default --with-tiff-realism generation failed in Standard mode"
+fi
+
+print_info "Test: --tiff-byte-order mm writes big-endian TIFF in Standard mode"
+TIFF_BO_STD_OUT="$TEST_OUTPUT_DIR/tiff-byte-order-std"
+if zipper --type tiff --count 2 --tiff-pages 1-1 --bates-prefix REAL --with-tiff-realism --tiff-byte-order mm --output-path "$TIFF_BO_STD_OUT" > /dev/null 2>&1; then
+    tiff_std_zip=$(find "$TIFF_BO_STD_OUT" -name "*.zip" -print -quit)
+    if [[ -n "$tiff_std_zip" ]] && python3 "$(dirname "$0")/validate_tiff_output.py" byte-order "$tiff_std_zip" MM; then
+        pass "--tiff-byte-order mm generated big-endian TIFF entries"
+    else
+        fail "--tiff-byte-order mm did not generate big-endian TIFF entries"
+    fi
+else
+    fail "--tiff-byte-order mm generation failed in Standard mode"
+fi
+
+print_info "Test: --tiff-byte-order mm writes big-endian natives in Production Set mode"
+TIFF_BO_PROD_OUT="$TEST_OUTPUT_DIR/tiff-byte-order-prod"
+if zipper --production-set --type tiff --count 2 --bates-prefix PROD --with-tiff-realism --tiff-byte-order mm --output-path "$TIFF_BO_PROD_OUT" > /dev/null 2>&1; then
+    tiff_natives_dir=$(find "$TIFF_BO_PROD_OUT" -type d -name NATIVES -print -quit)
+    if [[ -n "$tiff_natives_dir" ]] && python3 "$(dirname "$0")/validate_tiff_output.py" byte-order "$tiff_natives_dir" MM; then
+        pass "--tiff-byte-order mm generated big-endian Production Set natives"
+    else
+        fail "--tiff-byte-order mm did not generate big-endian Production Set natives"
+    fi
+else
+    fail "--tiff-byte-order mm generation failed in Production Set mode"
+fi
+
+print_info "Test: --type tiff with --chaos-mode in Standard mode audits every TIFF anomaly type"
+TIFF_CHAOS_STD_OUT="$TEST_OUTPUT_DIR/tiff-chaos-standard"
+if zipper --type tiff --count 8 --seed 42 --chaos-mode --chaos-amount 100% --output-path "$TIFF_CHAOS_STD_OUT" > /dev/null 2>&1; then
+    tiff_chaos_dat_props=$(find "$TIFF_CHAOS_STD_OUT" -name "*.dat_properties.json" -print -quit)
+    if [[ -n "$tiff_chaos_dat_props" ]] && python3 "$(dirname "$0")/validate_tiff_output.py" standard "$tiff_chaos_dat_props"; then
+        pass "--type tiff with --chaos-mode audited the expected TIFF anomalies"
+    else
+        fail "--type tiff with --chaos-mode did not audit the expected TIFF anomalies"
+    fi
+else
+    fail "--type tiff with --chaos-mode generation failed"
+fi
+
+print_info "Test: --type tiff with --chaos-mode in Production Set mode audits the selected TIFF types"
+TIFF_CHAOS_PROD_OUT="$TEST_OUTPUT_DIR/tiff-chaos-prod"
+if zipper --production-set --type tiff --count 6 --seed 42 --bates-prefix PROD --chaos-mode --chaos-amount 100% --chaos-types "tiff-truncated-ifd,tiff-tag-count-lie" --output-path "$TIFF_CHAOS_PROD_OUT" > /dev/null 2>&1; then
+    tiff_chaos_prod_props=$(find "$TIFF_CHAOS_PROD_OUT" -name "loadfile_properties.json" -print -quit)
+    if [[ -n "$tiff_chaos_prod_props" ]] && python3 "$(dirname "$0")/validate_tiff_output.py" production "$tiff_chaos_prod_props"; then
+        pass "--type tiff with --chaos-mode in Production Set audited the expected TIFF anomalies"
+    else
+        fail "--type tiff with --chaos-mode in Production Set did not audit the expected TIFF anomalies"
+    fi
+else
+    fail "--type tiff with --chaos-mode in Production Set failed"
+fi
+
+print_info "Test: --tiff-byte-order without realism fails validation"
+if zipper --type tiff --count 2 --tiff-byte-order mm --output-path "$TEST_OUTPUT_DIR/tiff-byte-order-no-realism" > /dev/null 2>&1; then
+    fail "--tiff-byte-order without realism should have failed validation"
+else
+    pass "--tiff-byte-order without realism correctly failed validation"
+fi
+
+print_info "Test: invalid --tiff-byte-order value fails validation"
+if zipper --type tiff --count 2 --with-tiff-realism --tiff-byte-order le --output-path "$TEST_OUTPUT_DIR/tiff-byte-order-invalid" > /dev/null 2>&1; then
+    fail "Invalid --tiff-byte-order value should have failed validation"
+else
+    pass "Invalid --tiff-byte-order value correctly failed validation"
+fi
+
+print_info "Test: email chaos type with --type tiff --chaos-mode fails validation"
+if zipper --type tiff --count 3 --chaos-mode --chaos-types mime-boundary --output-path "$TEST_OUTPUT_DIR/tiff-chaos-email-type" > /dev/null 2>&1; then
+    fail "Email chaos type in a TIFF run should have failed validation"
+else
+    pass "Email chaos type in a TIFF run correctly failed validation"
+fi
+
+print_info "Test: TIFF chaos types with --loadfile-only fail validation"
+if zipper --loadfile-only --type tiff --count 3 --chaos-mode --chaos-types tiff-dimension-lie --output-path "$TEST_OUTPUT_DIR/tiff-chaos-loadfile-only" > /dev/null 2>&1; then
+    fail "TIFF chaos types with --loadfile-only should have failed validation"
+else
+    pass "TIFF chaos types with --loadfile-only correctly failed validation"
+fi
+
+print_info "Test: --chaos-scenario with --type tiff --chaos-mode in Standard mode fails validation"
+if zipper --type tiff --count 3 --chaos-mode --chaos-scenario cross-format-desync --output-path "$TEST_OUTPUT_DIR/tiff-chaos-scenario" > /dev/null 2>&1; then
+    fail "--chaos-scenario with TIFF chaos in Standard mode should have failed validation"
+else
+    pass "--chaos-scenario with TIFF chaos in Standard mode correctly failed validation"
+fi
+
 # --- Summary ---
 
 echo ""

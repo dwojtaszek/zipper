@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Text;
 using Xunit;
 using Zipper.Config;
 using Zipper.Tests.TestHelpers;
@@ -366,6 +367,75 @@ public class TiffRendererTests
         var result = ms.ToArray();
         Assert.Equal(prefix, result.Take(prefix.Length).ToArray());
         Assert.Equal(directBytes, result.Skip(prefix.Length).ToArray());
+    }
+
+    [Theory]
+    [InlineData("group4")]
+    [InlineData("uncompressed")]
+    public void RenderMultiPage_BigEndian_WritesMmHeaderAndSameFieldsAsLittleEndian(string compression)
+    {
+        // Same content in both byte orders: the header differs, and every IFD field decodes to the same value.
+        var little = TiffRenderer.RenderMultiPage(3, "PROD00000001", new TiffConfig { RealismMode = "standard", ByteOrder = "ii", Compression = compression });
+        var big = TiffRenderer.RenderMultiPage(3, "PROD00000001", new TiffConfig { RealismMode = "standard", ByteOrder = "mm", Compression = compression });
+
+        Assert.Equal("II", Encoding.ASCII.GetString(little, 0, 2));
+        Assert.Equal("MM", Encoding.ASCII.GetString(big, 0, 2));
+        Assert.Equal(new byte[] { 0x00, 0x2A, 0x00, 0x00, 0x00, 0x08 }, big.AsSpan(2, 6).ToArray());
+        Assert.Equal(3, TiffTestHelpers.CountTiffPages(big));
+        Assert.Equal(TiffTestHelpers.ReadFirstIfdFields(little), TiffTestHelpers.ReadFirstIfdFields(big));
+    }
+
+    [Theory]
+    [InlineData("ii")]
+    [InlineData("mm")]
+    public void RenderPage_PageNumberField_PacksPageIndexAndCountInEachByteOrder(string byteOrder)
+    {
+        // PageNumber is two SHORT values (page index, then page count) that must each follow the file's byte order.
+        var tiff = TiffRenderer.RenderPage("PROD00000001", 2, 3, new TiffConfig { RealismMode = "standard", ByteOrder = byteOrder });
+
+        Assert.Equal("3:2:1,3", TiffTestHelpers.ReadFirstIfdFields(tiff)[297]);
+    }
+
+    [Fact]
+    public void RenderPage_DefaultByteOrder_IsLittleEndian()
+    {
+        var defaulted = TiffRenderer.RenderPage("PROD00000001", 1, 1, new TiffConfig { RealismMode = "standard" });
+        var explicitLittle = TiffRenderer.RenderPage("PROD00000001", 1, 1, new TiffConfig { RealismMode = "standard", ByteOrder = "ii" });
+
+        Assert.Equal("II", Encoding.ASCII.GetString(defaulted, 0, 2));
+        Assert.Equal(explicitLittle, defaulted);
+    }
+
+    [SkippableTheory]
+    [InlineData("group4")]
+    [InlineData("uncompressed")]
+    public void GeneratePage_BigEndian_DecodesToSamePixelsAsLittleEndian(string compression)
+    {
+        var magick = TiffTestHelpers.FindToolOnPath("magick");
+        Skip.If(magick is null, "ImageMagick (magick) is not installed");
+
+        var littleBytes = TiffMultiPageGenerator.GeneratePage("PROD00000001_LONG", 1, 1, new TiffConfig { RealismMode = "standard", ByteOrder = "ii", Compression = compression });
+        var bigBytes = TiffMultiPageGenerator.GeneratePage("PROD00000001_LONG", 1, 1, new TiffConfig { RealismMode = "standard", ByteOrder = "mm", Compression = compression });
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"tiff_byteorder_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var littlePath = Path.Combine(tempDir, "little.tif");
+            var bigPath = Path.Combine(tempDir, "big.tif");
+            File.WriteAllBytes(littlePath, littleBytes);
+            File.WriteAllBytes(bigPath, bigBytes);
+
+            // A big-endian file must decode through libtiff to exactly the same pixels as the little-endian one.
+            var result = TiffTestHelpers.RunTool(magick!, "compare", "-metric", "AE", littlePath, bigPath, "null:");
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.Equal("0 (0)", result.StdErr.Trim());
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
     }
 
     private sealed class NonSeekableStream(Stream inner) : Stream

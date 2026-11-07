@@ -66,6 +66,7 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine("                           CSV: csv-quote-escape,csv-embedded-newline,csv-bom");
         Console.Error.WriteLine("                           Concordance: concordance-delimiter,concordance-quote-escape");
         Console.Error.WriteLine("                           EDRM-XML: xml-unclosed-tag,xml-bad-entity,xml-encoding-lie");
+        Console.Error.WriteLine("                           TIFF (--type tiff): tiff-dimension-lie,tiff-truncated-ifd,tiff-tag-count-lie,tiff-strip-offset");
         Console.Error.WriteLine("                           DAT record anomalies are opt-in; full-chaos enables all types for the selected format");
         Console.Error.WriteLine("                           OPT opt-encoding is opt-in; full-chaos enables it");
         Console.Error.WriteLine("  --chaos-scenario <name>  Predefined scenario; conflicts with --chaos-types; adversarial-values emits valid DAT values");
@@ -102,6 +103,7 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine("  --with-tiff-realism      Enable standard realistic TIFF emission with Bates endorsement band (Group 4 unless --tiff-compression uncompressed)");
         Console.Error.WriteLine("  --realistic-tiff         Alias for --with-tiff-realism");
         Console.Error.WriteLine("  --tiff-compression <cmp> Compression scheme for realistic TIFFs (group4, uncompressed; requires realism)");
+        Console.Error.WriteLine("  --tiff-byte-order <ii|mm> Byte order for realistic TIFFs: ii (little-endian, default) or mm (big-endian); requires realism");
         Console.Error.WriteLine();
         Console.Error.WriteLine("Column Profile Options:");
         Console.Error.WriteLine("  --column-profile <name>  Built-in profile: minimal, standard, litigation, full");

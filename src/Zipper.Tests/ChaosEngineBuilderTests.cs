@@ -629,6 +629,219 @@ public class ChaosEngineBuilderTests
         Assert.Equal(emlCount, engine!.Anomalies.Count);
     }
 
+    [Fact]
+    public void BuildForStandardEmail_WithTiffFileType_ReturnsNull()
+    {
+        // Email types never sample .tif work items, so a TIFF run builds no email engine.
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileCount = 3, FileType = "tiff" },
+            Chaos = new ChaosConfig { ChaosMode = true, ChaosAmount = "100%" },
+        };
+
+        Assert.Null(ChaosEngineBuilder.BuildForStandardEmail(request));
+    }
+
+    [Fact]
+    public void BuildForStandardTiff_WhenChaosModeIsDisabled_ReturnsNull()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileCount = 3, FileType = "tiff" },
+        };
+
+        Assert.Null(ChaosEngineBuilder.BuildForStandardTiff(request));
+    }
+
+    [Fact]
+    public void BuildForStandardTiff_WithoutTiffFileType_ReturnsNull()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileCount = 3, FileType = "pdf" },
+            Chaos = new ChaosConfig { ChaosMode = true, ChaosAmount = "100%", ChaosTypes = "tiff-strip-offset" },
+        };
+
+        Assert.Null(ChaosEngineBuilder.BuildForStandardTiff(request));
+    }
+
+    [Fact]
+    public void BuildForStandardTiff_WithMixedFileTypes_SamplesOnlyTiffWorkItems()
+    {
+        // Arrange
+        var ratios = new[]
+        {
+            new FileTypeRatio { Type = "tiff", Weight = 1 },
+            new FileTypeRatio { Type = "pdf", Weight = 1 },
+        };
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileCount = 12,
+                FileType = "pdf",
+                FileTypeRatios = ratios,
+                FileTypePlan = new FileTypePlan(ratios, 12),
+            },
+            Chaos = new ChaosConfig { ChaosMode = true, ChaosAmount = "100%" },
+            Metadata = new MetadataConfig { Seed = 42 },
+        };
+        var tiffCount = Enumerable.Range(1, 12).Count(i => request.Output.ResolveFileType(i) == "tiff");
+        Assert.InRange(tiffCount, 1, 11);
+
+        // Act
+        var engine = ChaosEngineBuilder.BuildForStandardTiff(request);
+
+        // Assert
+        Assert.NotNull(engine);
+        for (long index = 1; index <= 12; index++)
+        {
+            string fileType = request.Output.ResolveFileType(index);
+            var content = TiffContent();
+            var item = new FileWorkItem { Index = index, FileType = fileType, FileName = $"{index:D8}.{fileType}" };
+            var result = engine!.ApplyTiffChaos(item, content);
+
+            if (fileType == "tiff")
+            {
+                Assert.False(content.Content.AsSpan().SequenceEqual(result.Content));
+            }
+            else
+            {
+                Assert.Same(content, result);
+            }
+        }
+
+        Assert.Equal(tiffCount, engine!.Anomalies.Count);
+        Assert.All(engine.Anomalies, anomaly => Assert.Contains(anomaly.ErrorType, ChaosAnomalyTypes.Tiff));
+    }
+
+    [Fact]
+    public void BuildForStandardTiff_WithEmailChaosType_SamplesNoWorkItems()
+    {
+        // An email type matches no TIFF anomaly, so the engine is built but samples nothing.
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileCount = 2, FileType = "tiff" },
+            Chaos = new ChaosConfig { ChaosMode = true, ChaosAmount = "100%", ChaosTypes = "encoded-word" },
+            Metadata = new MetadataConfig { Seed = 42 },
+        };
+
+        var engine = ChaosEngineBuilder.BuildForStandardTiff(request);
+        Assert.NotNull(engine);
+
+        var content = TiffContent();
+        var result = engine!.ApplyTiffChaos(new FileWorkItem { Index = 1, FileType = "tiff", FileName = "00000001.tif" }, content);
+
+        Assert.Same(content, result);
+        Assert.Empty(engine.Anomalies);
+    }
+
+    [Fact]
+    public void BuildForProductionTiff_WithMixedFileTypes_SamplesOnlyTiffPlans()
+    {
+        // Arrange
+        var ratios = new[]
+        {
+            new FileTypeRatio { Type = "tiff", Weight = 1 },
+            new FileTypeRatio { Type = "pdf", Weight = 1 },
+        };
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileCount = 8,
+                FileType = "pdf",
+                FileTypeRatios = ratios,
+                FileTypePlan = new FileTypePlan(ratios, 8),
+            },
+            Production = new ProductionConfig { ProductionSet = true },
+            Bates = new BatesNumberConfig { Prefix = "PLAN", Start = 1, Digits = 8 },
+            Chaos = new ChaosConfig { ChaosMode = true, ChaosAmount = "100%" },
+            Metadata = new MetadataConfig { Seed = 42 },
+        };
+        var plans = ProductionSetPlanner.Plan(request);
+        var tiffCount = plans.Count(plan => plan.FileType == "tiff");
+        Assert.InRange(tiffCount, 1, plans.Count - 1);
+
+        // Act
+        var engine = ChaosEngineBuilder.BuildForProductionTiff(request, plans);
+
+        // Assert
+        Assert.NotNull(engine);
+        foreach (var plan in plans)
+        {
+            // Production plans are 0-based; work item indexes are 1-based.
+            var content = TiffContent();
+            var item = new FileWorkItem { Index = plan.Index + 1, FileType = plan.FileType, FileName = $"{plan.Index + 1:D8}.{plan.FileType}" };
+            var result = engine!.ApplyTiffChaos(item, content);
+
+            if (plan.FileType == "tiff")
+            {
+                Assert.False(content.Content.AsSpan().SequenceEqual(result.Content));
+            }
+            else
+            {
+                Assert.Same(content, result);
+            }
+        }
+
+        Assert.Equal(tiffCount, engine!.Anomalies.Count);
+    }
+
+    [Fact]
+    public void BuildForProductionTiff_WithInterleavedFileTypes_SamplesEachTiffPlanAtItsOwnIndex()
+    {
+        // The planner packs tiff plans into a prefix, so this layout puts them at indexes 2, 4 and 6 to show that
+        // each one is sampled at its own work item index rather than at a position in the tiff subset.
+        string[] fileTypes = ["pdf", "tiff", "pdf", "tiff", "pdf", "tiff"];
+        var plans = fileTypes.Select((type, i) => new ProductionNativeFilePlan
+        {
+            Index = i,
+            VolumeIndex = 0,
+            VolumeName = "VOL001",
+            BatesNumber = $"PLAN{i + 1:D8}",
+            FileType = type,
+            NativeRelPath = $"NATIVES/{i + 1:D8}.{type}",
+            TextRelPath = $"TEXT/{i + 1:D8}.txt",
+            ImageRelPath = $"IMAGES/{i + 1:D8}.tif",
+        }).ToList();
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileCount = fileTypes.Length, FileType = "pdf" },
+            Production = new ProductionConfig { ProductionSet = true },
+            Chaos = new ChaosConfig { ChaosMode = true, ChaosAmount = "100%" },
+            Metadata = new MetadataConfig { Seed = 42 },
+        };
+
+        // Act
+        var engine = ChaosEngineBuilder.BuildForProductionTiff(request, plans);
+
+        // Assert
+        Assert.NotNull(engine);
+        foreach (var plan in plans)
+        {
+            var content = TiffContent();
+            var item = new FileWorkItem { Index = plan.Index + 1, FileType = plan.FileType, FileName = $"{plan.Index + 1:D8}.{plan.FileType}" };
+            var result = engine!.ApplyTiffChaos(item, content);
+
+            if (plan.FileType == "tiff")
+            {
+                Assert.False(content.Content.AsSpan().SequenceEqual(result.Content));
+            }
+            else
+            {
+                Assert.Same(content, result);
+            }
+        }
+
+        Assert.Equal(3, engine!.Anomalies.Count);
+    }
+
+    private static GeneratedFileContent TiffContent() => new()
+    {
+        Content = PlaceholderFiles.GetContent("tiff"),
+    };
+
     private static GeneratedFileContent EmlContent() => new()
     {
         Content = Encoding.ASCII.GetBytes(

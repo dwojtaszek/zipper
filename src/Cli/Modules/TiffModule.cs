@@ -2,12 +2,13 @@ using Zipper.Config;
 
 namespace Zipper.Cli.Modules;
 
-/// <summary>Owns --tiff-pages, --tiff-realism, --with-tiff-realism, --realistic-tiff, --tiff-compression: parse, validate, and build TiffConfig.</summary>
+/// <summary>Owns --tiff-pages, --tiff-realism, --with-tiff-realism, --realistic-tiff, --tiff-compression, --tiff-byte-order: parse, validate, and build TiffConfig.</summary>
 public sealed class TiffModule : CliModule
 {
     private string? _pageRange;
     private string? _realismMode;
     private string? _compression;
+    private string? _byteOrder;
 
     public override IReadOnlyCollection<string> OwnedFlags { get; } = new[]
     {
@@ -16,6 +17,7 @@ public sealed class TiffModule : CliModule
         "--with-tiff-realism",
         "--realistic-tiff",
         "--tiff-compression",
+        "--tiff-byte-order",
     };
 
     public override bool TakesValue(string flag) => flag switch
@@ -68,6 +70,21 @@ public sealed class TiffModule : CliModule
                 _compression = comp;
                 return true;
 
+            case "--tiff-byte-order":
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    Console.Error.WriteLine("Error: --tiff-byte-order requires a value.");
+                    return false;
+                }
+                var order = value.ToLowerInvariant();
+                if (order is not ("ii" or "mm"))
+                {
+                    Console.Error.WriteLine($"Error: Invalid TIFF byte order '{value}'. Allowed: ii, mm.");
+                    return false;
+                }
+                _byteOrder = order;
+                return true;
+
             default:
                 Console.Error.WriteLine($"Error: Unknown argument or unconsumed value '{flag}'");
                 return false;
@@ -99,6 +116,13 @@ public sealed class TiffModule : CliModule
             return false;
         }
 
+        if (_byteOrder is not null && _realismMode is (null or "none"))
+        {
+            Console.Error.WriteLine("Error: --tiff-byte-order requires realism to be enabled (--tiff-realism standard, group4, or uncompressed, --with-tiff-realism, or --realistic-tiff).");
+            config = default!;
+            return false;
+        }
+
         var compression = _compression ?? (_realismMode switch
         {
             "uncompressed" => "uncompressed",
@@ -110,6 +134,7 @@ public sealed class TiffModule : CliModule
             PageRange = !string.IsNullOrEmpty(_pageRange) ? TiffMultiPageGenerator.ParsePageRange(_pageRange!) : null,
             RealismMode = _realismMode,
             Compression = compression,
+            ByteOrder = _byteOrder ?? "ii",
         };
         return true;
     }

@@ -445,6 +445,152 @@ if !ERRORLEVEL! neq 0 (
     set /a FAILED+=1
 )
 
+REM --- REQ-241: TIFF Byte Order and TIFF Chaos Types ---
+echo [ INFO ] Test: realistic TIFF defaults to little-endian (II) in Standard mode
+set "TIFF_BO_DEFAULT_OUTPUT=%TEST_OUTPUT_DIR%\tiff-byte-order-default"
+%ZIPPER_CMD% --type tiff --count 2 --tiff-pages 1-1 --bates-prefix REAL --with-tiff-realism --output-path "%TIFF_BO_DEFAULT_OUTPUT%" >nul 2>&1
+if !ERRORLEVEL! equ 0 (
+    set "TIFF_BO_DEFAULT_ZIP="
+    for /r "%TIFF_BO_DEFAULT_OUTPUT%" %%F in (*.zip) do if not defined TIFF_BO_DEFAULT_ZIP set "TIFF_BO_DEFAULT_ZIP=%%F"
+    python "%~dp0validate_tiff_output.py" byte-order "!TIFF_BO_DEFAULT_ZIP!" II >nul 2>&1
+    if !ERRORLEVEL! equ 0 (
+        echo [ INFO ] PASS: Default realistic TIFF output is little-endian
+        set /a PASSED+=1
+    ) else (
+        echo [ ERROR ] FAIL: Default realistic TIFF output is not little-endian
+        set /a FAILED+=1
+    )
+) else (
+    echo [ ERROR ] FAIL: Default --with-tiff-realism generation failed in Standard mode
+    set /a FAILED+=1
+)
+
+echo [ INFO ] Test: --tiff-byte-order mm writes big-endian TIFF in Standard mode
+set "TIFF_BO_STD_OUTPUT=%TEST_OUTPUT_DIR%\tiff-byte-order-std"
+%ZIPPER_CMD% --type tiff --count 2 --tiff-pages 1-1 --bates-prefix REAL --with-tiff-realism --tiff-byte-order mm --output-path "%TIFF_BO_STD_OUTPUT%" >nul 2>&1
+if !ERRORLEVEL! equ 0 (
+    set "TIFF_BO_STD_ZIP="
+    for /r "%TIFF_BO_STD_OUTPUT%" %%F in (*.zip) do if not defined TIFF_BO_STD_ZIP set "TIFF_BO_STD_ZIP=%%F"
+    python "%~dp0validate_tiff_output.py" byte-order "!TIFF_BO_STD_ZIP!" MM >nul 2>&1
+    if !ERRORLEVEL! equ 0 (
+        echo [ INFO ] PASS: --tiff-byte-order mm generated big-endian TIFF entries
+        set /a PASSED+=1
+    ) else (
+        echo [ ERROR ] FAIL: --tiff-byte-order mm did not generate big-endian TIFF entries
+        set /a FAILED+=1
+    )
+) else (
+    echo [ ERROR ] FAIL: --tiff-byte-order mm generation failed in Standard mode
+    set /a FAILED+=1
+)
+
+echo [ INFO ] Test: --tiff-byte-order mm writes big-endian natives in Production Set mode
+set "TIFF_BO_PROD_OUTPUT=%TEST_OUTPUT_DIR%\tiff-byte-order-prod"
+%ZIPPER_CMD% --production-set --type tiff --count 2 --bates-prefix PROD --with-tiff-realism --tiff-byte-order mm --output-path "%TIFF_BO_PROD_OUTPUT%" >nul 2>&1
+if !ERRORLEVEL! equ 0 (
+    set "TIFF_NATIVES_DIR="
+    for /d /r "%TIFF_BO_PROD_OUTPUT%" %%D in (NATIVES*) do if not defined TIFF_NATIVES_DIR set "TIFF_NATIVES_DIR=%%D"
+    python "%~dp0validate_tiff_output.py" byte-order "!TIFF_NATIVES_DIR!" MM >nul 2>&1
+    if !ERRORLEVEL! equ 0 (
+        echo [ INFO ] PASS: --tiff-byte-order mm generated big-endian Production Set natives
+        set /a PASSED+=1
+    ) else (
+        echo [ ERROR ] FAIL: --tiff-byte-order mm did not generate big-endian Production Set natives
+        set /a FAILED+=1
+    )
+) else (
+    echo [ ERROR ] FAIL: --tiff-byte-order mm generation failed in Production Set mode
+    set /a FAILED+=1
+)
+
+echo [ INFO ] Test: --type tiff with --chaos-mode in Standard mode audits every TIFF anomaly type
+set "TIFF_CHAOS_STD_OUTPUT=%TEST_OUTPUT_DIR%\tiff-chaos-standard"
+%ZIPPER_CMD% --type tiff --count 8 --seed 42 --chaos-mode --chaos-amount 100%% --output-path "%TIFF_CHAOS_STD_OUTPUT%" >nul 2>&1
+if !ERRORLEVEL! equ 0 (
+    set "TIFF_CHAOS_DAT_PROPS="
+    for /r "%TIFF_CHAOS_STD_OUTPUT%" %%F in (*.dat_properties.json) do if not defined TIFF_CHAOS_DAT_PROPS set "TIFF_CHAOS_DAT_PROPS=%%F"
+    python "%~dp0validate_tiff_output.py" standard "!TIFF_CHAOS_DAT_PROPS!" >nul 2>&1
+    if !ERRORLEVEL! equ 0 (
+        echo [ INFO ] PASS: --type tiff with --chaos-mode audited the expected TIFF anomalies
+        set /a PASSED+=1
+    ) else (
+        echo [ ERROR ] FAIL: --type tiff with --chaos-mode did not audit the expected TIFF anomalies
+        set /a FAILED+=1
+    )
+) else (
+    echo [ ERROR ] FAIL: --type tiff with --chaos-mode generation failed
+    set /a FAILED+=1
+)
+
+echo [ INFO ] Test: --type tiff with --chaos-mode in Production Set mode audits the selected TIFF types
+set "TIFF_CHAOS_PROD_OUTPUT=%TEST_OUTPUT_DIR%\tiff-chaos-prod"
+%ZIPPER_CMD% --production-set --type tiff --count 6 --seed 42 --bates-prefix PROD --chaos-mode --chaos-amount 100%% --chaos-types "tiff-truncated-ifd,tiff-tag-count-lie" --output-path "%TIFF_CHAOS_PROD_OUTPUT%" >nul 2>&1
+if !ERRORLEVEL! equ 0 (
+    set "TIFF_CHAOS_PROD_PROPS="
+    for /r "%TIFF_CHAOS_PROD_OUTPUT%" %%F in (loadfile_prop*.json) do if not defined TIFF_CHAOS_PROD_PROPS set "TIFF_CHAOS_PROD_PROPS=%%F"
+    python "%~dp0validate_tiff_output.py" production "!TIFF_CHAOS_PROD_PROPS!" >nul 2>&1
+    if !ERRORLEVEL! equ 0 (
+        echo [ INFO ] PASS: --type tiff with --chaos-mode in Production Set audited the expected TIFF anomalies
+        set /a PASSED+=1
+    ) else (
+        echo [ ERROR ] FAIL: --type tiff with --chaos-mode in Production Set did not audit the expected TIFF anomalies
+        set /a FAILED+=1
+    )
+) else (
+    echo [ ERROR ] FAIL: --type tiff with --chaos-mode in Production Set failed
+    set /a FAILED+=1
+)
+
+echo [ INFO ] Test: --tiff-byte-order without realism fails validation
+%ZIPPER_CMD% --type tiff --count 2 --tiff-byte-order mm --output-path "%TEST_OUTPUT_DIR%\tiff-byte-order-no-realism" >nul 2>&1
+if !ERRORLEVEL! neq 0 (
+    echo [ INFO ] PASS: --tiff-byte-order without realism correctly failed validation
+    set /a PASSED+=1
+) else (
+    echo [ ERROR ] FAIL: --tiff-byte-order without realism should have failed validation
+    set /a FAILED+=1
+)
+
+echo [ INFO ] Test: invalid --tiff-byte-order value fails validation
+%ZIPPER_CMD% --type tiff --count 2 --with-tiff-realism --tiff-byte-order le --output-path "%TEST_OUTPUT_DIR%\tiff-byte-order-invalid" >nul 2>&1
+if !ERRORLEVEL! neq 0 (
+    echo [ INFO ] PASS: Invalid --tiff-byte-order value correctly failed validation
+    set /a PASSED+=1
+) else (
+    echo [ ERROR ] FAIL: Invalid --tiff-byte-order value should have failed validation
+    set /a FAILED+=1
+)
+
+echo [ INFO ] Test: email chaos type with --type tiff --chaos-mode fails validation
+%ZIPPER_CMD% --type tiff --count 3 --chaos-mode --chaos-types mime-boundary --output-path "%TEST_OUTPUT_DIR%\tiff-chaos-email-type" >nul 2>&1
+if !ERRORLEVEL! neq 0 (
+    echo [ INFO ] PASS: Email chaos type in a TIFF run correctly failed validation
+    set /a PASSED+=1
+) else (
+    echo [ ERROR ] FAIL: Email chaos type in a TIFF run should have failed validation
+    set /a FAILED+=1
+)
+
+echo [ INFO ] Test: TIFF chaos types with --loadfile-only fail validation
+%ZIPPER_CMD% --loadfile-only --type tiff --count 3 --chaos-mode --chaos-types tiff-dimension-lie --output-path "%TEST_OUTPUT_DIR%\tiff-chaos-loadfile-only" >nul 2>&1
+if !ERRORLEVEL! neq 0 (
+    echo [ INFO ] PASS: TIFF chaos types with --loadfile-only correctly failed validation
+    set /a PASSED+=1
+) else (
+    echo [ ERROR ] FAIL: TIFF chaos types with --loadfile-only should have failed validation
+    set /a FAILED+=1
+)
+
+echo [ INFO ] Test: --chaos-scenario with --type tiff --chaos-mode in Standard mode fails validation
+%ZIPPER_CMD% --type tiff --count 3 --chaos-mode --chaos-scenario cross-format-desync --output-path "%TEST_OUTPUT_DIR%\tiff-chaos-scenario" >nul 2>&1
+if !ERRORLEVEL! neq 0 (
+    echo [ INFO ] PASS: --chaos-scenario with TIFF chaos in Standard mode correctly failed validation
+    set /a PASSED+=1
+) else (
+    echo [ ERROR ] FAIL: --chaos-scenario with TIFF chaos in Standard mode should have failed validation
+    set /a FAILED+=1
+)
+
 REM --- Cleanup ---
 if exist "%TEST_OUTPUT_DIR%" rmdir /s /q "%TEST_OUTPUT_DIR%"
 
