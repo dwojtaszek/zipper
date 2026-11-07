@@ -99,7 +99,8 @@ REM --- Helper Functions ---
     call :print_info ".dat file header is correct."
 
     REM Verify file count in zip using PowerShell
-    powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::OpenRead('%zip_file%').Entries.Where({$_.Name -match '\.%file_type%$'}).Count" > "%temp%\zip_count.txt"
+    powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = @($z.Entries | Where { $_.Name -match '\.%file_type%$' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\zip_count.txt"
+    set "zip_file_count="
     set /p zip_file_count=<"%temp%\zip_count.txt"
     if "%zip_file_count%" neq "%expected_count%" (
         call :print_error "Incorrect file count in .zip file. Expected %expected_count%, found %zip_file_count%."
@@ -109,10 +110,11 @@ REM --- Helper Functions ---
     REM Verify text file count if required
     if "%check_text%" == "true" (
         if "%file_type%" == "eml" (
-            powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::OpenRead('%zip_file%').Entries.Where({$_.Name -match '\.txt$' -and $_.Name -notmatch 'attachment'}).Count" > "%temp%\zip_txt_count.txt"
+            powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = @($z.Entries | Where { $_.Name -match '\.txt$' -and $_.Name -notmatch 'attachment' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\zip_txt_count.txt"
         ) else (
-            powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::OpenRead('%zip_file%').Entries.Where({$_.Name -match '\.txt$'}).Count" > "%temp%\zip_txt_count.txt"
+            powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = @($z.Entries | Where { $_.Name -match '\.txt$' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\zip_txt_count.txt"
         )
+        set "txt_count="
         set /p txt_count=<"%temp%\zip_txt_count.txt"
         if "%txt_count%" neq "%expected_count%" (
             call :print_error "Incorrect .txt file count in .zip file. Expected %expected_count%, found %txt_count%."
@@ -423,7 +425,7 @@ call :print_success "Test Case 15 passed."
 
 REM Test Case 16: EML attachments with metadata and text (comprehensive attachment test)
 call :run_test_case "Test Case 16: EML attachments with metadata and text" --type eml --count 15 --output-path "%TEST_OUTPUT_DIR%\eml_attachments_full" --attachment-rate 60 --with-metadata --with-text --seed 42
-call :verify_eml_output "%TEST_OUTPUT_DIR%\eml_attachments_full" 15 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Compression Method,Attachment,Extracted Text" "eml" "true" "UTF-8"
+call :verify_eml_output "%TEST_OUTPUT_DIR%\eml_attachments_full" 15 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Compression Method,Attachment,Extracted Text" "eml" "true" "UTF-8" 13
 call :print_success "Test Case 16 passed."
 
 REM Test Case 17: Maximum folders edge case (100 folders)
