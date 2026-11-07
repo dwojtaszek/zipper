@@ -62,42 +62,48 @@ class RunTestsBatEntryPointTests(unittest.TestCase):
         )
 
     def test_no_subroutines_with_goto_eof_between_main_and_end_of_tests(self):
-        """Subroutines ending in 'goto :eof' must not be placed between :main and :end_of_tests.
+        """Subroutines ending in 'goto :eof' or 'exit /b' must not be placed between :main and :end_of_tests.
 
-        In batch files, falling through into a subroutine that ends with 'goto :eof'
+        In batch files, falling through into a subroutine that ends with 'goto :eof' or 'exit /b'
         causes the script to terminate early when not called via 'call'.
         """
         in_main = False
+        seen_main = False
+        seen_end = False
         subroutine_labels = []
 
         for idx, line in enumerate(self.lines):
             stripped = line.strip()
             if re.match(r"^:main\b", stripped, re.IGNORECASE):
                 in_main = True
+                seen_main = True
                 continue
             if re.match(r"^:end_of_tests\b", stripped, re.IGNORECASE):
                 in_main = False
+                seen_end = True
                 break
 
             if in_main and stripped.startswith(":") and not stripped.startswith("::"):
-                # Check if this label block contains goto :eof
+                # Check if this label block contains goto :eof or exit /b
                 label = stripped
-                # Look ahead for goto :eof before next label
-                has_eof = False
+                # Look ahead for goto :eof or exit /b before next label
+                has_terminator = False
                 for forward_line in self.lines[idx + 1:]:
                     f_stripped = forward_line.strip()
                     if f_stripped.startswith(":") and not f_stripped.startswith("::"):
                         break
-                    if re.match(r"^goto\s+:eof\b", f_stripped, re.IGNORECASE):
-                        has_eof = True
+                    if re.match(r"^(goto\s+:eof|exit\s+/b)\b", f_stripped, re.IGNORECASE):
+                        has_terminator = True
                         break
-                if has_eof:
+                if has_terminator:
                     subroutine_labels.append(label)
 
+        self.assertTrue(seen_main, "run-tests.bat must contain a ':main' label")
+        self.assertTrue(seen_end, "run-tests.bat must contain an ':end_of_tests' label")
         self.assertEqual(
             subroutine_labels,
             [],
-            f"Helper subroutines with 'goto :eof' found between :main and :end_of_tests: {subroutine_labels}. "
+            f"Helper subroutines terminating early found between :main and :end_of_tests: {subroutine_labels}. "
             "These must be moved before :main so sequential execution does not fall into them and terminate early.",
         )
 

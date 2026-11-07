@@ -170,6 +170,13 @@ if errorlevel 1 (
     call :fail "validator passed a run-tests.bat with no 'goto :main'"
     type "%SANDBOX%.nogotomain.out"
 )
+findstr /C:"without 'goto :main' before it" "%SANDBOX%.nogotomain.out" >nul
+if errorlevel 1 (
+    call :fail "validator does not report missing 'goto :main'"
+    type "%SANDBOX%.nogotomain.out"
+) else (
+    call :pass "validator reports missing 'goto :main' entry point"
+)
 
 REM --- Negative: run-tests.bat missing :main label must be caught (#1405) ---
 
@@ -187,6 +194,37 @@ if errorlevel 1 (
     call :fail "validator passed a run-tests.bat with no ':main' label"
     type "%SANDBOX%.nomainlabel.out"
 )
+findstr /C:"no ':main' label found" "%SANDBOX%.nomainlabel.out" >nul
+if errorlevel 1 (
+    call :fail "validator does not report missing ':main' label"
+    type "%SANDBOX%.nomainlabel.out"
+) else (
+    call :pass "validator reports missing ':main' label"
+)
+
+REM --- Negative: run-tests.bat misplaced :main label must be caught (#1405) ---
+
+copy /y "%RUNNER_BAT%" "%SANDBOX%\run-tests.bat" >nul
+powershell -NoProfile -Command "$p='%SANDBOX%\run-tests.bat'; $s=[IO.File]::ReadAllText($p); $old=\"`r`n:main`r`n\"; if (-not $s.Contains($old)) { $old=\"`n:main`n\"; $nl=\"`n\" } else { $nl=\"`r`n\" }; if (-not $s.Contains($old)) { Write-Error ':main not found'; exit 1 }; $s=$s.Replace($old, $nl); $m='Test Case 1 passed.'; if (-not $s.Contains($m)) { Write-Error 'Test Case 1 marker not found'; exit 1 }; $s=$s.Replace($m, $m + $nl + ':main' + $nl); [IO.File]::WriteAllText($p, $s)"
+if errorlevel 1 (
+    call :fail "could not misplace :main in sandbox"
+    goto :summary
+)
+
+bash "%SANDBOX%\validate-e2e-parity.sh" --strict > "%SANDBOX%.misplacedmain.out" 2>&1
+if errorlevel 1 (
+    call :pass "validator fails when run-tests.bat has ':main' after test cases"
+) else (
+    call :fail "validator passed a run-tests.bat with ':main' after test cases"
+    type "%SANDBOX%.misplacedmain.out"
+)
+findstr /C:"Entry point misplaced in run-tests.bat" "%SANDBOX%.misplacedmain.out" >nul
+if errorlevel 1 (
+    call :fail "validator does not report misplaced ':main' label"
+    type "%SANDBOX%.misplacedmain.out"
+) else (
+    call :pass "validator reports misplaced ':main' label"
+)
 
 call :cleanup
 
@@ -202,7 +240,7 @@ exit /b 1
 
 :cleanup
 if exist "%SANDBOX%" rd /s /q "%SANDBOX%"
-for %%F in (clean unguarded noexit errlevel echofake oneline nogotomain nomainlabel) do (
+for %%F in (clean unguarded noexit errlevel echofake oneline nogotomain nomainlabel misplacedmain) do (
     if exist "%SANDBOX%.%%F.out" del /q "%SANDBOX%.%%F.out"
 )
 goto :eof

@@ -278,9 +278,14 @@ if [[ -n "$first_label_line" ]]; then
         echo "Entry point missing in run-tests.bat: label at line $first_label_line without 'goto :main' before it (#1405)."
     fi
 fi
-if ! grep -qiE '^[[:space:]]*:main\b' "$BAT_RUNNER"; then
+main_line=$(grep -n -i -E '^[[:space:]]*:main([[:space:]]|$)' "$BAT_RUNNER" | head -n1 | cut -d: -f1 || true)
+first_case_line=$(grep -n -E 'call[[:space:]]+:run_test_case[[:space:]]+"Test Case' "$BAT_RUNNER" | head -n1 | cut -d: -f1 || true)
+if [[ -z "$main_line" ]]; then
     DRIFT=1
     echo "Entry point missing in run-tests.bat: no ':main' label found (#1405)."
+elif [[ -n "$first_case_line" && "$main_line" -ge "$first_case_line" ]]; then
+    DRIFT=1
+    echo "Entry point misplaced in run-tests.bat: ':main' at line $main_line appears after first test case at line $first_case_line (#1405)."
 fi
 
 if [[ $DRIFT -eq 0 ]]; then

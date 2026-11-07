@@ -300,11 +300,19 @@ REM %2: Target size in MB
 
 :run_test_case
     set "test_name=%~1"
+    set "test_args="
     shift
+:run_test_case_loop
+    if "%~1"=="" goto :run_test_case_exec
+    set "test_args=%test_args% %1"
+    shift
+    goto :run_test_case_loop
+:run_test_case_exec
     call :print_info "START: %test_name% at %DATE% %TIME%"
-    %ZIPPER_CMD% %*
-    if errorlevel 1 (
-        call :print_error "%test_name% failed with exit code %errorlevel%"
+    %ZIPPER_CMD%%test_args%
+    set "_exit_code=%errorlevel%"
+    if %_exit_code% neq 0 (
+        call :print_error "%test_name% failed with exit code %_exit_code%"
     )
     call :print_info "END: %test_name% at %DATE% %TIME%"
     goto :eof

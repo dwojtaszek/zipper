@@ -331,6 +331,43 @@ else
     cat "$SANDBOX/no_main_label.out"
 fi
 
+# --- Negative: run-tests.bat with :main placed after first test case must be caught (#1405) ---
+
+cp "$RUNNER_BAT" "$SANDBOX_REPO/tests/run-tests.bat"
+python3 - "$SANDBOX_REPO/tests/run-tests.bat" <<'PY'
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8-sig") as handle:
+    text = handle.read()
+
+target = "\n:main\n"
+if target not in text:
+    sys.exit("could not find ':main' to move")
+
+text = text.replace(target, "\n", 1)
+case1_str = 'call :print_success "Test Case 1 passed."'
+if case1_str not in text:
+    sys.exit("could not find Test Case 1 passed marker")
+text = text.replace(case1_str, case1_str + "\n:main\n", 1)
+
+with open(path, "w", encoding="utf-8") as handle:
+    handle.write(text)
+PY
+
+if bash "$SANDBOX_REPO/tests/validate-e2e-parity.sh" --strict > "$SANDBOX/misplaced_main_label.out" 2>&1; then
+    fail "validator passed a run-tests.bat with ':main' after test cases"
+else
+    pass "validator fails when run-tests.bat has ':main' after test cases"
+fi
+
+if grep -q "Entry point misplaced in run-tests.bat" "$SANDBOX/misplaced_main_label.out"; then
+    pass "validator reports misplaced ':main' label"
+else
+    fail "validator does not report misplaced ':main' label"
+    cat "$SANDBOX/misplaced_main_label.out"
+fi
+
 # --- Summary ---
 
 echo ""
