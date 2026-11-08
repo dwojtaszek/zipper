@@ -20,10 +20,20 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]//\\//}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 RESOLVER="$REPO_ROOT/tools/typesafe-audit/checks/traceability/validate.py"
-PYTHON_BIN="${PYTHON:-python3}"
+PYTHON_BIN="${PYTHON:-}"
+if [[ -z "$PYTHON_BIN" ]]; then
+    if command -v python3 >/dev/null 2>&1 && python3 -c 'import sys' >/dev/null 2>&1; then
+        PYTHON_BIN="python3"
+    elif command -v python >/dev/null 2>&1 && python -c 'import sys' >/dev/null 2>&1; then
+        PYTHON_BIN="python"
+    else
+        echo "Error: Python interpreter not found" >&2
+        exit 2
+    fi
+fi
 
 if [[ ! -f "$RESOLVER" ]]; then
     echo "Error: Traceability validator not found at $RESOLVER" >&2
