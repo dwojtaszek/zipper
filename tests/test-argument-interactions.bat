@@ -6,6 +6,8 @@ setlocal enabledelayedexpansion
 
 set PASSED=0
 set FAILED=0
+set "SESSION_DIR=.\results\test-interactions-%RANDOM%-%RANDOM%"
+mkdir "%SESSION_DIR%" 2>nul
 
 echo [ INFO ] === CLI Argument Interaction Tests ===
 
@@ -55,6 +57,7 @@ call :assert_accepted "--loadfile-only + --load-file-format concordance" --loadf
 
 echo.
 set /a TOTAL=!PASSED!+!FAILED!
+if exist "%SESSION_DIR%" rmdir /s /q "%SESSION_DIR%" 2>nul
 if exist ".\results\zi_test" rmdir /s /q ".\results\zi_test" 2>nul
 if !FAILED! equ 0 (
     echo [ SUCCESS ] All argument interaction tests passed! ^(!PASSED!/!TOTAL!^)
@@ -68,13 +71,10 @@ exit /b 0
 set "DESC=%~1"
 set ARGS=%*
 set ARGS=!ARGS:%1 =!
-set "OUT_DIR=.\results\test-out-%RANDOM%-%RANDOM%"
+set "OUT_DIR=%SESSION_DIR%\out_!PASSED!_!FAILED!"
+set "STDERR_FILE=%SESSION_DIR%\err_!PASSED!_!FAILED!.txt"
 set ARGS=!ARGS:.\results\zi_test=%OUT_DIR%!
-set "TEMP_DIR=.\results\test-interactions-%RANDOM%"
-mkdir "%TEMP_DIR%" 2>nul
-set "STDERR_FILE=%TEMP_DIR%\stderr.txt"
 if exist "%OUT_DIR%" rmdir /s /q "%OUT_DIR%" 2>nul
-if exist ".\results\zi_test" rmdir /s /q ".\results\zi_test" 2>nul
 %ZIPPER_CMD% !ARGS! >nul 2>"!STDERR_FILE!"
 if errorlevel 1 (
     findstr /i /c:"Unhandled exception" /c:"NullReferenceException" /c:"Exception:" "!STDERR_FILE!" >nul
@@ -91,22 +91,17 @@ if errorlevel 1 (
     set /a FAILED+=1
 )
 del /f /q "!STDERR_FILE!" 2>nul
-if exist "%TEMP_DIR%" rmdir /s /q "%TEMP_DIR%" 2>nul
 if exist "%OUT_DIR%" rmdir /s /q "%OUT_DIR%" 2>nul
-if exist ".\results\zi_test" rmdir /s /q ".\results\zi_test" 2>nul
 goto :eof
 
 :assert_accepted
 set "DESC=%~1"
 set ARGS=%*
 set ARGS=!ARGS:%1 =!
-set "OUT_DIR=.\results\test-out-%RANDOM%-%RANDOM%"
+set "OUT_DIR=%SESSION_DIR%\out_!PASSED!_!FAILED!"
+set "STDERR_FILE=%SESSION_DIR%\err_!PASSED!_!FAILED!.txt"
 set ARGS=!ARGS:.\results\zi_test=%OUT_DIR%!
-set "TEMP_DIR=.\results\test-accepted-%RANDOM%"
-mkdir "%TEMP_DIR%" 2>nul
-set "STDERR_FILE=%TEMP_DIR%\stderr.txt"
 if exist "%OUT_DIR%" rmdir /s /q "%OUT_DIR%" 2>nul
-if exist ".\results\zi_test" rmdir /s /q ".\results\zi_test" 2>nul
 %ZIPPER_CMD% !ARGS! >nul 2>"!STDERR_FILE!"
 if not errorlevel 1 (
     echo [ INFO ] PASS: !DESC!
@@ -117,7 +112,5 @@ if not errorlevel 1 (
     set /a FAILED+=1
 )
 del /f /q "!STDERR_FILE!" 2>nul
-if exist "%TEMP_DIR%" rmdir /s /q "%TEMP_DIR%" 2>nul
 if exist "%OUT_DIR%" rmdir /s /q "%OUT_DIR%" 2>nul
-if exist ".\results\zi_test" rmdir /s /q ".\results\zi_test" 2>nul
 goto :eof
