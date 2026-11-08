@@ -597,7 +597,7 @@ if exist "%TEST_OUTPUT_DIR%" rmdir /s /q "%TEST_OUTPUT_DIR%"
 echo.
 set /a TOTAL=!PASSED!+!FAILED!
 if !FAILED! equ 0 (
-    echo [ SUCCESS ] All E2E coverage gap tests passed^! ^(!PASSED!/!TOTAL!^)
+    echo [ SUCCESS ] All E2E coverage gap tests passed! ^(%PASSED%/%TOTAL%^)
 ) else (
     echo [ ERROR ] E2E coverage gap tests: !FAILED!/!TOTAL! FAILED
     exit /b 1

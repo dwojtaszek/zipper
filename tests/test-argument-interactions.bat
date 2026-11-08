@@ -60,7 +60,7 @@ set /a TOTAL=!PASSED!+!FAILED!
 if exist "%SESSION_DIR%" rmdir /s /q "%SESSION_DIR%" 2>nul
 if exist ".\results\zi_test" rmdir /s /q ".\results\zi_test" 2>nul
 if !FAILED! equ 0 (
-    echo [ SUCCESS ] All argument interaction tests passed^! ^(!PASSED!/!TOTAL!^)
+    echo [ SUCCESS ] All argument interaction tests passed! ^(%PASSED%/%TOTAL%^)
 ) else (
     echo [ ERROR ] Argument interaction tests: !FAILED!/!TOTAL! FAILED
     exit /b 1

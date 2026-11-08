@@ -40,7 +40,7 @@ if exist "%TEST_OUTPUT_DIR%" rmdir /s /q "%TEST_OUTPUT_DIR%"
 echo.
 set /a TOTAL=!PASSED!+!FAILED!
 if !FAILED! equ 0 (
-    echo [ SUCCESS ] Target-zip-size smoke tests passed^! ^(!PASSED!/!TOTAL!^)
+    echo [ SUCCESS ] Target-zip-size smoke tests passed! ^(%PASSED%/%TOTAL%^)
 ) else (
     echo [ ERROR ] Target-zip-size tests: !FAILED!/!TOTAL! FAILED
     exit /b 1
