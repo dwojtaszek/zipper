@@ -168,6 +168,15 @@ if not exist "%WORKFLOW_FILE%" (
     exit /b 1
 )
 
+REM Normalize workflow file to CRLF so findstr regex anchors (^, $) match line boundaries reliably (#1405).
+set WORKFLOW_FILE_CRLF=%TEMP_DIR%\typesafe-audit-crlf.yml
+%PYCMD% -c "import pathlib, sys; p = pathlib.Path(sys.argv[1]); pathlib.Path(sys.argv[2]).write_bytes(p.read_bytes().replace(b'\r\n', b'\n').replace(b'\n', b'\r\n'))" "%WORKFLOW_FILE%" "%WORKFLOW_FILE_CRLF%"
+if errorlevel 1 (
+    echo [ ERROR ] Failed to normalize workflow file line endings for findstr.
+    exit /b 1
+)
+set WORKFLOW_FILE=%WORKFLOW_FILE_CRLF%
+
 set WORKFLOW_CHECK_LOG=%TEMP_DIR%\workflow-check.log
 set ACTION_USES_LOG=%TEMP_DIR%\action-uses.log
 
