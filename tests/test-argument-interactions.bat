@@ -68,38 +68,56 @@ exit /b 0
 set "DESC=%~1"
 set ARGS=%*
 set ARGS=!ARGS:%1 =!
+set "OUT_DIR=.\results\test-out-%RANDOM%-%RANDOM%"
+set ARGS=!ARGS:.\results\zi_test=%OUT_DIR%!
 set "TEMP_DIR=.\results\test-interactions-%RANDOM%"
 mkdir "%TEMP_DIR%" 2>nul
 set "STDERR_FILE=%TEMP_DIR%\stderr.txt"
+if exist "%OUT_DIR%" rmdir /s /q "%OUT_DIR%" 2>nul
+if exist ".\results\zi_test" rmdir /s /q ".\results\zi_test" 2>nul
 %ZIPPER_CMD% !ARGS! >nul 2>"!STDERR_FILE!"
 if errorlevel 1 (
     findstr /i /c:"Unhandled exception" /c:"NullReferenceException" /c:"Exception:" "!STDERR_FILE!" >nul
     if not errorlevel 1 (
-        echo [ ERROR ] FAIL: %DESC% ^(expected validation error, got crash^)
+        echo [ ERROR ] FAIL: !DESC! ^(expected validation error, got crash^)
         type "!STDERR_FILE!"
         set /a FAILED+=1
     ) else (
-        echo [ INFO ] PASS: %DESC%
+        echo [ INFO ] PASS: !DESC!
         set /a PASSED+=1
     )
 ) else (
-    echo [ ERROR ] FAIL: %DESC% ^(expected rejection^)
+    echo [ ERROR ] FAIL: !DESC! ^(expected rejection^)
     set /a FAILED+=1
 )
 del /f /q "!STDERR_FILE!" 2>nul
 if exist "%TEMP_DIR%" rmdir /s /q "%TEMP_DIR%" 2>nul
+if exist "%OUT_DIR%" rmdir /s /q "%OUT_DIR%" 2>nul
+if exist ".\results\zi_test" rmdir /s /q ".\results\zi_test" 2>nul
 goto :eof
 
 :assert_accepted
 set "DESC=%~1"
 set ARGS=%*
 set ARGS=!ARGS:%1 =!
-%ZIPPER_CMD% !ARGS! >nul 2>&1
+set "OUT_DIR=.\results\test-out-%RANDOM%-%RANDOM%"
+set ARGS=!ARGS:.\results\zi_test=%OUT_DIR%!
+set "TEMP_DIR=.\results\test-accepted-%RANDOM%"
+mkdir "%TEMP_DIR%" 2>nul
+set "STDERR_FILE=%TEMP_DIR%\stderr.txt"
+if exist "%OUT_DIR%" rmdir /s /q "%OUT_DIR%" 2>nul
+if exist ".\results\zi_test" rmdir /s /q ".\results\zi_test" 2>nul
+%ZIPPER_CMD% !ARGS! >nul 2>"!STDERR_FILE!"
 if not errorlevel 1 (
-    echo [ INFO ] PASS: %DESC%
+    echo [ INFO ] PASS: !DESC!
     set /a PASSED+=1
 ) else (
-    echo [ ERROR ] FAIL: %DESC% ^(expected success^)
+    echo [ ERROR ] FAIL: !DESC! ^(expected success^)
+    type "!STDERR_FILE!"
     set /a FAILED+=1
 )
+del /f /q "!STDERR_FILE!" 2>nul
+if exist "%TEMP_DIR%" rmdir /s /q "%TEMP_DIR%" 2>nul
+if exist "%OUT_DIR%" rmdir /s /q "%OUT_DIR%" 2>nul
+if exist ".\results\zi_test" rmdir /s /q ".\results\zi_test" 2>nul
 goto :eof
