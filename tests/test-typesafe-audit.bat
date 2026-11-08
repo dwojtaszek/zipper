@@ -231,11 +231,11 @@ if errorlevel 1 exit /b 1
 REM Advisory: the runner must not run in --strict (blocking) mode in CI. Both
 REM token orders are matched, and the dot is escaped so runnerXpy cannot match.
 %PYCMD% -c "import pathlib, re, sys; text = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8', errors='replace'); matches = [l for l in text.splitlines() if re.search(r'runner\.py.*--strict|--strict.*runner\.py', l, re.IGNORECASE)]; [print(l, file=sys.stderr) for l in matches]; sys.exit(1 if matches else 0)" "%WORKFLOW_FILE%" >"%WORKFLOW_CHECK_LOG%" 2>&1
-if errorlevel 1 (
-    echo [ ERROR ] Workflow check failed: audit must stay advisory ^(no --strict^)
-    type "%WORKFLOW_CHECK_LOG%" >&2
-    exit /b 1
-)
+if not errorlevel 1 goto :advisory_ok
+echo [ ERROR ] Workflow check failed: audit must stay advisory ^(no --strict^)
+type "%WORKFLOW_CHECK_LOG%" >&2
+exit /b 1
+:advisory_ok
 echo [ SUCCESS ] Workflow check: advisory (no --strict)
 
 REM YAML-aware workflow validation (validates all typesafe-*.yml workflows)
@@ -260,21 +260,21 @@ exit /b 0
 set "CHECK_TARGET=%~3"
 if not defined CHECK_TARGET set "CHECK_TARGET=%WORKFLOW_FILE%"
 %PYCMD% -c "import pathlib, re, sys; p = sys.argv[1]; p = chr(94) + p[2:] if p.startswith(chr(94) * 2) else p; text = pathlib.Path(sys.argv[2]).read_text(encoding='utf-8', errors='replace'); matches = [l for l in text.splitlines() if re.search(p, l)]; [print(l) for l in matches] if matches else print(f'Pattern {p!r} not found in {sys.argv[2]}', file=sys.stderr); sys.exit(0 if matches else 1)" "%~2" "%CHECK_TARGET%" >"%WORKFLOW_CHECK_LOG%" 2>&1
-if errorlevel 1 (
-    echo [ ERROR ] Workflow check failed: %~1
-    type "%WORKFLOW_CHECK_LOG%" >&2
-    exit /b 1
-)
+if not errorlevel 1 goto :contains_ok
+echo [ ERROR ] Workflow check failed: %~1
+type "%WORKFLOW_CHECK_LOG%" >&2
+exit /b 1
+:contains_ok
 echo [ SUCCESS ] Workflow check: %~1
 exit /b 0
 
 :check_absent
 %PYCMD% -c "import pathlib, re, sys; p = sys.argv[1]; p = chr(94) + p[2:] if p.startswith(chr(94) * 2) else p; text = pathlib.Path(sys.argv[2]).read_text(encoding='utf-8', errors='replace'); matches = [l for l in text.splitlines() if re.search(p, l)]; [print(l, file=sys.stderr) for l in matches]; sys.exit(1 if matches else 0)" "%~2" "%WORKFLOW_FILE%" >"%WORKFLOW_CHECK_LOG%" 2>&1
-if errorlevel 1 (
-    echo [ ERROR ] Workflow check failed: %~1 must be absent
-    type "%WORKFLOW_CHECK_LOG%" >&2
-    exit /b 1
-)
+if not errorlevel 1 goto :absent_ok
+echo [ ERROR ] Workflow check failed: %~1 must be absent
+type "%WORKFLOW_CHECK_LOG%" >&2
+exit /b 1
+:absent_ok
 echo [ SUCCESS ] Workflow check: %~1
 exit /b 0
 
