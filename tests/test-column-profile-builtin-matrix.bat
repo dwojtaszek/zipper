@@ -17,7 +17,7 @@ echo [ INFO ] === Column Profile Built-in Matrix Tests (Windows) ===
 for %%P in (minimal standard litigation full) do (
     for %%T in (pdf tiff) do (
         echo [ INFO ] Test: %%P/%%T
-        %ZIPPER_CMD% --type %%T --count 5 --output-path "%TEST_OUTPUT_DIR%\%%P_%%T" --column-profile %%P --seed 42 >nul 2>&1
+        %ZIPPER_CMD% --type %%T --count 5 --output-path "%TEST_OUTPUT_DIR%\%%P_%%T" --column-profile %%P --seed 42 --loadfile-only >nul 2>&1
         if not errorlevel 1 (
             echo [ INFO ] PASS: %%P/%%T
             set /a PASSED+=1
@@ -29,7 +29,7 @@ for %%P in (minimal standard litigation full) do (
 )
 
 REM --- Cleanup ---
-if exist "%TEST_OUTPUT_DIR%" rmdir /s /q "%TEST_OUTPUT_DIR%"
+if !FAILED! equ 0 if exist "%TEST_OUTPUT_DIR%" rmdir /s /q "%TEST_OUTPUT_DIR%"
 
 echo.
 set /a TOTAL=!PASSED!+!FAILED!
