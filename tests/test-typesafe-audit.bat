@@ -279,57 +279,11 @@ echo [ SUCCESS ] Workflow check: %~1
 exit /b 0
 
 :check_action_pins
-REM Action references may use quoted YAML keys ('uses': or "uses":), so all
-REM three spellings are scanned. cmd embeds a literal quote as "" inside a
-REM quoted argument.
-findstr /R /C:"uses:" /C:"uses': " /C:"uses"": " "%WORKFLOW_FILE%" >"%ACTION_USES_LOG%" 2>&1
-if errorlevel 2 (
-    echo [ ERROR ] Workflow check failed: action pins could not be read.
-    type "%ACTION_USES_LOG%" >&2
-    exit /b 1
-)
-REM No action lines at all must fail rather than pass vacuously.
-if errorlevel 1 (
-    echo [ ERROR ] Workflow check failed: no action uses lines found.
-    exit /b 1
-)
-for /f "usebackq delims=" %%L in ("%ACTION_USES_LOG%") do (
-    call :check_action_pin "%%L"
-    if errorlevel 1 exit /b 1
-)
+REM Action references must be pinned to a full 40-char commit SHA (#955).
+%PYCMD% -c "import pathlib, re, sys; text = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8', errors='replace'); quote = chr(34); uses_lines = [l.split('#')[0].strip() for l in text.splitlines() if re.search(r'[' + quote + r'\x27]?uses[' + quote + r'\x27]?\s*:', l)]; action_lines = [l for l in uses_lines if l]; (print('[ ERROR ] Workflow check failed: no action uses lines found.', file=sys.stderr), sys.exit(1)) if not action_lines else None; unpinned = [l for l in action_lines if not re.search(r'@[0-9a-f]{40}\s*$', l, re.I)]; (print(f'[ ERROR ] Workflow check failed: action must be pinned to a full commit SHA: {unpinned[0]}', file=sys.stderr), sys.exit(1)) if unpinned else sys.exit(0)" "%WORKFLOW_FILE%" >"%ACTION_USES_LOG%" 2>&1
+if not errorlevel 1 goto :action_pins_ok
+type "%ACTION_USES_LOG%" >&2
+exit /b 1
+:action_pins_ok
 echo [ SUCCESS ] Workflow check: all actions pinned to full commit SHAs
 exit /b 0
-
-:check_action_pin
-REM Strip a trailing YAML comment first, so a SHA inside a comment cannot pose
-REM as the pin. Workflow text is quoted everywhere it is echoed.
-set "ACTION_LINE=%~1"
-for /f "tokens=1,* delims=#" %%A in ("%ACTION_LINE%") do set "ACTION_LINE=%%A"
-REM A comment-only line has nothing left after the strip: it is not an action.
-set "ACTION_REMAINDER="
-for /f "tokens=1" %%Z in ("%ACTION_LINE%") do set "ACTION_REMAINDER=%%Z"
-if not defined ACTION_REMAINDER exit /b 0
-set "ACTION_REF="
-for /f "tokens=1,* delims=@" %%A in ("%ACTION_LINE%") do set "ACTION_REF=%%B"
-if not defined ACTION_REF goto :action_pin_invalid
-set "ACTION_BEFORE_COMMENT="
-set "ACTION_SHA="
-set "ACTION_EXTRA="
-for /f "tokens=1,* delims=#" %%A in ("%ACTION_REF%") do set "ACTION_BEFORE_COMMENT=%%A"
-for /f "tokens=1" %%A in ("%ACTION_BEFORE_COMMENT%") do set "ACTION_SHA=%%A"
-for /f "tokens=2" %%B in ("%ACTION_BEFORE_COMMENT%") do set "ACTION_EXTRA=%%B"
-if defined ACTION_EXTRA goto :action_pin_invalid
-if not defined ACTION_SHA goto :action_pin_invalid
-if "%ACTION_SHA:~39,1%"=="" goto :action_pin_invalid
-if not "%ACTION_SHA:~40%"=="" goto :action_pin_invalid
-REM Hex validation without a regex engine: if the ref is made only of hex
-REM digits, treating them as delimiters leaves nothing to iterate, so any
-REM surviving token is a non-hex character.
-set "NON_HEX="
-for /f "delims=0123456789abcdef" %%A in ("%ACTION_SHA%") do set "NON_HEX=%%A"
-if defined NON_HEX goto :action_pin_invalid
-exit /b 0
-
-:action_pin_invalid
-echo [ ERROR ] Workflow check failed: action must be pinned to a full commit SHA: "%~1"
-exit /b 1
