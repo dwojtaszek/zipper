@@ -20,9 +20,19 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]//\\//}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-RESOLVER="$REPO_ROOT/tools/typesafe-audit/checks/traceability/validate.py"
+to_mixed_path() {
+    if command -v cygpath >/dev/null 2>&1; then
+        cygpath -m "$1"
+    else
+        echo "$1"
+    fi
+}
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]//\\//}")" && (pwd -W 2>/dev/null || pwd))"
+SCRIPT_DIR="$(to_mixed_path "$SCRIPT_DIR")"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && (pwd -W 2>/dev/null || pwd))"
+REPO_ROOT="$(to_mixed_path "$REPO_ROOT")"
+RESOLVER="$(to_mixed_path "$REPO_ROOT/tools/typesafe-audit/checks/traceability/validate.py")"
 PYTHON_BIN="${PYTHON:-}"
 if [[ -z "$PYTHON_BIN" ]]; then
     if command -v python3 >/dev/null 2>&1 && python3 -c 'import sys' >/dev/null 2>&1; then

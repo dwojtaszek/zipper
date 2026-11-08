@@ -827,6 +827,8 @@ class DeterministicGateRegressions(unittest.TestCase):
         self.assertEqual(2, len(report["missing_refs"]))
 
     def _run_shell_gate(self, *extra_args: str) -> subprocess.CompletedProcess:
+        if sys.platform == "win32":
+            self.skipTest("validate-req-traceability.sh is a Linux-only utility script (tests/README.md)")
         if shutil.which("bash") is None:
             self.skipTest("bash not found on PATH")
         script_path = (REPO_ROOT / "tests/validate-req-traceability.sh").as_posix()
@@ -842,7 +844,7 @@ class DeterministicGateRegressions(unittest.TestCase):
             "--requirements",
             (self.root / "Requirements.md").as_posix(),
             "--tests-root",
-            self.root.as_posix(),
+            (self.root / "src").as_posix(),
             "--repo-root",
             self.root.as_posix(),
         ]
