@@ -103,7 +103,7 @@ call :assert_production_set_cross_format "broken-families" "eml" "--with-familie
 call :adversarial_values
 
 REM --- Cleanup ---
-if exist "%TEST_OUTPUT_DIR%" rmdir /s /q "%TEST_OUTPUT_DIR%"
+if %FAILED% equ 0 if exist "%TEST_OUTPUT_DIR%" rmdir /s /q "%TEST_OUTPUT_DIR%"
 
 echo.
 set /a TOTAL=%PASSED%+%FAILED%
@@ -245,7 +245,7 @@ set "VALIDATION_REPORT=%PRODUCTION_DIR%\_validation_report.json"
 if not exist "%DAT_PROPS%" goto :production_set_cross_format_failed
 if not exist "%OPT_PROPS%" goto :production_set_cross_format_failed
 if not exist "%VALIDATION_REPORT%" goto :production_set_cross_format_failed
-powershell -NoProfile -Command "$d=Get-Content -Raw '%DAT_PROPS%' | ConvertFrom-Json; $o=Get-Content -Raw '%OPT_PROPS%' | ConvertFrom-Json; $r=Get-Content -Raw '%VALIDATION_REPORT%' | ConvertFrom-Json; $dBad=@($d.chaosMode.injectedAnomalies | Where-Object { $_.file -ne 'loadfile.dat' -or $null -eq $_.peer -or $_.peer.file -ne 'loadfile.opt' -or [string]::IsNullOrEmpty($_.peer.lineNumber) }); $oBad=@($o.chaosMode.injectedAnomalies | Where-Object { $_.file -ne 'loadfile.opt' -or $null -eq $_.peer -or $_.peer.file -ne 'loadfile.dat' -or [string]::IsNullOrEmpty($_.peer.lineNumber) }); if ($d.chaosMode.targetAmount -eq '5%' -and $o.chaosMode.targetAmount -eq '5%' -and $d.chaosMode.totalAnomalies -gt 0 -and $o.chaosMode.totalAnomalies -gt 0 -and $dBad.Count -eq 0 -and $oBad.Count -eq 0 -and $r.status -eq 'failed' -and @($r.findings).Count -gt 0) { exit 0 } else { exit 1 }" >nul 2>&1
+powershell -NoProfile -Command "$d=Get-Content -Raw '%DAT_PROPS%' | ConvertFrom-Json; $o=Get-Content -Raw '%OPT_PROPS%' | ConvertFrom-Json; $r=Get-Content -Raw '%VALIDATION_REPORT%' | ConvertFrom-Json; $dBad=@($d.chaosMode.injectedAnomalies | Where-Object { $_.file -ne 'loadfile.dat' -or -not $_.peer -or $_.peer.file -ne 'loadfile.opt' -or -not $_.peer.lineNumber }); $oBad=@($o.chaosMode.injectedAnomalies | Where-Object { $_.file -ne 'loadfile.opt' -or -not $_.peer -or $_.peer.file -ne 'loadfile.dat' -or -not $_.peer.lineNumber }); if ($d.chaosMode.targetAmount -eq '5%%' -and $o.chaosMode.targetAmount -eq '5%%' -and $d.chaosMode.totalAnomalies -gt 0 -and $o.chaosMode.totalAnomalies -gt 0 -and $dBad.Count -eq 0 -and $oBad.Count -eq 0 -and $r.status -eq 'failed' -and @($r.findings).Count -gt 0) { exit 0 } else { exit 1 }" >nul
 if errorlevel 1 goto :production_set_cross_format_failed
 
 echo [ INFO ] PASS: %SCEN% Production Set chaos audits both Load Files and validator findings
