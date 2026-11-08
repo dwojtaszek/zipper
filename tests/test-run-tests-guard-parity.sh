@@ -267,6 +267,141 @@ else
     pass "validator fails on a second unguarded duplicate call site"
 fi
 
+# --- Negative: run-tests.bat missing goto :main must be caught (#1405) ---
+
+cp "$RUNNER_BAT" "$SANDBOX_REPO/tests/run-tests.bat"
+python3 - "$SANDBOX_REPO/tests/run-tests.bat" <<'PY'
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8-sig") as handle:
+    text = handle.read()
+
+target = "goto :main\n"
+if target not in text:
+    sys.exit("could not find 'goto :main' to remove")
+
+text = text.replace(target, "", 1)
+with open(path, "w", encoding="utf-8") as handle:
+    handle.write(text)
+PY
+
+if bash "$SANDBOX_REPO/tests/validate-e2e-parity.sh" --strict > "$SANDBOX/no_goto_main.out" 2>&1; then
+    fail "validator passed a run-tests.bat with no 'goto :main' before subroutines"
+else
+    pass "validator fails when run-tests.bat is missing 'goto :main'"
+fi
+
+if grep -q "without 'goto :main' before it" "$SANDBOX/no_goto_main.out"; then
+    pass "validator reports missing 'goto :main' entry point"
+else
+    fail "validator does not report missing 'goto :main'"
+    cat "$SANDBOX/no_goto_main.out"
+fi
+
+# --- Negative: run-tests.bat missing :main label must be caught (#1405) ---
+
+cp "$RUNNER_BAT" "$SANDBOX_REPO/tests/run-tests.bat"
+python3 - "$SANDBOX_REPO/tests/run-tests.bat" <<'PY'
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8-sig") as handle:
+    text = handle.read()
+
+target = "\n:main\n"
+if target not in text:
+    sys.exit("could not find ':main' to remove")
+
+text = text.replace(target, "\n", 1)
+with open(path, "w", encoding="utf-8") as handle:
+    handle.write(text)
+PY
+
+if bash "$SANDBOX_REPO/tests/validate-e2e-parity.sh" --strict > "$SANDBOX/no_main_label.out" 2>&1; then
+    fail "validator passed a run-tests.bat with no ':main' label"
+else
+    pass "validator fails when run-tests.bat is missing ':main' label"
+fi
+
+if grep -q "no ':main' label found" "$SANDBOX/no_main_label.out"; then
+    pass "validator reports missing ':main' label"
+else
+    fail "validator does not report missing ':main' label"
+    cat "$SANDBOX/no_main_label.out"
+fi
+
+# --- Negative: run-tests.bat with :main placed after first test case must be caught (#1405) ---
+
+cp "$RUNNER_BAT" "$SANDBOX_REPO/tests/run-tests.bat"
+python3 - "$SANDBOX_REPO/tests/run-tests.bat" <<'PY'
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8-sig") as handle:
+    text = handle.read()
+
+target = "\n:main\n"
+if target not in text:
+    sys.exit("could not find ':main' to move")
+
+text = text.replace(target, "\n", 1)
+case1_str = 'call :print_success "Test Case 1 passed."'
+if case1_str not in text:
+    sys.exit("could not find Test Case 1 passed marker")
+text = text.replace(case1_str, case1_str + "\n:main\n", 1)
+
+with open(path, "w", encoding="utf-8") as handle:
+    handle.write(text)
+PY
+
+if bash "$SANDBOX_REPO/tests/validate-e2e-parity.sh" --strict > "$SANDBOX/misplaced_main_label.out" 2>&1; then
+    fail "validator passed a run-tests.bat with ':main' after test cases"
+else
+    pass "validator fails when run-tests.bat has ':main' after test cases"
+fi
+
+if grep -q "Entry point misplaced in run-tests.bat" "$SANDBOX/misplaced_main_label.out"; then
+    pass "validator reports misplaced ':main' label"
+else
+    fail "validator does not report misplaced ':main' label"
+    cat "$SANDBOX/misplaced_main_label.out"
+fi
+
+# --- Negative: run-tests.bat with terminating subroutine between :main and :end_of_tests must be caught (#1405) ---
+
+cp "$RUNNER_BAT" "$SANDBOX_REPO/tests/run-tests.bat"
+python3 - "$SANDBOX_REPO/tests/run-tests.bat" <<'PY'
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8-sig") as handle:
+    text = handle.read()
+
+target = "\n:main\n"
+if target not in text:
+    sys.exit("could not find ':main' to insert terminating subroutine")
+
+rogue = "\n:main\n:rogue_helper\ngoto :eof\n"
+text = text.replace(target, rogue, 1)
+
+with open(path, "w", encoding="utf-8") as handle:
+    handle.write(text)
+PY
+
+if bash "$SANDBOX_REPO/tests/validate-e2e-parity.sh" --strict > "$SANDBOX/terminating_sub.out" 2>&1; then
+    fail "validator passed a run-tests.bat with terminating subroutine between :main and :end_of_tests"
+else
+    pass "validator fails when run-tests.bat has terminating subroutine between :main and :end_of_tests"
+fi
+
+if grep -q "Terminating helper subroutine found between :main and :end_of_tests" "$SANDBOX/terminating_sub.out"; then
+    pass "validator reports terminating subroutine between :main and :end_of_tests"
+else
+    fail "validator does not report terminating subroutine between :main and :end_of_tests"
+    cat "$SANDBOX/terminating_sub.out"
+fi
+
 # --- Summary ---
 
 echo ""

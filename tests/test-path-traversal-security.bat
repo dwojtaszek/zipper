@@ -61,7 +61,7 @@ if !errorlevel! equ 0 if !SYSTEM_EXIT_CODE! neq 0 (
 ) else (
     findstr /C:"Invalid path" "%TEMP%\system_output.txt" > nul
     if !errorlevel! equ 0 if !SYSTEM_EXIT_CODE! neq 0 (
-        echo [OK] Absolute path traversal was properly blocked (invalid path)
+        echo [OK] Absolute path traversal was properly blocked ^(invalid path^)
         for /f "tokens=*" %%a in ('findstr /C:"Invalid path" "%TEMP%\system_output.txt"') do echo    Error message: %%a
     ) else (
         echo [FAIL] Absolute path traversal was not properly blocked

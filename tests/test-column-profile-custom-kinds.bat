@@ -1,5 +1,5 @@
 @echo off
-setlocal enabledelayedexpansion
+setlocal disabledelayedexpansion
 
 REM E2E tests for --column-profile with a custom JSON profile (Windows)
 REM exercises every Column Kind and every Distribution Pattern.
@@ -74,7 +74,7 @@ echo     sys.exit(f"Column count errors: {len(errors)}"^)
 echo docids = [r['DOCID'] for r in rows]
 echo if len(set(docids^)^) != len(docids^):
 echo     sys.exit("DOCID has duplicates"^)
-echo bad_docid = [d for d in docids if not re.match(r'^DOC[0-9]+$', d^)]
+echo bad_docid = [d for d in docids if not re.match(r'^^DOC[0-9]+$', d^)]
 echo if bad_docid:
 echo     sys.exit(f"DOCID invalid: {bad_docid[:3]}"^)
 echo empty_text = sum(1 for r in rows if not r.get('TEXTFIELD'^)^)
@@ -107,8 +107,8 @@ echo valid_coded = {'Active', 'Inactive', 'Pending', 'Closed', 'Archived'}
 echo bad_coded = [r['CODEDFIELD'] for r in rows if r.get('CODEDFIELD'^) and r['CODEDFIELD'] not in valid_coded]
 echo if bad_coded:
 echo     sys.exit(f"CODEDFIELD invalid: {bad_coded}"^)
-echo email_re = re.compile(r'^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'^)
-echo bad_email = [r['EMAILFIELD'] for r in rows if r.get('EMAILFIELD'^) and not email_re.match(r['EMAILFIELD'])]
+echo email_re = re.compile(r'^^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'^)
+echo bad_email = [r['EMAILFIELD'] for r in rows if r.get('EMAILFIELD'^) and not email_re.match(r['EMAILFIELD']^)]
 echo if bad_email:
 echo     sys.exit(f"EMAILFIELD invalid: {bad_email}"^)
 echo multi_rows = sum(1 for r in rows if ';' in r.get('EMAILMULTI', ''^)^)

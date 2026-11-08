@@ -6,6 +6,8 @@ setlocal enabledelayedexpansion
 
 set PASSED=0
 set FAILED=0
+set "SESSION_DIR=.\results\test-interactions-%RANDOM%-%RANDOM%"
+mkdir "%SESSION_DIR%" 2>nul
 
 echo [ INFO ] === CLI Argument Interaction Tests ===
 
@@ -21,7 +23,7 @@ call :assert_accepted "--col-delim in standard mode" --type pdf --count 5 --outp
 call :assert_accepted "--quote-delim in standard mode" --type pdf --count 5 --output-path ".\results\zi_test" --quote-delim "char:~"
 call :assert_accepted "--newline-delim in standard mode" --type pdf --count 5 --output-path ".\results\zi_test" --newline-delim "char:^"
 call :assert_accepted "--multi-delim in standard mode" --type pdf --count 5 --output-path ".\results\zi_test" --multi-delim "char:;"
-call :assert_accepted "--nested-delim in standard mode" --type pdf --count 5 --output-path ".\results\zi_test" --nested-delim "char:\"
+call :assert_accepted "--nested-delim in standard mode" --type pdf --count 5 --output-path ".\results\zi_test" --nested-delim "char:\\"
 call :assert_accepted "--col-delim in production-set mode" --production-set --count 5 --bates-prefix PS --type pdf --output-path ".\results\zi_test" --col-delim "char:|"
 call :assert_accepted "--quote-delim in production-set mode" --production-set --count 5 --bates-prefix PS --type pdf --output-path ".\results\zi_test" --quote-delim "char:~"
 call :assert_rejected "--production-set without --bates-prefix" --production-set --count 5 --output-path ".\results\zi_test"
@@ -34,7 +36,7 @@ call :assert_accepted "valid standard --loadfile-only with --col-delim" --loadfi
 call :assert_accepted "valid standard --production-set" --production-set --count 5 --bates-prefix TEST --type pdf --output-path ".\results\zi_test"
 call :assert_accepted "--loadfile-only + --chaos-mode + --chaos-amount" --loadfile-only --count 5 --chaos-mode --chaos-amount "5%%" --output-path ".\results\zi_test"
 call :assert_accepted "--production-set + --bates-prefix + --volume-size" --production-set --count 5 --bates-prefix TEST --volume-size 100 --output-path ".\results\zi_test"
-call :assert_accepted "--loadfile-only + --col-delim + --quote-delim" --loadfile-only --count 5 --col-delim "char:|" --quote-delim "char:\"" --output-path ".\results\zi_test"
+call :assert_accepted "--loadfile-only + --col-delim + --quote-delim" --loadfile-only --count 5 --col-delim "char:|" --quote-delim "char:'" --output-path ".\results\zi_test"
 
 REM --- Collection metadata interaction tests (REQ-181 through REQ-189) ---
 call :assert_accepted "--with-collection-metadata in Standard mode" --type pdf --count 5 --with-collection-metadata --output-path ".\results\zi_test"
@@ -44,9 +46,9 @@ call :assert_accepted "--with-collection-metadata in loadfile-only (silently ign
 
 call :assert_rejected "invalid --hash-mode" --type pdf --count 5 --output-path ".\results\zi_test" --hash-mode invalid
 call :assert_rejected "--hash-algorithms without --hash-mode" --type pdf --count 5 --output-path ".\results\zi_test" --hash-algorithms md5
-call :assert_rejected "invalid --hash-algorithms" --type pdf --count 5 --output-path ".\results\zi_test" --hash-mode actual --hash-algorithms md5,sha512
+call :assert_rejected "invalid --hash-algorithms" --type pdf --count 5 --output-path ".\results\zi_test" --hash-mode actual --hash-algorithms "md5,sha512"
 call :assert_rejected "--hash-mode actual + --loadfile-only" --loadfile-only --count 5 --output-path ".\results\zi_test" --hash-mode actual
-call :assert_accepted "valid --hash-mode actual" --type pdf --count 5 --output-path ".\results\zi_test" --hash-mode actual --hash-algorithms md5,sha256
+call :assert_accepted "valid --hash-mode actual" --type pdf --count 5 --output-path ".\results\zi_test" --hash-mode actual --hash-algorithms "md5,sha256"
 call :assert_accepted "valid --hash-mode simulated" --loadfile-only --count 5 --output-path ".\results\zi_test" --hash-mode simulated
 call :assert_accepted "--loadfile-only + --load-file-format csv" --loadfile-only --count 5 --output-path ".\results\zi_test" --load-file-format csv
 call :assert_accepted "--loadfile-only + --load-file-format xml" --loadfile-only --count 5 --output-path ".\results\zi_test" --load-file-format xml
@@ -55,8 +57,10 @@ call :assert_accepted "--loadfile-only + --load-file-format concordance" --loadf
 
 echo.
 set /a TOTAL=!PASSED!+!FAILED!
+if exist "%SESSION_DIR%" rmdir /s /q "%SESSION_DIR%" 2>nul
+if exist ".\results\zi_test" rmdir /s /q ".\results\zi_test" 2>nul
 if !FAILED! equ 0 (
-    echo [ SUCCESS ] All argument interaction tests passed! ^(!PASSED!/!TOTAL!^)
+    echo [ SUCCESS ] All argument interaction tests passed! ^(%PASSED%/%TOTAL%^)
 ) else (
     echo [ ERROR ] Argument interaction tests: !FAILED!/!TOTAL! FAILED
     exit /b 1
@@ -65,39 +69,48 @@ exit /b 0
 
 :assert_rejected
 set "DESC=%~1"
-set "ARGS=%*"
-set "ARGS=!ARGS:%1 =!"
-set "TEMP_DIR=.\results\test-interactions-%RANDOM%"
-mkdir "%TEMP_DIR%" 2>nul
-set "STDERR_FILE=%TEMP_DIR%\stderr.txt"
+set ARGS=%*
+set ARGS=!ARGS:%1 =!
+set "OUT_DIR=%SESSION_DIR%\out_!PASSED!_!FAILED!"
+set "STDERR_FILE=%SESSION_DIR%\err_!PASSED!_!FAILED!.txt"
+set ARGS=!ARGS:.\results\zi_test=%OUT_DIR%!
+if exist "%OUT_DIR%" rmdir /s /q "%OUT_DIR%" 2>nul
 %ZIPPER_CMD% !ARGS! >nul 2>"!STDERR_FILE!"
 if errorlevel 1 (
     findstr /i /c:"Unhandled exception" /c:"NullReferenceException" /c:"Exception:" "!STDERR_FILE!" >nul
     if not errorlevel 1 (
-        echo [ ERROR ] FAIL: %DESC% ^(expected validation error, got crash^)
+        echo [ ERROR ] FAIL: !DESC! ^(expected validation error, got crash^)
         type "!STDERR_FILE!"
         set /a FAILED+=1
     ) else (
-        echo [ INFO ] PASS: %DESC%
+        echo [ INFO ] PASS: !DESC!
         set /a PASSED+=1
     )
 ) else (
-    echo [ ERROR ] FAIL: %DESC% ^(expected rejection^)
+    echo [ ERROR ] FAIL: !DESC! ^(expected rejection^)
     set /a FAILED+=1
 )
 del /f /q "!STDERR_FILE!" 2>nul
+if exist "%OUT_DIR%" rmdir /s /q "%OUT_DIR%" 2>nul
 goto :eof
 
 :assert_accepted
 set "DESC=%~1"
-set "ARGS=%*"
-set "ARGS=!ARGS:%1 =!"
-%ZIPPER_CMD% !ARGS! >nul 2>&1
+set ARGS=%*
+set ARGS=!ARGS:%1 =!
+set "OUT_DIR=%SESSION_DIR%\out_!PASSED!_!FAILED!"
+set "STDERR_FILE=%SESSION_DIR%\err_!PASSED!_!FAILED!.txt"
+set ARGS=!ARGS:.\results\zi_test=%OUT_DIR%!
+if exist "%OUT_DIR%" rmdir /s /q "%OUT_DIR%" 2>nul
+%ZIPPER_CMD% !ARGS! >nul 2>"!STDERR_FILE!"
 if not errorlevel 1 (
-    echo [ INFO ] PASS: %DESC%
+    echo [ INFO ] PASS: !DESC!
     set /a PASSED+=1
 ) else (
-    echo [ ERROR ] FAIL: %DESC% ^(expected success^)
+    echo [ ERROR ] FAIL: !DESC! ^(expected success^)
+    type "!STDERR_FILE!"
     set /a FAILED+=1
 )
+del /f /q "!STDERR_FILE!" 2>nul
+if exist "%OUT_DIR%" rmdir /s /q "%OUT_DIR%" 2>nul
 goto :eof

@@ -66,7 +66,7 @@ echo             phi_z = 1.0 - (1.0/math.sqrt(2.0*math.pi^)^) * math.exp(-z*z/2.
 echo             p = 1.0 - phi_z
 echo         else:
 echo             p = 1.0
-echo     print(f"chi2={chi2:.4f} p={p:.6f} obs={int(obs^)} exp={e1:.1f}"^)
+echo     print(f"chi2={chi2:.4f} p={p:.6f} obs={int(obs)} exp={e1:.1f}"^)
 echo     sys.exit(0 if p ^>= sig else 1^)
 ) > "%PY_HELPER%"
 

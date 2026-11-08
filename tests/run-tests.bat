@@ -5,9 +5,12 @@ REM --- Test Configuration ---
 REM The directory where test output will be generated.
 set TEST_OUTPUT_DIR=.\test_output
 set FAILED=0
+set "PYTHONIOENCODING=utf-8"
 
 REM The .NET project to run.
 set PROJECT=src\Zipper.csproj
+
+goto :main
 
 REM --- Helper Functions ---
 
@@ -31,6 +34,13 @@ REM --- Helper Functions ---
     set "file_type=%~4"
     set "check_text=%~5"
     set "encoding=%~6"
+    if not defined encoding set "encoding=UTF-8"
+    set "zip_file="
+    set "dat_file="
+    set "first_bytes="
+    set "has_nl="
+    set "line_count="
+    set "header="
 
     call :print_info "Verifying output in %test_dir% (Encoding: %encoding%)"
 
@@ -42,6 +52,7 @@ REM --- Helper Functions ---
     )
     if not defined dat_file (
         call :print_error "No .dat file found in %test_dir%"
+        goto :skip_dat_verify
     )
 
     set "bom_cmd=$bytes = [System.IO.File]::ReadAllBytes('%dat_file%'); $hex = [System.BitConverter]::ToString($bytes, 0, [Math]::Min($bytes.Length, 3)) -replace '-',''; Write-Host $hex"
@@ -67,7 +78,7 @@ REM --- Helper Functions ---
         )
     )
 
-    set "ps_cmd=$enc = [System.Text.UTF8Encoding]::new($false); if ('%encoding%' -eq 'UTF-16') { $enc = [System.Text.Encoding]::Unicode } elseif ('%encoding%' -eq 'ANSI') { $enc = [System.Text.Encoding]::GetEncoding(1252) }; $c = [System.IO.File]::ReadAllText('%dat_file%', $enc); $nl = $c.EndsWith(\"`n\"); $lines = [regex]::Matches($c, \"`n\").Count; $header = ''; if ($c -match '^([^\r\n]+)') { $header = $matches[1] }; Write-Host \"$nl|$lines|$header\""
+    set "ps_cmd=$enc = [System.Text.UTF8Encoding]::new($false); if ('%encoding%' -eq 'UTF-16') { $enc = [System.Text.Encoding]::Unicode } elseif ('%encoding%' -eq 'ANSI') { $enc = [System.Text.Encoding]::GetEncoding(1252) }; $c = [System.IO.File]::ReadAllText('%dat_file%', $enc); $nl = $c.EndsWith([string][char]10); $lines = [regex]::Matches($c, '\n').Count; $header = ''; if ($c -match '^([^\r\n]+)') { $header = $matches[1] }; Write-Host ($nl.ToString() + '|' + $lines + '|' + $header)"
     powershell -Command "%ps_cmd%" > "%temp%\dat_info.txt"
     for /f "tokens=1,2,* delims=|" %%A in (%temp%\dat_info.txt) do (
         set "has_nl=%%A"
@@ -93,8 +104,11 @@ REM --- Helper Functions ---
     )
     call :print_info ".dat file header is correct."
 
+:skip_dat_verify
     REM Verify file count in zip using PowerShell
-    powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::OpenRead('%zip_file%').Entries.Where({$_.Name -match '\.%file_type%$'}).Count" > "%temp%\zip_count.txt"
+    if not defined zip_file goto :skip_text_verify
+    powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = @($z.Entries | Where { $_.Name -match '\.%file_type%$' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\zip_count.txt"
+    set "zip_file_count="
     set /p zip_file_count=<"%temp%\zip_count.txt"
     if "%zip_file_count%" neq "%expected_count%" (
         call :print_error "Incorrect file count in .zip file. Expected %expected_count%, found %zip_file_count%."
@@ -102,18 +116,19 @@ REM --- Helper Functions ---
     call :print_info ".zip file count for .%file_type% is correct (%zip_file_count%)."
 
     REM Verify text file count if required
-    if "%check_text%" == "true" (
-        if "%file_type%" == "eml" (
-            powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::OpenRead('%zip_file%').Entries.Where({$_.Name -match '\.txt$' -and $_.Name -notmatch 'attachment'}).Count" > "%temp%\zip_txt_count.txt"
-        ) else (
-            powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::OpenRead('%zip_file%').Entries.Where({$_.Name -match '\.txt$'}).Count" > "%temp%\zip_txt_count.txt"
-        )
-        set /p txt_count=<"%temp%\zip_txt_count.txt"
-        if "%txt_count%" neq "%expected_count%" (
-            call :print_error "Incorrect .txt file count in .zip file. Expected %expected_count%, found %txt_count%."
-        )
-        call :print_info ".zip file count for .txt is correct (%txt_count%)."
+    if not "%check_text%" == "true" goto :skip_text_verify
+    if "%file_type%" == "eml" (
+        powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = @($z.Entries | Where { $_.Name -match '\.txt$' -and $_.Name -notmatch 'attachment' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\zip_txt_count.txt"
+    ) else (
+        powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = @($z.Entries | Where { $_.Name -match '\.txt$' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\zip_txt_count.txt"
     )
+    set "txt_count="
+    set /p txt_count=<"%temp%\zip_txt_count.txt"
+    if "%txt_count%" neq "%expected_count%" (
+        call :print_error "Incorrect .txt file count in .zip file. Expected %expected_count%, found %txt_count%."
+    )
+    call :print_info ".zip file count for .txt is correct (%txt_count%)."
+:skip_text_verify
     goto :eof
 
 REM Verifies the size of the generated zip file.
@@ -123,6 +138,7 @@ REM %2: Target size in MB
 :verify_zip_size
     set "test_dir=%~1"
     set "target_size_mb=%~2"
+    set "zip_file="
     set /a target_size_bytes=target_size_mb * 1024 * 1024
     set /a tolerance_bytes=target_size_bytes / 10
 
@@ -131,6 +147,7 @@ REM %2: Target size in MB
 
     if not defined zip_file (
         call :print_error "No .zip file found in %test_dir%"
+        goto :eof
     )
 
     REM Get file size
@@ -156,6 +173,8 @@ REM %2: Target size in MB
     set "check_text=%~5"
     set "encoding=%~6"
     set "expected_attachment_count=%~7"
+    set "zip_file="
+    set "dat_file="
 
     call :verify_output "%test_dir%" "%expected_count%" "%expected_header_str%" "%file_type%" "%check_text%" "%encoding%"
 
@@ -167,9 +186,12 @@ REM %2: Target size in MB
     if not defined dat_file (
         call :print_error "No .dat file found in %test_dir%"
     )
+    if not defined zip_file goto :eof
+    if not defined dat_file goto :eof
 
     REM Count attachment files in zip (attachment*.pdf, .jpg, .tiff)
     powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = @($z.Entries | Where { $_.Name -match 'attachment.*\.(pdf|jpg|tiff)$' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\att_count.txt"
+    set "attachment_files="
     set /p attachment_files=<"%temp%\att_count.txt"
 
     if "%attachment_files%" neq "%expected_attachment_count%" (
@@ -177,9 +199,10 @@ REM %2: Target size in MB
     )
     call :print_info "Found %attachment_files% attachment files in ZIP archive (expected exactly %expected_attachment_count%)."
 
-    REM Check attachments in .dat file
-    set "att_cmd=$enc = [System.Text.UTF8Encoding]::new($false); if ('%encoding%' -eq 'UTF-16') { $enc = [System.Text.Encoding]::Unicode } elseif ('%encoding%' -eq 'ANSI') { $enc = [System.Text.Encoding]::GetEncoding(1252) }; $lines = [System.IO.File]::ReadAllLines('%dat_file%', $enc); Write-Host @($lines | Where-Object { $_ -match 'attachment' }).Count"
+    REM Check attachments in .dat file (case-sensitive to ignore header column 'Attachment')
+    set "att_cmd=$enc = [System.Text.UTF8Encoding]::new($false); if ('%encoding%' -eq 'UTF-16') { $enc = [System.Text.Encoding]::Unicode } elseif ('%encoding%' -eq 'ANSI') { $enc = [System.Text.Encoding]::GetEncoding(1252) }; $lines = [System.IO.File]::ReadAllLines('%dat_file%', $enc); Write-Host @($lines | Where-Object { $_ -cmatch 'attachment' }).Count"
     powershell -Command "%att_cmd%" > "%temp%\dat_att_count.txt"
+    set "dat_attachment_count="
     set /p dat_attachment_count=<"%temp%\dat_att_count.txt"
     if "%dat_attachment_count%" neq "%expected_attachment_count%" (
         call :print_error "Expected exactly %expected_attachment_count% attachments in .dat file, found %dat_attachment_count%."
@@ -187,14 +210,15 @@ REM %2: Target size in MB
     call :print_info "Found %dat_attachment_count% attachments in .dat file."
 
     REM Verify attachment text files if text extraction enabled
-    if "%check_text%" == "true" (
-        powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = @($z.Entries | Where { $_.Name -match 'attachment.*\.txt$' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\att_txt_count.txt"
-        set /p attachment_text_files=<"%temp%\att_txt_count.txt"
-        if "%attachment_text_files%" neq "%expected_attachment_count%" (
-            call :print_error "Expected exactly %expected_attachment_count% attachment text files, but found %attachment_text_files%."
-        )
-        call :print_info "Found %attachment_text_files% attachment text files in ZIP archive."
+    if not "%check_text%" == "true" goto :skip_eml_text_verify
+    powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = @($z.Entries | Where { $_.Name -match 'attachment.*\.txt$' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\att_txt_count.txt"
+    set "attachment_text_files="
+    set /p attachment_text_files=<"%temp%\att_txt_count.txt"
+    if "%attachment_text_files%" neq "%expected_attachment_count%" (
+        call :print_error "Expected exactly %expected_attachment_count% attachment text files, but found %attachment_text_files%."
     )
+    call :print_info "Found %attachment_text_files% attachment text files in ZIP archive."
+:skip_eml_text_verify
     goto :eof
 
 :verify_load_file_included
@@ -203,12 +227,21 @@ REM %2: Target size in MB
     set "expected_header_str=%~3"
     set "file_type=%~4"
     set "encoding=%~5"
+    if not defined encoding set "encoding=UTF-8"
+    set "zip_file="
+    set "dat_file="
+    set "extracted_dat="
+    set "first_bytes="
+    set "has_nl="
+    set "line_count="
+    set "header="
 
     call :print_info "Verifying load file included in zip archive (Encoding: %encoding%)"
 
     for %%F in ("%test_dir%\*.zip") do set "zip_file=%%F"
     if not defined zip_file (
         call :print_error "No .zip file found in %test_dir%"
+        goto :eof
     )
 
     REM Verify no separate .dat file in output directory
@@ -218,7 +251,7 @@ REM %2: Target size in MB
     )
 
     REM Verify .dat file exists in zip
-    powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = ($z.Entries | Where { $_.Name -match '\.dat$' }).Count; $z.Dispose(); exit ($c -eq 1 ? 0 : 1) } catch { exit 1 }"
+    powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = ($z.Entries | Where { $_.Name -match '\.dat$' }).Count; $z.Dispose(); if ($c -eq 1) { exit 0 } else { exit 1 } } catch { exit 1 }"
     if errorlevel 1 (
         call :print_error "Expected 1 .dat file in zip archive"
     )
@@ -233,6 +266,7 @@ REM %2: Target size in MB
     for %%F in ("%temp_extract%\*.dat") do set "extracted_dat=%%F"
     if not defined extracted_dat (
         call :print_error "Failed to extract .dat file from zip archive"
+        goto :skip_extracted_dat_verify
     )
 
     set "bom_cmd=$bytes = [System.IO.File]::ReadAllBytes('%extracted_dat%'); $hex = [System.BitConverter]::ToString($bytes, 0, [Math]::Min($bytes.Length, 3)) -replace '-',''; Write-Host $hex"
@@ -258,7 +292,7 @@ REM %2: Target size in MB
         )
     )
 
-    set "ps_cmd=$enc = [System.Text.UTF8Encoding]::new($false); if ('%encoding%' -eq 'UTF-16') { $enc = [System.Text.Encoding]::Unicode } elseif ('%encoding%' -eq 'ANSI') { $enc = [System.Text.Encoding]::GetEncoding(1252) }; $c = [System.IO.File]::ReadAllText('%extracted_dat%', $enc); $nl = $c.EndsWith(\"`n\"); $lines = [regex]::Matches($c, \"`n\").Count; $header = ''; if ($c -match '^([^\r\n]+)') { $header = $matches[1] }; Write-Host \"$nl|$lines|$header\""
+    set "ps_cmd=$enc = [System.Text.UTF8Encoding]::new($false); if ('%encoding%' -eq 'UTF-16') { $enc = [System.Text.Encoding]::Unicode } elseif ('%encoding%' -eq 'ANSI') { $enc = [System.Text.Encoding]::GetEncoding(1252) }; $c = [System.IO.File]::ReadAllText('%extracted_dat%', $enc); $nl = $c.EndsWith([string][char]10); $lines = [regex]::Matches($c, '\n').Count; $header = ''; if ($c -match '^([^\r\n]+)') { $header = $matches[1] }; Write-Host ($nl.ToString() + '|' + $lines + '|' + $header)"
     powershell -Command "%ps_cmd%" > "%temp%\dat_info.txt"
     for /f "tokens=1,2,* delims=|" %%A in (%temp%\dat_info.txt) do (
         set "has_nl=%%A"
@@ -284,8 +318,10 @@ REM %2: Target size in MB
     )
     call :print_info ".dat file header is correct."
 
+:skip_extracted_dat_verify
     REM Verify file count in zip (excluding .dat file)
-    powershell -Command "try { $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = ($z.Entries | Where { $_.Name -match '\.%file_type%$' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\zip_count2.txt"
+    powershell -Command "try { Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [System.IO.Compression.ZipFile]::OpenRead('%zip_file%'); $c = @($z.Entries | Where { $_.Name -match '\.%file_type%$' }).Count; $z.Dispose(); Write-Host $c } catch { Write-Host 0 }" > "%temp%\zip_count2.txt"
+    set "zip_file_count="
     set /p zip_file_count=<"%temp%\zip_count2.txt"
     if "%zip_file_count%" neq "%expected_count%" (
         call :print_error "Incorrect file count in .zip file. Expected %expected_count%, found %zip_file_count%."
@@ -296,6 +332,26 @@ REM %2: Target size in MB
     rmdir /s /q "%temp_extract%"
     goto :eof
 
+:run_test_case
+    set "test_name=%~1"
+    set "test_args="
+    shift
+:run_test_case_loop
+    if [%1]==[] goto :run_test_case_exec
+    set "test_args=%test_args% %1"
+    shift
+    goto :run_test_case_loop
+:run_test_case_exec
+    call :print_info "START: %test_name% at %DATE% %TIME%"
+    %ZIPPER_CMD%%test_args%
+    set "_exit_code=%errorlevel%"
+    if %_exit_code% neq 0 (
+        call :print_error "%test_name% failed with exit code %_exit_code%"
+    )
+    call :print_info "END: %test_name% at %DATE% %TIME%"
+    goto :eof
+
+:main
 REM --- Test Cases ---
 
 if "%~1"=="--meta-test-fail-only" (
@@ -307,23 +363,13 @@ call :print_info "Starting test suite..."
 
 REM Resolve the Zipper binary once (shared helper). Sets %ZIPPER_CMD%.
 call "%~dp0_zipper-cli.bat"
+if errorlevel 1 exit /b 1
 
 REM Create a temporary directory for test output.
 if exist "%TEST_OUTPUT_DIR%" (
     rmdir /s /q "%TEST_OUTPUT_DIR%"
 )
 mkdir "%TEST_OUTPUT_DIR%"
-
-:run_test_case
-    set "test_name=%~1"
-    shift
-    call :print_info "START: %test_name% at %DATE% %TIME%"
-    %ZIPPER_CMD% %*
-    if errorlevel 1 (
-        call :print_error "%test_name% failed with exit code %errorlevel%"
-    )
-    call :print_info "END: %test_name% at %DATE% %TIME%"
-    goto :eof
 
 REM Test Case 1: Basic PDF generation
 call :run_test_case "Test Case 1: Basic PDF generation" --type pdf --count 10 --output-path "%TEST_OUTPUT_DIR%\pdf_basic"
@@ -332,7 +378,7 @@ call :print_success "Test Case 1 passed."
 
 REM Test Case 2: JPG generation with different encoding
 call :run_test_case "Test Case 2: JPG generation with UTF-16 encoding" --type jpg --count 10 --output-path "%TEST_OUTPUT_DIR%\jpg_encoding" --encoding UTF-16
-call :verify_output "%TEST_OUTPUT_DIR%\jpg_encoding" 10 "Control Number,File Path" "jpg" "false"
+call :verify_output "%TEST_OUTPUT_DIR%\jpg_encoding" 10 "Control Number,File Path" "jpg" "false" "UTF-16"
 call :print_success "Test Case 2 passed."
 
 REM Test Case 3: TIFF generation with multiple folders and proportional distribution
@@ -357,7 +403,7 @@ call :print_success "Test Case 6 passed."
 
 REM Test Case 7: All options combined
 call :run_test_case "Test Case 7: All options combined" --type tiff --count 15 --output-path "%TEST_OUTPUT_DIR%\all_options" --folders 5 --encoding ANSI --distribution gaussian --with-metadata
-call :verify_output "%TEST_OUTPUT_DIR%\all_options" 15 "Control Number,File Path,Custodian,Date Sent,Author,File Size,Compression Method" "tiff" "false"
+call :verify_output "%TEST_OUTPUT_DIR%\all_options" 15 "Control Number,File Path,Custodian,Date Sent,Author,File Size,Compression Method" "tiff" "false" "ANSI"
 call :print_success "Test Case 7 passed."
 
 REM Test Case 8: With text
@@ -372,7 +418,7 @@ call :print_success "Test Case 9 passed."
 
 REM Test Case 10: EML generation with attachments
 call :run_test_case "Test Case 10: EML generation with attachments" --type eml --count 20 --output-path "%TEST_OUTPUT_DIR%\eml_attachments" --attachment-rate 50 --seed 42
-call :verify_eml_output "%TEST_OUTPUT_DIR%\eml_attachments" 20 "Control Number,File Path,To,From,Subject,Sent Date,Attachment" "eml" "false" "UTF-8"
+call :verify_eml_output "%TEST_OUTPUT_DIR%\eml_attachments" 20 "Control Number,File Path,To,From,Subject,Sent Date,Attachment" "eml" "false" "UTF-8" 14
 call :print_success "Test Case 10 passed."
 
 REM Test Case 11: EML generation with metadata
@@ -402,7 +448,7 @@ call :print_success "Test Case 15 passed."
 
 REM Test Case 16: EML attachments with metadata and text (comprehensive attachment test)
 call :run_test_case "Test Case 16: EML attachments with metadata and text" --type eml --count 15 --output-path "%TEST_OUTPUT_DIR%\eml_attachments_full" --attachment-rate 60 --with-metadata --with-text --seed 42
-call :verify_eml_output "%TEST_OUTPUT_DIR%\eml_attachments_full" 15 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Compression Method,Attachment,Extracted Text" "eml" "true" "UTF-8"
+call :verify_eml_output "%TEST_OUTPUT_DIR%\eml_attachments_full" 15 "Control Number,File Path,To,From,Subject,Custodian,Author,Sent Date,Date Sent,File Size,Compression Method,Attachment,Extracted Text" "eml" "true" "UTF-8" 13
 call :print_success "Test Case 16 passed."
 
 REM Test Case 17: Maximum folders edge case (100 folders)
@@ -717,3 +763,4 @@ if %FAILED% gtr 0 (
     exit /b 1
 )
 call :print_success "All tests passed successfully!"
+exit /b 0

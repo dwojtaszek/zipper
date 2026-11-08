@@ -53,7 +53,7 @@ if not defined DAT_FILE (
 set OPT_FILE=
 for %%f in ("%TEST_OUTPUT_DIR%\csv_archive\*.opt") do set OPT_FILE=%%f
 if not defined OPT_FILE (
-  echo [ ERROR ] Test 1: No .opt file found (tiff row should default to DAT+OPT^)
+  echo [ ERROR ] Test 1: No .opt file found ^(tiff row should default to DAT+OPT^)
   exit /b 1
 )
 
@@ -66,7 +66,7 @@ if errorlevel 1 (
 set /p HEADER=<"%DAT_FILE%"
 echo !HEADER! | findstr /C:"File Type" >nul
 if errorlevel 1 (
-  echo [ ERROR ] Test 1: 'File Type' column not found in .dat header (mixed source types)
+  echo [ ERROR ] Test 1: 'File Type' column not found in .dat header ^(mixed source types^)
   exit /b 1
 )
 
@@ -118,7 +118,7 @@ if errorlevel 1 (
 
 powershell -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; $z=[System.IO.Compression.ZipFile]::OpenRead('%ZIP_FILE%'); $bad=$false; foreach ($e in $z.Entries) { $sr = New-Object System.IO.StreamReader($e.Open()); $c = $sr.ReadToEnd(); $sr.Close(); if ($c -match 'real content') { $bad=$true } }; $z.Dispose(); if ($bad) { exit 1 }" >nul
 if errorlevel 1 (
-  echo [ ERROR ] Test 2: Source bytes were copied into the archive (placeholders required)
+  echo [ ERROR ] Test 2: Source bytes were copied into the archive ^(placeholders required^)
   exit /b 1
 )
 

@@ -96,17 +96,14 @@ if not defined opt_file (
 )
 
 REM Verify line count (documents expand to page level, so should be at least 50)
-powershell -Command "(Get-Content -Path '%opt_file%').Count" > "%temp%\line_count.txt"
-set /p opt_line_count=<"%temp%\line_count.txt"
-if !opt_line_count! lss 50 (
-    echo [ ERROR ] OPT line count: expected at least 50, got !opt_line_count!
+powershell -NoProfile -Command "if ((Get-Content -Path '%opt_file%').Count -lt 50) { exit 1 }"
+if errorlevel 1 (
+    echo [ ERROR ] OPT line count: expected at least 50
     goto :cleanup
 )
 
 REM Check first line prefix
-powershell -Command "(Get-Content -Path '%opt_file%' -TotalCount 1)" > "%temp%\header.txt"
-set /p first_line=<"%temp%\header.txt"
-echo "!first_line!" | findstr "^IMG" >nul
+powershell -NoProfile -Command "$first = (Get-Content -Path '%opt_file%' -TotalCount 1).TrimStart([char]0xFEFF); if (-not $first.StartsWith('IMG')) { exit 1 }"
 if errorlevel 1 (
     echo [ ERROR ] OPT first line doesn't start with IMG prefix
     goto :cleanup
@@ -196,14 +193,7 @@ if not defined props_file ( echo [ ERROR ] Properties file not found & goto :cle
 if not exist "%props_file%" ( echo [ ERROR ] Properties file missing: %props_file% & goto :cleanup )
 
 REM Parse JSON and assert anomalies were actually injected
-powershell -NoProfile -Command ^
-    "$j = Get-Content '%props_file%' -Raw | ConvertFrom-Json; ^
-    if ($j.chaosMode.totalAnomalies -le 0) { Write-Error 'totalAnomalies is 0'; exit 1 }; ^
-    if (-not $j.chaosMode.injectedAnomalies -or $j.chaosMode.injectedAnomalies.Count -eq 0) { Write-Error 'injectedAnomalies is empty'; exit 1 }; ^
-    $types = $j.chaosMode.injectedAnomalies | ForEach-Object { $_.errorType } | Sort-Object -Unique; ^
-    if (-not ($types -contains 'quotes' -or $types -contains 'columns')) { Write-Error ('Expected quotes or columns, got: ' + ($types -join ',')); exit 1 }; ^
-    if ($types -contains 'encoding') { Write-Error 'Found forbidden type: encoding'; exit 1 }; ^
-    if ($types -contains 'eol') { Write-Error 'Found forbidden type: eol'; exit 1 }"
+powershell -NoProfile -Command "$j = Get-Content '%props_file%' -Raw | ConvertFrom-Json; if ($j.chaosMode.totalAnomalies -le 0) { exit 1 }; if (-not $j.chaosMode.injectedAnomalies -or $j.chaosMode.injectedAnomalies.Count -eq 0) { exit 1 }; $types = @($j.chaosMode.injectedAnomalies | ForEach-Object { $_.errorType } | Sort-Object -Unique); if (-not ($types -contains 'quotes' -or $types -contains 'columns')) { exit 1 }; if ($types -contains 'encoding' -or $types -contains 'eol') { exit 1 }"
 if errorlevel 1 ( echo [ ERROR ] Chaos type filter assertion failed & goto :cleanup )
 echo [ INFO ] Chaos type filtering OK
 
@@ -350,7 +340,7 @@ echo [ INFO ] Cleaning up...
 if exist "%TEST_OUTPUT_DIR%" rmdir /s /q "%TEST_OUTPUT_DIR%"
 
 if %TESTS_PASSED% equ %TESTS_TOTAL% (
-    echo [ SUCCESS ] All loadfile-only E2E tests passed! (%TESTS_PASSED%/%TESTS_TOTAL%)
+    echo [ SUCCESS ] All loadfile-only E2E tests passed^! ^(%TESTS_PASSED%/%TESTS_TOTAL%^)
     exit /b 0
 ) else (
     echo [ ERROR ] Loadfile-only E2E tests failed: %TESTS_PASSED%/%TESTS_TOTAL% passed

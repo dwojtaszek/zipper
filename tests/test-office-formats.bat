@@ -219,27 +219,48 @@ if errorlevel 1 (
 for %%f in ("%TEST_OUTPUT_DIR%\test6\*.zip") do set ZIP_FILE=%%f
 
 :: Create temp directory for extraction
-set TEMP_DIR=%TEMP%\office_test_verify
+set TEMP_DIR=%TEST_OUTPUT_DIR%\test6\temp
 if exist "%TEMP_DIR%" rmdir /s /q "%TEMP_DIR%"
 mkdir "%TEMP_DIR%"
 
 :: Extract the zip
-powershell -Command "Expand-Archive -Path '!ZIP_FILE!' -DestinationPath '%TEMP_DIR%' -Force" >nul 2>&1
+powershell -NoProfile -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('!ZIP_FILE!', '%TEMP_DIR%')" >nul 2>&1
 if errorlevel 1 (
   echo [ ERROR ] Test 6: Failed to extract ZIP file
   rmdir /s /q "%TEMP_DIR%" 2>nul
   exit /b 1
 )
 
-:: Verify required DOCX entries exist
-dir /b /s "%TEMP_DIR%\[Content_Types].xml" >nul 2>&1
+:: Locate first DOCX file inside the extracted zip
+set "DOCX_FILE="
+for /r "%TEMP_DIR%" %%f in (*.docx) do (
+  if not defined DOCX_FILE set "DOCX_FILE=%%f"
+)
+if not defined DOCX_FILE (
+  echo [ ERROR ] Test 6: No DOCX file found in archive
+  rmdir /s /q "%TEMP_DIR%" 2>nul
+  exit /b 1
+)
+
+:: Extract DOCX archive to verify it is a valid zip containing DOCX structure
+set "DOCX_DIR=%TEMP_DIR%\docx_content"
+mkdir "%DOCX_DIR%"
+powershell -NoProfile -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('!DOCX_FILE!', '%DOCX_DIR%')" >nul 2>&1
+if errorlevel 1 (
+  echo [ ERROR ] Test 6: Extracted DOCX file is not a valid ZIP archive
+  rmdir /s /q "%TEMP_DIR%" 2>nul
+  exit /b 1
+)
+
+:: Verify required DOCX entries exist inside the DOCX
+dir /b /s "%DOCX_DIR%\[Content_Types].xml" >nul 2>&1
 if errorlevel 1 (
   echo [ ERROR ] Test 6: DOCX missing [Content_Types].xml
   rmdir /s /q "%TEMP_DIR%" 2>nul
   exit /b 1
 )
 
-dir /b /s "%TEMP_DIR%\word\document.xml" >nul 2>&1
+dir /b /s "%DOCX_DIR%\word\document.xml" >nul 2>&1
 if errorlevel 1 (
   echo [ ERROR ] Test 6: DOCX missing word\document.xml
   rmdir /s /q "%TEMP_DIR%" 2>nul

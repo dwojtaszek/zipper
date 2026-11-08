@@ -318,5 +318,96 @@ public class DocsDriftTests
         var testsReadme = File.ReadAllText(testsReadmePath);
         Assert.DoesNotContain("test-compute-version.sh", testsReadme);
     }
+
+    [Fact]
+    public void RunTestsBat_HasExplicitEntryPointBeforeHelperSubroutines()
+    {
+        var runTestsBatPath = Path.Combine(RepoRoot, "tests", "run-tests.bat");
+        var lines = File.ReadAllLines(runTestsBatPath);
+
+        int firstLabelIndex = -1;
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var trimmed = lines[i].TrimStart();
+            if (trimmed.StartsWith(':') && !trimmed.StartsWith("::", StringComparison.Ordinal))
+            {
+                firstLabelIndex = i;
+                break;
+            }
+        }
+
+        Assert.True(firstLabelIndex > 0, "run-tests.bat must have at least one subroutine label.");
+
+        bool hasGotoMain = false;
+        for (int i = 0; i < firstLabelIndex; i++)
+        {
+            if (System.Text.RegularExpressions.Regex.IsMatch(lines[i], @"^\s*goto\s+:?main\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)))
+            {
+                hasGotoMain = true;
+                break;
+            }
+        }
+
+        Assert.True(hasGotoMain, $"run-tests.bat must contain 'goto :main' before label '{lines[firstLabelIndex].Trim()}' at line {firstLabelIndex + 1} (#1405).");
+
+        int mainLabelIndex = -1;
+        int endOfTestsIndex = -1;
+        int firstCaseIndex = -1;
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var trimmed = lines[i].TrimStart();
+            if (System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^:main\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)))
+            {
+                if (mainLabelIndex < 0)
+                {
+                    mainLabelIndex = i;
+                }
+            }
+            if (System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^:end_of_tests\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)))
+            {
+                if (endOfTestsIndex < 0)
+                {
+                    endOfTestsIndex = i;
+                }
+            }
+            if (System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"call\s+:run_test_case\s+""Test Case 1:", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)))
+            {
+                if (firstCaseIndex < 0)
+                {
+                    firstCaseIndex = i;
+                }
+            }
+        }
+
+        Assert.True(mainLabelIndex >= 0, "run-tests.bat must contain a ':main' label.");
+        Assert.True(endOfTestsIndex > mainLabelIndex, "run-tests.bat must contain ':end_of_tests' after ':main'.");
+        Assert.True(firstCaseIndex >= 0, "run-tests.bat must contain 'Test Case 1'.");
+        Assert.True(mainLabelIndex < firstCaseIndex, "':main' label must appear before Test Case 1 in run-tests.bat.");
+
+        // Check that no helper subroutines terminating with goto :eof or exit /b are placed between :main and :end_of_tests
+        var terminatingSubroutines = new List<string>();
+        for (int i = mainLabelIndex + 1; i < endOfTestsIndex; i++)
+        {
+            var trimmed = lines[i].TrimStart();
+            if (trimmed.StartsWith(':') && !trimmed.StartsWith("::", StringComparison.Ordinal))
+            {
+                for (int j = i + 1; j < endOfTestsIndex; j++)
+                {
+                    var forwardTrimmed = lines[j].TrimStart();
+                    if (forwardTrimmed.StartsWith(':') && !forwardTrimmed.StartsWith("::", StringComparison.Ordinal))
+                    {
+                        break;
+                    }
+                    if (System.Text.RegularExpressions.Regex.IsMatch(forwardTrimmed, @"^(goto\s*:?eof|exit\s*/b|exit\s+[0-9]+)\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)))
+                    {
+                        terminatingSubroutines.Add(trimmed);
+                        break;
+                    }
+                }
+            }
+        }
+
+        Assert.Empty(terminatingSubroutines);
+    }
 }
 

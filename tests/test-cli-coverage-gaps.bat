@@ -18,10 +18,10 @@ REM --- Utility flags ---
 echo [ INFO ] Test: --benchmark runs and produces output
 %ZIPPER_CMD% --benchmark >nul 2>&1
 if not errorlevel 2 (
-    echo [ INFO ] PASS: --benchmark ran (exit 0 or 1 acceptable)
+    echo [ INFO ] PASS: --benchmark ran ^(exit 0 or 1 acceptable^)
     set /a PASSED+=1
 ) else (
-    echo [ ERROR ] FAIL: --benchmark crashed (exit errorlevel %errorlevel%)
+    echo [ ERROR ] FAIL: --benchmark crashed ^(exit errorlevel !ERRORLEVEL!^)
     set /a FAILED+=1
 )
 
@@ -79,7 +79,7 @@ if !ZIPPER_EXIT! equ 0 (
             echo [ INFO ] PASS: --with-families accepted without warning
             set /a PASSED+=1
         ) else (
-            echo [ ERROR ] FAIL: --with-families (no output produced)
+            echo [ ERROR ] FAIL: --with-families ^(no output produced^)
             set /a FAILED+=1
         )
     ) else (
@@ -597,7 +597,7 @@ if exist "%TEST_OUTPUT_DIR%" rmdir /s /q "%TEST_OUTPUT_DIR%"
 echo.
 set /a TOTAL=!PASSED!+!FAILED!
 if !FAILED! equ 0 (
-    echo [ SUCCESS ] All E2E coverage gap tests passed! ^(!PASSED!/!TOTAL!^)
+    echo [ SUCCESS ] All E2E coverage gap tests passed! ^(%PASSED%/%TOTAL%^)
 ) else (
     echo [ ERROR ] E2E coverage gap tests: !FAILED!/!TOTAL! FAILED
     exit /b 1

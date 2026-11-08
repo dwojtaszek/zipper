@@ -1,5 +1,5 @@
 @echo off
-setlocal enabledelayedexpansion
+setlocal disabledelayedexpansion
 
 REM Test script to validate artifact handling in current workflows (Windows wrapper)
 REM Invokes shared deterministic YAML-aware structural validation in workflow_validator.py (#1112)
@@ -19,6 +19,7 @@ if not defined PYCMD (
     exit /b 1
 )
 
+set "PYTHONIOENCODING=utf-8"
 %PYCMD% "%REPO_ROOT%\tools\typesafe-audit\workflow_validator.py" --artifacts %*
 if errorlevel 1 (
     echo [ ERROR ] Artifact handling validation failed.

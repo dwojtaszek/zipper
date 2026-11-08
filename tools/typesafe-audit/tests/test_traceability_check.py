@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -824,6 +826,38 @@ class DeterministicGateRegressions(unittest.TestCase):
         self.assertEqual(1, code)
         self.assertEqual(2, len(report["missing_refs"]))
 
+    def _run_shell_gate(self, *extra_args: str) -> subprocess.CompletedProcess:
+        if sys.platform == "win32":
+            self.skipTest("validate-req-traceability.sh is a Linux-only utility script (tests/README.md)")
+        if shutil.which("bash") is None:
+            self.skipTest("bash not found on PATH")
+        script_path = (REPO_ROOT / "tests/validate-req-traceability.sh").as_posix()
+        env = dict(os.environ)
+        env["PYTHON"] = sys.executable.replace("\\", "/")
+        args = [
+            "bash",
+            script_path,
+            "--strict",
+            *extra_args,
+            "--tsv",
+            self.tsv_path.as_posix(),
+            "--requirements",
+            (self.root / "Requirements.md").as_posix(),
+            "--tests-root",
+            (self.root / "src").as_posix(),
+            "--repo-root",
+            self.root.as_posix(),
+        ]
+        return subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            env=env,
+        )
+
     def test_shell_script_gate_fails_strict_on_nonexistent_reference(self):
         self.tsv_path.write_text(
             "req_id\tcoverage\treference\tnotes\n"
@@ -832,24 +866,12 @@ class DeterministicGateRegressions(unittest.TestCase):
             "REQ_E-008\texemption\t-\tExemption\n",
             encoding="utf-8",
         )
-        script_path = REPO_ROOT / "tests/validate-req-traceability.sh"
-        res = subprocess.run(
-            ["bash", str(script_path), "--strict", "--tsv", str(self.tsv_path), "--requirements", str(self.root / "Requirements.md"), "--tests-root", str(self.root), "--repo-root", str(self.root)],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        res = self._run_shell_gate()
         self.assertEqual(1, res.returncode)
         self.assertIn("missing test references found", res.stderr)
 
     def test_shell_script_gate_succeeds_on_valid_setup(self):
-        script_path = REPO_ROOT / "tests/validate-req-traceability.sh"
-        res = subprocess.run(
-            ["bash", str(script_path), "--strict", "--tsv", str(self.tsv_path), "--requirements", str(self.root / "Requirements.md"), "--tests-root", str(self.root), "--repo-root", str(self.root)],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        res = self._run_shell_gate()
         self.assertEqual(0, res.returncode)
         self.assertIn("Coverage: 100%", res.stdout)
 
@@ -869,13 +891,7 @@ class DeterministicGateRegressions(unittest.TestCase):
         self.assertNotIn("reverse_summary", report_no_rev)
 
     def test_shell_script_gate_supports_reverse_flag(self):
-        script_path = REPO_ROOT / "tests/validate-req-traceability.sh"
-        res = subprocess.run(
-            ["bash", str(script_path), "--strict", "--reverse", "--tsv", str(self.tsv_path), "--requirements", str(self.root / "Requirements.md"), "--tests-root", str(self.root), "--repo-root", str(self.root)],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
+        res = self._run_shell_gate("--reverse")
         self.assertEqual(0, res.returncode)
         self.assertIn("Coverage: 100%", res.stdout)
         self.assertIn("Reverse Traceability Summary (Informational)", res.stdout)

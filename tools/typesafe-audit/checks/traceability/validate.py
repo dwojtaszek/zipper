@@ -161,6 +161,8 @@ def _is_test_class(decl) -> bool:
 def _extract_discovered_test_classes(source_index: SourceIndex) -> set[str]:
     discovered: set[str] = set()
     for cs_path in sorted(source_index.contents.keys()):
+        if cs_path.suffix != ".cs":
+            continue
         if "/bin/" in cs_path.as_posix() or "/obj/" in cs_path.as_posix():
             continue
         decls = source_index.get_classes(cs_path)
