@@ -33,6 +33,8 @@ if [[ -z "$PYTHON_BIN" ]]; then
         echo "Error: Python interpreter not found" >&2
         exit 2
     fi
+else
+    PYTHON_BIN="${PYTHON_BIN//\\//}"
 fi
 
 if [[ ! -f "$RESOLVER" ]]; then

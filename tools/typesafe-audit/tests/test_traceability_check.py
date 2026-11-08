@@ -6,6 +6,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -826,6 +827,8 @@ class DeterministicGateRegressions(unittest.TestCase):
         self.assertEqual(2, len(report["missing_refs"]))
 
     def _run_shell_gate(self, *extra_args: str) -> subprocess.CompletedProcess:
+        if shutil.which("bash") is None:
+            self.skipTest("bash not found on PATH")
         script_path = (REPO_ROOT / "tests/validate-req-traceability.sh").as_posix()
         env = dict(os.environ)
         env["PYTHON"] = sys.executable.replace("\\", "/")
@@ -843,7 +846,15 @@ class DeterministicGateRegressions(unittest.TestCase):
             "--repo-root",
             self.root.as_posix(),
         ]
-        return subprocess.run(args, capture_output=True, text=True, check=False, env=env)
+        return subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            env=env,
+        )
 
     def test_shell_script_gate_fails_strict_on_nonexistent_reference(self):
         self.tsv_path.write_text(
