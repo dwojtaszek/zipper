@@ -272,11 +272,9 @@ rm -f "$SANDBOX_REPORT" "$SANDBOX_RAW"
 # and a matching `:main` label before test cases. Without this, batch execution falls straight into
 # the first helper (:print_success) and exits 0 in ~0.02s without running any tests.
 first_label_line=$(awk '/^[ \t]*:[a-zA-Z0-9_]/ && !/^[ \t]*::/ { print NR; exit }' "$BAT_RUNNER")
-if [[ -n "$first_label_line" ]]; then
-    if ! head -n "$first_label_line" "$BAT_RUNNER" | grep -qiE '^[[:space:]]*goto[[:space:]]+:?main\b'; then
-        DRIFT=1
-        echo "Entry point missing in run-tests.bat: label at line $first_label_line without 'goto :main' before it (#1405)."
-    fi
+if [[ -n "$first_label_line" ]] && ! head -n "$first_label_line" "$BAT_RUNNER" | grep -qiE '^[[:space:]]*goto[[:space:]]+:?main\b'; then
+    DRIFT=1
+    echo "Entry point missing in run-tests.bat: label at line $first_label_line without 'goto :main' before it (#1405)."
 fi
 main_line=$(grep -n -i -E '^[[:space:]]*:main([[:space:]]|$)' "$BAT_RUNNER" | head -n1 | cut -d: -f1 || true)
 first_case_line=$(grep -n -i -E 'call[[:space:]]+:run_test_case[[:space:]]+"Test Case' "$BAT_RUNNER" | head -n1 | cut -d: -f1 || true)
