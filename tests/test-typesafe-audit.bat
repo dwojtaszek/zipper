@@ -207,18 +207,18 @@ REM Negative probe: verify that a workflow fixture without the fork guard or
 REM secret-availability condition fails the strengthened assertions, even if it
 REM contains bare "secret" tokens.
 set NO_GUARD_FIXTURE=%TEMP_DIR%\workflow-no-guard.yml
-findstr /V /R /C:"github\.event\.pull_request\.head\.repo\.fork" /C:"steps\.secret\.outputs\.available" "%WORKFLOW_FILE%" > "%NO_GUARD_FIXTURE%"
-findstr /C:"secret" "%NO_GUARD_FIXTURE%" >nul 2>&1
+%PYCMD% -c "import pathlib, re, sys; text = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8', errors='replace'); lines = [l for l in text.splitlines() if not re.search(r'github\.event\.pull_request\.head\.repo\.fork|steps\.secret\.outputs\.available', l)]; pathlib.Path(sys.argv[2]).write_text('\n'.join(lines) + '\n', encoding='utf-8')" "%WORKFLOW_FILE%" "%NO_GUARD_FIXTURE%"
+%PYCMD% -c "import pathlib, sys; sys.exit(0 if 'secret' in pathlib.Path(sys.argv[1]).read_text(encoding='utf-8', errors='replace') else 1)" "%NO_GUARD_FIXTURE%"
 if errorlevel 1 (
     echo [ ERROR ] Negative probe fixture must contain bare 'secret' token.
     exit /b 1
 )
-findstr /R /C:"github\.event\.pull_request\.head\.repo\.fork" "%NO_GUARD_FIXTURE%" >nul 2>&1
+call :check_contains "fork guard" "github\.event\.pull_request\.head\.repo\.fork" "%NO_GUARD_FIXTURE%" >nul 2>&1
 if not errorlevel 1 (
     echo [ ERROR ] Negative probe failed: fork guard unexpectedly passed on fixture without guards.
     exit /b 1
 )
-findstr /R /C:"steps\.secret\.outputs\.available" "%NO_GUARD_FIXTURE%" >nul 2>&1
+call :check_contains "secret-availability condition" "steps\.secret\.outputs\.available" "%NO_GUARD_FIXTURE%" >nul 2>&1
 if not errorlevel 1 (
     echo [ ERROR ] Negative probe failed: secret-availability condition unexpectedly passed on fixture without guards.
     exit /b 1
@@ -230,13 +230,8 @@ if errorlevel 1 exit /b 1
 
 REM Advisory: the runner must not run in --strict (blocking) mode in CI. Both
 REM token orders are matched, and the dot is escaped so runnerXpy cannot match.
-findstr /R /C:"runner\.py.*--strict" /C:"--strict.*runner\.py" "%WORKFLOW_FILE%" >"%WORKFLOW_CHECK_LOG%" 2>&1
-if errorlevel 2 (
-    echo [ ERROR ] Workflow check failed: advisory mode could not be checked.
-    type "%WORKFLOW_CHECK_LOG%" >&2
-    exit /b 1
-)
-if not errorlevel 1 (
+%PYCMD% -c "import pathlib, re, sys; text = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8', errors='replace'); matches = [l for l in text.splitlines() if re.search(r'runner\.py.*--strict|--strict.*runner\.py', l, re.IGNORECASE)]; [print(l, file=sys.stderr) for l in matches]; sys.exit(1 if matches else 0)" "%WORKFLOW_FILE%" >"%WORKFLOW_CHECK_LOG%" 2>&1
+if errorlevel 1 (
     echo [ ERROR ] Workflow check failed: audit must stay advisory ^(no --strict^)
     type "%WORKFLOW_CHECK_LOG%" >&2
     exit /b 1
@@ -264,7 +259,7 @@ exit /b 0
 :check_contains
 set "CHECK_TARGET=%~3"
 if not defined CHECK_TARGET set "CHECK_TARGET=%WORKFLOW_FILE%"
-findstr /R /C:"%~2" "%CHECK_TARGET%" >"%WORKFLOW_CHECK_LOG%" 2>&1
+%PYCMD% -c "import pathlib, re, sys; p = sys.argv[1]; p = chr(94) + p[2:] if p.startswith(chr(94) * 2) else p; text = pathlib.Path(sys.argv[2]).read_text(encoding='utf-8', errors='replace'); matches = [l for l in text.splitlines() if re.search(p, l)]; [print(l) for l in matches] if matches else print(f'Pattern {p!r} not found in {sys.argv[2]}', file=sys.stderr); sys.exit(0 if matches else 1)" "%~2" "%CHECK_TARGET%" >"%WORKFLOW_CHECK_LOG%" 2>&1
 if errorlevel 1 (
     echo [ ERROR ] Workflow check failed: %~1
     type "%WORKFLOW_CHECK_LOG%" >&2
@@ -274,13 +269,8 @@ echo [ SUCCESS ] Workflow check: %~1
 exit /b 0
 
 :check_absent
-findstr /R /C:"%~2" "%WORKFLOW_FILE%" >"%WORKFLOW_CHECK_LOG%" 2>&1
-if errorlevel 2 (
-    echo [ ERROR ] Workflow check failed: %~1 could not be checked.
-    type "%WORKFLOW_CHECK_LOG%" >&2
-    exit /b 1
-)
-if not errorlevel 1 (
+%PYCMD% -c "import pathlib, re, sys; p = sys.argv[1]; p = chr(94) + p[2:] if p.startswith(chr(94) * 2) else p; text = pathlib.Path(sys.argv[2]).read_text(encoding='utf-8', errors='replace'); matches = [l for l in text.splitlines() if re.search(p, l)]; [print(l, file=sys.stderr) for l in matches]; sys.exit(1 if matches else 0)" "%~2" "%WORKFLOW_FILE%" >"%WORKFLOW_CHECK_LOG%" 2>&1
+if errorlevel 1 (
     echo [ ERROR ] Workflow check failed: %~1 must be absent
     type "%WORKFLOW_CHECK_LOG%" >&2
     exit /b 1
