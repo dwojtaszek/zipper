@@ -256,7 +256,7 @@ call :cleanup
 set /a TOTAL=PASSED+FAILED
 echo.
 if "%FAILED%"=="0" (
-    echo [ SUCCESS ] All E2E validator guard-parity tests passed! (%PASSED%/%TOTAL%)
+    echo [ SUCCESS ] All E2E validator guard-parity tests passed^! ^(%PASSED%/%TOTAL%^)
     exit /b 0
 )
 echo [ ERROR ] E2E validator guard-parity tests: %FAILED%/%TOTAL% FAILED

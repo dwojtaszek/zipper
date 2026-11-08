@@ -228,7 +228,7 @@ if errorlevel 2 (
     exit /b 1
 )
 if not errorlevel 1 (
-    echo [ ERROR ] Workflow check failed: audit must stay advisory (no --strict)
+    echo [ ERROR ] Workflow check failed: audit must stay advisory ^(no --strict^)
     type "%WORKFLOW_CHECK_LOG%" >&2
     exit /b 1
 )

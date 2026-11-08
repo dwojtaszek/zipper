@@ -44,7 +44,7 @@ if not defined DAT_FILE (
 
 for %%f in ("%TEST_OUTPUT_DIR%\mixed_archive\*.opt") do set OPT_FILE=%%f
 if not defined OPT_FILE (
-  echo [ ERROR ] Test 1: No .opt file found (tiff in mix should default to DAT+OPT)
+  echo [ ERROR ] Test 1: No .opt file found ^(tiff in mix should default to DAT+OPT^)
   exit /b 1
 )
 

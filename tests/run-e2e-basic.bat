@@ -305,7 +305,7 @@ echo [ INFO ] Cleaning up...
 if exist "%TEST_OUTPUT_DIR%" rmdir /s /q "%TEST_OUTPUT_DIR%"
 
 if %TESTS_PASSED% equ %TESTS_TOTAL% (
-    echo [ SUCCESS ] All basic E2E smoke tests passed! (%TESTS_PASSED%/%TESTS_TOTAL%)
+    echo [ SUCCESS ] All basic E2E smoke tests passed^! ^(%TESTS_PASSED%/%TESTS_TOTAL%^)
     exit /b 0
 ) else (
     echo [ ERROR ] E2E smoke tests failed: %TESTS_PASSED%/%TESTS_TOTAL% passed

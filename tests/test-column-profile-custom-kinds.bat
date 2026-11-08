@@ -64,13 +64,13 @@ echo         if not line:
 echo             continue
 echo         fields = [c.strip(QUOTE^) for c in line.split(COL_SEP^)]
 echo         rows.append(dict(zip(headers, fields^)^)^)
-echo assert len(rows^) == 2000, f"Expected 2000 rows, got {len(rows)}"
+echo assert len(rows^) == 2000, f"Expected 2000 rows, got {len(rows^)}"
 echo errors = []
 echo for i, row in enumerate(rows^):
 echo     if len(row^) != 14:
-echo         errors.append(f"Row {i+1}: expected 14 cols, got {len(row)}"^)
+echo         errors.append(f"Row {i+1}: expected 14 cols, got {len(row^)}"^)
 echo if errors:
-echo     sys.exit(f"Column count errors: {len(errors)}"^)
+echo     sys.exit(f"Column count errors: {len(errors^)}"^)
 echo docids = [r['DOCID'] for r in rows]
 echo if len(set(docids^)^) != len(docids^):
 echo     sys.exit("DOCID has duplicates"^)
@@ -108,7 +108,7 @@ echo bad_coded = [r['CODEDFIELD'] for r in rows if r.get('CODEDFIELD'^) and r['C
 echo if bad_coded:
 echo     sys.exit(f"CODEDFIELD invalid: {bad_coded}"^)
 echo email_re = re.compile(r'^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'^)
-echo bad_email = [r['EMAILFIELD'] for r in rows if r.get('EMAILFIELD'^) and not email_re.match(r['EMAILFIELD'])]
+echo bad_email = [r['EMAILFIELD'] for r in rows if r.get('EMAILFIELD'^) and not email_re.match(r['EMAILFIELD']^)]
 echo if bad_email:
 echo     sys.exit(f"EMAILFIELD invalid: {bad_email}"^)
 echo multi_rows = sum(1 for r in rows if ';' in r.get('EMAILMULTI', ''^)^)
