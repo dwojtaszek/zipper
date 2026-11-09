@@ -1,72 +1,72 @@
 {
-  "_captured_on": "ubuntu-latest (5-run median, 2026-11-02)",
+  "_captured_on": "ubuntu-latest (5-run median, 2026-11-09)",
   "_methodology": "Run measure.sh 5x with --seed 42, take median(wall_s) and median(rss_kb) per scenario.",
   "_context": {
     "runner_os": "Linux",
-    "runner_image": "ubuntu26 (20261026.180.1)",
+    "runner_image": "ubuntu26 (20261101.186.1)",
     "dotnet_sdk": "10.0.402",
     "seed": 42
   },
   "_variability": {
     "pdf_50k": {
       "wall_s": {
-        "median": 1.92,
-        "min": 1.89,
-        "max": 1.94,
-        "spread": 0.05,
-        "spread_pct": 2.6
+        "median": 2.36,
+        "min": 2.3,
+        "max": 2.38,
+        "spread": 0.08,
+        "spread_pct": 3.4
       },
       "rss_kb": {
-        "median": 125984,
-        "min": 125732,
-        "max": 126180,
-        "spread": 448,
-        "spread_pct": 0.4
+        "median": 188180,
+        "min": 187824,
+        "max": 189276,
+        "spread": 1452,
+        "spread_pct": 0.8
       }
     },
     "eml_20k": {
       "wall_s": {
-        "median": 1.59,
-        "min": 1.53,
-        "max": 1.7,
-        "spread": 0.17,
-        "spread_pct": 10.7
+        "median": 1.89,
+        "min": 1.85,
+        "max": 1.97,
+        "spread": 0.12,
+        "spread_pct": 6.3
       },
       "rss_kb": {
-        "median": 101340,
-        "min": 100516,
-        "max": 101492,
-        "spread": 976,
-        "spread_pct": 1.0
+        "median": 169484,
+        "min": 168196,
+        "max": 169556,
+        "spread": 1360,
+        "spread_pct": 0.8
       }
     },
     "loadfile_200k": {
       "wall_s": {
-        "median": 3.79,
-        "min": 3.73,
-        "max": 3.88,
-        "spread": 0.15,
-        "spread_pct": 4.0
+        "median": 4.64,
+        "min": 4.58,
+        "max": 4.79,
+        "spread": 0.21,
+        "spread_pct": 4.5
       },
       "rss_kb": {
-        "median": 110540,
-        "min": 109388,
-        "max": 111072,
-        "spread": 1684,
-        "spread_pct": 1.5
+        "median": 172880,
+        "min": 172548,
+        "max": 173524,
+        "spread": 976,
+        "spread_pct": 0.6
       }
     }
   },
   "pdf_50k": {
-    "wall_s": 1.92,
-    "rss_kb": 125984
+    "wall_s": 2.36,
+    "rss_kb": 188180
   },
   "eml_20k": {
-    "wall_s": 1.59,
-    "rss_kb": 101340
+    "wall_s": 1.89,
+    "rss_kb": 169484
   },
   "loadfile_200k": {
-    "wall_s": 3.79,
-    "rss_kb": 110540
+    "wall_s": 4.64,
+    "rss_kb": 172880
   }
 }
