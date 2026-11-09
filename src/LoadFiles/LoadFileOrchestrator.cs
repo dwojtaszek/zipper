@@ -55,6 +55,20 @@ internal static class LoadFileOrchestrator
                 await auditWriter.WriteAsync(auditJson.AsMemory(), cancellationToken).ConfigureAwait(false);
             }
 
+            if (request.Chaos.ChaosMode
+                && anomalies is not null
+                && !ChaosScenarios.GeneratesAdversarialValues(request.Chaos.ChaosScenario))
+            {
+                var sidecarJson = LoadFileAuditWriter.GenerateExpectationSidecarJson(
+                    loadFileTarget, request, processedFiles, anomalies, format);
+                var sidecarStream = openTarget(LoadFileAuditWriter.ExpectationSidecarPath(auditTarget));
+                await using (sidecarStream.ConfigureAwait(false))
+                {
+                    using var sidecarWriter = new System.IO.StreamWriter(sidecarStream);
+                    await sidecarWriter.WriteAsync(sidecarJson.AsMemory(), cancellationToken).ConfigureAwait(false);
+                }
+            }
+
             lastLoadFileTarget = loadFileTarget;
         }
 

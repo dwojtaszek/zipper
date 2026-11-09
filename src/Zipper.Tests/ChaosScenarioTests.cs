@@ -345,6 +345,69 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public async Task LoadfileOnly_ChaosRun_EmitsExpectationSidecarThatValidatesAgainstProducedOutput()
+    {
+        var tempPath = Path.Combine(this.TempDir, $"zipper_{Guid.NewGuid():N}");
+        try
+        {
+            var (exitCode, _, stderr) = await RunWithCapture(new[]
+            {
+                "--loadfile-only", "--count", "50", "--output-path", tempPath,
+                "--chaos-mode", "--chaos-types", "path-pointer,columns", "--chaos-amount", "10", "--seed", "42",
+            });
+
+            // ValidationOrchestrator dogfoods the sidecar in the same run: a mismatch would fail generation.
+            Assert.Equal(0, exitCode);
+            Assert.Empty(stderr);
+
+            var sidecarPath = Assert.Single(Directory.GetFiles(tempPath, "*_chaos_expectations.json"));
+            using var sidecar = JsonDocument.Parse(File.ReadAllText(sidecarPath));
+            var root = sidecar.RootElement;
+
+            Assert.Equal(1, root.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal("dat", root.GetProperty("loadFileFormat").GetString());
+            Assert.True(root.GetProperty("totalAnomalies").GetInt32() > 0);
+            Assert.True(root.GetProperty("invariants").GetProperty("remainingRecordsParseCleanly").GetBoolean());
+
+            foreach (var anomaly in root.GetProperty("anomalies").EnumerateArray())
+            {
+                Assert.Contains(anomaly.GetProperty("outcomeClass").GetString(), ChaosOutcomeClasses.All);
+                Assert.NotEmpty(anomaly.GetProperty("errorType").GetString()!);
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(tempPath))
+            {
+                Directory.Delete(tempPath, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task LoadfileOnly_NonChaosRun_DoesNotEmitExpectationSidecar()
+    {
+        var tempPath = Path.Combine(this.TempDir, $"zipper_{Guid.NewGuid():N}");
+        try
+        {
+            var (exitCode, _, _) = await RunWithCapture(new[]
+            {
+                "--loadfile-only", "--count", "5", "--output-path", tempPath,
+            });
+
+            Assert.Equal(0, exitCode);
+            Assert.Empty(Directory.GetFiles(tempPath, "*_chaos_expectations.json"));
+        }
+        finally
+        {
+            if (Directory.Exists(tempPath))
+            {
+                Directory.Delete(tempPath, true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task ChaosScenario_WithChaosTypes_ReturnsConflictError()
     {
         var tempPath = Path.Combine(this.TempDir, $"zipper_{Guid.NewGuid():N}");

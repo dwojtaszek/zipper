@@ -340,4 +340,125 @@ public class LoadFileAuditWriterTests : TempDirectoryTestBase
         Assert.Equal(42L, doc.RootElement.GetProperty("totalRecords").GetInt64());
         Assert.True(doc.RootElement.GetProperty("chaosMode").GetProperty("injectedAnomalies")[0].TryGetProperty("peer", out _));
     }
+
+    // ---- Chaos expectation sidecar tests ----
+
+    private static FileGenerationRequest CreateChaosRequest(int fileCount = 50) => new()
+    {
+        Output = new OutputConfig { FileCount = fileCount },
+        LoadFile = new LoadFileConfig { Formats = new List<LoadFileFormat> { LoadFileFormat.Dat } },
+        Chaos = new ChaosConfig { ChaosMode = true, ChaosAmount = "5%" },
+        Metadata = new MetadataConfig { Seed = 42 },
+    };
+
+    [Fact]
+    public void GenerateExpectationSidecarJson_WithAnomalies_RecordsOutcomeClassPerAnomaly()
+    {
+        // Arrange
+        var request = CreateChaosRequest();
+        var anomalies = new List<ChaosAnomaly>
+        {
+            new() { LineNumber = "12", RecordID = "DOC001", Column = "FILEPATH", ErrorType = "path-pointer", Description = "missing path" },
+            new() { LineNumber = "13", RecordID = "DOC002", Column = "N/A", ErrorType = "columns", Description = "column shift" },
+        };
+
+        // Act
+        var json = LoadFileAuditWriter.GenerateExpectationSidecarJson("test.dat", request, Array.Empty<FileData>(), anomalies);
+
+        // Assert
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        Assert.Equal(1, root.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal("test.dat", root.GetProperty("loadFile").GetString());
+        Assert.Equal("dat", root.GetProperty("loadFileFormat").GetString());
+        Assert.Equal(2, root.GetProperty("totalAnomalies").GetInt32());
+        Assert.Equal(50, root.GetProperty("invariants").GetProperty("expectedDataRecords").GetInt64());
+        Assert.True(root.GetProperty("invariants").GetProperty("remainingRecordsParseCleanly").GetBoolean());
+
+        var entries = root.GetProperty("anomalies");
+        Assert.Equal(2, entries.GetArrayLength());
+        Assert.Equal(ChaosOutcomeClasses.ParseSucceedsWithLoss, entries[0].GetProperty("outcomeClass").GetString());
+        Assert.Equal("path-pointer", entries[0].GetProperty("errorType").GetString());
+        Assert.Equal("12", entries[0].GetProperty("lineNumber").GetString());
+        Assert.Equal("DOC001", entries[0].GetProperty("recordID").GetString());
+        Assert.Equal("FILEPATH", entries[0].GetProperty("columns")[0].GetString());
+        Assert.Equal(ChaosOutcomeClasses.ParseFails, entries[1].GetProperty("outcomeClass").GetString());
+        Assert.Equal(0, entries[1].GetProperty("columns").GetArrayLength());
+    }
+
+    [Fact]
+    public void GenerateExpectationSidecarJson_WithoutAnomalies_EmitsEmptyOracle()
+    {
+        var request = CreateChaosRequest(10);
+
+        var json = LoadFileAuditWriter.GenerateExpectationSidecarJson("test.opt", request, Array.Empty<FileData>(), [], LoadFileFormat.Opt);
+        long expectedRecords = JsonDocument.Parse(
+            LoadFileAuditWriter.GenerateAuditJson("test.opt", request, Array.Empty<FileData>(), [], LoadFileFormat.Opt))
+            .RootElement.GetProperty("totalRecords").GetInt64();
+
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        Assert.Equal("opt", root.GetProperty("loadFileFormat").GetString());
+        Assert.Equal(0, root.GetProperty("totalAnomalies").GetInt32());
+        Assert.Equal(0, root.GetProperty("anomalies").GetArrayLength());
+        Assert.Equal(expectedRecords, root.GetProperty("invariants").GetProperty("expectedDataRecords").GetInt64());
+    }
+
+    [Fact]
+    public async Task WriteAsync_ChaosRun_WritesExpectationSidecarNextToAudit()
+    {
+        // Arrange
+        var loadFile = Path.Combine(this.TempDir, "loadfile.dat");
+        var request = CreateChaosRequest();
+        var anomalies = new List<ChaosAnomaly>
+        {
+            new() { LineNumber = "2", RecordID = "DOC001", Column = "FILEPATH", ErrorType = "path-pointer", Description = "missing path" },
+        };
+
+        // Act
+        var propertiesPath = await LoadFileAuditWriter.WriteAsync(loadFile, request, Array.Empty<FileData>(), anomalies);
+        var sidecarPath = LoadFileAuditWriter.ExpectationSidecarPath(propertiesPath);
+
+        // Assert
+        Assert.True(File.Exists(sidecarPath), $"Expected sidecar at {sidecarPath}");
+        using var doc = JsonDocument.Parse(await File.ReadAllTextAsync(sidecarPath));
+        Assert.Equal(Path.GetFileName(loadFile), doc.RootElement.GetProperty("loadFile").GetString());
+        Assert.Equal(1, doc.RootElement.GetProperty("totalAnomalies").GetInt32());
+    }
+
+    [Fact]
+    public async Task WriteAsync_WithoutChaos_DoesNotWriteExpectationSidecar()
+    {
+        // Arrange
+        var loadFile = Path.Combine(this.TempDir, "loadfile.dat");
+        var request = CreateChaosRequest();
+        request.Chaos = request.Chaos with { ChaosMode = false };
+
+        // Act
+        var propertiesPath = await LoadFileAuditWriter.WriteAsync(loadFile, request, Array.Empty<FileData>(), null);
+
+        // Assert
+        Assert.True(File.Exists(propertiesPath));
+        Assert.False(File.Exists(LoadFileAuditWriter.ExpectationSidecarPath(propertiesPath)));
+    }
+
+    [Fact]
+    public async Task WriteAsync_AdversarialValuesRun_DoesNotWriteExpectationSidecar()
+    {
+        // Arrange: adversarial-values generates producer-valid values, not anomalies.
+        var loadFile = Path.Combine(this.TempDir, "loadfile.dat");
+        var request = CreateChaosRequest();
+        request.Chaos = request.Chaos with { ChaosScenario = "adversarial-values" };
+        var anomalies = new List<ChaosAnomaly>
+        {
+            new() { LineNumber = "2", RecordID = "DOC001", Column = "Enjoyment", ErrorType = "path-pointer", Description = "missing path" },
+        };
+
+        // Act
+        var propertiesPath = await LoadFileAuditWriter.WriteAsync(loadFile, request, Array.Empty<FileData>(), anomalies);
+
+        // Assert
+        Assert.True(File.Exists(propertiesPath));
+        Assert.False(File.Exists(LoadFileAuditWriter.ExpectationSidecarPath(propertiesPath)));
+    }
 }

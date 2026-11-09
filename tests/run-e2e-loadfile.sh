@@ -170,6 +170,16 @@ print_info "Chaos anomalies injected: $anomaly_count"
 # Verify InjectedAnomalies array exists
 grep -q '"injectedAnomalies"' "$props_file" || print_error "Missing InjectedAnomalies array"
 
+# Verify the Chaos Expectation Sidecar is emitted next to the Audit File (REQ-242)
+sidecar_file=$(find "$TEST_OUTPUT_DIR/dat_chaos" -name "*_chaos_expectations.json" -print -quit)
+[[ -z "$sidecar_file" ]] && print_error "No _chaos_expectations.json sidecar found for chaos test"
+grep -q '"schemaVersion": 1' "$sidecar_file" || print_error "Sidecar schemaVersion missing"
+grep -q '"outcomeClass"' "$sidecar_file" || print_error "Sidecar outcomeClass missing"
+grep -Eq '"outcomeClass": "(parse-fails|parse-succeeds-with-loss|silent-pass)"' "$sidecar_file" || \
+    print_error "Sidecar has no known outcome class"
+grep -q '"expectedDataRecords"' "$sidecar_file" || print_error "Sidecar expectedDataRecords invariant missing"
+print_info "Chaos expectation sidecar OK"
+
 PASSED=$((PASSED + 1))
 print_success "Test 4: Chaos mode — PASSED"
 

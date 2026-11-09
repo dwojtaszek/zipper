@@ -692,6 +692,23 @@ internal static class ProductionSetOrchestrator
                 await sw.WriteAsync(datAuditJson.AsMemory(), cancellationToken).ConfigureAwait(false);
             }
 
+            if (request.Chaos.ChaosMode && !ChaosScenarios.GeneratesAdversarialValues(request.Chaos.ChaosScenario))
+            {
+                var datSidecarJson = LoadFileAuditWriter.GenerateExpectationSidecarJson(
+                    datPath,
+                    request,
+                    fileDataList,
+                    result.DatAnomalies,
+                    LoadFileFormat.Dat,
+                    expectedDataRecords: result.DatLines.Count - 1L);
+                var datSidecarStream = materializer.OpenWriteStream(LoadFileAuditWriter.ExpectationSidecarPath(datAuditTarget));
+                await using (datSidecarStream.ConfigureAwait(false))
+                {
+                    using var sw = new StreamWriter(datSidecarStream, new UTF8Encoding(false), leaveOpen: true);
+                    await sw.WriteAsync(datSidecarJson.AsMemory(), cancellationToken).ConfigureAwait(false);
+                }
+            }
+
             // Write OPT
             var optStream = materializer.OpenWriteStream(optPath);
             await using (optStream.ConfigureAwait(false))
@@ -717,6 +734,23 @@ internal static class ProductionSetOrchestrator
             {
                 using var sw = new StreamWriter(optAuditStream, new UTF8Encoding(false), leaveOpen: true);
                 await sw.WriteAsync(optAuditJson.AsMemory(), cancellationToken).ConfigureAwait(false);
+            }
+
+            if (request.Chaos.ChaosMode && !ChaosScenarios.GeneratesAdversarialValues(request.Chaos.ChaosScenario))
+            {
+                var optSidecarJson = LoadFileAuditWriter.GenerateExpectationSidecarJson(
+                    optPath,
+                    request,
+                    fileDataList,
+                    result.OptAnomalies,
+                    LoadFileFormat.Opt,
+                    expectedDataRecords: result.OptLines.Count);
+                var optSidecarStream = materializer.OpenWriteStream(LoadFileAuditWriter.ExpectationSidecarPath(optAuditTarget));
+                await using (optSidecarStream.ConfigureAwait(false))
+                {
+                    using var sw = new StreamWriter(optSidecarStream, new UTF8Encoding(false), leaveOpen: true);
+                    await sw.WriteAsync(optSidecarJson.AsMemory(), cancellationToken).ConfigureAwait(false);
+                }
             }
 
             return (datPath, optPath);
