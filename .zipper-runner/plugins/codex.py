@@ -120,7 +120,10 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
     try:
         result = subprocess.run(
             base,
-            input=prompt,
+            # Remote CI can outlast the mission bound; the runner owns that wait.
+            input=prompt + "\n\nRunner handoff: After completing local validation and any requested PR "
+                         "publication, return immediately. Do not watch or wait for remote CI. "
+                         "The parent runner owns CI monitoring and subsequent repair missions.",
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,

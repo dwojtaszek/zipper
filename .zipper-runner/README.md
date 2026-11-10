@@ -262,3 +262,4 @@ Native checkout paths are resolved relative to the scripts. Override `RUNNER_BAS
 Codex CLI must be on the runner service PATH and authenticated (`codex login status`).
 The Codex plugin defaults to `gpt-6.1-sol` and explicitly sets `model_reasoning_effort="low"` for both health probes and missions. `AGENT_PREFERENCES.md` enables `openai/gpt-6.1-sol` at priority 1; other enabled agents remain fallbacks.
 For a controlled intake, run `python3 .zipper-runner/runner.py --agent codex --model openai/gpt-6.1-sol`; normal capacity, queue ordering, and mission locks still apply.
+The Codex mission hands control back after local validation and PR publication; the parent runner monitors remote CI, which can exceed the 15-minute mission bound.

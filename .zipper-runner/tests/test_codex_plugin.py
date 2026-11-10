@@ -23,6 +23,7 @@ class CodexPluginTests(unittest.TestCase):
                 "import json, os, sys\n"
                 "from pathlib import Path\n"
                 "Path(os.environ['CODEX_TEST_INVOCATION']).write_text(json.dumps(sys.argv[1:]))\n"
+                "Path(os.environ['CODEX_TEST_INVOCATION'] + '.stdin').write_text(sys.stdin.read()) if sys.argv[-1] != 'say ok' else None\n"
                 "print('ok')\n"
             )
             executable.chmod(0o755)
@@ -34,5 +35,8 @@ class CodexPluginTests(unittest.TestCase):
                 for model in (None, "default", "openai/gpt-6.1-sol", "openai/gpt-5.5"):
                     code, _, err = plugin.run_mission("Keep quotes ' and $ literal", directory, model=model)
                     self.assertEqual((code, err), (0, ""))
+                    received = (Path(directory) / "invocation.json.stdin").read_text()
+                    self.assertTrue(received.startswith("Keep quotes ' and $ literal\n\n"))
+                    self.assertIn("Do not watch or wait for remote CI", received)
                     argv = json.loads((Path(directory) / "invocation.json").read_text())
                     self.assertEqual(argv, ["exec", "--ephemeral", "-m", "gpt-5.5" if model == "openai/gpt-5.5" else "gpt-6.1-sol", "-c", 'model_reasoning_effort="low"'])
