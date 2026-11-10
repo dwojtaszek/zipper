@@ -256,3 +256,9 @@ While Bash is excellent for setting up environments, it is notoriously fragile w
 ## Configuration
 
 Native checkout paths are resolved relative to the scripts. Override `RUNNER_BASE`, `REPO_PATH`, `WORKTREES_BASE`, `DOTNET_ROOT`, and `EMAIL_RECIPIENT` for another installation. Keep credentials in the ignored `.env` or the process environment. GitHub repository endpoints remain Zipper-specific.
+
+### Codex on dom
+
+Codex CLI must be on the runner service PATH and authenticated (`codex login status`).
+The Codex plugin defaults to `gpt-6.1-sol` and explicitly sets `model_reasoning_effort="low"` for both health probes and missions. `AGENT_PREFERENCES.md` enables `openai/gpt-6.1-sol` at priority 1; other enabled agents remain fallbacks.
+For a controlled intake, run `python3 .zipper-runner/runner.py --agent codex --model openai/gpt-6.1-sol`; normal capacity, queue ordering, and mission locks still apply.
