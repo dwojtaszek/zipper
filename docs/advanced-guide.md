@@ -370,9 +370,9 @@ zipper --compare-production-manifests "/path/to/prior1/_manifest.json,/path/to/p
 
 ## 6. Audit & Manifest File Schemas
 
-### `_properties.json` (Loadfile-Only Audit File)
+### `_properties.json` (Audit File)
 
-Written alongside standalone Load Files in Loadfile-Only Mode using `camelCase` schema:
+Written with every generated Load File in every generation mode (a sidecar on disk, or an entry inside the Archive with `--include-load-file`) using `camelCase` schema:
 
 ```json
 {

@@ -4,7 +4,8 @@ using System.Text.Json.Serialization;
 namespace Zipper;
 
 /// <summary>
-/// Generates the companion _properties.json audit file for loadfile-only mode.
+/// Generates the companion _properties.json audit file emitted with every generated Load File in every generation mode.
+/// The chaos anomaly manifest is populated whenever the run injects Anomalies (including Production Set and Standard Mode native-file chaos).
 /// </summary>
 internal static class LoadFileAuditWriter
 {

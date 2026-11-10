@@ -159,6 +159,32 @@ public class DocsDriftTests
     }
 
     [Fact]
+    public void AuditFileDefinitions_CoverEveryGenerationMode()
+    {
+        var languageLines = File.ReadAllLines(Path.Combine(RepoRoot, "UBIQUITOUS_LANGUAGE.md"));
+        var auditRow = Assert.Single(languageLines, l => l.StartsWith("| **Audit File**", StringComparison.Ordinal));
+        Assert.Contains("every generation mode", auditRow);
+        Assert.Contains("Standard Mode", auditRow);
+        Assert.Contains("Loadfile-Only Mode", auditRow);
+        Assert.Contains("Production Set", auditRow);
+
+        var requirement = Assert.Single(File.ReadAllLines(Path.Combine(RepoRoot, "Requirements.md")),
+            l => l.StartsWith("- **REQ-090**:", StringComparison.Ordinal));
+        Assert.Contains("Every generation mode", requirement);
+        Assert.Contains("When the Chaos Engine injects anomalies", requirement);
+        Assert.Contains("chaos anomaly manifest", requirement);
+
+        var auditWriterSource = File.ReadAllText(Path.Combine(RepoRoot, "src", "LoadFileAuditWriter.cs"));
+        Assert.DoesNotContain("for loadfile-only mode", auditWriterSource, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("only in loadfile-only mode", auditWriterSource, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("every generation mode", auditWriterSource);
+
+        var advancedGuide = File.ReadAllText(Path.Combine(RepoRoot, "docs", "advanced-guide.md"));
+        Assert.DoesNotContain("Loadfile-Only Audit File", advancedGuide);
+        Assert.Contains("Written with every generated Load File in every generation mode", advancedGuide);
+    }
+
+    [Fact]
     public void Architecture_ComponentMapAndOverview_DocumentsTwelveModulesAndValidationOrchestrator()
     {
         var archPath = Path.Combine(RepoRoot, "docs", "architecture.md");
