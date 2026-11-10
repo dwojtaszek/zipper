@@ -525,6 +525,69 @@ public sealed class ValidationPropertyTests : IDisposable
     }
 
     // ------------------------------------------------------------------
+    // Chaos expectation sidecar — serializer/parser round-trip and mutations
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Round-trip at the production seam: the sidecar emitted by
+    /// <see cref="LoadFileAuditWriter.GenerateExpectationSidecarJson"/> for an arbitrary run must
+    /// parse and validate against that run's produced DAT with zero findings.
+    /// </summary>
+    [Property]
+    public void ChaosExpectationValidator_Validate_GeneratedSidecarShouldMatchProducedOutput(ChaosExpectationCaseInput input)
+    {
+        var (loadFile, sidecar, _) = this.CreateChaosExpectationCase(input, "chaos_sidecar");
+
+        var result = new ChaosExpectationValidator().Validate(loadFile, sidecar, CreateDatSidecarRequest());
+
+        Assert.False(result.HasErrors, result.GetSummary());
+    }
+
+    /// <summary>
+    /// A sidecar whose recorded record count drifts by one from the produced output must be
+    /// rejected by the count invariant, not silently accepted.
+    /// </summary>
+    [Property]
+    public void ChaosExpectationValidator_Validate_DriftedRecordCountShouldReportCountError(ChaosExpectationCaseInput input)
+    {
+        var (loadFile, sidecar, recordCount) = this.CreateChaosExpectationCase(input, "chaos_sidecar_drift");
+        var node = JsonNode.Parse(File.ReadAllText(sidecar))!;
+        node["invariants"]!["expectedDataRecords"] = recordCount + 1;
+        File.WriteAllText(sidecar, node.ToJsonString());
+
+        var result = new ChaosExpectationValidator().Validate(loadFile, sidecar, CreateDatSidecarRequest());
+
+        Assert.True(result.HasErrors);
+        Assert.Contains(result.Findings, finding => finding.Message.Contains("record count", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// A syntactically valid sidecar with a wrong-typed field must yield an error finding
+    /// instead of aborting the caller with an exception.
+    /// </summary>
+    [Property]
+    public void ChaosExpectationValidator_Validate_WrongTypedFieldShouldReportErrorWithoutThrowing(ChaosExpectationCaseInput input)
+    {
+        var (loadFile, sidecar, _) = this.CreateChaosExpectationCase(input, "chaos_sidecar_type");
+        var node = JsonNode.Parse(File.ReadAllText(sidecar))!;
+        if (input.MutationKind % 2 == 0 && node["anomalies"] is JsonArray { Count: > 0 } anomalies)
+        {
+            anomalies[0]!["errorType"] = 42;
+        }
+        else
+        {
+            node["loadFile"] = 42;
+        }
+
+        File.WriteAllText(sidecar, node.ToJsonString());
+
+        var result = new ChaosExpectationValidator().Validate(loadFile, sidecar, CreateDatSidecarRequest());
+
+        Assert.True(result.HasErrors);
+        Assert.Contains(result.Findings, finding => finding.Message.Contains("unexpected JSON type", StringComparison.Ordinal));
+    }
+
+    // ------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------
 
@@ -533,6 +596,59 @@ public sealed class ValidationPropertyTests : IDisposable
         var dir = Path.Combine(this.tempRoot, $"{label}_{Guid.NewGuid():N}");
         Directory.CreateDirectory(dir);
         return dir;
+    }
+
+    private static FileGenerationRequest CreateDatSidecarRequest() => new()
+    {
+        LoadFile = new LoadFileConfig { Formats = new List<LoadFileFormat> { LoadFileFormat.Dat }, Encoding = "UTF-8", IsEncodingExplicit = true },
+        Delimiters = new DelimiterConfig { ColumnDelimiter = ColDelim.ToString(), QuoteDelimiter = QuoteDelim.ToString() },
+        Chaos = new ChaosConfig { ChaosMode = true },
+    };
+
+    /// <summary>
+    /// Writes a DAT with <paramref name="input"/>'s record count and a sidecar produced by the
+    /// production serializer for value-level anomalies that leave every record parseable. The
+    /// sidecar records the exact record count, so only the mutation under test breaks agreement.
+    /// </summary>
+    private (string LoadFile, string Sidecar, int RecordCount) CreateChaosExpectationCase(ChaosExpectationCaseInput input, string label)
+    {
+        int recordCount = Math.Clamp(input.RecordCount, 1, 8);
+        var caseDir = this.CreateCaseDirectory(label);
+        var loadFilePath = Path.Combine(caseDir, "loadfile.dat");
+
+        var rows = new List<string> { JoinDatFields("DOCID", "AUTHOR") };
+        for (int i = 0; i < recordCount; i++)
+        {
+            rows.Add(JoinDatFields($"DOC{i:D8}", $"Author {i}"));
+        }
+
+        File.WriteAllText(loadFilePath, string.Join("\r\n", rows) + "\r\n");
+
+        string[] valueLevelTypes = ["path-pointer", "field-length", "date-format", "null-byte"];
+        int anomalyCount = Math.Min(input.AnomalyCount, recordCount);
+        var anomalies = new List<ChaosAnomaly>(anomalyCount);
+        for (int i = 0; i < anomalyCount; i++)
+        {
+            int recordIndex = (input.LineSeed + i) % recordCount;
+            anomalies.Add(new ChaosAnomaly
+            {
+                ErrorType = valueLevelTypes[(input.TypeSeed + i) % valueLevelTypes.Length],
+                LineNumber = (2 + recordIndex).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                RecordID = $"DOC{recordIndex:D8}",
+                Column = "AUTHOR",
+            });
+        }
+
+        string sidecarJson = LoadFileAuditWriter.GenerateExpectationSidecarJson(
+            loadFilePath,
+            CreateDatSidecarRequest(),
+            Array.Empty<FileData>(),
+            anomalies,
+            LoadFileFormat.Dat,
+            expectedDataRecords: recordCount);
+        var sidecarPath = Path.Combine(caseDir, "loadfile_chaos_expectations.json");
+        File.WriteAllText(sidecarPath, sidecarJson);
+        return (loadFilePath, sidecarPath, recordCount);
     }
 
     private static FileGenerationRequest CreateStandardModeRequest(string outputPath, int fileCount) => new()

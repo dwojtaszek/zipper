@@ -701,4 +701,62 @@ public class PostGenerationValidatorTests : TempDirectoryTestBase
             File.Delete(tempFile);
         }
     }
+
+    [Fact]
+    public void ValidationOrchestrator_RunAfterGeneration_NonChaosContextIgnoresStaleSidecar()
+    {
+        // A sidecar left beside a reused output path must not fail a run that is not a Chaos run.
+        var loadFile = Path.Combine(this.TempDir, $"loadfile_{Guid.NewGuid():N}.dat");
+        var sidecar = Path.Combine(this.TempDir, $"{Path.GetFileNameWithoutExtension(loadFile)}_chaos_expectations.json");
+        try
+        {
+            File.WriteAllText(loadFile, "DOCID\u0014AUTHOR\r\nDOC1\u0014Alice\r\n");
+            File.WriteAllText(
+                sidecar,
+                $$"""{"schemaVersion":1,"loadFile":"{{Path.GetFileName(loadFile)}}","loadFileFormat":"dat","totalAnomalies":0,"invariants":{"expectedDataRecords":5,"remainingRecordsParseCleanly":true},"anomalies":[]}""");
+            var ctx = new ValidationContext
+            {
+                LoadFiles = new Dictionary<string, string> { ["dat"] = loadFile },
+                Request = new FileGenerationRequest(),
+                SkipEolValidation = true,
+                IsChaosMode = false,
+            };
+
+            ValidationOrchestrator.RunAfterGeneration(ctx);
+        }
+        finally
+        {
+            File.Delete(loadFile);
+            File.Delete(sidecar);
+        }
+    }
+
+    [Fact]
+    public void ValidationOrchestrator_RunAfterGeneration_ChaosContextValidatesSidecar()
+    {
+        // The same stale sidecar is validated (and fails) when the run is a Chaos run.
+        var loadFile = Path.Combine(this.TempDir, $"loadfile_{Guid.NewGuid():N}.dat");
+        var sidecar = Path.Combine(this.TempDir, $"{Path.GetFileNameWithoutExtension(loadFile)}_chaos_expectations.json");
+        try
+        {
+            File.WriteAllText(loadFile, "DOCID\u0014AUTHOR\r\nDOC1\u0014Alice\r\n");
+            File.WriteAllText(
+                sidecar,
+                $$"""{"schemaVersion":1,"loadFile":"{{Path.GetFileName(loadFile)}}","loadFileFormat":"dat","totalAnomalies":0,"invariants":{"expectedDataRecords":5,"remainingRecordsParseCleanly":true},"anomalies":[]}""");
+            var ctx = new ValidationContext
+            {
+                LoadFiles = new Dictionary<string, string> { ["dat"] = loadFile },
+                Request = new FileGenerationRequest(),
+                SkipEolValidation = true,
+                IsChaosMode = true,
+            };
+
+            Assert.Throws<InvalidOperationException>(() => ValidationOrchestrator.RunAfterGeneration(ctx));
+        }
+        finally
+        {
+            File.Delete(loadFile);
+            File.Delete(sidecar);
+        }
+    }
 }

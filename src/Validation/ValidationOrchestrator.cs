@@ -20,14 +20,19 @@ public static class ValidationOrchestrator
         var vr = validator.Validate(context);
 
         // Dogfood the Chaos expectation oracle: when a chaos run emitted a sidecar, verify the
-        // produced Load File against it in the same run. Normal validation remains skipped for chaos runs.
-        var expectationValidator = new ChaosExpectationValidator();
-        foreach (var (formatName, loadFilePath) in context.LoadFiles)
+        // produced Load File against it in the same run. Discovery is limited to eligible chaos
+        // runs so a stale sidecar beside a reused output path cannot fail an unrelated run.
+        // Normal validation remains skipped for chaos runs.
+        if (context.IsChaosMode)
         {
-            var sidecarPath = FindExpectationSidecar(loadFilePath, formatName);
-            if (sidecarPath is not null)
+            var expectationValidator = new ChaosExpectationValidator();
+            foreach (var (formatName, loadFilePath) in context.LoadFiles)
             {
-                vr.AddRange(expectationValidator.Validate(loadFilePath, sidecarPath, context.Request).Findings);
+                var sidecarPath = FindExpectationSidecar(loadFilePath, formatName);
+                if (sidecarPath is not null)
+                {
+                    vr.AddRange(expectationValidator.Validate(loadFilePath, sidecarPath, context.Request).Findings);
+                }
             }
         }
 

@@ -177,4 +177,137 @@ public class ChaosExpectationValidatorTests : TempDirectoryTestBase
         Assert.True(result.HasErrors);
         Assert.Contains(result.Findings, finding => finding.Category == "ChaosExpectation");
     }
+
+    [Fact]
+    public void Validate_WrongTypedSidecarField_ReportsTypeErrorInsteadOfThrowing()
+    {
+        // Arrange: a valid JSON sidecar whose errorType is a number instead of a string.
+        var (loadFile, sidecar) = this.WriteRun(
+            """
+            {"schemaVersion":1,"loadFile":"loadfile.dat","loadFileFormat":"dat","totalAnomalies":1,
+             "invariants":{"expectedDataRecords":2,"remainingRecordsParseCleanly":true},
+             "anomalies":[{"errorType":5,"outcomeClass":"parse-succeeds-with-loss","lineNumber":"2","recordID":"DOC00000001"}]}
+            """,
+            DatRow("DOC00000001", "Alice"),
+            DatRow("DOC00000002", "Bob"));
+
+        // Act
+        var result = new ChaosExpectationValidator().Validate(loadFile, sidecar, this.CreateDatRequest());
+
+        // Assert: the validator must not abort; it reports a finding instead.
+        Assert.True(result.HasErrors);
+        Assert.Contains(result.Findings, finding => finding.Category == "ChaosExpectation" && finding.Message.Contains("unexpected JSON type", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Validate_DamagedHeaderWithWrongRecordCount_StillReportsCountError()
+    {
+        // Arrange: the header is damaged, the sidecar claims three data records but two exist.
+        var loadFile = this.WriteLoadFile(
+            "DOCID",
+            DatRow("DOC00000001", "Alice"),
+            DatRow("DOC00000002", "Bob"));
+        var sidecar = this.WriteFile(
+            "loadfile_chaos_expectations.json",
+            SidecarJson(
+                3,
+                anomalies: [new
+                {
+                    errorType = "columns",
+                    outcomeClass = ChaosOutcomeClasses.ParseFails,
+                    lineNumber = "1",
+                    recordID = "HEADER",
+                    columns = new[] { "N/A" },
+                }]));
+
+        // Act
+        var result = new ChaosExpectationValidator().Validate(loadFile, sidecar, this.CreateDatRequest());
+
+        // Assert: the truncated header must not suppress the independent record-count check.
+        Assert.True(result.HasErrors);
+        Assert.Contains(result.Findings, finding => finding.Message.Contains("record count", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(result.Findings, finding => finding.Message.Contains("does not parse cleanly", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Validate_DamagedHeaderWithMatchingRecordCount_ReportsNoCountFinding()
+    {
+        // Arrange: damaged header but the produced row count matches the sidecar.
+        var loadFile = this.WriteLoadFile(
+            "DOCID",
+            DatRow("DOC00000001", "Alice"),
+            DatRow("DOC00000002", "Bob"));
+        var sidecar = this.WriteFile(
+            "loadfile_chaos_expectations.json",
+            SidecarJson(
+                2,
+                anomalies: [new
+                {
+                    errorType = "columns",
+                    outcomeClass = ChaosOutcomeClasses.ParseFails,
+                    lineNumber = "1",
+                    recordID = "HEADER",
+                    columns = new[] { "N/A" },
+                }]));
+
+        // Act
+        var result = new ChaosExpectationValidator().Validate(loadFile, sidecar, this.CreateDatRequest());
+
+        // Assert
+        Assert.False(result.HasErrors, result.GetSummary());
+    }
+
+    [Fact]
+    public void Validate_EdrmXmlMatchingDocumentCount_ReturnsNoFindings()
+    {
+        // Arrange: an EDRM-XML Load File whose document count matches the sidecar.
+        var loadFile = this.WriteFile(
+            "loadfile.xml",
+            """
+            <?xml version="1.0" encoding="utf-8"?>
+            <Records><Document DocID="DOC1" /><Document DocID="DOC2" /></Records>
+            """);
+        var sidecar = this.WriteFile("loadfile_chaos_expectations.json", SidecarJson(2, loadFile: "loadfile.xml", format: "edrmxml", anomalies: []));
+
+        // Act
+        var result = new ChaosExpectationValidator().Validate(loadFile, sidecar, new FileGenerationRequest());
+
+        // Assert
+        Assert.False(result.HasErrors, result.GetSummary());
+    }
+
+    [Fact]
+    public void Validate_EdrmXmlMismatchedDocumentCount_ReportsError()
+    {
+        // Arrange: two documents produced, sidecar expects three.
+        var loadFile = this.WriteFile(
+            "loadfile.xml",
+            """
+            <?xml version="1.0" encoding="utf-8"?>
+            <Records><Document DocID="DOC1" /><Document DocID="DOC2" /></Records>
+            """);
+        var sidecar = this.WriteFile("loadfile_chaos_expectations.json", SidecarJson(3, loadFile: "loadfile.xml", format: "edrmxml", anomalies: []));
+
+        // Act
+        var result = new ChaosExpectationValidator().Validate(loadFile, sidecar, new FileGenerationRequest());
+
+        // Assert
+        Assert.True(result.HasErrors);
+        Assert.Contains(result.Findings, finding => finding.Message.Contains("document count", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Validate_EdrmXmlEmptyFile_ReportsError()
+    {
+        // Arrange: an empty EDRM-XML Load File.
+        var loadFile = this.WriteFile("loadfile.xml", string.Empty);
+        var sidecar = this.WriteFile("loadfile_chaos_expectations.json", SidecarJson(1, loadFile: "loadfile.xml", format: "edrmxml", anomalies: []));
+
+        // Act
+        var result = new ChaosExpectationValidator().Validate(loadFile, sidecar, new FileGenerationRequest());
+
+        // Assert
+        Assert.True(result.HasErrors);
+        Assert.Contains(result.Findings, finding => finding.Message.Contains("empty", StringComparison.OrdinalIgnoreCase));
+    }
 }

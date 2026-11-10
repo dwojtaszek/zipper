@@ -43,7 +43,16 @@ public sealed class ChaosExpectationValidator
 
         using (document)
         {
-            ValidateDocument(document.RootElement, loadFilePath, sidecarPath, request, result);
+            try
+            {
+                ValidateDocument(document.RootElement, loadFilePath, sidecarPath, request, result);
+            }
+            catch (InvalidOperationException)
+            {
+                // A syntactically valid sidecar with wrong-typed fields (a numeric errorType, for
+                // example) must become a finding instead of aborting generation.
+                AddError(result, sidecarPath, "Expectation sidecar contains a field with an unexpected JSON type.");
+            }
         }
 
         return result;
@@ -111,6 +120,12 @@ public sealed class ChaosExpectationValidator
         }
 
         ValidateAgainstAudit(sidecarPath, anomalies, anomaliesElement.GetArrayLength(), result);
+
+        if (format == LoadFileFormat.EdrmXml)
+        {
+            ValidateProducedXml(loadFilePath, expectedDataRecords, result);
+            return;
+        }
 
         if (format is LoadFileFormat.Dat or LoadFileFormat.Opt or LoadFileFormat.Csv or LoadFileFormat.Concordance)
         {
@@ -311,20 +326,24 @@ public sealed class ChaosExpectationValidator
             }
         }
 
-        // A damaged header removes the column-count oracle for the whole file; the Audit File
-        // cross-check still validates the sidecar, so skip the row invariants instead of guessing.
-        if (format != LoadFileFormat.Opt && damagedLines.Contains(1))
-        {
-            return;
-        }
-
-        int expectedFieldCount = format == LoadFileFormat.Opt ? 7 : ParseFieldCount(lines[0], format, request);
+        // Independent invariant: the produced row count must match the sidecar even when the
+        // header is damaged and the column-count oracle is unreliable.
         long expectedPhysicalRows = expectedDataRecords + splitLines.Count;
         long actualPhysicalRows = Math.Max(0, lines.Length - dataStartIndex);
         if (actualPhysicalRows != expectedPhysicalRows)
         {
             AddError(result, loadFilePath, $"Produced record count {actualPhysicalRows} does not match the expectation sidecar's {expectedPhysicalRows} ({expectedDataRecords} expected data records plus {splitLines.Count} record splits).");
         }
+
+        // A damaged header removes the column-count oracle for the whole file; the Audit File
+        // cross-check still validates the sidecar, so skip the remaining row checks instead of
+        // guessing the header's column count.
+        if (format != LoadFileFormat.Opt && damagedLines.Contains(1))
+        {
+            return;
+        }
+
+        int expectedFieldCount = format == LoadFileFormat.Opt ? 7 : ParseFieldCount(lines[0], format, request);
 
         for (int index = dataStartIndex; index < lines.Length; index++)
         {
@@ -370,6 +389,45 @@ public sealed class ChaosExpectationValidator
                 AddError(result, loadFilePath, $"Anomaly '{anomaly.ErrorType}' declares parse-succeeds-with-loss but record on line {lineNumber} does not parse cleanly.", lineNumber);
             }
         }
+    }
+
+    /// <summary>
+    /// Verifies an EDRM-XML Load File against its sidecar. The document tree is not line
+    /// based, so the row oracle is replaced by the document-count invariant.
+    /// </summary>
+    private static void ValidateProducedXml(string loadFilePath, long expectedDataRecords, ValidationResult result)
+    {
+        if (!File.Exists(loadFilePath))
+        {
+            AddError(result, loadFilePath, "Produced Load File is missing.");
+            return;
+        }
+
+        string xml = File.ReadAllText(loadFilePath);
+        if (xml.Length == 0)
+        {
+            AddError(result, loadFilePath, "Produced Load File is empty.");
+            return;
+        }
+
+        int documentCount = CountOccurrences(xml, "<Document");
+        if (documentCount != expectedDataRecords)
+        {
+            AddError(result, loadFilePath, $"Produced EDRM-XML document count {documentCount} does not match the expectation sidecar's {expectedDataRecords} expected data records.");
+        }
+    }
+
+    private static int CountOccurrences(string text, string needle)
+    {
+        int count = 0;
+        int index = 0;
+        while ((index = text.IndexOf(needle, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += needle.Length;
+        }
+
+        return count;
     }
 
     private static int ParseFieldCount(string line, LoadFileFormat format, FileGenerationRequest request)
