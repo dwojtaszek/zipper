@@ -310,6 +310,13 @@ public sealed class ChaosExpectationValidator
             .ToList();
         long PhysicalLine(long logicalLine) => logicalLine + splitLines.Count(splitLine => splitLine < logicalLine);
 
+        // Byte-injection anomalies record their position as "Boundary N-N+1": invalid bytes are
+        // written after line N's EOL. After the final EOL they decode as one non-record fragment
+        // rather than an extra data record.
+        long lastLogicalLine = expectedDataRecords + dataStartIndex;
+        int trailingFragments = anomalies.Count(anomaly =>
+            TryParseBoundaryStart(anomaly.LineNumber, out long boundaryLine) && boundaryLine == lastLogicalLine);
+
         var damagedLines = new HashSet<long>();
         foreach (var anomaly in anomalies)
         {
@@ -329,7 +336,7 @@ public sealed class ChaosExpectationValidator
         // Independent invariant: the produced row count must match the sidecar even when the
         // header is damaged and the column-count oracle is unreliable.
         long expectedPhysicalRows = expectedDataRecords + splitLines.Count;
-        long actualPhysicalRows = Math.Max(0, lines.Length - dataStartIndex);
+        long actualPhysicalRows = Math.Max(0, lines.Length - dataStartIndex - trailingFragments);
         if (actualPhysicalRows != expectedPhysicalRows)
         {
             AddError(result, loadFilePath, $"Produced record count {actualPhysicalRows} does not match the expectation sidecar's {expectedPhysicalRows} ({expectedDataRecords} expected data records plus {splitLines.Count} record splits).");
@@ -345,7 +352,8 @@ public sealed class ChaosExpectationValidator
 
         int expectedFieldCount = format == LoadFileFormat.Opt ? 7 : ParseFieldCount(lines[0], format, request);
 
-        for (int index = dataStartIndex; index < lines.Length; index++)
+        int lastRecordIndex = Math.Max(dataStartIndex, lines.Length - trailingFragments);
+        for (int index = dataStartIndex; index < lastRecordIndex; index++)
         {
             long lineNumber = index + 1;
             if (remainingRecordsParseCleanly
@@ -460,6 +468,20 @@ public sealed class ChaosExpectationValidator
 
     private static bool TryParseLineNumber(string value, out long lineNumber) =>
         long.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out lineNumber) && lineNumber > 0;
+
+    private static bool TryParseBoundaryStart(string value, out long startLine)
+    {
+        startLine = 0;
+        const string prefix = "Boundary ";
+        if (!value.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        int dash = value.IndexOf('-', prefix.Length);
+        return dash > prefix.Length
+            && long.TryParse(value.AsSpan(prefix.Length, dash - prefix.Length), NumberStyles.None, CultureInfo.InvariantCulture, out startLine);
+    }
 
     private static void AddError(ValidationResult result, string path, string message, long? lineNumber = null) =>
         result.Add(new ValidationFinding(ValidationSeverity.Error, Category, message, path, lineNumber));

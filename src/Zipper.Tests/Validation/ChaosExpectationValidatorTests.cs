@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Xunit;
 using Zipper.Config;
@@ -26,6 +27,13 @@ public class ChaosExpectationValidatorTests : TempDirectoryTestBase
     {
         var path = Path.Combine(this.TempDir, name);
         File.WriteAllText(path, content);
+        return path;
+    }
+
+    private string WriteBinaryFile(string name, params byte[][] segments)
+    {
+        var path = Path.Combine(this.TempDir, name);
+        File.WriteAllBytes(path, [.. segments.SelectMany(segment => segment)]);
         return path;
     }
 
@@ -117,6 +125,85 @@ public class ChaosExpectationValidatorTests : TempDirectoryTestBase
         // Assert
         Assert.True(result.HasErrors);
         Assert.Contains(result.Findings, finding => finding.Category == "ChaosExpectation" && finding.Message.Contains("does not parse cleanly", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Validate_EncodingAnomalyAtFinalBoundary_IgnoresTrailingFragment()
+    {
+        // Arrange: invalid encoding bytes land after the final EOL, so they decode as one
+        // non-record fragment instead of an extra data record.
+        var loadFile = this.WriteBinaryFile(
+            "loadfile.dat",
+            Encoding.UTF8.GetBytes($"{DatHeader}\r\n{DatRow("DOC00000001", "Alice")}\r\n{DatRow("DOC00000002", "Bob")}\r\n"),
+            [0xFE, 0xFF]);
+        var sidecar = this.WriteFile(
+            "loadfile_chaos_expectations.json",
+            SidecarJson(2, anomalies: [ValueAnomaly("Boundary 3-4", recordId: "N/A", type: "encoding")]));
+
+        // Act
+        var result = new ChaosExpectationValidator().Validate(loadFile, sidecar, this.CreateDatRequest());
+
+        // Assert: the fragment is not a record, so the row invariants still hold.
+        Assert.False(result.HasErrors, result.GetSummary());
+    }
+
+    [Fact]
+    public void Validate_EncodingAnomalyBeforeFinalBoundary_CountsEveryRecord()
+    {
+        // Arrange: bytes injected between line 2 and line 3 prefix line 3's first field, so the
+        // file still has exactly two data records.
+        var loadFile = this.WriteBinaryFile(
+            "loadfile.dat",
+            Encoding.UTF8.GetBytes($"{DatHeader}\r\n{DatRow("DOC00000001", "Alice")}\r\n"),
+            [0xFE, 0xFF],
+            Encoding.UTF8.GetBytes($"{DatRow("DOC00000002", "Bob")}\r\n"));
+        var sidecar = this.WriteFile(
+            "loadfile_chaos_expectations.json",
+            SidecarJson(2, anomalies: [ValueAnomaly("Boundary 2-3", recordId: "N/A", type: "encoding")]));
+
+        // Act
+        var result = new ChaosExpectationValidator().Validate(loadFile, sidecar, this.CreateDatRequest());
+
+        // Assert
+        Assert.False(result.HasErrors, result.GetSummary());
+    }
+
+    [Fact]
+    public void Validate_OptEncodingAnomalyAtFinalBoundary_IgnoresTrailingFragment()
+    {
+        // Arrange: OPT has no header, so the final logical line is the last record; its trailing
+        // BOM bytes are a fragment, not a record.
+        var loadFile = this.WriteBinaryFile(
+            "loadfile.opt",
+            Encoding.UTF8.GetBytes("a,b,c,d,e,f,g\r\nh,i,j,k,l,m,n\r\n"),
+            [0xEF, 0xBB, 0xBF]);
+        var sidecar = this.WriteFile(
+            "loadfile_chaos_expectations.json",
+            SidecarJson(2, loadFile: "loadfile.opt", format: "opt", anomalies: [ValueAnomaly("Boundary 2-3", recordId: "N/A", type: "opt-encoding")]));
+
+        // Act
+        var result = new ChaosExpectationValidator().Validate(loadFile, sidecar, this.CreateDatRequest());
+
+        // Assert
+        Assert.False(result.HasErrors, result.GetSummary());
+    }
+
+    [Fact]
+    public void Validate_UnrecordedTrailingFragment_StillReportsRecordCountError()
+    {
+        // Arrange: the same trailing bytes with no boundary anomaly in the sidecar are an extra row.
+        var loadFile = this.WriteBinaryFile(
+            "loadfile.dat",
+            Encoding.UTF8.GetBytes($"{DatHeader}\r\n{DatRow("DOC00000001", "Alice")}\r\n"),
+            [0xFE, 0xFF]);
+        var sidecar = this.WriteFile("loadfile_chaos_expectations.json", SidecarJson(1));
+
+        // Act
+        var result = new ChaosExpectationValidator().Validate(loadFile, sidecar, this.CreateDatRequest());
+
+        // Assert
+        Assert.True(result.HasErrors);
+        Assert.Contains(result.Findings, finding => finding.Message.Contains("record count", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

@@ -440,7 +440,7 @@ Written next to each Audit File for a Chaos run that injects Anomalies (not for 
 }
 ```
 
-`outcomeClass` is one of `parse-fails`, `parse-succeeds-with-loss`, or `silent-pass`. `expectedDataRecords` is the produced data-record count; record-splitting anomalies (`eol`, `csv-embedded-newline`) add physical rows, which the verifier accounts for. The record-count invariant is checked even when a damaged line-1 header removes the column-count oracle, and EDRM-XML runs are verified by `<Document>` element count instead of physical rows. The validator also cross-checks the sidecar against the Audit File so a sidecar cannot drift from the run that produced it, and a syntactically valid sidecar with wrong-typed fields becomes a finding instead of aborting generation.
+`outcomeClass` is one of `parse-fails`, `parse-succeeds-with-loss`, or `silent-pass`. `expectedDataRecords` is the produced data-record count; record-splitting anomalies (`eol`, `csv-embedded-newline`) add physical rows, which the verifier accounts for. Byte-injection anomalies (`encoding`, `opt-encoding`, `csv-bom`) record `Boundary N-N+1`; when N is the final line, their trailing bytes decode as a non-record fragment, which the verifier excludes from the row count rather than calling it a record. The record-count invariant is checked even when a damaged line-1 header removes the column-count oracle, and EDRM-XML runs are verified by `<Document>` element count instead of physical rows. The validator also cross-checks the sidecar against the Audit File so a sidecar cannot drift from the run that produced it, and a syntactically valid sidecar with wrong-typed fields becomes a finding instead of aborting generation.
 
 ### `_manifest.json` (Production Set Manifest)
 
