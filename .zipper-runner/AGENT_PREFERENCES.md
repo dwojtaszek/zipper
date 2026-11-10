@@ -4,6 +4,7 @@ Set priority: `0` = don't use, `1` = best, `2` = good, `3` = fallback.
 
 | Agent | Model | Priority |
 |-------|-------|----------|
+| `codex` | `openai/gpt-6.1-sol` | 1|
 | `opencode` | `deepseek/deepseek-chat` | 0|
 | `opencode` | `deepseek/deepseek-reasoner` | 0|
 | `opencode` | `deepseek/deepseek-v4-flash` | 0|

@@ -15,7 +15,10 @@ import subprocess
 import shutil
 
 
+DEFAULT_MODEL = "gpt-6.1-sol"
+
 KNOWN_MODELS = [
+    "openai/gpt-6.1-sol",
     "openai/gpt-5.6-terra",
     "openai/gpt-5.5",
     "openai/gpt-5.4",
@@ -64,10 +67,9 @@ def check_token_health(model: str | None = None) -> bool:
     Sends a trivial prompt to verify end-to-end connectivity.
     Token-cost: negligible (~1 output token).
     """
-    cmd = ["codex", "exec", "--ephemeral"]
-    if model and model != "default":
-        model_name = model.split("/", 1)[-1] if "/" in model else model
-        cmd += ["-m", model_name]
+    model_name = model.split("/", 1)[-1] if model and model != "default" else DEFAULT_MODEL
+    cmd = ["codex", "exec", "--ephemeral", "-m", model_name,
+           "-c", 'model_reasoning_effort="low"']
     cmd.append("say ok")
     try:
         result = subprocess.run(
@@ -102,16 +104,14 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
         prompt: The task description to pass to the agent.
         cwd: Absolute path to the git worktree where the work happens.
         is_continue: If True, resumes the most recent session in cwd.
-        model: Model to use (e.g. 'openai/gpt-5.6-terra').
+        model: Model to use (defaults to 'openai/gpt-6.1-sol', low effort).
 
     Returns:
         (exit_code, stdout, stderr)
     """
-    base = ["codex", "exec", "--ephemeral"]
-    if model and model != "default":
-        # Strip provider prefix if present (e.g. "openai/gpt-5.6-terra" -> "gpt-5.6-terra")
-        model_name = model.split("/", 1)[-1] if "/" in model else model
-        base += ["-m", model_name]
+    model_name = model.split("/", 1)[-1] if model and model != "default" else DEFAULT_MODEL
+    base = ["codex", "exec", "--ephemeral", "-m", model_name,
+            "-c", 'model_reasoning_effort="low"']
 
     print(f"[codex] Running mission (continue={is_continue}) in {cwd}")
     env = os.environ.copy()
@@ -120,7 +120,10 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
     try:
         result = subprocess.run(
             base,
-            input=prompt,
+            # Remote CI can outlast the mission bound; the runner owns that wait.
+            input=prompt + "\n\nRunner handoff: After completing local validation and any requested PR "
+                         "publication, return immediately. Do not watch or wait for remote CI. "
+                         "The parent runner owns CI monitoring and subsequent repair missions.",
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
