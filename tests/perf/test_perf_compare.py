@@ -413,7 +413,10 @@ class PerfBaselineRefreshTests(unittest.TestCase):
             self._write_runs(results, runs)
 
             baselines_copy = temp_dir / "baselines.json"
-            baselines_copy.write_text(json.dumps(self.baselines))
+            # Keep the increase assertion independent of weekly production baselines.
+            baselines_copy.write_text(json.dumps({
+                sc: {"wall_s": 1.0, "rss_kb": 100000} for sc in self.scenarios
+            }))
             gh_out = temp_dir / "gh_output"
 
             result = self._run_refresh(
