@@ -173,6 +173,13 @@ if errorlevel 1 (
     goto :cleanup
 )
 
+REM Verify the Chaos Expectation Sidecar is emitted next to the Audit File (REQ-242)
+set "sidecar_file="
+for %%F in ("%TEST_OUTPUT_DIR%\dat_chaos\*_chaos_expectations.json") do set "sidecar_file=%%F"
+if not defined sidecar_file ( echo [ ERROR ] No _chaos_expectations.json sidecar found for chaos test & goto :cleanup )
+powershell -NoProfile -Command "$j = Get-Content -Raw -Path '%sidecar_file%' | ConvertFrom-Json; if ($j.schemaVersion -ne 1) { exit 1 }; if (@($j.anomalies).Count -le 0) { exit 1 }; if (@($j.anomalies | Where-Object { $_.outcomeClass -notin @('parse-fails','parse-succeeds-with-loss','silent-pass') }).Count -ne 0) { exit 1 }; if ($null -eq $j.invariants.expectedDataRecords) { exit 1 }"
+if errorlevel 1 ( echo [ ERROR ] Chaos expectation sidecar assertion failed & goto :cleanup )
+
 echo [ SUCCESS ] Test 4: Chaos mode — PASSED
 set /a TESTS_PASSED+=1
 

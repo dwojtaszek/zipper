@@ -357,6 +357,18 @@ public readonly record struct AdversarialValueTailPropertyInput(
     int Seed);
 
 /// <summary>
+/// Bounded record count, anomaly count, and selectors for Chaos expectation sidecar
+/// serializer/parser round-trip and mutation properties.
+/// </summary>
+[StructLayout(LayoutKind.Auto)]
+public readonly record struct ChaosExpectationCaseInput(
+    int RecordCount,
+    int AnomalyCount,
+    int LineSeed,
+    int TypeSeed,
+    int MutationKind);
+
+/// <summary>
 /// Shared FsCheck Arbitrary registrations for Zipper domain property-based tests.
 /// <para>
 /// Seed ranges are drawn from <c>0</c> (inclusive) so they match the CLI's documented
@@ -1572,6 +1584,19 @@ public static class ZipperArbitraries
         return Arb.From(gen, ShrinkValidationMutationInput);
     }
 
+    public static Arbitrary<ChaosExpectationCaseInput> ChaosExpectationCaseInputArb()
+    {
+        var gen =
+            from recordCount in Gen.Choose(1, 8)
+            from anomalyCount in Gen.Choose(0, recordCount)
+            from lineSeed in Gen.Choose(0, 7)
+            from typeSeed in Gen.Choose(0, 3)
+            from mutationKind in Gen.Choose(0, 3)
+            select new ChaosExpectationCaseInput(recordCount, anomalyCount, lineSeed, typeSeed, mutationKind);
+
+        return Arb.From(gen, ShrinkChaosExpectationCaseInput);
+    }
+
     /// <summary>
     /// Sorts the raw per-volume starts and adds a fixed spacing so every element is
     /// strictly greater than its predecessor. Rolling volume Bates transitions are only
@@ -1944,6 +1969,40 @@ public static class ZipperArbitraries
         {
             yield return input with { VolumeSeed = input.VolumeSeed / 2 };
             yield return input with { VolumeSeed = 0 };
+        }
+    }
+
+    private static IEnumerable<ChaosExpectationCaseInput> ShrinkChaosExpectationCaseInput(ChaosExpectationCaseInput input)
+    {
+        if (input.RecordCount > 1)
+        {
+            int half = input.RecordCount / 2;
+            if (half >= 1)
+            {
+                yield return input with { RecordCount = half, AnomalyCount = Math.Min(input.AnomalyCount, half) };
+            }
+
+            yield return input with { RecordCount = 1, AnomalyCount = Math.Min(input.AnomalyCount, 1) };
+        }
+
+        if (input.AnomalyCount > 0)
+        {
+            yield return input with { AnomalyCount = 0 };
+        }
+
+        if (input.LineSeed > 0)
+        {
+            yield return input with { LineSeed = 0 };
+        }
+
+        if (input.TypeSeed > 0)
+        {
+            yield return input with { TypeSeed = 0 };
+        }
+
+        if (input.MutationKind > 0)
+        {
+            yield return input with { MutationKind = 0 };
         }
     }
 }

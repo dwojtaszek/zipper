@@ -34,7 +34,75 @@ internal static class LoadFileAuditWriter
         var propertiesPath = Path.ChangeExtension(outputPath, null) + "_properties.json";
         var json = GenerateAuditJson(outputPath, request, composedRecords, anomalies, format);
         await File.WriteAllTextAsync(propertiesPath, json).ConfigureAwait(false);
+
+        if (request.Chaos.ChaosMode
+            && anomalies is not null
+            && !ChaosScenarios.GeneratesAdversarialValues(request.Chaos.ChaosScenario))
+        {
+            var sidecarJson = GenerateExpectationSidecarJson(outputPath, request, composedRecords, anomalies, format);
+            await File.WriteAllTextAsync(ExpectationSidecarPath(propertiesPath), sidecarJson);
+        }
+
         return propertiesPath;
+    }
+
+    /// <summary>
+    /// Returns the Chaos expectation sidecar path for an Audit File path.
+    /// Sidecars keep the Audit File's base name so DAT and OPT sidecars cannot collide.
+    /// </summary>
+    public static string ExpectationSidecarPath(string auditPath)
+    {
+        ArgumentNullException.ThrowIfNull(auditPath);
+        const string suffix = "_properties.json";
+        return auditPath.EndsWith(suffix, StringComparison.Ordinal)
+            ? string.Concat(auditPath.AsSpan(0, auditPath.Length - suffix.Length), "_chaos_expectations.json")
+            : auditPath + "_chaos_expectations.json";
+    }
+
+    /// <summary>
+    /// Generates the schema-versioned Chaos expectation sidecar: per anomaly, the expected
+    /// consumer outcome class, affected record and columns, and the invariants that must hold.
+    /// </summary>
+    /// <param name="outputPath">Path to the generated load file.</param>
+    /// <param name="request">File generation request.</param>
+    /// <param name="composedRecords">The generated records.</param>
+    /// <param name="anomalies">List of chaos anomalies.</param>
+    /// <param name="format">The explicit load file format.</param>
+    /// <param name="expectedDataRecords">The produced data-record count when it differs from the clean count.</param>
+    /// <returns>The expectation sidecar JSON string.</returns>
+    public static string GenerateExpectationSidecarJson(
+        string outputPath,
+        FileGenerationRequest request,
+        IReadOnlyCollection<FileData> composedRecords,
+        IReadOnlyList<ChaosAnomaly>? anomalies,
+        LoadFileFormat? format = null,
+        long? expectedDataRecords = null)
+    {
+        var activeFormat = format ?? (request.LoadFile.Formats.Count > 0 ? request.LoadFile.Formats[0] : LoadFileFormat.Dat);
+        long expectedRecords = expectedDataRecords ?? ComputeRecordCounts(request, composedRecords, activeFormat).TotalRecords;
+
+        var document = new ChaosExpectationDocument
+        {
+            SchemaVersion = 1,
+            LoadFile = Path.GetFileName(outputPath),
+            LoadFileFormat = FormatCode(activeFormat),
+            TotalAnomalies = anomalies?.Count ?? 0,
+            Invariants = new ChaosExpectationInvariants { ExpectedDataRecords = expectedRecords },
+            Anomalies = anomalies is null
+                ? new List<ChaosExpectationAnomaly>()
+                : anomalies.Select(a => new ChaosExpectationAnomaly
+                {
+                    ErrorType = a.ErrorType,
+                    OutcomeClass = ChaosExpectationOracle.ExpectedOutcomeClass(a.ErrorType),
+                    LineNumber = a.LineNumber,
+                    RecordID = a.RecordID,
+                    Columns = string.IsNullOrEmpty(a.Column) || string.Equals(a.Column, "N/A", StringComparison.Ordinal)
+                        ? new List<string>()
+                        : new List<string> { a.Column },
+                }).ToList(),
+        };
+
+        return JsonSerializer.Serialize(document, JsonOptions);
     }
 
     /// <summary>
@@ -169,14 +237,7 @@ internal static class LoadFileAuditWriter
         var activeFormat = format ?? (request.LoadFile.Formats.Count > 0 ? request.LoadFile.Formats[0] : LoadFileFormat.Dat);
         var (computedTotalRecords, _) = ComputeRecordCounts(request, composedRecords, activeFormat);
         long totalRecords = totalRecordsOverride ?? computedTotalRecords;
-        var formatName = activeFormat switch
-        {
-            LoadFileFormat.Opt => "OPT (Image)",
-            LoadFileFormat.Csv => "CSV (Metadata)",
-            LoadFileFormat.EdrmXml => "EDRM-XML (Metadata)",
-            LoadFileFormat.Concordance => "Concordance (Metadata)",
-            _ => "DAT (Metadata)",
-        };
+        var formatName = FormatDisplayName(activeFormat);
 
         AuditDelimiters delimiters;
         if (activeFormat == LoadFileFormat.Opt)
@@ -268,6 +329,24 @@ internal static class LoadFileAuditWriter
                 : null,
         };
     }
+
+    private static string FormatDisplayName(LoadFileFormat format) => format switch
+    {
+        LoadFileFormat.Opt => "OPT (Image)",
+        LoadFileFormat.Csv => "CSV (Metadata)",
+        LoadFileFormat.EdrmXml => "EDRM-XML (Metadata)",
+        LoadFileFormat.Concordance => "Concordance (Metadata)",
+        _ => "DAT (Metadata)",
+    };
+
+    private static string FormatCode(LoadFileFormat format) => format switch
+    {
+        LoadFileFormat.Opt => "opt",
+        LoadFileFormat.Csv => "csv",
+        LoadFileFormat.EdrmXml => "edrmxml",
+        LoadFileFormat.Concordance => "concordance",
+        _ => "dat",
+    };
 
     private static string FormatDelimiter(string delimiter)
     {
@@ -362,5 +441,40 @@ internal static class LoadFileAuditWriter
         public string RecordID { get; init; } = string.Empty;
 
         public string Column { get; init; } = string.Empty;
+    }
+
+    private record ChaosExpectationDocument
+    {
+        public int SchemaVersion { get; init; }
+
+        public string LoadFile { get; init; } = string.Empty;
+
+        public string LoadFileFormat { get; init; } = string.Empty;
+
+        public int TotalAnomalies { get; init; }
+
+        public ChaosExpectationInvariants Invariants { get; init; } = new();
+
+        public List<ChaosExpectationAnomaly> Anomalies { get; init; } = new();
+    }
+
+    private record ChaosExpectationInvariants
+    {
+        public long ExpectedDataRecords { get; init; }
+
+        public bool RemainingRecordsParseCleanly { get; init; } = true;
+    }
+
+    private record ChaosExpectationAnomaly
+    {
+        public string ErrorType { get; init; } = string.Empty;
+
+        public string OutcomeClass { get; init; } = string.Empty;
+
+        public string LineNumber { get; init; } = string.Empty;
+
+        public string RecordID { get; init; } = string.Empty;
+
+        public List<string> Columns { get; init; } = new();
     }
 }

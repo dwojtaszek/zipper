@@ -1,0 +1,176 @@
+{
+  "schemaVersion": 1,
+  "loadFile": "loadfile.dat",
+  "loadFileFormat": "dat",
+  "totalAnomalies": 20,
+  "invariants": {
+    "expectedDataRecords": 200,
+    "remainingRecordsParseCleanly": true
+  },
+  "anomalies": [
+    {
+      "errorType": "mixed-delimiters",
+      "outcomeClass": "parse-fails",
+      "lineNumber": "10",
+      "recordID": "DOC00000009",
+      "columns": [
+        "Delimiter 3"
+      ]
+    },
+    {
+      "errorType": "quotes",
+      "outcomeClass": "parse-fails",
+      "lineNumber": "12",
+      "recordID": "DOC00000011",
+      "columns": [
+        "Column 12"
+      ]
+    },
+    {
+      "errorType": "columns",
+      "outcomeClass": "parse-fails",
+      "lineNumber": "14",
+      "recordID": "DOC00000013",
+      "columns": []
+    },
+    {
+      "errorType": "eol",
+      "outcomeClass": "parse-fails",
+      "lineNumber": "30",
+      "recordID": "DOC00000029",
+      "columns": [
+        "Field 1"
+      ]
+    },
+    {
+      "errorType": "encoding",
+      "outcomeClass": "parse-succeeds-with-loss",
+      "lineNumber": "Boundary 33-34",
+      "recordID": "N/A",
+      "columns": []
+    },
+    {
+      "errorType": "mixed-delimiters",
+      "outcomeClass": "parse-fails",
+      "lineNumber": "45",
+      "recordID": "DOC00000044",
+      "columns": [
+        "Delimiter 1"
+      ]
+    },
+    {
+      "errorType": "quotes",
+      "outcomeClass": "parse-fails",
+      "lineNumber": "48",
+      "recordID": "DOC00000047",
+      "columns": [
+        "Column 12"
+      ]
+    },
+    {
+      "errorType": "columns",
+      "outcomeClass": "parse-fails",
+      "lineNumber": "66",
+      "recordID": "DOC00000065",
+      "columns": []
+    },
+    {
+      "errorType": "eol",
+      "outcomeClass": "parse-fails",
+      "lineNumber": "68",
+      "recordID": "DOC00000067",
+      "columns": [
+        "Field 1"
+      ]
+    },
+    {
+      "errorType": "encoding",
+      "outcomeClass": "parse-succeeds-with-loss",
+      "lineNumber": "Boundary 75-76",
+      "recordID": "N/A",
+      "columns": []
+    },
+    {
+      "errorType": "mixed-delimiters",
+      "outcomeClass": "parse-fails",
+      "lineNumber": "94",
+      "recordID": "DOC00000093",
+      "columns": [
+        "Delimiter 9"
+      ]
+    },
+    {
+      "errorType": "quotes",
+      "outcomeClass": "parse-fails",
+      "lineNumber": "98",
+      "recordID": "DOC00000097",
+      "columns": [
+        "Column 12"
+      ]
+    },
+    {
+      "errorType": "columns",
+      "outcomeClass": "parse-fails",
+      "lineNumber": "99",
+      "recordID": "DOC00000098",
+      "columns": []
+    },
+    {
+      "errorType": "eol",
+      "outcomeClass": "parse-fails",
+      "lineNumber": "102",
+      "recordID": "DOC00000101",
+      "columns": [
+        "Field 1"
+      ]
+    },
+    {
+      "errorType": "encoding",
+      "outcomeClass": "parse-succeeds-with-loss",
+      "lineNumber": "Boundary 138-139",
+      "recordID": "N/A",
+      "columns": []
+    },
+    {
+      "errorType": "mixed-delimiters",
+      "outcomeClass": "parse-fails",
+      "lineNumber": "150",
+      "recordID": "DOC00000149",
+      "columns": [
+        "Delimiter 6"
+      ]
+    },
+    {
+      "errorType": "quotes",
+      "outcomeClass": "parse-fails",
+      "lineNumber": "161",
+      "recordID": "DOC00000160",
+      "columns": [
+        "Column 12"
+      ]
+    },
+    {
+      "errorType": "columns",
+      "outcomeClass": "parse-fails",
+      "lineNumber": "181",
+      "recordID": "DOC00000180",
+      "columns": []
+    },
+    {
+      "errorType": "eol",
+      "outcomeClass": "parse-fails",
+      "lineNumber": "198",
+      "recordID": "DOC00000197",
+      "columns": [
+        "Field 1"
+      ]
+    },
+    {
+      "errorType": "encoding",
+      "outcomeClass": "parse-succeeds-with-loss",
+      "lineNumber": "Boundary 199-200",
+      "recordID": "N/A",
+      "columns": []
+    }
+  ]
+}

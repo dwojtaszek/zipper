@@ -962,3 +962,24 @@ REQ-241	unit	ChaosModuleTests.TryBuild_LoadfileOnlyWithTiffType_ReturnsFalseWith
 REQ-241	unit	ChaosModuleTests.TryBuild_StandardTiffRunWithCrossFormatScenario_ReturnsFalseWithTiffMessage	--chaos-scenario is rejected on a Standard TIFF run
 REQ-241	e2e	test-cli-coverage-gaps.sh	E2E verification of TIFF byte order, TIFF chaos in Standard and Production Set modes, and its rejection rules
 REQ-241	e2e	test-cli-coverage-gaps.bat	Windows batch E2E verification of TIFF byte order, TIFF chaos in Standard and Production Set modes, and its rejection rules
+REQ-242	unit	ChaosExpectationOracleTests.ExpectedOutcomeClass_EveryCatalogAnomalyType_IsExplicit	Every Chaos anomaly type in every catalog has an explicit expected-outcome class
+REQ-242	unit	ChaosExpectationOracleTests.ExpectedOutcomeClass_RepresentativeAnomaly_ReturnsCatalogClass	Representative DAT, value-level, and silent-pass types map to their documented classes
+REQ-242	unit	LoadFileAuditWriterTests.GenerateExpectationSidecarJson_WithAnomalies_RecordsOutcomeClassPerAnomaly	Sidecar records outcome class, record, line, and columns per anomaly
+REQ-242	unit	LoadFileAuditWriterTests.WriteAsync_ChaosRun_WritesExpectationSidecarNextToAudit	Chaos runs write the sidecar next to the Audit File; non-chaos runs do not
+REQ-242	unit	ChaosExpectationValidatorTests.Validate_MatchingSidecarAndProducedOutput_ReturnsNoFindings	Produced chaos output validates against its sidecar
+REQ-242	unit	ChaosExpectationValidatorTests.Validate_UnexpectedRecordCount_ReportsInvariantError	Record-count invariant mismatches are reported
+REQ-242	unit	ChaosExpectationValidatorTests.Validate_UndamagedRecordDoesNotParseCleanly_ReportsInvariantError	Undamaged records that do not parse cleanly are reported
+REQ-242	e2e	run-e2e-loadfile.sh	E2E chaos run emits an expectation sidecar with outcome classes
+REQ-242	e2e	run-e2e-loadfile.bat	Windows batch E2E chaos run emits an expectation sidecar with outcome classes
+REQ-242	unit	ChaosExpectationValidatorTests.Validate_DamagedHeaderWithWrongRecordCount_StillReportsCountError	Record-count invariant is still checked when a damaged header removes the column oracle
+REQ-242	unit	ChaosExpectationValidatorTests.Validate_EdrmXmlMismatchedDocumentCount_ReportsError	EDRM-XML runs are verified by Document element count
+REQ-242	unit	ChaosExpectationValidatorTests.Validate_WrongTypedSidecarField_ReportsTypeErrorInsteadOfThrowing	Wrong-typed sidecar fields become findings instead of aborting generation
+REQ-242	unit	PostGenerationValidatorTests.ValidationOrchestrator_RunAfterGeneration_NonChaosContextIgnoresStaleSidecar	Sidecar discovery is limited to eligible Chaos runs
+REQ-242	unit	ValidationPropertyTests.ChaosExpectationValidator_Validate_GeneratedSidecarShouldMatchProducedOutput	Property: sidecar serializer output validates against the produced Load File
+REQ-242	unit	ChaosExpectationValidatorTests.Validate_EncodingAnomalyAtFinalBoundary_IgnoresTrailingFragment	Trailing byte fragment from a final-boundary encoding anomaly is not counted as a record
+REQ-242	unit	ChaosExpectationValidatorTests.Validate_EncodingAnomalyBeforeFinalBoundary_CountsEveryRecord	Mid-file boundary encoding anomaly does not change the record count
+REQ-242	unit	ChaosExpectationValidatorTests.Validate_OptEncodingAnomalyAtFinalBoundary_IgnoresTrailingFragment	OPT final-boundary trailing fragment is not counted as a record
+REQ-242	unit	ChaosExpectationValidatorTests.Validate_UnrecordedTrailingFragment_StillReportsRecordCountError	An unrecorded trailing row still violates the record-count invariant
+REQ-242	unit	ValidationPropertyTests.ChaosExpectationValidator_Validate_DamagedHeaderShouldStillReportDriftedRecordCount	Property: record-count invariant survives a damaged header
+REQ-242	unit	ValidationPropertyTests.ChaosExpectationValidator_Validate_GeneratedXmlSidecarShouldMatchProducedDocuments	Property: EDRM-XML sidecar validates against produced Document elements
+REQ-242	unit	ValidationPropertyTests.ChaosExpectationValidator_Validate_DriftedXmlDocumentCountShouldReportError	Property: drifted EDRM-XML document count is rejected

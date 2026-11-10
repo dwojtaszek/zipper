@@ -68,7 +68,7 @@ internal class LoadFileOnlyMode : IGenerationMode
         Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Records: {0:N0}", result.TotalRecords));
 
         bool adversarialValues = ChaosScenarios.GeneratesAdversarialValues(request.Chaos.ChaosScenario);
-        if (!string.IsNullOrEmpty(result.LoadFilePath) && (!request.Chaos.ChaosMode || adversarialValues))
+        if (!string.IsNullOrEmpty(result.LoadFilePath))
         {
             var formats = request.LoadFile.Formats.Count > 0 ? request.LoadFile.Formats : new[] { LoadFileFormat.Dat };
             var loadFiles = new Dictionary<string, string>();
@@ -94,6 +94,7 @@ internal class LoadFileOnlyMode : IGenerationMode
             {
                 LoadFiles = loadFiles,
                 Request = request,
+                IsChaosMode = request.Chaos.ChaosMode && !adversarialValues,
             };
             ValidationOrchestrator.RunAfterGeneration(context);
         }

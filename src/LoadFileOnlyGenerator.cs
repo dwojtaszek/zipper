@@ -173,6 +173,7 @@ internal static class LoadFileOnlyGenerator
                 chaosEngine?.Anomalies,
                 format).ConfigureAwait(false);
             createdFiles.Add(propertiesPath);
+            AddExpectationSidecar(propertiesPath, createdFiles);
             cancellationToken.ThrowIfCancellationRequested();
 
             if (format == formatsToGenerate[0] || string.IsNullOrEmpty(primaryLoadFilePath))
@@ -251,6 +252,22 @@ internal static class LoadFileOnlyGenerator
             totalRecordsOverride: result.DatLines.Count - 1L);
         await WriteAuditFileAsync(datPropertiesPath, datAuditJson, createdFiles, cancellationToken).ConfigureAwait(false);
 
+        if (request.Chaos.ChaosMode && !ChaosScenarios.GeneratesAdversarialValues(request.Chaos.ChaosScenario))
+        {
+            string datSidecarJson = LoadFileAuditWriter.GenerateExpectationSidecarJson(
+                datPath,
+                datRequest,
+                records,
+                result.DatAnomalies,
+                LoadFileFormat.Dat,
+                expectedDataRecords: result.DatLines.Count - 1L);
+            await WriteAuditFileAsync(
+                LoadFileAuditWriter.ExpectationSidecarPath(datPropertiesPath),
+                datSidecarJson,
+                createdFiles,
+                cancellationToken).ConfigureAwait(false);
+        }
+
         // Write mutated OPT
         var optFileStream = new FileStream(optPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
         createdFiles.Add(optPath);
@@ -274,7 +291,32 @@ internal static class LoadFileOnlyGenerator
             totalRecordsOverride: result.OptLines.Count);
         await WriteAuditFileAsync(optPropertiesPath, optAuditJson, createdFiles, cancellationToken).ConfigureAwait(false);
 
+        if (request.Chaos.ChaosMode && !ChaosScenarios.GeneratesAdversarialValues(request.Chaos.ChaosScenario))
+        {
+            string optSidecarJson = LoadFileAuditWriter.GenerateExpectationSidecarJson(
+                optPath,
+                optRequest,
+                records,
+                result.OptAnomalies,
+                LoadFileFormat.Opt,
+                expectedDataRecords: result.OptLines.Count);
+            await WriteAuditFileAsync(
+                LoadFileAuditWriter.ExpectationSidecarPath(optPropertiesPath),
+                optSidecarJson,
+                createdFiles,
+                cancellationToken).ConfigureAwait(false);
+        }
+
         return (datPath, datPropertiesPath, result.DatLines.Count - 1L);
+    }
+
+    private static void AddExpectationSidecar(string propertiesPath, List<string> createdFiles)
+    {
+        var sidecarPath = LoadFileAuditWriter.ExpectationSidecarPath(propertiesPath);
+        if (File.Exists(sidecarPath))
+        {
+            createdFiles.Add(sidecarPath);
+        }
     }
 
     private static async Task WriteAuditFileAsync(

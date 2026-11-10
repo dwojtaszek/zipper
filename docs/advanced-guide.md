@@ -407,6 +407,41 @@ Written alongside standalone Load Files in Loadfile-Only Mode using `camelCase` 
 }
 ```
 
+### `_chaos_expectations.json` (Chaos Expectation Sidecar)
+
+Written next to each Audit File for a Chaos run that injects Anomalies (not for `adversarial-values` or non-Chaos runs). It is purely additive: the Audit File schema and bytes are unchanged. Each entry records the outcome a consumer should observe, and `ChaosExpectationValidator` checks these invariants against the produced Load File at the end of the same run. `camelCase` schema:
+
+```json
+{
+  "schemaVersion": 1,
+  "loadFile": "loadfile.dat",
+  "loadFileFormat": "dat",
+  "totalAnomalies": 2,
+  "invariants": {
+    "expectedDataRecords": 200,
+    "remainingRecordsParseCleanly": true
+  },
+  "anomalies": [
+    {
+      "errorType": "columns",
+      "outcomeClass": "parse-fails",
+      "lineNumber": "14",
+      "recordID": "DOC00000014",
+      "columns": []
+    },
+    {
+      "errorType": "path-pointer",
+      "outcomeClass": "parse-succeeds-with-loss",
+      "lineNumber": "27",
+      "recordID": "DOC00000027",
+      "columns": ["FILEPATH"]
+    }
+  ]
+}
+```
+
+`outcomeClass` is one of `parse-fails`, `parse-succeeds-with-loss`, or `silent-pass`. `expectedDataRecords` is the produced data-record count; record-splitting anomalies (`eol`, `csv-embedded-newline`) add physical rows, which the verifier accounts for. Byte-injection anomalies (`encoding`, `opt-encoding`, `csv-bom`) record `Boundary N-N+1`; when N is the final line, their trailing bytes decode as a non-record fragment, which the verifier excludes from the row count rather than calling it a record. The record-count invariant is checked even when a damaged line-1 header removes the column-count oracle, and EDRM-XML runs are verified by `<Document>` element count instead of physical rows. The validator also cross-checks the sidecar against the Audit File so a sidecar cannot drift from the run that produced it, and a syntactically valid sidecar with wrong-typed fields becomes a finding instead of aborting generation.
+
 ### `_manifest.json` (Production Set Manifest)
 
 Written at the root of Production Sets. Records Bates ranges, volume layout, load file paths, document counts (`nativeFileCount`, `parentNativeFileCount`, `attachmentNativeFileCount`), configuration parameters, and the Azure-safe Production Metadata block (`metadata`):
