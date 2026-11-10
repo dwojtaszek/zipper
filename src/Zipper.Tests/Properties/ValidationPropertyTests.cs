@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO.Compression;
+using System.Text;
 using System.Text.Json.Nodes;
 using FsCheck.Xunit;
 using Xunit;
@@ -587,6 +588,72 @@ public sealed class ValidationPropertyTests : IDisposable
         Assert.Contains(result.Findings, finding => finding.Message.Contains("unexpected JSON type", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A sidecar with an anomaly on line 1 skips the column-count oracle for the damaged header,
+    /// but the record-count invariant must still reject a drifted sidecar.
+    /// </summary>
+    [Property]
+    public void ChaosExpectationValidator_Validate_DamagedHeaderShouldStillReportDriftedRecordCount(ChaosExpectationCaseInput input)
+    {
+        var caseDir = this.CreateCaseDirectory("chaos_sidecar_header");
+        var loadFilePath = Path.Combine(caseDir, "loadfile.dat");
+        int recordCount = Math.Clamp(input.RecordCount, 1, 8);
+
+        var rows = new List<string> { JoinDatFields("DOCID", "AUTHOR") };
+        for (int i = 0; i < recordCount; i++)
+        {
+            rows.Add(JoinDatFields($"DOC{i:D8}", $"Author {i}"));
+        }
+
+        File.WriteAllText(loadFilePath, string.Join("\r\n", rows) + "\r\n");
+
+        string sidecarJson = LoadFileAuditWriter.GenerateExpectationSidecarJson(
+            loadFilePath,
+            CreateDatSidecarRequest(),
+            Array.Empty<FileData>(),
+            [new ChaosAnomaly { ErrorType = "columns", LineNumber = "1", RecordID = "HEADER", Column = "N/A" }],
+            LoadFileFormat.Dat,
+            expectedDataRecords: recordCount + 1);
+        var sidecarPath = Path.Combine(caseDir, "loadfile_chaos_expectations.json");
+        File.WriteAllText(sidecarPath, sidecarJson);
+
+        var result = new ChaosExpectationValidator().Validate(loadFilePath, sidecarPath, CreateDatSidecarRequest());
+
+        Assert.True(result.HasErrors);
+        Assert.Contains(result.Findings, finding => finding.Message.Contains("record count", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// EDRM-XML runs are verified against the produced document tree: a sidecar recording the
+    /// generated <c>&lt;Document&gt;</c> count must validate with zero findings.
+    /// </summary>
+    [Property]
+    public void ChaosExpectationValidator_Validate_GeneratedXmlSidecarShouldMatchProducedDocuments(ChaosExpectationCaseInput input)
+    {
+        var (loadFile, sidecar, _) = this.CreateChaosExpectationXmlCase(input, "chaos_sidecar_xml");
+
+        var result = new ChaosExpectationValidator().Validate(loadFile, sidecar, CreateDatSidecarRequest());
+
+        Assert.False(result.HasErrors, result.GetSummary());
+    }
+
+    /// <summary>
+    /// A drifted <c>&lt;Document&gt;</c> count in an EDRM-XML sidecar must be rejected.
+    /// </summary>
+    [Property]
+    public void ChaosExpectationValidator_Validate_DriftedXmlDocumentCountShouldReportError(ChaosExpectationCaseInput input)
+    {
+        var (loadFile, sidecar, documentCount) = this.CreateChaosExpectationXmlCase(input, "chaos_sidecar_xml_drift");
+        var node = JsonNode.Parse(File.ReadAllText(sidecar))!;
+        node["invariants"]!["expectedDataRecords"] = documentCount + 1;
+        File.WriteAllText(sidecar, node.ToJsonString());
+
+        var result = new ChaosExpectationValidator().Validate(loadFile, sidecar, CreateDatSidecarRequest());
+
+        Assert.True(result.HasErrors);
+        Assert.Contains(result.Findings, finding => finding.Message.Contains("document count", StringComparison.OrdinalIgnoreCase));
+    }
+
     // ------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------
@@ -604,6 +671,37 @@ public sealed class ValidationPropertyTests : IDisposable
         Delimiters = new DelimiterConfig { ColumnDelimiter = ColDelim.ToString(), QuoteDelimiter = QuoteDelim.ToString() },
         Chaos = new ChaosConfig { ChaosMode = true },
     };
+
+    /// <summary>
+    /// Writes an EDRM-XML Load File with <paramref name="input"/>'s document count and a sidecar
+    /// produced by the production serializer for that count.
+    /// </summary>
+    private (string LoadFile, string Sidecar, int DocumentCount) CreateChaosExpectationXmlCase(ChaosExpectationCaseInput input, string label)
+    {
+        int documentCount = Math.Clamp(input.RecordCount, 1, 8);
+        var caseDir = this.CreateCaseDirectory(label);
+        var loadFilePath = Path.Combine(caseDir, "loadfile.xml");
+
+        var xml = new StringBuilder("<Root DataInterchangeType=\"Export\" MajorVersion=\"1\" MinorVersion=\"2\"><Batch>");
+        for (int i = 0; i < documentCount; i++)
+        {
+            xml.Append(CultureInfo.InvariantCulture, $"<Document DocID=\"DOC{i:D8}\"></Document>");
+        }
+
+        xml.Append("</Batch></Root>");
+        File.WriteAllText(loadFilePath, xml.ToString());
+
+        string sidecarJson = LoadFileAuditWriter.GenerateExpectationSidecarJson(
+            loadFilePath,
+            CreateDatSidecarRequest(),
+            Array.Empty<FileData>(),
+            Array.Empty<ChaosAnomaly>(),
+            LoadFileFormat.EdrmXml,
+            expectedDataRecords: documentCount);
+        var sidecarPath = Path.Combine(caseDir, "loadfile_chaos_expectations.json");
+        File.WriteAllText(sidecarPath, sidecarJson);
+        return (loadFilePath, sidecarPath, documentCount);
+    }
 
     /// <summary>
     /// Writes a DAT with <paramref name="input"/>'s record count and a sidecar produced by the
