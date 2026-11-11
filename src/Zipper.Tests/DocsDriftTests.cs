@@ -7,6 +7,22 @@ public class DocsDriftTests
 {
     private static readonly string RepoRoot = FindRepoRoot();
 
+    [Theory]
+    [InlineData("FR-035: Production Manifest Comparison", 157, 163)]
+    [InlineData("FR-036: Hash Generation", 165, 169)]
+    public void Requirements_ComparisonAndHashRequirements_HaveOwnGroups(string heading, int first, int last)
+    {
+        var lines = File.ReadAllLines(Path.Combine(RepoRoot, "Requirements.md"));
+        var start = Array.IndexOf(lines, $"### {heading}");
+        Assert.True(start >= 0, $"Missing requirement group: {heading}");
+        var group = lines.Skip(start + 1).TakeWhile(line => !line.StartsWith("##", StringComparison.Ordinal)).ToArray();
+
+        for (var id = first; id <= last; id++)
+        {
+            Assert.Contains(group, line => line.StartsWith($"- **REQ-{id}**:", StringComparison.Ordinal));
+        }
+    }
+
     private static string FindRepoRoot()
     {
         var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
