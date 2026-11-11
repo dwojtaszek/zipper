@@ -30,6 +30,9 @@ if ! GIT_COMMON_DIR="$(git rev-parse --git-common-dir 2>/dev/null)" || [[ -z "$G
 fi
 HOOK_DIR="$GIT_COMMON_DIR/hooks"
 
+# Validate before touching any installed hook, including quiet build-time syncs.
+python3 .github/scripts/validate-hooks.py || exit 1
+
 if ! mkdir -p "$HOOK_DIR" 2>/dev/null; then
     [[ "$QUIET" -eq 0 ]] && echo "Error: failed to create $HOOK_DIR" >&2
     [[ "$QUIET" -eq 1 ]] && exit 0 || exit 1

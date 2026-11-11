@@ -154,6 +154,11 @@ class ReviewGateWrapperTests(unittest.TestCase):
         self.assertFalse(result.ok)
         self.assertTrue(result.environmental)
 
+    def test_invalidated_head_cannot_park_a_reviewer(self):
+        result, _ = self._run(3, out=f"REVIEWER-OUTCOME {CODEX}=skipped")
+        self.assertTrue(result.environmental)
+        self.assertNotIn(CODEX, runner._load_reviewer_availability())
+
     def test_usageFailureExit_shouldBeEnvironmental(self):
         """Exit 2 is `gh` missing or `gh repo view` failing -- not a review verdict.
 
@@ -164,6 +169,50 @@ class ReviewGateWrapperTests(unittest.TestCase):
         self.assertFalse(result.ok)
         self.assertTrue(result.environmental)
         self.assertIn("command not found", result.detail)
+
+    def test_staleReview_shouldRequestCurrentHeadOnlyOnce(self):
+        out = "REVIEW-REQUEST codex " + "a" * 40
+        with patch.object(runner, "run_cmd", side_effect=[(4, out, ""), (0, "", ""), (4, out, "")]) as command:
+            first = runner._run_review_gate(42, self._tmp.name)
+            second = runner._run_review_gate(42, self._tmp.name)
+        self.assertTrue(first.environmental)
+        self.assertTrue(second.environmental)
+        self.assertEqual(command.call_count, 3)
+        self.assertEqual(command.call_args_list[1].args[0][:4], ["gh", "pr", "comment", "42"])
+
+    def test_interruptedRequest_shouldBeRetriedAfterRestart(self):
+        out = "REVIEW-REQUEST codex " + "a" * 40
+        with patch.object(runner, "run_cmd", side_effect=[(4, out, ""), KeyboardInterrupt(),
+                                                         (4, out, ""), (0, "", "")]) as command:
+            with self.assertRaises(KeyboardInterrupt):
+                runner._run_review_gate(42, self._tmp.name)
+            result = runner._run_review_gate(42, self._tmp.name)
+        self.assertTrue(result.environmental)
+        self.assertEqual(command.call_count, 4)
+
+    def test_failedRequest_shouldBeRetried(self):
+        out = "REVIEW-REQUEST codex " + "a" * 40
+        with patch.object(runner, "run_cmd", side_effect=[(4, out, ""), (1, "", "API failure"),
+                                                         (4, out, ""), (0, "", "")]) as command:
+            runner._run_review_gate(42, self._tmp.name)
+            result = runner._run_review_gate(42, self._tmp.name)
+        self.assertTrue(result.environmental)
+        self.assertEqual(command.call_count, 4)
+
+    def test_dryRun_never_posts_or_records_a_review_request(self):
+        out = "REVIEW-REQUEST codex " + "a" * 40
+        with patch.object(runner, "DRY_RUN", True), patch.object(runner, "run_cmd", return_value=(4, out, "")) as command:
+            result = runner._run_review_gate(42, self._tmp.name)
+        self.assertTrue(result.environmental)
+        self.assertEqual(command.call_count, 1)
+        self.assertEqual(list(Path(self._tmp.name).glob('*review-request*')), [])
+        self.assertTrue(runner._is_mutating_cmd(['gh', 'pr', 'comment', '42', '--body', '@codex review']))
+
+    def test_pendingReview_shouldRetryWithoutRepairMission(self):
+        result, _ = self._run(4, out="REVIEWER-OUTCOME %s=pending" % CODEX)
+        self.assertFalse(result.ok)
+        self.assertTrue(result.environmental)
+        self.assertNotIn(CODEX, runner._reviewers_currently_unavailable())
 
     def test_gateTimeout_shouldBeEnvironmental(self):
         """`run_cmd` returns -1 when it kills the gate; that is not a verdict."""
@@ -179,7 +228,7 @@ class ReviewGateWrapperTests(unittest.TestCase):
 
     def test_noUnavailableReviewers_shouldNotSetTheSkipVariable(self):
         _, rc = self._run(0)
-        self.assertIsNone(rc.call_args.kwargs.get("env"))
+        self.assertNotIn(runner.REVIEW_GATE_ENV_SKIP, rc.call_args.kwargs.get("env") or {})
 
     def test_quickCheck_shouldForwardItsWaitBudget(self):
         with patch.object(runner, "run_cmd", return_value=(1, "", "")) as rc:
@@ -278,6 +327,8 @@ class ReviewGateEndToEndTests(unittest.TestCase):
             "args = sys.argv[1:]\n"
             "if args[:2] == ['repo', 'view']:\n"
             "    print('dwojtaszek/zipper')\n"
+            "elif args[:2] == ['pr', 'view']:\n"
+            "    print('a' * 40)\n"
             "elif args[:2] == ['api', '--paginate']:\n"
             "    print('[]')\n"
             "elif args[0] == 'api':\n"

@@ -50,6 +50,12 @@ class DevCliAndLocalWorkflowTests(unittest.TestCase):
         self.assertNotIn("Run incremental mutation smoke", res.stdout)
         self.assertNotIn("Run basic E2E smoke", res.stdout)
 
+    def test_all_runs_cheap_contract_checks_before_build(self):
+        result = self._run_dev('all', '--dry-run')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for label in ('Validate E2E .sh/.bat parity', 'Run CI workflow contract tests'):
+            self.assertLess(result.stdout.index(label), result.stdout.index('Build solution (Release)'))
+
     def test_dev_cli_rejects_unknown_command(self):
         res = self._run_dev("tset")
         self.assertNotEqual(res.returncode, 0)

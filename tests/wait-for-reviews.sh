@@ -10,6 +10,7 @@
 # Exit:    0 = all bots accounted for, no unresolved review threads
 #          1 = unresolved review threads exist (fix or reply + resolve, re-run)
 #          2 = usage error / missing prerequisites
+#          4 = a current-head review is active, or a fresh request is needed; retry
 #          3 = could not determine review state (API failure) — environmental,
 #              not a review outcome
 #
@@ -19,7 +20,7 @@
 # exit 1: "the reviewers could not be asked" is not "the reviewers objected".
 #
 # Machine-readable contract for the runner: one `REVIEWER-OUTCOME <bot>=<state>`
-# line per reviewer (states: reviewed, skipped, skipped-by-policy, silent) and a
+# line per reviewer (states: reviewed, skipped, skipped-by-policy, silent, pending) and a
 # final `REVIEW-GATE-RESULT unresolved=<n>` line. The runner persists these to
 # track reviewer availability so it stops waiting on a reviewer that is gone.
 #
@@ -40,7 +41,6 @@ SKIP_PATTERN='usage limit|rate limit|review limit|Review skipped|skip review|Rev
 # machine-readable completion marker instead of a formal review object. Without
 # this the gate cannot see that review at all and waits out its whole timeout on a
 # PR Codex has already finished — measured at 20 minutes on PR #1328.
-CODEX_COMPLETION_PATTERN='codex-review-state:v1'
 POLL_SECONDS=30
 
 # Reviewers the caller already knows to be unavailable (a rate-limit window, a
@@ -111,6 +111,39 @@ print_warn()  { printf '\033[43m[ WARN ]\033[0m %s\n' "$1"; }
 print_error() { printf '\033[41m[ FAIL ]\033[0m %s\n' "$1"; }
 print_ok()    { printf '\033[42m[ OK ]\033[0m %s\n' "$1"; }
 
+read_head() {
+    with_timeout gh pr view "$PR" --json headRefOid --jq .headRefOid
+}
+if ! REVIEW_HEAD=$(read_head) || [[ ! "$REVIEW_HEAD" =~ ^[0-9a-f]{40}$ ]]; then
+    print_error "Could not read the current PR head."
+    exit 3
+fi
+REVIEW_PENDING=0
+if [[ -n "${STATE_DIR:-}" ]]; then
+    REVIEW_WAIT_DIR="$STATE_DIR/review-waits"
+else
+    REVIEW_WAIT_DIR=$(git rev-parse --git-path zipper-hooks/review-waits) || exit 3
+fi
+MAX_ACTIVE_WAIT_SECONDS=1200
+
+# First observation is shared across quick passes and survives runner restarts.
+active_window_expired() {
+    local path="$REVIEW_WAIT_DIR/$PR-$REVIEW_HEAD-$1.started" first temporary
+    if [[ ! -f "$path" ]]; then
+        [[ "${WAIT_FOR_REVIEWS_DRY_RUN:-0}" == "1" ]] && return 1
+        mkdir -p "$REVIEW_WAIT_DIR" || exit 3
+        temporary=$(mktemp "$REVIEW_WAIT_DIR/.started.XXXXXX") || exit 3
+        date +%s > "$temporary" || { rm -f "$temporary"; exit 3; }
+        # A hard link publishes a complete timestamp without overwriting another observer.
+        ln "$temporary" "$path" 2>/dev/null || true
+        rm -f "$temporary"
+    fi
+    [[ -f "$path" ]] || exit 3
+    first=$(<"$path")
+    [[ "$first" =~ ^[0-9]{1,12}$ ]] || exit 3
+    (( $(date +%s) - 10#$first >= MAX_ACTIVE_WAIT_SECONDS ))
+}
+
 # --- Phase 1: wait until every expected bot is accounted for ---
 
 # Fetches reviews and issue comments once per polling cycle; individual bots
@@ -125,7 +158,14 @@ reviews_json=""
 comments_json=""
 FETCH_OK=0
 fetch_review_state() {
-    local reviews comments
+    local reviews comments head
+    if ! head=$(read_head); then
+        return 1
+    fi
+    if [[ "$head" != "$REVIEW_HEAD" ]]; then
+        print_error "PR head changed; retry the review gate."
+        exit 3
+    fi
     if ! reviews=$(with_timeout gh api --paginate "repos/$REPO/pulls/$PR/reviews" 2>/dev/null) \
             || ! jq -s 'flatten' <<<"$reviews" >/dev/null 2>&1; then
         return 1
@@ -140,29 +180,96 @@ fetch_review_state() {
     return 0
 }
 
+# Keep paginated bodies on stdin: one argv string is limited to ~128 KiB on Linux.
+bot_query() {
+    local status=0 bot="$1" expression="$2"
+    printf '%s\n%s\n' "$reviews_json" "$comments_json" | jq -se \
+      --arg bot "$bot" --arg head "$REVIEW_HEAD" --arg skip "$SKIP_PATTERN" --arg owner "$OWNER" \
+      '.[0] as $reviews | .[1] as $comments | '"$expression" >/dev/null 2>&1 || status=$?
+    if [[ "$status" -gt 1 ]]; then
+        print_error "Review data could not be evaluated; retry the gate."
+        exit 3
+    fi
+    return "$status"
+}
+
+bot_has_reviewed() {
+    local bot="$1"
+    bot_query "$bot" '
+      def completed_marker:
+        try ((capture("codex-review-state:v1 (?<payload>[^\\n]+) -->").payload
+          | fromjson | [.code_review, .security_review]
+          | map(select(.commit_sha == $head)))
+          | length > 0 and all(.[]; .status == "completed")) catch false;
+      any($reviews[]; .user.login == $bot and .commit_id == $head
+        and (.state == "APPROVED" or .state == "COMMENTED" or .state == "CHANGES_REQUESTED")
+        and (if ((.body // "") | contains("<!-- codex-review-state:v1 "))
+             then ((.body | completed_marker) // false) else true end))
+      or any($comments[]; .user.login == $bot and (((.body // "") | completed_marker) // false))
+    '
+}
+
+bot_declared_skip() {
+    local bot="$1"
+    bot_query "$bot" '
+      def trusted: .user.login == $owner or .user.login == "github-actions[bot]"
+        or .author_association == "OWNER" or .author_association == "MEMBER" or .author_association == "COLLABORATOR";
+      [$comments[] | select(trusted and ((.body // "") | startswith("@codex review\n")
+        and contains("<!-- zipper-review-head:" + $head + " -->"))) | .created_at // empty] | min as $requested |
+      any($comments[]; .user.login == $bot and ((.body // "") | test($skip; "i"))
+        and (((.body // "") | contains($head)
+          or test("fewer than 10 stars|does not receive automatic reviews"; "i"))
+          or ($bot == "chatgpt-codex-connector[bot]" and $requested != null
+              and (.created_at // "") >= $requested)))'
+}
+
+bot_has_review_activity() {
+    local bot="$1"
+    bot_query "$bot" '
+      any($reviews[]; .user.login == $bot)
+      or any($comments[]; .user.login == $bot and ((.body // "") | contains("<!-- codex-review-state:v1 ")))
+    '
+}
+
+bot_has_current_activity() {
+    local bot="$1"
+    bot_query "$bot" '
+      any($reviews[]; .user.login == $bot and .commit_id == $head and .state == "PENDING")
+      or any(($comments + $reviews)[]; .user.login == $bot and (try (
+        .body | capture("codex-review-state:v1 (?<payload>[^\\n]+) -->").payload | fromjson
+        | [.code_review, .security_review][]
+        | .commit_sha == $head and (.status == "running" or .status == "queued" or .status == "pending")
+      ) catch false))
+    '
+}
+
+head_was_requested() {
+    bot_query "" 'any($comments[];
+      (.user.login == $owner or .user.login == "github-actions[bot]"
+       or .author_association == "OWNER" or .author_association == "MEMBER" or .author_association == "COLLABORATOR")
+      and ((.body // "") | startswith("@codex review\n") and contains("<!-- zipper-review-head:" + $head + " -->")))'
+}
+
+bot_has_current_response() {
+    local bot="$1"
+    bot_query "$bot" '
+      def current_marker:
+        (.body // "") as $body |
+        try ($body | capture("codex-review-state:v1 (?<payload>[^\\n]+) -->").payload | fromjson
+          | [.code_review, .security_review] | any(.[]; .commit_sha == $head))
+        catch ($body | contains($head));
+      any($reviews[]; .user.login == $bot and .commit_id == $head)
+      or any(($comments + $reviews)[]; .user.login == $bot
+        and ((.body // "") | contains("<!-- codex-review-state:v1 "))
+        and current_marker)
+    '
+}
+
 bot_accounted_for() {
     local bot="$1"
-    # Posted a review?
-    if jq -e --arg bot "$bot" '.[] | select(.user.login == $bot)' <<<"$reviews_json" >/dev/null 2>&1; then
-        return 0
-    fi
-    # Declared a skip / rate limit / walkthrough in an issue comment?
-    if jq -r --arg bot "$bot" '.[] | select(.user.login == $bot) | .body' <<<"$comments_json" 2>/dev/null \
-        | grep -qiE "$SKIP_PATTERN"; then
-        return 0
-    fi
-    # Reported a finished review through a completion marker rather than a review
-    # object? Codex does this, so the marker is checked in both carriers: it posts
-    # the marker as an issue comment and has also posted it as a review body.
-    if jq -r --arg bot "$bot" '.[] | select(.user.login == $bot) | .body' <<<"$reviews_json" 2>/dev/null \
-        | grep -qE "$CODEX_COMPLETION_PATTERN"; then
-        return 0
-    fi
-    if jq -r --arg bot "$bot" '.[] | select(.user.login == $bot) | .body' <<<"$comments_json" 2>/dev/null \
-        | grep -qE "$CODEX_COMPLETION_PATTERN"; then
-        return 0
-    fi
-    return 1
+    if bot_has_reviewed "$bot"; then return 0; fi
+    if bot_has_current_response "$bot"; then return 1; fi
+    bot_declared_skip "$bot"
 }
 
 print_info "Waiting for robot reviews on PR #$PR (timeout: ${TIMEOUT_MINUTES}m)..."
@@ -213,24 +320,39 @@ while [[ ${#pending[@]} -gt 0 ]]; do
             # Distinguish a real review from a declared skip: only the former is
             # evidence about the code, and only the latter is evidence the
             # reviewer is unavailable.
-            if jq -e --arg bot "$bot" '.[] | select(.user.login == $bot)' <<<"$reviews_json" >/dev/null 2>&1; then
+            if bot_has_reviewed "$bot"; then
                 set_outcome "$bot" "reviewed"
-            elif jq -r --arg bot "$bot" '.[] | select(.user.login == $bot) | .body' <<<"$comments_json" 2>/dev/null \
-                    | grep -qiE "$SKIP_PATTERN"; then
-                set_outcome "$bot" "skipped"
+                if [[ "${WAIT_FOR_REVIEWS_DRY_RUN:-0}" != "1" ]]; then
+                    rm -f "$REVIEW_WAIT_DIR/$PR-$REVIEW_HEAD-$bot.started"
+                fi
             else
-                set_outcome "$bot" "reviewed"
+                set_outcome "$bot" "skipped"
             fi
         else
-            still_pending+=("$bot")
+            if bot_has_current_activity "$bot" && active_window_expired "$bot"; then
+                print_warn "$bot did not complete the current-head review within 20m; proceeding without review credit."
+                set_outcome "$bot" "silent"
+            else
+                still_pending+=("$bot")
+            fi
         fi
     done
     pending=("${still_pending[@]+"${still_pending[@]}"}")
     [[ ${#pending[@]} -eq 0 ]] && break
     if [[ $(date +%s) -ge $DEADLINE ]]; then
         for bot in "${pending[@]}"; do
-            print_warn "$bot did not respond within ${TIMEOUT_MINUTES}m — proceeding without it."
-            set_outcome "$bot" "silent"
+            if bot_has_current_activity "$bot" \
+                    || { [[ "$bot" == "chatgpt-codex-connector[bot]" ]] && bot_has_review_activity "$bot" && ! head_was_requested; }; then
+                print_warn "$bot has not completed a review of $REVIEW_HEAD; retry later."
+                set_outcome "$bot" "pending"
+                REVIEW_PENDING=1
+                if [[ "$bot" == "chatgpt-codex-connector[bot]" ]] && ! bot_has_current_activity "$bot" && ! head_was_requested; then
+                    echo "REVIEW-REQUEST codex $REVIEW_HEAD"
+                fi
+            else
+                print_warn "$bot did not respond within ${TIMEOUT_MINUTES}m — proceeding without it."
+                set_outcome "$bot" "silent"
+            fi
         done
         break
     fi
@@ -285,6 +407,11 @@ if ! jq -e '.data.repository.pullRequest.reviewThreads.nodes' <<<"$threads_json"
     exit 3
 fi
 
+if ! FINAL_HEAD=$(read_head) || [[ "$FINAL_HEAD" != "$REVIEW_HEAD" ]]; then
+    print_error "PR head changed or could not be verified; retry the review gate."
+    exit 3
+fi
+
 unresolved=$(jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)]' <<<"$threads_json")
 unresolved_count=$(jq 'length' <<<"$unresolved")
 echo "REVIEW-GATE-RESULT unresolved=$unresolved_count"
@@ -294,6 +421,10 @@ print_info "Review summaries:"
 jq -r '.[] | select(.body != null and .body != "") | "  \(.user.login) [\(.state)]: \(.body | split("\n")[0])"' <<<"$reviews_json" || true
 
 if [[ "$unresolved_count" -eq 0 ]]; then
+    if [[ "$REVIEW_PENDING" -eq 1 ]]; then
+        print_warn "Review is pending for the current head; merge deferred."
+        exit 4
+    fi
     print_ok "No unresolved review threads on PR #$PR."
     exit 0
 fi

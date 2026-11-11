@@ -25,6 +25,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "tests" / "wait-for-reviews.sh"
 
+HEAD_SHA = "883fe06900d8de9f20480a83e905474673a10eb5"
 CODEX = "chatgpt-codex-connector[bot]"
 CODERABBIT = "coderabbitai[bot]"
 
@@ -57,10 +58,16 @@ class _StubGh:
 
     def __init__(self, root: Path, reviews: list[dict], comments: list[dict],
                  fail: str | None = None, threads: list[dict] | None = None,
-                 threads_shape: dict | None = None):
+                 threads_shape: dict | None = None, head: str = HEAD_SHA,
+                 final_head: str | None = None):
         self.root = root
         self.bin = root / "bin"
         self.bin.mkdir(parents=True, exist_ok=True)
+        for comment in comments:
+            comment.setdefault("updated_at", "2026-06-11T00:00:00Z")
+        for review in reviews:
+            review.setdefault("commit_id", head)
+            review.setdefault("state", "COMMENTED")
         (root / "reviews.json").write_text(json.dumps(reviews))
         (root / "comments.json").write_text(json.dumps(comments))
         if threads is not None:
@@ -83,6 +90,13 @@ class _StubGh:
                 args = sys.argv[1:]
                 if args[:2] == ["repo", "view"]:
                     print("dwojtaszek/zipper")
+                elif args[:2] == ["pr", "view"]:
+                    if fail == "head":
+                        raise SystemExit(1)
+                    count = (root / "head-count")
+                    seen = int(count.read_text()) if count.exists() else 0
+                    count.write_text(str(seen + 1))
+                    print({head!r} if seen == 0 or {final_head!r} is None else {final_head!r})
                 elif args[:2] == ["api", "--paginate"] and args[2].endswith("/reviews"):
                     if fail == "reviews":
                         raise SystemExit(1)
@@ -107,6 +121,7 @@ class _StubGh:
         )
         gh.chmod(gh.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
         self.env = dict(os.environ)
+        self.env["STATE_DIR"] = str(root / "review-state")
         self.env["PATH"] = f"{self.bin}{os.pathsep}{self.env.get('PATH', '')}"
 
     def run_gate(self, timeout_minutes: int = 1, skip: str | None = None) -> subprocess.CompletedProcess:
@@ -153,10 +168,55 @@ class ReviewWaitGateTests(unittest.TestCase):
         self.assertNotIn("did not respond within", result.stdout,
                          "the gate must not fall through to its timeout warning")
 
-    def test_codexMarkerForAnotherCommit_isStillAccountedFor(self):
-        """The marker names the reviewed commit. The gate's contract is that the bot
-        has responded, and a stale marker is a thread-level problem (branch
-        protection blocks on unresolved threads), not a reason to wait 20 minutes."""
+    def test_skip_from_before_current_head_does_not_waive_new_wait(self):
+        stub = self._gate(comments=[
+            {"user": {"login": CODEX}, "body": CODEX_SUMMARY_MARKER},
+            {"user": {"login": CODERABBIT}, "body": "Review skipped: rate limit",
+             "updated_at": "2026-06-09T00:00:00Z"}])
+        result = stub.run_gate(timeout_minutes=0)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(f"REVIEWER-OUTCOME {CODERABBIT}=silent", result.stdout)
+        self.assertNotIn(f"REVIEWER-OUTCOME {CODERABBIT}=skipped", result.stdout)
+
+    def test_skip_for_current_head_is_accepted_without_commit_dates(self):
+        stub = self._gate(comments=[
+            {"user": {"login": CODEX}, "body": CODEX_SUMMARY_MARKER},
+            {"user": {"login": CODERABBIT}, "body": "Review skipped: rate limit " + HEAD_SHA}])
+        result = stub.run_gate(timeout_minutes=0)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(f"REVIEWER-OUTCOME {CODERABBIT}=skipped", result.stdout)
+
+    def test_skip_after_trusted_current_head_request_is_accepted(self):
+        stub = self._gate(comments=[
+            {"user": {"login": "dwojtaszek"}, "body": "@codex review\n<!-- zipper-review-head:" + HEAD_SHA + " -->",
+             "created_at": "2026-06-11T00:00:00Z"},
+            {"user": {"login": CODEX}, "body": "Review skipped: rate limit", "created_at": "2026-06-11T00:01:00Z"},
+            {"user": {"login": CODERABBIT}, "body": CODERABBIT_SKIP}])
+        result = stub.run_gate(timeout_minutes=0)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(f"REVIEWER-OUTCOME {CODEX}=skipped", result.stdout)
+
+    def test_old_malformed_marker_does_not_override_a_fresh_skip(self):
+        stub = self._gate(comments=[
+            {"user": {"login": CODEX}, "body": "<!-- codex-review-state:v1 {broken} -->",
+             "created_at": "2026-06-09T00:00:00Z"},
+            {"user": {"login": "dwojtaszek"}, "body": "@codex review\n<!-- zipper-review-head:" + HEAD_SHA + " -->",
+             "created_at": "2026-06-11T00:00:00Z"},
+            {"user": {"login": CODEX}, "body": "Review skipped: rate limit", "created_at": "2026-06-11T00:01:00Z"},
+            {"user": {"login": CODERABBIT}, "body": CODERABBIT_SKIP}])
+        result = stub.run_gate(timeout_minutes=0)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(f"REVIEWER-OUTCOME {CODEX}=skipped", result.stdout)
+
+    def test_formal_review_can_discuss_marker_as_ordinary_prose(self):
+        stub = self._gate(reviews=[{"user": {"login": CODEX}, "body": "The codex-review-state:v1 parser is correct."}],
+                          comments=[{"user": {"login": CODERABBIT}, "body": CODERABBIT_SKIP}])
+        result = stub.run_gate(timeout_minutes=0)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(f"REVIEWER-OUTCOME {CODEX}=reviewed", result.stdout)
+
+    def test_codexMarkerForAnotherCommit_staysPending(self):
+        """A response about an older head cannot authorize the current head."""
         other = CODEX_SUMMARY_MARKER.replace("883fe06900d8de9f20480a83e905474673a10eb5", "f" * 40)
         stub = self._gate(
             reviews=[],
@@ -166,10 +226,124 @@ class ReviewWaitGateTests(unittest.TestCase):
             ],
         )
 
-        result = stub.run_gate()
+        result = stub.run_gate(timeout_minutes=0)
 
+        self.assertEqual(result.returncode, 4, result.stdout + result.stderr)
+        self.assertIn("=pending", result.stdout)
+        self.assertIn("REVIEW-REQUEST codex " + HEAD_SHA, result.stdout)
+
+    def test_running_or_malformed_markers_never_count_as_reviewed(self):
+        for marker in (CODEX_SUMMARY_MARKER.replace('"completed"', '"running"'),
+                       '<!-- codex-review-state:v1 {broken} -->'):
+            with self.subTest(marker=marker), tempfile.TemporaryDirectory() as directory:
+                stub = _StubGh(Path(directory), [], [
+                    {"user": {"login": CODEX}, "body": marker},
+                    {"user": {"login": CODERABBIT}, "body": CODERABBIT_SKIP}])
+                result = stub.run_gate(timeout_minutes=0)
+                self.assertEqual(result.returncode, 4, result.stdout + result.stderr)
+                self.assertIn(f"REVIEWER-OUTCOME {CODEX}=pending", result.stdout)
+                if '\"running\"' in marker:
+                    self.assertNotIn("REVIEW-REQUEST", result.stdout)
+
+    def test_stale_formal_review_does_not_count_for_current_head(self):
+        stub = self._gate(reviews=[{"user": {"login": CODEX}, "state": "APPROVED",
+                                    "commit_id": "f" * 40, "body": ""}],
+                          comments=[{"user": {"login": CODERABBIT}, "body": CODERABBIT_SKIP}])
+        result = stub.run_gate(timeout_minutes=0)
+        self.assertEqual(result.returncode, 4, result.stdout + result.stderr)
+
+    def test_head_change_during_gate_invalidates_result(self):
+        stub = self._gate(comments=[{"user": {"login": CODEX}, "body": CODEX_SUMMARY_MARKER},
+                                    {"user": {"login": CODERABBIT}, "body": CODERABBIT_SKIP}],
+                          final_head="f" * 40)
+        result = stub.run_gate(timeout_minutes=0)
+        self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+
+    def test_current_running_review_overrides_historical_skip(self):
+        stub = self._gate(comments=[
+            {"user": {"login": CODEX}, "body": "Review skipped: usage limit"},
+            {"user": {"login": CODEX}, "body": CODEX_SUMMARY_MARKER.replace('"completed"', '"running"')},
+            {"user": {"login": CODERABBIT}, "body": CODERABBIT_SKIP}])
+        result = stub.run_gate(timeout_minutes=0)
+        self.assertEqual(result.returncode, 4, result.stdout + result.stderr)
+        self.assertIn(f"REVIEWER-OUTCOME {CODEX}=pending", result.stdout)
+
+    def test_large_paginated_comments_cannot_turn_running_review_into_silence(self):
+        stub = self._gate(comments=[
+            {"user": {"login": "maintainer"}, "body": "x" * 50000} for _ in range(3)] + [
+            {"user": {"login": CODEX}, "body": CODEX_SUMMARY_MARKER.replace('"completed"', '"running"')},
+            {"user": {"login": CODERABBIT}, "body": CODERABBIT_SKIP}])
+        result = stub.run_gate(timeout_minutes=0)
+        self.assertEqual(result.returncode, 4, result.stdout + result.stderr)
+        self.assertNotIn(f"REVIEWER-OUTCOME {CODEX}=silent", result.stdout)
+
+    def test_requested_refresh_without_activity_becomes_silent_after_budget(self):
+        stub = self._gate(comments=[
+            {"user": {"login": CODEX}, "body": CODEX_SUMMARY_MARKER.replace(HEAD_SHA, "f" * 40)},
+            {"user": {"login": "dwojtaszek"}, "body": "@codex review\n<!-- zipper-review-head:" + HEAD_SHA + " -->"},
+            {"user": {"login": CODERABBIT}, "body": CODERABBIT_SKIP}])
+        result = stub.run_gate(timeout_minutes=0)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertNotIn("did not respond within", result.stdout)
+        self.assertNotIn("REVIEW-REQUEST", result.stdout)
+        self.assertIn(f"REVIEWER-OUTCOME {CODEX}=silent", result.stdout)
+        self.assertNotIn(f"REVIEWER-OUTCOME {CODEX}=reviewed", result.stdout)
+
+    def test_requested_refresh_still_pending_while_current_review_runs(self):
+        stub = self._gate(comments=[
+            {"user": {"login": CODEX}, "body": CODEX_SUMMARY_MARKER.replace('"completed"', '"running"')},
+            {"user": {"login": "dwojtaszek"}, "body": "@codex review\n<!-- zipper-review-head:" + HEAD_SHA + " -->"},
+            {"user": {"login": CODERABBIT}, "body": CODERABBIT_SKIP}])
+        result = stub.run_gate(timeout_minutes=0)
+        self.assertEqual(result.returncode, 4, result.stdout + result.stderr)
+        self.assertIn(f"REVIEWER-OUTCOME {CODEX}=pending", result.stdout)
+
+    def test_abandoned_current_activity_has_a_bounded_window(self):
+        stub = self._gate(comments=[
+            {"user": {"login": CODEX}, "body": CODEX_SUMMARY_MARKER.replace('"completed"', '"running"')},
+            {"user": {"login": CODERABBIT}, "body": CODERABBIT_SKIP}])
+        waiting = Path(stub.env['STATE_DIR']) / 'review-waits'
+        waiting.mkdir(parents=True)
+        (waiting / f'1328-{HEAD_SHA}-{CODEX}.started').write_text('1\n')
+        result = stub.run_gate(timeout_minutes=0)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(f'REVIEWER-OUTCOME {CODEX}=silent', result.stdout)
+        self.assertNotIn(f'REVIEWER-OUTCOME {CODEX}=reviewed', result.stdout)
+
+    def test_diagnostic_wait_does_not_persist_an_activity_window(self):
+        stub = self._gate(comments=[
+            {"user": {"login": CODEX}, "body": CODEX_SUMMARY_MARKER.replace('"completed"', '"running"')},
+            {"user": {"login": CODERABBIT}, "body": CODERABBIT_SKIP}])
+        stub.env['WAIT_FOR_REVIEWS_DRY_RUN'] = '1'
+        result = stub.run_gate(timeout_minutes=0)
+        self.assertEqual(result.returncode, 4, result.stdout + result.stderr)
+        self.assertFalse(Path(stub.env['STATE_DIR']).exists())
+
+    def test_malformed_marker_is_not_waived_by_an_old_skip(self):
+        stub = self._gate(comments=[
+            {"user": {"login": CODEX}, "body": "Review skipped: usage limit"},
+            {"user": {"login": CODEX}, "body": "<!-- codex-review-state:v1 malformed -->"},
+            {"user": {"login": CODERABBIT}, "body": CODERABBIT_SKIP}])
+        result = stub.run_gate(timeout_minutes=0)
+        self.assertEqual(result.returncode, 4, result.stdout + result.stderr)
+
+    def test_running_review_body_overrides_historical_skip(self):
+        stub = self._gate(reviews=[{"user": {"login": CODEX}, "state": "COMMENTED",
+                                    "body": CODEX_SUMMARY_MARKER.replace('"completed"', '"running"')}],
+                          comments=[{"user": {"login": CODEX}, "body": "Review skipped: usage limit"},
+                                    {"user": {"login": CODERABBIT}, "body": CODERABBIT_SKIP}])
+        result = stub.run_gate(timeout_minutes=0)
+        self.assertEqual(result.returncode, 4, result.stdout + result.stderr)
+        self.assertNotIn('REVIEW-REQUEST', result.stdout)
+
+    def test_outsider_cannot_suppress_a_current_head_request(self):
+        stub = self._gate(comments=[
+            {"user": {"login": CODEX}, "body": CODEX_SUMMARY_MARKER.replace(HEAD_SHA, "f" * 40)},
+            {"user": {"login": "outsider"}, "author_association": "NONE",
+             "body": "@codex review\n<!-- zipper-review-head:" + HEAD_SHA + " -->"},
+            {"user": {"login": CODERABBIT}, "body": CODERABBIT_SKIP}])
+        result = stub.run_gate(timeout_minutes=0)
+        self.assertEqual(result.returncode, 4, result.stdout + result.stderr)
+        self.assertIn('REVIEW-REQUEST codex ' + HEAD_SHA, result.stdout)
 
     def test_unrecognisedCodexComment_isNotTreatedAsAReview(self):
         """The marker must be required, not any comment by the bot: a stray comment
