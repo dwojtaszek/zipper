@@ -1050,6 +1050,8 @@ def _is_mutating_cmd(a: list) -> bool:
     Module-level rather than nested in `run_cmd` so the classification can be
     asserted directly instead of inferred from a side effect.
     """
+    if a[:3] == ["gh", "pr", "comment"]:
+        return True
     if "worktree" in a:
         return True
     if "merge" in a:
@@ -2670,6 +2672,26 @@ class ReviewGate(NamedTuple):
     detail: str
 
 
+def _request_head_review(pr_number, head: str, cwd: str) -> None:
+    if DRY_RUN:
+        print(f"[DRY RUN] Would request a Codex review for {head} on PR #{pr_number}")
+        return
+    os.makedirs(STATE_DIR, exist_ok=True)
+    claim = os.path.join(STATE_DIR, f"pr-{pr_number}-review-request-{head}")
+    with open(claim + ".lock", "a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return
+        if os.path.exists(claim + ".sent"):
+            return
+        requested, _, _ = run_cmd(["gh", "pr", "comment", str(pr_number), "--body",
+            f"@codex review\n<!-- zipper-review-head:{head} -->"], cwd=cwd, timeout=60)
+        if requested == 0:
+            with open(claim + ".sent", "w") as receipt:
+                receipt.write(head)
+
+
 def _run_review_gate(pr_number, cwd: str, wait_minutes: int | None = None,
                      timeout: int = 1500) -> ReviewGate:
     """Wait for robot reviews, skipping reviewers already known to be gone.
@@ -2680,20 +2702,27 @@ def _run_review_gate(pr_number, cwd: str, wait_minutes: int | None = None,
     `environmental`.
     """
     unavailable = _reviewers_currently_unavailable()
-    env = None
+    env = {"STATE_DIR": os.path.abspath(STATE_DIR)}
+    if DRY_RUN:
+        env["WAIT_FOR_REVIEWS_DRY_RUN"] = "1"
     if unavailable:
         print(f"[reviewers] Not waiting on {', '.join(unavailable)} "
               f"(recorded unavailable).")
-        env = {REVIEW_GATE_ENV_SKIP: ",".join(unavailable)}
+        env[REVIEW_GATE_ENV_SKIP] = ",".join(unavailable)
     args = ["bash", REVIEW_GATE_SCRIPT, str(pr_number)]
     if wait_minutes is not None:
         args.append(str(wait_minutes))
     code, out, err = run_cmd(args, cwd=cwd, timeout=timeout, env=env)
     # The quick passes give the gate ~1 minute, which is not long enough for a
     # queued reviewer to answer, so their silences must not count as strikes.
-    _record_reviewer_outcomes(out, count_silence=wait_minutes is None)
+    if code in (0, 1, 4):
+        _record_reviewer_outcomes(out, count_silence=wait_minutes is None)
+    # Updated heads may need an explicit Codex trigger; claim once across runner processes.
+    request = re.search(r"^REVIEW-REQUEST codex ([0-9a-f]{40})$", out, re.MULTILINE) if code == 4 else None
+    if request:
+        _request_head_review(pr_number, request.group(1), cwd)
     # Only exit 1 is a verdict on the code (unresolved threads exist). Everything
-    # else nonzero is "the reviewers could not be asked": REVIEW_GATE_ENVIRONMENTAL_EXIT
+    # else nonzero means review is pending or unavailable: REVIEW_GATE_ENVIRONMENTAL_EXIT
     # is the gate's own environmental code, 2 means `gh` was missing or `gh repo view`
     # failed, and -1 is `run_cmd` killing the gate on timeout. Those must not dispatch a
     # mission to fix review threads nobody raised.

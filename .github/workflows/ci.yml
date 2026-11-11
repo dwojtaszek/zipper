@@ -250,6 +250,12 @@ jobs:
       - name: Restore (locked)
         run: dotnet restore zipper.sln --locked-mode
 
+      - name: Validate candidate Git hooks in an independent clone
+        shell: bash
+        run: |
+          python3 .github/scripts/validate-hooks.py
+          python3 -m unittest discover -s tests/ci -p test_hook_installation.py
+
       - name: Build solution (Release, includes tests)
         shell: bash
         env:

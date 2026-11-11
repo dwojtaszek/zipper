@@ -212,3 +212,9 @@ publish/E2E builds against shared `bin`/`obj` outputs.
 Runner-only eligibility is shared by `dev.sh`, hooks, and PR CI through `.github/scripts/change-scope.py`. Product/shared/gate paths and unknown paths retain broader gates. Main/release calls default to the full matrix. Use `.github/scripts/run-check.py --log <path> -- <command>` to preserve full logs and real exit status with bounded console output.
 
 Runner-only hook success uses a tree-bound `scope=runner` receipt. Pre-push reuses it only for the same clean, fresh HEAD after classifying every outgoing ref as documentation/runner-only; mixed product refs still require product checks. Full-unit receipts retain their existing credit.
+
+### Local guardrail ordering
+
+Pre-commit checks staged whitespace first and validates affected workflow structure after staging isolation, before SDK tests. Hook test commands use the SDK's incremental restore; an existing `project.assets.json` alone does not prove the dependency graph is current. `dev.sh` runs CI contract and parity checks before the product build.
+
+Both hook installers validate candidates in an independent clone before replacing installed hooks. The native linked-worktree commit and push-hook canary protects caller Git metadata. Successful validation is cached by the candidate hooks, their helpers, and the canary test contents; any changed input invalidates that cache. CI validates the same canary on every build platform.

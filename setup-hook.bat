@@ -30,6 +30,10 @@ if "%GIT_COMMON_DIR%"=="" (
 )
 set "HOOK_DIR=%GIT_COMMON_DIR%\hooks"
 
+REM Validate before replacing any installed hook.
+python .github\scripts\validate-hooks.py
+if errorlevel 1 ( popd & endlocal & exit /b 1 )
+
 if not exist "%HOOK_DIR%" (
     mkdir "%HOOK_DIR%" >nul 2>nul
     if errorlevel 1 (

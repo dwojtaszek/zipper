@@ -49,12 +49,17 @@
     <_GitHookTemplate Include="$(MSBuildThisFileDirectory).github/hooks/pre-commit" />
     <_GitHookTemplate Include="$(MSBuildThisFileDirectory).github/hooks/post-commit" />
     <_GitHookTemplate Include="$(MSBuildThisFileDirectory).github/hooks/pre-push" />
+    <_GitHookValidationInput Include="$(MSBuildThisFileDirectory).github/scripts/validate-hooks.py" />
+    <_GitHookValidationInput Include="$(MSBuildThisFileDirectory).github/scripts/change-scope.py" />
+    <_GitHookValidationInput Include="$(MSBuildThisFileDirectory).github/scripts/run-check.py" />
+    <_GitHookValidationInput Include="$(MSBuildThisFileDirectory)tests/ci/test_change_scope.py" />
+    <_GitHookValidationInput Include="$(MSBuildThisFileDirectory)dev.sh" />
   </ItemGroup>
 
   <Target Name="SyncGitHooks"
           BeforeTargets="BeforeBuild"
           Condition="'@(_GitHookTemplate)' != '' AND Exists('$(MSBuildThisFileDirectory).git/HEAD')"
-          Inputs="@(_GitHookTemplate)"
+          Inputs="@(_GitHookTemplate);@(_GitHookValidationInput)"
           Outputs="@(_GitHookTemplate->'$(MSBuildThisFileDirectory).git/hooks/%(Filename)%(Extension)')">
     <!-- IgnoreExitCode + IgnoreStandardErrorWarningFormat ensure hook sync failures never fail local builds. -->
     <Exec Command="bash &quot;$(MSBuildThisFileDirectory)setup-hook.sh&quot; --quiet"

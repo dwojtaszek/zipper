@@ -274,14 +274,6 @@ run_check() {
         need_docs_drift=0
     fi
 
-    if [[ "$need_build" -eq 1 || "$need_unit_tests" -eq 1 || "$need_docs_drift" -eq 1 || "$need_analyzer_tests" -eq 1 || "$need_e2e_smoke" -eq 1 || "${#specific_e2e_scripts[@]}" -gt 0 ]]; then
-        ensure_release_build
-    fi
-
-    if [[ "$need_format" -eq 1 ]]; then
-        run_step "Verify code formatting" dotnet format --verify-no-changes src/
-    fi
-
     if [[ "$need_parity" -eq 1 ]]; then
         run_step "Validate E2E .sh/.bat parity" bash tests/validate-e2e-parity.sh
         run_step "Validate build properties contract" bash tests/test-ci-build-props.sh
@@ -292,6 +284,18 @@ run_check() {
         run_step "Run workflow artifact handling check" bash tests/test-artifact-handling.sh
         run_step "Run coverage gate action tests" bash .github/actions/coverage-gate/test-coverage-gate.sh
     fi
+
+    if [[ "$need_build" -eq 1 || "$need_unit_tests" -eq 1 || "$need_docs_drift" -eq 1 || "$need_analyzer_tests" -eq 1 || "$need_e2e_smoke" -eq 1 || "${#specific_e2e_scripts[@]}" -gt 0 ]]; then
+        ensure_release_build
+        if [[ "$need_ci_tests" -eq 1 ]]; then
+            run_step "Verify SDK hook synchronization" env PYTHONPATH=tests/ci python3 -m unittest test_dev_cli.DevCliAndLocalWorkflowTests.test_directory_build_props_msbuild_sync_git_hooks_targets_succeed
+        fi
+    fi
+
+    if [[ "$need_format" -eq 1 ]]; then
+        run_step "Verify code formatting" dotnet format --verify-no-changes src/
+    fi
+
 
     if [[ "$need_runner_tests" -eq 1 ]]; then
         run_step "Run zipper-runner tests" python3 -m unittest discover -s .zipper-runner/tests -p "test_*.py"
@@ -359,15 +363,16 @@ case "$COMMAND" in
         run_step "Sync local Git hooks" bash setup-hook.sh
         ;;
     all)
-        ensure_release_build
-        run_step "Verify code formatting" dotnet format --verify-no-changes src/
         run_step "Validate E2E .sh/.bat parity" bash tests/validate-e2e-parity.sh
         run_step "Validate build properties contract" bash tests/test-ci-build-props.sh
-        run_step "Run unit + property tests" dotnet test src/Zipper.Tests/Zipper.Tests.csproj --no-build -c Release
-        run_step "Run Roslyn analyzer tests" dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj --no-build -c Release
         run_step "Run CI workflow contract tests" python3 -m unittest discover -s tests/ci -p "test_*.py"
         run_step "Run workflow artifact handling check" bash tests/test-artifact-handling.sh
         run_step "Run coverage gate action tests" bash .github/actions/coverage-gate/test-coverage-gate.sh
+        ensure_release_build
+        run_step "Verify SDK hook synchronization" env PYTHONPATH=tests/ci python3 -m unittest test_dev_cli.DevCliAndLocalWorkflowTests.test_directory_build_props_msbuild_sync_git_hooks_targets_succeed
+        run_step "Verify code formatting" dotnet format --verify-no-changes src/
+        run_step "Run unit + property tests" dotnet test src/Zipper.Tests/Zipper.Tests.csproj --no-build -c Release
+        run_step "Run Roslyn analyzer tests" dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj --no-build -c Release
         run_step "Run incremental mutation smoke" bash tests/run-mutation-smoke.sh
         resolve_zipper_binary
         run_step "Run basic E2E smoke" bash tests/run-e2e-basic.sh
