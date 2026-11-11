@@ -103,6 +103,31 @@ public sealed class CrossFormatLoadFileRendererTests
         Assert.All(result.DatLines, line => Assert.DoesNotContain("\n", line, StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData("Standard", false)]
+    [InlineData("Standard", true)]
+    [InlineData("LoadfileOnly", true)]
+    [InlineData("ProductionSet", false)]
+    public async Task RenderAndApply_WarnsExactlyWhenOptComposingWriterWarns(string writerModeName, bool loadfileOnly)
+    {
+        var writerMode = Enum.Parse<WriterMode>(writerModeName);
+        var request = new FileGenerationRequest
+        {
+            LoadfileOnly = loadfileOnly,
+            Output = new OutputConfig { FileCount = 1 },
+            Metadata = new MetadataConfig { Seed = 42, WithMetadata = true },
+        };
+
+        var (_, expectedError) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(
+            () => LoadFileWriterFactory.CreateWriter(LoadFileFormat.Opt, writerMode)
+                .WriteAsync(new MemoryStream(), request, []));
+        var (_, _, actualError) = ConsoleOutputCapture.RunWithCapturedOutput(
+            () => CrossFormatLoadFileRenderer.RenderAndApply(request, request, [], writerMode,
+                "loadfile.dat", "loadfile.opt", CancellationToken.None));
+
+        Assert.Equal(expectedError, actualError);
+    }
+
     private sealed class FixedComposer(IReadOnlyList<string> columns, IReadOnlyList<string[]> values) : ILoadFileComposer
     {
         public IReadOnlyList<string> HeaderColumns => columns;

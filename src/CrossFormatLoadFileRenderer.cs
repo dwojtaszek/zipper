@@ -19,7 +19,7 @@ internal static class CrossFormatLoadFileRenderer
     {
         var datComposer = new DatComposer(datRequest, writerMode);
         var optComposer = new OptComposer(optRequest, writerMode);
-        if (writerMode != WriterMode.Standard && !optRequest.LoadfileOnly)
+        if (writerMode == WriterMode.Standard && !optRequest.LoadfileOnly)
         {
             OptComposingWriter.WarnUnsupportedStandardColumns(optRequest);
         }

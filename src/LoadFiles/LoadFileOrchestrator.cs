@@ -7,7 +7,8 @@ namespace Zipper.LoadFiles;
 /// and ProductionSetGenerator (files on disk) both delegate here so "which formats to write
 /// and how to invoke writers" has exactly one code path, preserving the
 /// composer → serializer → emitter seam behind ILoadFileWriter. Loadfile-Only Mode keeps
-/// its own loop for per-format chaos; coordinated DAT/OPT emission is shared here.
+/// its own loop for per-format chaos; coordinated DAT/OPT emission is shared here through
+/// <see cref="EmitCrossFormatAsync"/>.
 /// </summary>
 internal static class LoadFileOrchestrator
 {
