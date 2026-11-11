@@ -7,7 +7,7 @@ namespace Zipper.LoadFiles;
 /// and ProductionSetGenerator (files on disk) both delegate here so "which formats to write
 /// and how to invoke writers" has exactly one code path, preserving the
 /// composer → serializer → emitter seam behind ILoadFileWriter. Loadfile-Only Mode keeps
-/// its own loop because it applies chaos per format.
+/// its own loop for per-format chaos; coordinated DAT/OPT emission is shared here.
 /// </summary>
 internal static class LoadFileOrchestrator
 {
@@ -47,31 +47,55 @@ internal static class LoadFileOrchestrator
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            var auditJson = LoadFileAuditWriter.GenerateAuditJson(loadFileTarget, request, processedFiles, anomalies, format);
-            var auditStream = openTarget(auditTarget);
-            await using (auditStream.ConfigureAwait(false))
-            {
-                using var auditWriter = new System.IO.StreamWriter(auditStream);
-                await auditWriter.WriteAsync(auditJson.AsMemory(), cancellationToken).ConfigureAwait(false);
-            }
-
-            if (request.Chaos.ChaosMode
-                && anomalies is not null
-                && !ChaosScenarios.GeneratesAdversarialValues(request.Chaos.ChaosScenario))
-            {
-                var sidecarJson = LoadFileAuditWriter.GenerateExpectationSidecarJson(
-                    loadFileTarget, request, processedFiles, anomalies, format);
-                var sidecarStream = openTarget(LoadFileAuditWriter.ExpectationSidecarPath(auditTarget));
-                await using (sidecarStream.ConfigureAwait(false))
-                {
-                    using var sidecarWriter = new System.IO.StreamWriter(sidecarStream);
-                    await sidecarWriter.WriteAsync(sidecarJson.AsMemory(), cancellationToken).ConfigureAwait(false);
-                }
-            }
+            await LoadFileAuditWriter.EmitAsync(loadFileTarget, auditTarget, request, processedFiles,
+                openTarget, anomalies, format, cancellationToken: cancellationToken).ConfigureAwait(false);
 
             lastLoadFileTarget = loadFileTarget;
         }
 
         return lastLoadFileTarget;
+    }
+
+    /// <summary>
+    /// Emits coordinated DAT/OPT Load Files, Audit Files, and Chaos Expectation Sidecars.
+    /// Callers retain target naming and partial-output cleanup ownership.
+    /// </summary>
+    internal static async Task<CrossFormatAnomalyResult> EmitCrossFormatAsync(
+        FileGenerationRequest datRequest,
+        FileGenerationRequest optRequest,
+        IReadOnlyList<FileData> records,
+        WriterMode mode,
+        string datTarget,
+        string optTarget,
+        string datAuditTarget,
+        string optAuditTarget,
+        Func<string, Stream> openTarget,
+        CancellationToken cancellationToken)
+    {
+        var result = CrossFormatLoadFileRenderer.RenderAndApply(
+            datRequest, optRequest, records, mode,
+            Path.GetFileName(datTarget), Path.GetFileName(optTarget), cancellationToken);
+
+        await EmitRenderedAsync(datRequest, LoadFileFormat.Dat, result.DatLines, result.DatAnomalies,
+            datTarget, datAuditTarget, result.DatLines.Count - 1L).ConfigureAwait(false);
+        await EmitRenderedAsync(optRequest, LoadFileFormat.Opt, result.OptLines, result.OptAnomalies,
+            optTarget, optAuditTarget, result.OptLines.Count).ConfigureAwait(false);
+        return result;
+
+        async Task EmitRenderedAsync(FileGenerationRequest request, LoadFileFormat format,
+            IReadOnlyList<string> lines, IReadOnlyList<ChaosAnomaly> anomalies,
+            string target, string auditTarget, long totalRecords)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var policy = new TextOutputPolicy(request, format, mode, hasChaos: true);
+            var stream = openTarget(target);
+            await using (stream.ConfigureAwait(false))
+            {
+                await LoadFileEmitter.EmitRenderedLinesAsync(stream, lines, policy.Encoding, policy.EndOfLine, cancellationToken).ConfigureAwait(false);
+            }
+
+            await LoadFileAuditWriter.EmitAsync(target, auditTarget, request, records,
+                openTarget, anomalies, format, totalRecords, cancellationToken).ConfigureAwait(false);
+        }
     }
 }

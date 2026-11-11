@@ -33,18 +33,51 @@ internal static class LoadFileAuditWriter
         LoadFileFormat? format = null)
     {
         var propertiesPath = Path.ChangeExtension(outputPath, null) + "_properties.json";
-        var json = GenerateAuditJson(outputPath, request, composedRecords, anomalies, format);
-        await File.WriteAllTextAsync(propertiesPath, json).ConfigureAwait(false);
-
-        if (request.Chaos.ChaosMode
-            && anomalies is not null
-            && !ChaosScenarios.GeneratesAdversarialValues(request.Chaos.ChaosScenario))
-        {
-            var sidecarJson = GenerateExpectationSidecarJson(outputPath, request, composedRecords, anomalies, format);
-            await File.WriteAllTextAsync(ExpectationSidecarPath(propertiesPath), sidecarJson);
-        }
+        await EmitAsync(outputPath, propertiesPath, request, composedRecords,
+            path => new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true),
+            anomalies, format).ConfigureAwait(false);
 
         return propertiesPath;
+    }
+
+    /// <summary>
+    /// Emits an Audit File and its eligible Chaos Expectation Sidecar to caller-owned targets.
+    /// </summary>
+    internal static async Task EmitAsync(
+        string outputPath,
+        string auditPath,
+        FileGenerationRequest request,
+        IReadOnlyCollection<FileData> records,
+        Func<string, Stream> openTarget,
+        IReadOnlyList<ChaosAnomaly>? anomalies = null,
+        LoadFileFormat? format = null,
+        long? totalRecordsOverride = null,
+        CancellationToken cancellationToken = default)
+    {
+        await WriteJsonAsync(auditPath,
+            GenerateAuditJson(outputPath, request, records, anomalies, format, totalRecordsOverride),
+            openTarget, cancellationToken).ConfigureAwait(false);
+
+        if (request.Chaos.ChaosMode && anomalies is not null
+            && !ChaosScenarios.GeneratesAdversarialValues(request.Chaos.ChaosScenario))
+        {
+            await WriteJsonAsync(ExpectationSidecarPath(auditPath),
+                GenerateExpectationSidecarJson(outputPath, request, records, anomalies, format, totalRecordsOverride),
+                openTarget, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task WriteJsonAsync(
+        string path, string json, Func<string, Stream> openTarget, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var stream = openTarget(path);
+        await using (stream.ConfigureAwait(false))
+        {
+            await using var writer = new StreamWriter(stream, new System.Text.UTF8Encoding(false), leaveOpen: true);
+            await writer.WriteAsync(json.AsMemory(), cancellationToken).ConfigureAwait(false);
+            await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <summary>

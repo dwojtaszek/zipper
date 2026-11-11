@@ -39,7 +39,7 @@ Source-Driven Generation has exactly one semantic seam: `SourceRecordIntake` (in
 
 `ChaosEngine` uses Floyd's algorithm for O(k) exact random sampling of lines to corrupt. Per-format anomaly catalogs live in `ChaosAnomalyTypes.cs` (DAT, OPT, CSV, Concordance, EDRM-XML), and single-format anomalies run in Loadfile-Only Mode through `LoadFileEmitter`. EDRM-XML applies document-scoped anomalies inside the `XmlLoadFileWriter` carve-out. Email anomalies (`ChaosAnomalyTypes.Email`) sample the `.eml` work items with the same sampler, and `EmailAnomalyApplier` applies one deterministic anomaly to each sampled Email. Each mutation depends only on the run seed and the work item index, so concurrent producers produce the same output and audit. TIFF anomalies (`ChaosAnomalyTypes.Tiff`) follow the same pattern: `TiffAnomalyApplier` applies one deterministic header or IFD anomaly to the first IFD of each sampled TIFF, `TiffPreflightValidator` (in `src/Validation/`) checks TIFF bytes for each type. Generation does not run it.
 
-The `cross-format-desync` and `broken-families` scenarios coordinate DAT and OPT in Loadfile-Only Mode or Production Set mode. `CrossFormatLoadFileRenderer` renders both formats through their normal writers into line buffers, `CrossFormatAnomalyApplier` mutates the coordinated view, and `LoadFileEmitter` writes the final lines. This path buffers both rendered Load Files; ordinary generation and single-format chaos retain their streaming behavior. Each Audit File records the peer Load File and line.
+The `cross-format-desync` and `broken-families` scenarios coordinate DAT and OPT in Loadfile-Only Mode or Production Set mode. `CrossFormatLoadFileRenderer` composes and serializes both formats directly into line buffers, `CrossFormatAnomalyApplier` mutates the coordinated view, and `LoadFileEmitter` writes the final lines. This path buffers both rendered Load Files; ordinary generation and single-format chaos retain their streaming behavior. Each Audit File records the peer Load File and line.
 
 ## Three-Mode Pipeline
 
@@ -196,7 +196,7 @@ An advisory Jev architecture seam lint (`tools/typesafe-audit/checks/architectur
 
 ## Load File Composition Seam
 
-The four delimited formats (DAT, OPT, CSV, Concordance) are produced by three deep modules; EDRM-XML is the carve-out. `LoadFileOrchestrator` owns format dispatch for Standard and regular Production Set output — for each requested format it creates the writer, opens the output stream (ZIP entry or disk file), writes, and emits the Audit File. ZipArchiveSink (Standard mode) and ProductionSetGenerator (Production Set mode) delegate to it. Loadfile-Only Mode keeps its own loop for per-format chaos; coordinated DAT/OPT scenarios use `CrossFormatLoadFileRenderer` and return the final rendered lines to `LoadFileEmitter` for output. See the [Architecture Invariants](#architecture-invariants-human-approval-required) — the composer/serializer/emitter shape must not be collapsed back into fat writers without human approval.
+The four delimited formats (DAT, OPT, CSV, Concordance) are produced by three deep modules; EDRM-XML is the carve-out. `LoadFileOrchestrator` owns format dispatch for Standard and Production Set output and coordinated DAT/OPT emission in Loadfile-Only Mode — for each requested format it creates the writer, opens the output stream (ZIP entry or disk file), writes, and emits the Audit File. ZipArchiveSink (Standard mode) and ProductionSetGenerator (Production Set mode) delegate to it. Loadfile-Only Mode keeps its own loop for per-format chaos; coordinated DAT/OPT scenarios delegate to `LoadFileOrchestrator`, which uses `CrossFormatLoadFileRenderer` and passes final rendered lines to `LoadFileEmitter` for output. `LoadFileAuditWriter` owns Audit File and optional Chaos Expectation Sidecar emission through caller-supplied stream targets. See the [Architecture Invariants](#architecture-invariants-human-approval-required) — the composer/serializer/emitter shape must not be collapsed back into fat writers without human approval.
 
 - **Composer** (`ILoadFileComposer`) — column authority: header columns + lazy `LoadFileRecord`s with raw values held as parallel arrays aligned by index (handles modes + column profiles internally).
 - **Serializer** (`ILoadFileSerializer`) — render authority: record/header → one escaped line. Pure (no stream, EOL, or chaos).
@@ -206,12 +206,12 @@ The four delimited formats (DAT, OPT, CSV, Concordance) are produced by three de
 graph TD
     Req["FileGenerationRequest + processedFiles"]
     Req --> LFO["LoadFileOrchestrator<br/>(format dispatch; stream target via caller)"]
-    Req --> CFR["CrossFormatLoadFileRenderer<br/>(paired DAT + OPT render)"]
+    LFO --> CFR["CrossFormatLoadFileRenderer<br/>(paired DAT + OPT render)"]
     LFO --> Factory["LoadFileWriterFactory.CreateWriter(format, mode)"]
-    CFR --> Factory
     Factory -->|"DAT / OPT / CSV / Concordance"| CW["Composing Writer<br/>(thin ILoadFileWriter)"]
     Factory -->|"EDRM-XML"| XML["XmlLoadFileWriter<br/>(carve-out: hierarchical tree)"]
 
+    CFR --> Comp
     CW --> Comp["Composer — column authority<br/>header columns + lazy raw records"]
     Comp --> Rec["LoadFileRecord<br/>(columns + raw values,<br/>parallel arrays aligned by index)"]
     Rec --> Ser["Serializer — render authority<br/>record/header → one escaped line (pure)"]
@@ -219,7 +219,7 @@ graph TD
 
     Emit -->|"no chaos"| Stream["stream lines<br/>(buffered StreamWriter)"]
     Emit -->|"single-format chaos<br/>(Loadfile-Only)"| ChaosP["stream line → intercept<br/>+ inter-line anomaly bytes"]
-    Emit -->|"coordinated DAT/OPT"| LineBuffers["rendered DAT + OPT<br/>line buffers"]
+    Ser -->|"coordinated DAT/OPT"| LineBuffers["rendered DAT + OPT<br/>line buffers"]
     LineBuffers --> CrossApplier["CrossFormatAnomalyApplier"]
     CrossApplier --> ReEmit["LoadFileEmitter.EmitRenderedLinesAsync"]
 

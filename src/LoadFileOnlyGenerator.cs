@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text;
 using Zipper.LoadFiles;
 
 namespace Zipper;
@@ -103,7 +102,7 @@ internal static class LoadFileOnlyGenerator
 
         if (ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario))
         {
-            var crossFormatResult = await GenerateCrossFormatLoadFilesAsync(request, baseFileName, createWriter, createdFiles, cancellationToken).ConfigureAwait(false);
+            var crossFormatResult = await GenerateCrossFormatLoadFilesAsync(request, baseFileName, createdFiles, cancellationToken).ConfigureAwait(false);
             var otherFormats = formatsToGenerate
                 .Where(format => format is not LoadFileFormat.Dat and not LoadFileFormat.Opt)
                 .ToList();
@@ -191,7 +190,6 @@ internal static class LoadFileOnlyGenerator
     private static async Task<(string LoadFilePath, string PropertiesFilePath, long TotalRecords)> GenerateCrossFormatLoadFilesAsync(
         FileGenerationRequest request,
         string baseFileName,
-        Func<LoadFileFormat, WriterMode, ILoadFileWriter> createWriter,
         List<string> createdFiles,
         CancellationToken cancellationToken)
     {
@@ -212,99 +210,17 @@ internal static class LoadFileOnlyGenerator
             : Array.Empty<FileData>();
         var writerMode = sourceDriven ? WriterMode.Standard : WriterMode.LoadfileOnly;
 
-        var datEncoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.Encoding);
-        var optEncoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile.IsEncodingExplicit ? request.LoadFile.Encoding : "ANSI");
-
-        var result = await CrossFormatLoadFileRenderer.RenderAndApplyAsync(
-            datRequest,
-            optRequest,
-            records,
-            createWriter,
-            writerMode,
-            Path.GetFileName(datPath),
-            Path.GetFileName(optPath),
-            datEncoding,
-            optEncoding,
-            cancellationToken).ConfigureAwait(false);
-
-        var eol = LoadFiles.LoadFileEmitter.GetEolString(request.Delimiters.EndOfLine);
-
-        // Write mutated DAT
-        var datFileStream = new FileStream(datPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
-        createdFiles.Add(datPath);
-        await using (datFileStream.ConfigureAwait(false))
-        {
-            await LoadFiles.LoadFileEmitter.EmitRenderedLinesAsync(
-                datFileStream,
-                result.DatLines,
-                datEncoding,
-                eol,
-                cancellationToken).ConfigureAwait(false);
-        }
-
         string datPropertiesPath = Path.ChangeExtension(datPath, null) + "_properties.json";
-        string datAuditJson = LoadFileAuditWriter.GenerateAuditJson(
-            datPath,
-            datRequest,
-            records,
-            result.DatAnomalies,
-            LoadFileFormat.Dat,
-            totalRecordsOverride: result.DatLines.Count - 1L);
-        await WriteAuditFileAsync(datPropertiesPath, datAuditJson, createdFiles, cancellationToken).ConfigureAwait(false);
+        var result = await LoadFileOrchestrator.EmitCrossFormatAsync(
+            datRequest, optRequest, records, writerMode,
+            datPath, optPath, datPropertiesPath, optPath + "_properties.json",
+            OpenTarget, cancellationToken).ConfigureAwait(false);
 
-        if (request.Chaos.ChaosMode && !ChaosScenarios.GeneratesAdversarialValues(request.Chaos.ChaosScenario))
+        Stream OpenTarget(string path)
         {
-            string datSidecarJson = LoadFileAuditWriter.GenerateExpectationSidecarJson(
-                datPath,
-                datRequest,
-                records,
-                result.DatAnomalies,
-                LoadFileFormat.Dat,
-                expectedDataRecords: result.DatLines.Count - 1L);
-            await WriteAuditFileAsync(
-                LoadFileAuditWriter.ExpectationSidecarPath(datPropertiesPath),
-                datSidecarJson,
-                createdFiles,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        // Write mutated OPT
-        var optFileStream = new FileStream(optPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
-        createdFiles.Add(optPath);
-        await using (optFileStream.ConfigureAwait(false))
-        {
-            await LoadFiles.LoadFileEmitter.EmitRenderedLinesAsync(
-                optFileStream,
-                result.OptLines,
-                optEncoding,
-                eol,
-                cancellationToken).ConfigureAwait(false);
-        }
-
-        string optPropertiesPath = optPath + "_properties.json";
-        string optAuditJson = LoadFileAuditWriter.GenerateAuditJson(
-            optPath,
-            optRequest,
-            records,
-            result.OptAnomalies,
-            LoadFileFormat.Opt,
-            totalRecordsOverride: result.OptLines.Count);
-        await WriteAuditFileAsync(optPropertiesPath, optAuditJson, createdFiles, cancellationToken).ConfigureAwait(false);
-
-        if (request.Chaos.ChaosMode && !ChaosScenarios.GeneratesAdversarialValues(request.Chaos.ChaosScenario))
-        {
-            string optSidecarJson = LoadFileAuditWriter.GenerateExpectationSidecarJson(
-                optPath,
-                optRequest,
-                records,
-                result.OptAnomalies,
-                LoadFileFormat.Opt,
-                expectedDataRecords: result.OptLines.Count);
-            await WriteAuditFileAsync(
-                LoadFileAuditWriter.ExpectationSidecarPath(optPropertiesPath),
-                optSidecarJson,
-                createdFiles,
-                cancellationToken).ConfigureAwait(false);
+            var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
+            createdFiles.Add(path);
+            return stream;
         }
 
         return (datPath, datPropertiesPath, result.DatLines.Count - 1L);
@@ -316,29 +232,6 @@ internal static class LoadFileOnlyGenerator
         if (File.Exists(sidecarPath))
         {
             createdFiles.Add(sidecarPath);
-        }
-    }
-
-    private static async Task WriteAuditFileAsync(
-        string path,
-        string content,
-        List<string> createdFiles,
-        CancellationToken cancellationToken)
-    {
-        var stream = new FileStream(
-            path,
-            FileMode.CreateNew,
-            FileAccess.Write,
-            FileShare.None,
-            PerformanceConstants.DefaultBufferSize,
-            FileOptions.Asynchronous);
-        createdFiles.Add(path);
-
-        await using (stream.ConfigureAwait(false))
-        {
-            await using var writer = new StreamWriter(stream, new UTF8Encoding(false), leaveOpen: true);
-            await writer.WriteAsync(content.AsMemory(), cancellationToken).ConfigureAwait(false);
-            await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 

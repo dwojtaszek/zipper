@@ -51,7 +51,7 @@ internal sealed class OptComposingWriter : ILoadFileWriter
         await LoadFileEmitter.EmitAsync(stream, serializer, composer.HeaderColumns, records, policy.Encoding, policy.EndOfLine, effectiveChaos, cancellationToken).ConfigureAwait(false);
     }
 
-    private static void WarnUnsupportedStandardColumns(FileGenerationRequest request)
+    internal static void WarnUnsupportedStandardColumns(FileGenerationRequest request)
     {
         if (request.Metadata.ShouldIncludeMetadataColumns(request.Output))
         {

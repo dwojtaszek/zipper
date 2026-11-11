@@ -18,6 +18,38 @@ internal sealed class TextOutputPolicy
         this.EndOfLine = ResolveEndOfLine(request, format, mode, hasChaos);
     }
 
+    /// <summary>
+    /// Preserves legacy single-byte replacement/best-fit characters before anomaly matching,
+    /// without encoding and decoding whole rendered Load Files.
+    /// </summary>
+    internal string NormalizeForAnomalies(string line)
+    {
+        if (!this.Encoding.IsSingleByte || line.AsSpan().IndexOfAnyExceptInRange('\0', '\x7f') < 0)
+        {
+            return line;
+        }
+
+        var normalized = new StringBuilder(line.Length);
+        Span<byte> bytes = stackalloc byte[2];
+        Span<char> characters = stackalloc char[2];
+        for (int i = 0; i < line.Length; i++)
+        {
+            if (line[i] <= '\x7f')
+            {
+                normalized.Append(line[i]);
+                continue;
+            }
+
+            int length = char.IsSurrogatePair(line, i) ? 2 : 1;
+            int byteCount = this.Encoding.GetBytes(line.AsSpan(i, length), bytes);
+            int charCount = this.Encoding.GetChars(bytes[..byteCount], characters);
+            normalized.Append(characters[..charCount]);
+            i += length - 1;
+        }
+
+        return normalized.ToString();
+    }
+
     private static Encoding ResolveEncoding(FileGenerationRequest request, LoadFileFormat format)
     {
         var resolvedEncoding = EncodingHelper.GetEncodingOrDefault(request.LoadFile?.Encoding);
