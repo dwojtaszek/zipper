@@ -20,6 +20,11 @@ if [[ -z "$STAGED" ]]; then
     exit 0
 fi
 
+# Catch staged whitespace before SDK discovery, stashing, or tests.
+if ! git diff --cached --check; then
+    exit 1
+fi
+
 record_verified_scope() {
     PENDING_DIR=$(git rev-parse --git-path zipper-hooks 2>/dev/null || echo "")
     if [[ -n "$PENDING_DIR" ]]; then
@@ -89,6 +94,11 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+if printf '%s\n' "$STAGED" | grep -qE '^(\.github/workflows/(ci|pr|build-and-test)\.yml|tests/test-unified-workflow\.(sh|bat))$'; then
+    echo "▶ Validating staged workflow structure..."
+    bash tests/test-unified-workflow.sh || exit 1
+fi
+
 # Docs-only = every staged file matches one of the doc patterns.
 # Runs after staging isolation so DocsDriftTests evaluates the exact staged markdown snapshot.
 TOTAL=$(printf '%s\n' "$STAGED" | grep -c .)
@@ -106,9 +116,6 @@ if [[ "$DOCS_ONLY" == "true" || "$RUNNER_ONLY" == "true" ]]; then
     if [[ -f "src/Zipper.Tests/Zipper.Tests.csproj" ]]; then
         echo "▶ Pre-commit (docs-only): running DocsDriftTests..."
         DRIFT_ARGS=(dotnet test src/Zipper.Tests/Zipper.Tests.csproj --filter "FullyQualifiedName~DocsDriftTests" --logger "console;verbosity=quiet")
-        if [[ -f "src/Zipper.Tests/obj/project.assets.json" ]]; then
-            DRIFT_ARGS+=(--no-restore)
-        fi
         if ! "${DRIFT_ARGS[@]}"; then
             echo "❌ DocsDriftTests failed. Commit aborted." >&2
             echo "   Run 'dotnet test src/Zipper.Tests/Zipper.Tests.csproj --filter FullyQualifiedName~DocsDriftTests' for full output." >&2
@@ -165,11 +172,7 @@ fi
 # 3. Unit tests
 # ──────────────────────────────────────────────────
 echo "▶ Running unit tests..."
-RESTORE_TRIGGER=$(printf '%s\n' "$STAGED" | grep -c -E '(\.csproj$|\.sln$|Directory\.Build\.props$|Directory\.Packages\.props$|global\.json$|packages\.lock\.json$)' || true)
 UNIT_ARGS=(dotnet test src/Zipper.Tests/Zipper.Tests.csproj --logger "console;verbosity=quiet")
-if [[ "$RESTORE_TRIGGER" -eq 0 && -f "src/Zipper.Tests/obj/project.assets.json" ]]; then
-    UNIT_ARGS+=(--no-restore)
-fi
 if ! "${UNIT_ARGS[@]}"; then
     echo "❌ Unit tests failed. Commit aborted." >&2
     echo "   Run 'dotnet test' for full output." >&2
@@ -181,9 +184,6 @@ ANALYZER_TRIGGER=$(printf '%s\n' "$STAGED" | grep -c -E '(^|/)(src/Zipper\.Analy
 if [[ "$ANALYZER_TRIGGER" -gt 0 ]]; then
     echo "▶ Running analyzer tests..."
     ANALYZER_ARGS=(dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj --logger "console;verbosity=quiet")
-    if [[ "$RESTORE_TRIGGER" -eq 0 && -f "src/Zipper.Analyzers.Tests/obj/project.assets.json" ]]; then
-        ANALYZER_ARGS+=(--no-restore)
-    fi
     if ! "${ANALYZER_ARGS[@]}"; then
         echo "❌ Analyzer unit tests failed. Commit aborted." >&2
         echo "   Run 'dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj' for full output." >&2
