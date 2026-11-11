@@ -339,9 +339,17 @@ We welcome contributions! Please see our [Contributing Guide](docs/contributing.
 ## Documentation Index
 
 - [Contributing Guide](docs/contributing.md) — Build, test, and developer workflow (Windows, macOS, Linux)
+- [Agent Workflow](docs/agent-workflow.md) — Testing, issue delivery, release notes, and review gates
+- [Agent Review Standards](docs/agent-review-standards.md) — Code style, test naming, and review responsibilities
+- [Code Review Guidelines](docs/code-review-guidelines.md) — Deliberate project patterns and review guardrails
+- [Property-Based Testing](docs/property-based-testing.md) — FsCheck properties, generators, and behavioral coverage
+- [Runner Operations](docs/runner-operations.md) — Preflight checks, controlled trials, and runner diagnostics
 - [Advanced CLI & Reference Guide](docs/advanced-guide.md) — Complete flag reference, Chaos Engine, delimiter tuning, and schemas
 - [Archive Test Suites](docs/archive-test-suites.md) — Extractor-test fixture pairs with paired unique IDs (`--archive-test-suite`, ADR-0008)
 - [Architecture Specifications](docs/architecture.md) — Core system design, seams, and pipeline architecture
+- [Architecture Decision Records](docs/adr/README.md) — Index of recorded architecture decisions
 - [Requirements & Specifications](Requirements.md) — Immutable functional requirement definitions (`REQ-XXX`)
 - [Ubiquitous Language](UBIQUITOUS_LANGUAGE.md) — Domain language definitions
 - [CI/CD & Testing Guide](docs/cicd.md) — Pipeline map, local hooks, and CI gates
+- [External Checks & Dependency Policy](CI.md) — SonarCloud, CodeRabbit, CodeQL, golden baselines, and dependency updates
+- [Weekly Functional QA](docs/weekly-qa.md) — Scheduled CLI smoke tests, optional Droid checks, and weekly issue reporting

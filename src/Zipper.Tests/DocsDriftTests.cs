@@ -7,6 +7,26 @@ public class DocsDriftTests
 {
     private static readonly string RepoRoot = FindRepoRoot();
 
+    [Fact]
+    public void README_DocumentationIndex_LinksEveryTopLevelGuideAndAdrIndex()
+    {
+        var lines = File.ReadAllLines(Path.Combine(RepoRoot, "README.md"));
+        var start = Array.IndexOf(lines, "## Documentation Index");
+        Assert.True(start >= 0, "Missing README Documentation Index.");
+        var index = string.Join('\n', lines.Skip(start + 1)
+            .TakeWhile(line => !line.StartsWith("## ", StringComparison.Ordinal)));
+        var guides = Directory.GetFiles(Path.Combine(RepoRoot, "docs"), "*.md")
+            .Select(path => $"docs/{Path.GetFileName(path)}")
+            .Append("CI.md")
+            .Append("docs/adr/README.md");
+
+        foreach (var guide in guides)
+        {
+            Assert.Contains($"]({guide})", index);
+            Assert.True(File.Exists(Path.Combine(RepoRoot, guide)), $"Missing guide: {guide}");
+        }
+    }
+
     [Theory]
     [InlineData("FR-035: Production Manifest Comparison", 157, 163)]
     [InlineData("FR-036: Hash Generation", 165, 169)]
