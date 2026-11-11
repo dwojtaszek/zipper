@@ -15,10 +15,20 @@ set -u
 # Include Deletions, Renames, and Copies so a D- or R-only commit still
 # runs format/tests (a deletion can still break compilation elsewhere).
 # ──────────────────────────────────────────────────
-STAGED=$(git diff --cached --name-only --diff-filter=ACMRDTUX)
+STAGED=$(git diff --cached --name-only --no-renames --diff-filter=ACMRDTUX)
 if [[ -z "$STAGED" ]]; then
     exit 0
 fi
+
+record_verified_scope() {
+    PENDING_DIR=$(git rev-parse --git-path zipper-hooks 2>/dev/null || echo "")
+    if [[ -n "$PENDING_DIR" ]]; then
+        mkdir -p "$PENDING_DIR" 2>/dev/null || true
+        STAGED_TREE=$(git write-tree 2>/dev/null || echo "")
+        printf 'timestamp=%s\npid=%s\ntree=%s\nscope=%s\n' "$(date +%s)" "$$" "$STAGED_TREE" "$1" \
+            > "$PENDING_DIR/pre-commit.pending" 2>/dev/null || true
+    fi
+}
 
 if ! command -v dotnet >/dev/null 2>&1; then
     echo "❌ dotnet not found. Commit aborted." >&2
@@ -32,9 +42,9 @@ fi
 STASH_REF=""
 UNSTAGED_EXISTS=false
 STASH_FLAGS=(--keep-index --quiet)
-# Scope untracked file check to src/ so untracked notes/docs outside src/ do not
+# Scope untracked isolation to product, runner, and gate sources; unrelated notes do not
 # trigger an unnecessary git stash push/pop cycle.
-UNTRACKED_SRC=$(git ls-files --others --exclude-standard -- src/)
+UNTRACKED_SRC=$(git ls-files --others --exclude-standard -- src/ .zipper-runner/ .github/scripts/)
 if [[ -n "$UNTRACKED_SRC" ]]; then
     UNSTAGED_EXISTS=true
     STASH_FLAGS+=(--include-untracked)
@@ -82,8 +92,17 @@ trap 'exit 143' TERM
 # Docs-only = every staged file matches one of the doc patterns.
 # Runs after staging isolation so DocsDriftTests evaluates the exact staged markdown snapshot.
 TOTAL=$(printf '%s\n' "$STAGED" | grep -c .)
-DOCS=$(printf '%s\n' "$STAGED" | grep -c -E '(^|/)(docs/|CHANGELOG(\.md)?$|.*\.(md|markdown)$)' || true)
-if [[ "$TOTAL" -gt 0 && "$DOCS" -eq "$TOTAL" ]]; then
+DOCS=$(printf '%s\n' "$STAGED" | grep -c -E '^(docs/|CHANGELOG(\.md)?$|.*\.(md|markdown)$)' || true)
+RUNNER_ONLY=false
+DOCS_ONLY=false
+if [[ -f .github/scripts/change-scope.py ]]; then
+    SCOPE=$(python3 .github/scripts/change-scope.py --staged) || exit 1
+    [[ "$SCOPE" == *"only_runner=true"* ]] && RUNNER_ONLY=true
+    [[ "$SCOPE" == *"only_docs=true"* ]] && DOCS_ONLY=true
+elif [[ "$TOTAL" -gt 0 && "$DOCS" -eq "$TOTAL" ]]; then
+    DOCS_ONLY=true
+fi
+if [[ "$DOCS_ONLY" == "true" || "$RUNNER_ONLY" == "true" ]]; then
     if [[ -f "src/Zipper.Tests/Zipper.Tests.csproj" ]]; then
         echo "▶ Pre-commit (docs-only): running DocsDriftTests..."
         DRIFT_ARGS=(dotnet test src/Zipper.Tests/Zipper.Tests.csproj --filter "FullyQualifiedName~DocsDriftTests" --logger "console;verbosity=quiet")
@@ -97,7 +116,13 @@ if [[ "$TOTAL" -gt 0 && "$DOCS" -eq "$TOTAL" ]]; then
             exit 1
         fi
     fi
-    echo "✓ Pre-commit: docs-only change verified (DocsDriftTests passed, skipping full suite)."
+    if [[ "$RUNNER_ONLY" == "true" ]]; then
+        echo "▶ Running runner tests for the staged runner-only change..."
+        python3 .github/scripts/run-check.py --log "$(mktemp -t zipper-runner-check.XXXXXX)" -- \
+            python3 -m unittest discover -s .zipper-runner/tests -p 'test_*.py' || exit 1
+        record_verified_scope runner
+    fi
+    echo "✓ Pre-commit: documentation/runner gates passed; unchanged product unit suite skipped."
     exit 0
 fi
 
@@ -170,12 +195,6 @@ echo "✓ Pre-commit: format + unit tests passed"
 #   - post-commit only promotes it to `pre-commit.ok` if the sentinel exists and matches HEAD^{tree}
 #   - `git commit --no-verify` skips pre-commit ⇒ no matching sentinel ⇒ no ok marker
 #     ⇒ pre-push never wrongly skips unit tests for a bypassed commit.
-PENDING_DIR=$(git rev-parse --git-path zipper-hooks 2>/dev/null || echo "")
-if [[ -n "$PENDING_DIR" ]]; then
-    mkdir -p "$PENDING_DIR" 2>/dev/null || true
-    STAGED_TREE=$(git write-tree 2>/dev/null || echo "")
-    printf 'timestamp=%s\npid=%s\ntree=%s\n' "$(date +%s)" "$$" "$STAGED_TREE" \
-        > "$PENDING_DIR/pre-commit.pending" 2>/dev/null || true
-fi
+record_verified_scope full
 
 exit 0

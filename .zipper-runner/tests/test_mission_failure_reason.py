@@ -78,6 +78,14 @@ class MissionFailureReasonTests(unittest.TestCase):
     def setUp(self):
         self.runner = _load()
 
+    def test_nativeProviderEvents_reportReason_butToolEventsDoNot(self):
+        import json
+        for event in ({"type": "error", "message": "Rate limit exceeded"},
+                      {"type": "turn.failed", "error": {"message": "insufficient quota"}}):
+            self.assertTrue(self.runner._mission_failure_reason(json.dumps(event), "").startswith("Error: "))
+        tool = {"type": "item.completed", "item": {"type": "command_execution", "aggregated_output": "Error: quota exceeded"}}
+        self.assertEqual(self.runner._mission_failure_reason(json.dumps(tool), ""), "")
+
     def test_errorLine_shouldWinOverATraceback(self):
         """Plugins announce their termination with `Error:`; a traceback above it
         is noise that would otherwise be reported as the reason."""

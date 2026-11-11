@@ -240,6 +240,20 @@ class CiGateContractTests(unittest.TestCase):
             payload["docs-only"]["outputs"]["only_docs"] = only_docs
         return payload
 
+    def test_runner_only_allows_only_golden_skip(self):
+        payload = self._needs({"docs-only": "success", "ci": "success", "goldens": "skipped"}, only_docs="false")
+        payload["docs-only"]["outputs"]["only_runner"] = "true"
+        self._assert_passes(payload)
+        payload["ci"]["result"] = "skipped"
+        self._assert_blocks(payload, names=("ci",))
+
+    def test_runner_only_does_not_excuse_failed_checks(self):
+        for job in ("docs-only", "ci", "goldens"):
+            payload = self._needs({"docs-only": "success", "ci": "success", "goldens": "skipped"}, only_docs="false")
+            payload["docs-only"]["outputs"]["only_runner"] = "true"
+            payload[job]["result"] = "failure"
+            self._assert_blocks(payload, names=(job,))
+
     # --- the regression itself -------------------------------------------------
 
     def test_abandoned_ci_job_should_block_the_merge(self):

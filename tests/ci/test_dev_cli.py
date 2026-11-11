@@ -181,6 +181,9 @@ class DevCliAndLocalWorkflowTests(unittest.TestCase):
                 dst = tmp_path / rel
                 dst.write_text((ROOT / rel).read_text(encoding="utf-8"), encoding="utf-8")
                 dst.chmod(0o755)
+            (tmp_path / ".github/scripts").mkdir(parents=True)
+            for helper in ("change-scope.py", "run-check.py"):
+                shutil.copy(ROOT / ".github/scripts" / helper, tmp_path / ".github/scripts" / helper)
             subprocess.run(["git", "init", "-b", "feature-only"], cwd=tmp_path, check=True, capture_output=True)
             subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=tmp_path, check=True)
             subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_path, check=True)

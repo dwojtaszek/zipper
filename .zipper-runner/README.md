@@ -263,3 +263,9 @@ Codex CLI must be on the runner service PATH and authenticated (`codex login sta
 The Codex plugin defaults to `gpt-6.1-sol` and explicitly sets `model_reasoning_effort="low"` for both health probes and missions. `AGENT_PREFERENCES.md` enables `openai/gpt-6.1-sol` at priority 1; other enabled agents remain fallbacks.
 For a controlled intake, run `python3 .zipper-runner/runner.py --agent codex --model openai/gpt-6.1-sol`; normal capacity, queue ordering, and mission locks still apply.
 The Codex mission hands control back after local validation and PR publication; the parent runner monitors remote CI, which can exceed the 15-minute mission bound.
+
+### Runtime preflight and failure signals
+
+Use `bash .zipper-runner/cron-wrapper.sh --preflight` before changing timers or running a controlled trial; it uses the normal tool PATH and repository working directory and exits nonzero for missing tools, invalid repository/SDK, unavailable GitHub access, or no healthy enabled agent. `--status` also fails for an unhealthy runtime. See [runner operations](../docs/runner-operations.md).
+
+Codex missions use native JSON events so command output and assistant quotations cannot masquerade as provider quota failures. Authorization alerts defer while the matching worktree mission holds its lock; origin checks still fail closed, and an existing issue reference is not presented as missing.

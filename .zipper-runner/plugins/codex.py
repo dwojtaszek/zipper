@@ -110,7 +110,7 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
         (exit_code, stdout, stderr)
     """
     model_name = model.split("/", 1)[-1] if model and model != "default" else DEFAULT_MODEL
-    base = ["codex", "exec", "--ephemeral", "-m", model_name,
+    base = ["codex", "exec", "--json", "--ephemeral", "-m", model_name,
             "-c", 'model_reasoning_effort="low"']
 
     print(f"[codex] Running mission (continue={is_continue}) in {cwd}")

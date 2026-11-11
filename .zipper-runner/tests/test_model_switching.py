@@ -49,6 +49,8 @@ class QuotaDetectionTests(unittest.TestCase):
             "Rate limit exceeded. Try again later.",
             "insufficient quota for model claude-opus-4-6",
             "429 Too Many Requests",
+            'API Error: 429 {"error":{"type":"rate_limit_error"}}',
+            "openai.RateLimitError: rate limit exceeded",
             "Error: credit balance is too low",
             "You have exceeded your current quota",
             "status: 429 (quota exceeded)",
@@ -67,6 +69,27 @@ class QuotaDetectionTests(unittest.TestCase):
         for case in cases:
             with self.subTest(case=case):
                 self.assertFalse(runner.is_quota_exhausted(case, ""))
+
+    def test_quoted_and_other_provider_errors_do_not_exhaust_model(self):
+        import json
+        cases = [
+            "Pullfrog provider error: Rate limit exceeded (429)",
+            "Tests assert that 'rate limit exceeded' is reported.",
+            json.dumps({"type": "item.completed", "item": {"type": "command_execution",
+                        "aggregated_output": "Error: rate limit exceeded (429)"}}),
+            json.dumps({"type": "item.completed", "item": {"type": "agent_message",
+                        "text": "Pullfrog failed with HTTP 429 rate limit."}}),
+            "```\nError: quota exceeded\n```",
+        ]
+        for text in cases:
+            with self.subTest(text=text):
+                self.assertFalse(runner.is_quota_exhausted(text, text))
+
+    def test_native_provider_error_events_exhaust_model(self):
+        import json
+        for event in ({"type": "error", "message": "Rate limit exceeded"},
+                      {"type": "turn.failed", "error": {"message": "insufficient quota"}}):
+            self.assertTrue(runner.is_quota_exhausted(json.dumps(event)))
 
 
 class ModelExhaustionTrackingTests(unittest.TestCase):

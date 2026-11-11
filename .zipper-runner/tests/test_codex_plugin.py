@@ -39,4 +39,4 @@ class CodexPluginTests(unittest.TestCase):
                     self.assertTrue(received.startswith("Keep quotes ' and $ literal\n\n"))
                     self.assertIn("Do not watch or wait for remote CI", received)
                     argv = json.loads((Path(directory) / "invocation.json").read_text())
-                    self.assertEqual(argv, ["exec", "--ephemeral", "-m", "gpt-5.5" if model == "openai/gpt-5.5" else "gpt-6.1-sol", "-c", 'model_reasoning_effort="low"'])
+                    self.assertEqual(argv, ["exec", "--json", "--ephemeral", "-m", "gpt-5.5" if model == "openai/gpt-5.5" else "gpt-6.1-sol", "-c", 'model_reasoning_effort="low"'])
