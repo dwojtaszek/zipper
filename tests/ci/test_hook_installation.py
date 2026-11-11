@@ -55,13 +55,13 @@ class HookInstallationTests(unittest.TestCase):
             post_commit.write_bytes(valid_post.encode())
             result = subprocess.run(installer, cwd=root, env=env,
                                     capture_output=True, text=True, encoding='utf-8')
-            if result.returncode:
-                diagnostic = subprocess.run(installer[:-1], cwd=root, env=env,
-                                            capture_output=True, text=True, encoding='utf-8')
-                self.fail(f'Quiet installer exited {result.returncode}: {result.stdout}{result.stderr}'
-                          f'\nDiagnostic retry exited {diagnostic.returncode}: {diagnostic.stdout}{diagnostic.stderr}')
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertEqual(result.stdout, '')
             self.assertEqual(installed.read_bytes(), candidate.read_bytes())
+            verbose = subprocess.run(installer[:-1], cwd=root, env=env,
+                                     capture_output=True, text=True, encoding='utf-8')
+            self.assertEqual(verbose.returncode, 0, verbose.stdout + verbose.stderr)
+            self.assertIn('Done. Hooks installed', verbose.stdout)
             stamp = root / '.git/zipper-hooks/hook-canary.sha256'
             fingerprint = stamp.read_text(encoding='utf-8')
             (root / '.github/scripts/run-check.py').write_bytes(b'raise SystemExit(7)\n')
