@@ -1,5 +1,6 @@
 """Verify real Git change classification and bounded check status propagation."""
 import os
+import json
 import shutil
 from contextlib import contextmanager
 from pathlib import Path
@@ -11,9 +12,56 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 SCOPE = ROOT / '.github/scripts/change-scope.py'
 CHECK = ROOT / '.github/scripts/run-check.py'
+def find_git_bash(location):
+    for parent in tuple(Path(location).parents)[:4]:
+        candidate = parent / 'bin/bash.exe'
+        if candidate.is_file():
+            return str(candidate)
+    return None
+
+
+def git_bash(git):
+    direct = find_git_bash(git)
+    if direct:
+        return direct
+    try:
+        execution = subprocess.check_output([str(git), '--exec-path'], text=True,
+                                            encoding='utf-8', timeout=10).strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return find_git_bash(execution)
+
+
+BASH = shutil.which('bash')
+if os.name == 'nt':
+    BASH = git_bash(shutil.which('git')) if shutil.which('git') else None
 
 
 class ChangeScopeTests(unittest.TestCase):
+    def test_git_bash_discovery_handles_cmd_and_mingw_git_layouts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'Git'
+            bash = root / 'bin/bash.exe'
+            bash.parent.mkdir(parents=True)
+            bash.touch()
+            for relative in ('cmd/git.exe', 'mingw64/bin/git.exe', 'bin/git.exe'):
+                self.assertEqual(git_bash(root / relative), str(bash))
+            self.assertIsNone(git_bash(Path(directory) / 'other/git.exe'))
+
+    @unittest.skipIf(os.name == 'nt', 'POSIX executable shim fixture')
+    def test_git_bash_discovery_follows_a_git_shim(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bash = root / 'Git/bin/bash.exe'
+            bash.parent.mkdir(parents=True)
+            bash.touch()
+            shim = root / 'shims/git'
+            shim.parent.mkdir()
+            execution = root / 'Git/mingw64/libexec/git-core'
+            shim.write_bytes(f'#!{sys.executable}\nprint({str(execution)!r})\n'.encode())
+            shim.chmod(0o755)
+            self.assertEqual(git_bash(shim), str(bash))
+
     def test_runner_only_never_admits_product_or_gate_changes(self):
         for paths, expected in [
             ([], False),
@@ -81,8 +129,7 @@ class BoundedCheckTests(unittest.TestCase):
             self.assertLessEqual(len(result.stdout.splitlines()), 21)
 
 
-@unittest.skipIf(os.name == 'nt' or shutil.which('bash') is None, 'POSIX hook boundary')
-class RunnerHookTests(unittest.TestCase):
+class HookFixture:
     @contextmanager
     def fixture(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -90,7 +137,8 @@ class RunnerHookTests(unittest.TestCase):
             root.mkdir()
             env = {**os.environ, 'GIT_AUTHOR_NAME': 'Test', 'GIT_AUTHOR_EMAIL': 'test@example.com',
                    'GIT_COMMITTER_NAME': 'Test', 'GIT_COMMITTER_EMAIL': 'test@example.com',
-                   'GIT_CONFIG_GLOBAL': os.devnull, 'GIT_CONFIG_NOSYSTEM': '1'}
+                   'GIT_CONFIG_GLOBAL': os.devnull, 'GIT_CONFIG_NOSYSTEM': '1',
+                   'PYTHONUTF8': '1'}
             def git(*args):
                 return subprocess.run(['git', *args], cwd=root, env=env, check=True, capture_output=True)
             git('init', '-b', 'main')
@@ -117,7 +165,7 @@ class RunnerHookTests(unittest.TestCase):
             binary = Path(directory) / 'bin'
             binary.mkdir()
             dotnet = binary / 'dotnet'
-            dotnet.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$DOTNET_CALLS"\n')
+            dotnet.write_bytes(b'#!/bin/sh\nprintf "%s\\n" "$*" >> "$DOTNET_CALLS"\n')
             dotnet.chmod(0o755)
             calls = Path(directory) / 'dotnet-calls'
             env.update(PATH=str(binary) + os.pathsep + env['PATH'], DOTNET_CALLS=str(calls))
@@ -127,8 +175,76 @@ class RunnerHookTests(unittest.TestCase):
         refs = f'refs/heads/main {head} refs/heads/main {base}\n'
         if extra:
             refs += f'refs/heads/copy {head} refs/heads/copy {base}\n'
-        return subprocess.run(['bash', str(ROOT / '.github/hooks/pre-push')], cwd=root, env=env,
-                              input=refs, text=True, capture_output=True)
+        return subprocess.run([BASH, (ROOT / '.github/hooks/pre-push').as_posix()], cwd=root, env=env,
+                              input=refs, text=True, encoding='utf-8', capture_output=True)
+
+
+@unittest.skipIf(os.name == 'nt' or BASH is None, 'POSIX hook boundary')
+class RunnerHookTests(HookFixture, unittest.TestCase):
+    def test_whitespace_failure_precedes_dotnet(self):
+        with self.fixture() as (root, env, git, calls, _):
+            (root / 'README.md').write_text('bad trailing space \n')
+            git('add', 'README.md')
+            result = subprocess.run(['bash', str(ROOT / '.github/hooks/pre-commit')],
+                                    cwd=root, env=env, text=True, capture_output=True)
+            self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn('trailing whitespace', result.stdout + result.stderr)
+            self.assertFalse(calls.exists(), 'cheap checks must fail before SDK work')
+
+    def test_broken_workflow_fails_before_dotnet(self):
+        with self.fixture() as (root, env, git, calls, _):
+            shutil.copytree(ROOT / '.github', root / '.github', dirs_exist_ok=True)
+            shutil.copy(ROOT / 'tests/test-unified-workflow.sh', root / 'tests')
+            git('add', '.github', 'tests')
+            git('commit', '-m', 'test: workflow baseline')
+            workflow = root / '.github/workflows/ci.yml'
+            text = workflow.read_text()
+            start = text.index('  build-and-test:\n')
+            workflow.write_text(text[:start] + text[start:].replace('      matrix:', '      removed_matrix:', 1))
+            git('add', '.github/workflows/ci.yml')
+            result = subprocess.run(['bash', str(ROOT / '.github/hooks/pre-commit')],
+                                    cwd=root, env=env, text=True, capture_output=True)
+            self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn('missing matrix strategy', result.stdout + result.stderr)
+            self.assertFalse(calls.exists(), 'native workflow checks must precede SDK work')
+
+    @unittest.skipUnless(shutil.which('dotnet'), 'requires .NET SDK')
+    def test_hooks_refresh_stale_native_sdk_assets(self):
+        version = subprocess.run(['dotnet', '--version'], capture_output=True, text=True)
+        if version.returncode or int(version.stdout.split('.')[0]) < 10:
+            self.skipTest('requires .NET 10 SDK')
+        project_text = ('<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>'
+                        '<TargetFramework>net10.0</TargetFramework>'
+                        '<EnableDefaultCompileItems>false</EnableDefaultCompileItems>'
+                        '</PropertyGroup></Project>')
+        for mode in ('commit', 'push'):
+            with self.subTest(mode=mode), self.fixture() as (root, env, git, _, _):
+                env = {**env, 'PATH': os.environ['PATH']}
+                project = root / 'src/Zipper.Tests/Zipper.Tests.csproj'
+                project.write_text(project_text)
+                subprocess.run(['dotnet', 'restore', str(project), '--ignore-failed-sources'],
+                               cwd=root, env=env, check=True, capture_output=True)
+                library = root / 'src/Library'
+                library.mkdir()
+                (library / 'Library.csproj').write_text(project_text)
+                project.write_text(project_text.replace('</Project>',
+                    '<ItemGroup><ProjectReference Include="../Library/Library.csproj" /></ItemGroup></Project>'))
+                git('add', 'src')
+                git('commit', '-m', 'test: updated project with old restore assets')
+                base = git('rev-parse', 'HEAD').stdout.decode().strip()
+                git('update-ref', 'refs/remotes/origin/main', base)
+                (root / 'README.md').write_text('documentation change\n')
+                git('add', 'README.md')
+                if mode == 'commit':
+                    result = subprocess.run(['bash', str(ROOT / '.github/hooks/pre-commit')],
+                                            cwd=root, env=env, text=True, capture_output=True)
+                else:
+                    git('commit', '-m', 'docs: change')
+                    head = git('rev-parse', 'HEAD').stdout.decode().strip()
+                    result = self.push(root, env, head, base)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                assets = json.loads((project.parent / 'obj/project.assets.json').read_text())
+                self.assertIn('Library/1.0.0', assets['libraries'], 'restore must refresh the changed graph')
 
     def test_runner_only_commit_and_failure_run_real_runner_suite(self):
         for fail in (False, True):
@@ -159,47 +275,6 @@ class RunnerHookTests(unittest.TestCase):
             self.assertIn('ModuleNotFoundError', result.stdout + result.stderr)
             self.assertTrue(helper.exists(), 'unstaged work must be restored after failed validation')
             self.assertFalse((root / '.git/zipper-hooks/pre-commit.pending').exists())
-
-    def test_runner_gates_isolate_git_fixture_environment(self):
-        for mode in ('commit', 'push'):
-            with self.subTest(mode=mode), self.fixture() as (root, env, git, _, base):
-                work = root
-                if mode == 'commit':
-                    work = root.parent / 'linked'
-                    git('worktree', 'add', '-b', 'runner-check', str(work))
-                test = work / '.zipper-runner/tests/test_outcome.py'
-                test.write_text(
-                    'import os, pathlib, subprocess, tempfile, unittest\n'
-                    'class Outcome(unittest.TestCase):\n'
-                    '    def test_git_fixture(self):\n'
-                    '        for name in ("GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE", "GIT_COMMON_DIR"):\n'
-                    '            self.assertNotIn(name, os.environ)\n'
-                    '        with tempfile.TemporaryDirectory() as directory:\n'
-                    '            subprocess.run(["git", "init", "--bare", directory], check=True, capture_output=True)\n'
-                    '            result = subprocess.check_output(["git", "--git-dir", directory, "rev-parse", "--is-bare-repository"], text=True)\n'
-                    '            self.assertEqual(result.strip(), "true")\n')
-                subprocess.run(['git', 'add', '.zipper-runner'], cwd=work, env=env, check=True)
-                expected = git('ls-tree', '-r', '--name-only', 'HEAD').stdout
-                if mode == 'commit':
-                    hooks = root / '.git/hooks'
-                    hook = hooks / 'pre-commit'
-                    shutil.copy(ROOT / '.github/hooks/pre-commit', hook)
-                    hook.chmod(0o755)
-                    git('config', 'core.hooksPath', str(hooks))
-                    result = subprocess.run(['git', 'commit', '-m', 'test: linked runner gate'],
-                                            cwd=work, env=env, text=True, capture_output=True)
-                else:
-                    git('commit', '-m', 'test: runner gate')
-                    head = git('rev-parse', 'HEAD').stdout.decode().strip()
-                    hook_env = {**env, 'GIT_DIR': str(root / '.git'),
-                                'GIT_INDEX_FILE': str(root / '.git/index'),
-                                'GIT_COMMON_DIR': str(root / '.git'), 'GIT_WORK_TREE': str(root)}
-                    result = self.push(root, hook_env, head, base)
-                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                self.assertEqual(git('config', '--get', 'core.bare').stdout.strip(), b'false')
-                actual = subprocess.check_output(['git', 'ls-tree', '-r', '--name-only', 'HEAD'],
-                                                 cwd=work, env=env)
-                self.assertEqual(actual, expected, 'fixture Git must preserve the committed snapshot')
 
     def test_precommit_product_to_docs_rename_keeps_product_checks(self):
         with self.fixture() as (root, env, git, calls, _):
@@ -321,3 +396,60 @@ class RunnerWorkflowGraphTests(unittest.TestCase):
         self.assertIn('default: false', option.group(1))
         pr = (ROOT / '.github/workflows/pr.yml').read_text()
         self.assertIn("runner_only: ${{ needs.docs-only.outputs.only_runner == 'true' }}", pr)
+
+
+@unittest.skipIf(BASH is None, "requires Git Bash")
+class HookInstallationCanaryTests(HookFixture, unittest.TestCase):
+    def test_runner_gates_isolate_git_fixture_environment(self):
+        for mode in ('commit', 'push'):
+            with self.subTest(mode=mode), self.fixture() as (root, env, git, calls, base):
+                work = root
+                if mode == 'commit':
+                    work = root.parent / 'linked'
+                    git('worktree', 'add', '-b', 'runner-check', str(work))
+                test = work / '.zipper-runner/tests/test_outcome.py'
+                test.write_bytes((
+                    'import os, pathlib, subprocess, tempfile, unittest\n'
+                    'class Outcome(unittest.TestCase):\n'
+                    '    def test_git_fixture(self):\n'
+                    '        pathlib.Path(".canary-executed").write_text("verified")\n'
+                    '        for name in ("GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE", "GIT_COMMON_DIR"):\n'
+                    '            self.assertNotIn(name, os.environ)\n'
+                    '        with tempfile.TemporaryDirectory() as directory:\n'
+                    '            subprocess.run(["git", "init", "--bare", directory], check=True, capture_output=True)\n'
+                    '            result = subprocess.check_output(["git", "--git-dir", directory, "rev-parse", "--is-bare-repository"], text=True)\n'
+                    '            self.assertEqual(result.strip(), "true")\n').encode('utf-8'))
+                subprocess.run(['git', 'add', '.zipper-runner'], cwd=work, env=env, check=True)
+                expected = subprocess.check_output(['git', 'write-tree'], cwd=work, env=env).strip()
+                if mode == 'commit':
+                    hooks = root / '.git/hooks'
+                    for name in ('pre-commit', 'post-commit', 'pre-push'):
+                        hook = hooks / name
+                        shutil.copy(ROOT / '.github/hooks' / name, hook)
+                        hook.chmod(0o755)
+                    git('config', 'core.hooksPath', str(hooks))
+                    config = (root / '.git/config').read_bytes()
+                    result = subprocess.run(['git', 'commit', '-m', 'test: linked runner gate'],
+                                            cwd=work, env=env, text=True, encoding='utf-8', capture_output=True)
+                else:
+                    git('commit', '-m', 'test: runner gate')
+                    head = git('rev-parse', 'HEAD').stdout.decode().strip()
+                    hook_env = {**env, 'GIT_DIR': str(root / '.git'),
+                                'GIT_INDEX_FILE': str(root / '.git/index'),
+                                'GIT_COMMON_DIR': str(root / '.git'), 'GIT_WORK_TREE': str(root)}
+                    config = (root / '.git/config').read_bytes()
+                    result = self.push(root, hook_env, head, base)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual((work / '.canary-executed').read_text(), 'verified')
+                self.assertTrue(calls.exists(), 'the SDK gate must also run')
+                self.assertEqual(git('config', '--get', 'core.bare').stdout.strip(), b'false')
+                actual = subprocess.check_output(['git', 'rev-parse', 'HEAD^{tree}'], cwd=work, env=env).strip()
+                self.assertEqual(actual, expected, 'fixture Git must preserve the committed snapshot')
+                self.assertEqual(subprocess.check_output(['git', 'write-tree'], cwd=work, env=env).strip(), expected)
+                self.assertEqual((root / '.git/config').read_bytes(), config)
+                if mode == 'commit':
+                    marker = subprocess.check_output(['git', 'rev-parse', '--git-path', 'zipper-hooks/pre-commit.ok'], cwd=work, env=env, text=True).strip()
+                    receipt = (work / marker).read_text()
+                    self.assertIn('scope=runner', receipt)
+                    head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=work, env=env, text=True).strip()
+                    self.assertIn('head=' + head, receipt)

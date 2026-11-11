@@ -1050,6 +1050,8 @@ def _is_mutating_cmd(a: list) -> bool:
     Module-level rather than nested in `run_cmd` so the classification can be
     asserted directly instead of inferred from a side effect.
     """
+    if a[:3] == ["gh", "pr", "comment"]:
+        return True
     if "worktree" in a:
         return True
     if "merge" in a:
@@ -2465,7 +2467,7 @@ def _run_coderabbit_pre_pr_check(cwd: str) -> CodeRabbitGate:
             print("Reusing successful CodeRabbit review for unchanged HEAD and main in this run.")
             return CodeRabbitGate(True, False, "")
 
-    code, out, err = run_cmd([cr_bin, "review", "--committed", "--base", "main", "--agent"], cwd=cwd, timeout=600)
+    code, out, err = run_cmd([cr_bin, "review", "--committed", "--base", "main", "--agent", "--fresh"], cwd=cwd, timeout=600)
 
     limited, wait_seconds, evidence = _coderabbit_rate_limited(out, err, code)
     if limited:
@@ -2488,7 +2490,7 @@ def _run_coderabbit_pre_pr_check(cwd: str) -> CodeRabbitGate:
             if data.get("type") == "finding":
                 findings.append(line)
             elif data.get("type") == "complete":
-                complete_status = data.get("status")
+                complete_status = "cached_without_fresh_review" if data.get("reused") else data.get("status")
                 complete_findings = data.get("findings")
                 if complete_status == "review_completed" and complete_findings == 0:
                     completed = True
@@ -2670,6 +2672,26 @@ class ReviewGate(NamedTuple):
     detail: str
 
 
+def _request_head_review(pr_number, head: str, cwd: str) -> None:
+    if DRY_RUN:
+        print(f"[DRY RUN] Would request a Codex review for {head} on PR #{pr_number}")
+        return
+    os.makedirs(STATE_DIR, exist_ok=True)
+    claim = os.path.join(STATE_DIR, f"pr-{pr_number}-review-request-{head}")
+    with open(claim + ".lock", "a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return
+        if os.path.exists(claim + ".sent"):
+            return
+        requested, _, _ = run_cmd(["gh", "pr", "comment", str(pr_number), "--body",
+            f"@codex review\n<!-- zipper-review-head:{head} -->"], cwd=cwd, timeout=60)
+        if requested == 0:
+            with open(claim + ".sent", "w") as receipt:
+                receipt.write(head)
+
+
 def _run_review_gate(pr_number, cwd: str, wait_minutes: int | None = None,
                      timeout: int = 1500) -> ReviewGate:
     """Wait for robot reviews, skipping reviewers already known to be gone.
@@ -2680,20 +2702,27 @@ def _run_review_gate(pr_number, cwd: str, wait_minutes: int | None = None,
     `environmental`.
     """
     unavailable = _reviewers_currently_unavailable()
-    env = None
+    env = {"STATE_DIR": os.path.abspath(STATE_DIR)}
+    if DRY_RUN:
+        env["WAIT_FOR_REVIEWS_DRY_RUN"] = "1"
     if unavailable:
         print(f"[reviewers] Not waiting on {', '.join(unavailable)} "
               f"(recorded unavailable).")
-        env = {REVIEW_GATE_ENV_SKIP: ",".join(unavailable)}
+        env[REVIEW_GATE_ENV_SKIP] = ",".join(unavailable)
     args = ["bash", REVIEW_GATE_SCRIPT, str(pr_number)]
     if wait_minutes is not None:
         args.append(str(wait_minutes))
     code, out, err = run_cmd(args, cwd=cwd, timeout=timeout, env=env)
     # The quick passes give the gate ~1 minute, which is not long enough for a
     # queued reviewer to answer, so their silences must not count as strikes.
-    _record_reviewer_outcomes(out, count_silence=wait_minutes is None)
+    if not DRY_RUN and code in (0, 1, 4):
+        _record_reviewer_outcomes(out, count_silence=wait_minutes is None)
+    # Updated heads may need an explicit Codex trigger; claim once across runner processes.
+    request = re.search(r"^REVIEW-REQUEST codex ([0-9a-f]{40})$", out, re.MULTILINE) if code == 4 else None
+    if request:
+        _request_head_review(pr_number, request.group(1), cwd)
     # Only exit 1 is a verdict on the code (unresolved threads exist). Everything
-    # else nonzero is "the reviewers could not be asked": REVIEW_GATE_ENVIRONMENTAL_EXIT
+    # else nonzero means review is pending or unavailable: REVIEW_GATE_ENVIRONMENTAL_EXIT
     # is the gate's own environmental code, 2 means `gh` was missing or `gh repo view`
     # failed, and -1 is `run_cmd` killing the gate on timeout. Those must not dispatch a
     # mission to fix review threads nobody raised.
@@ -4051,9 +4080,9 @@ def _build_babysit_prompt(issue_number: str, issue_title: str, safe_body: str, b
         f"Act on what you find:\n"
         f"  - If implementation is incomplete: finish it (write failing tests first if missing, then implement), commit.\n"
         f"  - Before pushing or marking complete: ensure 'bash tests/run-mutation-smoke.sh' passes locally. Pre-push enforces a hard gate on mutation smoke.\n"
-        f"  - If implementation is complete but no PR exists: run local CodeRabbit review ('coderabbit review --committed --base main --agent'), address all issues/findings first, then open PR now.\n"
+        f"  - If implementation is complete but no PR exists: run local CodeRabbit review ('coderabbit review --committed --base main --agent --fresh'), address all issues/findings first, then open PR now.\n"
         f"  - If a PR is already open: your primary job is to resolve every unresolved comment, CI failure, "
-        f"and bot finding — before pushing any update, run local CodeRabbit review ('coderabbit review --committed --base main --agent'), address all issues first, and push fixes until the PR is fully green.\n"
+        f"and bot finding — before pushing any update, run local CodeRabbit review ('coderabbit review --committed --base main --agent --fresh'), address all issues first, and push fixes until the PR is fully green.\n"
         f"When opening a PR, you MUST include 'Closes #{issue_number}' in the PR body.\n"
         f"Run completely autonomously. Do not ask questions or wait for input. Make all technical decisions yourself."
     )
@@ -5136,7 +5165,7 @@ def babysit_active_worktrees():
                     print(f"Local CodeRabbit review gate is FAILED for PR #{pr_number}. Triggering babysit.")
                     prompt = (
                         f"babysit. CI is passing, but local CodeRabbit review gate failed for PR #{pr_number}. "
-                        f"Run local CodeRabbit review ('coderabbit review --committed --base main --agent'), "
+                        f"Run local CodeRabbit review ('coderabbit review --committed --base main --agent --fresh'), "
                         f"resolve all findings, commit, and push updates.\n"
                         f"\nReview gate failure detail:\n{gate.detail}\n"
                     )
@@ -5159,7 +5188,7 @@ def babysit_active_worktrees():
                     prompt = (
                         f"babysit. CI is passing, but `bash {REVIEW_GATE_SCRIPT} {pr_number}` failed. "
                         f"Resolve every unresolved review thread, reply with a brief reason if skipping a finding, "
-                        f"fix the code, commit, run local CodeRabbit review ('coderabbit review --committed --base main --agent') and address all issues first, push fixes if needed, and rerun the script until it exits 0.\n\n"
+                        f"fix the code, commit, run local CodeRabbit review ('coderabbit review --committed --base main --agent --fresh') and address all issues first, push fixes if needed, and rerun the script until it exits 0.\n\n"
                         f"{review.detail}"
                     )
                 else:
@@ -5169,7 +5198,7 @@ def babysit_active_worktrees():
                         _record_coderabbit_gate_failure(pr_number, branch, gate.detail)
                         prompt = (
                             f"babysit. Robot reviews passed, but local CodeRabbit review failed for PR #{pr_number}:\n{gate.detail}\n"
-                            f"Run local CodeRabbit review ('coderabbit review --committed --base main --agent'), "
+                            f"Run local CodeRabbit review ('coderabbit review --committed --base main --agent --fresh'), "
                             f"resolve all findings, commit, and push updates.\n"
                         )
                     else:
@@ -5309,7 +5338,7 @@ def babysit_active_worktrees():
             prompt = (
                 f"babysit. CI checks failed. "
                 f"{triage_note}"
-                f"Investigate the failures, fix them, commit, run local CodeRabbit review ('coderabbit review --committed --base main --agent') and address all issues first, and push the updates. "
+                f"Investigate the failures, fix them, commit, run local CodeRabbit review ('coderabbit review --committed --base main --agent --fresh') and address all issues first, and push the updates. "
                 f"You must run completely autonomously, do not ask any questions, and make all technical decisions yourself."
             )
 
@@ -7066,7 +7095,7 @@ def main():
                 f"Write a failing test first (TDD), implement the fix, and make your final commit. "
                 f"Before opening a PR, run the /autoreview skill (located at .agents/skills/autoreview/SKILL.md in the repo) and address every finding it raises. "
                 f"Follow AGENTS.md Runtime Capabilities: use the current tool schemas and batch accepted review findings before re-review. "
-                f"Before PR submit or update, run the local CodeRabbit CLI review ('coderabbit review --committed --base main --agent') and make sure to address all issues/findings first. "
+                f"Before PR submit or update, run the local CodeRabbit CLI review ('coderabbit review --committed --base main --agent --fresh') and make sure to address all issues/findings first. "
                 f"Only after all review findings are resolved, open a PR. "
                 f"When creating the pull request, you MUST include the text 'Closes #{num}' in the PR body/description so that GitHub automatically closes the issue when the PR is merged.\n"
                 f"DO NOT pause or exit with an intermediate summary until you have verified all tests pass with 'dotnet test', committed the changes to git, and created the pull request with 'gh pr create'. If any compiler errors or test failures remain, resolve them immediately in this session.\n"
@@ -7252,7 +7281,7 @@ def main():
                                 f"Write a failing test first (TDD), implement the fix, and make your final commit. "
                                 f"Before opening a PR, run the /autoreview skill (located at .agents/skills/autoreview/SKILL.md in the repo) and address every finding it raises. "
                                 f"Follow AGENTS.md Runtime Capabilities: use the current tool schemas and batch accepted review findings before re-review. "
-                                f"Before PR submit or update, run the local CodeRabbit CLI review ('coderabbit review --committed --base main --agent') and make sure to address all issues/findings first. "
+                                f"Before PR submit or update, run the local CodeRabbit CLI review ('coderabbit review --committed --base main --agent --fresh') and make sure to address all issues/findings first. "
                                 f"Only after all review findings are resolved, open a PR. "
                                 f"When creating the pull request, you MUST include the text 'Closes #{num}' in the PR body/description so that GitHub automatically closes the issue when the PR is merged.\n"
                                 f"DO NOT pause or exit with an intermediate summary until you have verified all tests pass with 'dotnet test', committed the changes to git, and created the pull request with 'gh pr create'. If any compiler errors or test failures remain, resolve them immediately in this session.\n"

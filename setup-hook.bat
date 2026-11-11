@@ -30,6 +30,10 @@ if "%GIT_COMMON_DIR%"=="" (
 )
 set "HOOK_DIR=%GIT_COMMON_DIR%\hooks"
 
+REM Validate before replacing any installed hook.
+python .github\scripts\validate-hooks.py
+if errorlevel 1 ( popd & endlocal & exit /b 1 )
+
 if not exist "%HOOK_DIR%" (
     mkdir "%HOOK_DIR%" >nul 2>nul
     if errorlevel 1 (
@@ -51,9 +55,9 @@ if errorlevel 1 ( popd & endlocal & exit /b 1 )
 if "%QUIET%"=="0" (
     echo.
     echo Done. Hooks installed from %TEMPLATE_DIR%\ into %HOOK_DIR%\
-    echo   pre-commit  -^> format + unit tests (DocsDriftTests fast-path for docs-only)
+    echo   pre-commit  -^> format + unit tests ^(DocsDriftTests fast-path for docs-only^)
     echo   post-commit -^> writes tree-verified marker for pre-push skip optimization
-    echo   pre-push    -^> unit tests (skippable) + mutation smoke + conditional E2E (6 cases)
+    echo   pre-push    -^> unit tests ^(skippable^) + mutation smoke + conditional E2E ^(6 cases^)
     echo.
     echo Bypass with: git commit --no-verify / git push --no-verify
 )
@@ -73,7 +77,7 @@ copy /y "%src%" "%dst%" >nul 2>nul
 if errorlevel 1 (
     if "%QUIET%"=="1" exit /b 0
     echo Error: failed to copy %src% -^> %dst%
-    echo   (check permissions, disk space, and that the destination is writable)
+    echo   ^(check permissions, disk space, and that the destination is writable^)
     exit /b 1
 )
 if "%QUIET%"=="0" echo Installed: %dst%
