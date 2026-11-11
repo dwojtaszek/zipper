@@ -25,6 +25,16 @@ public class DocsDriftTests
             Assert.Contains($"]({guide})", index);
             Assert.True(File.Exists(Path.Combine(RepoRoot, guide)), $"Missing guide: {guide}");
         }
+
+        foreach (System.Text.RegularExpressions.Match link in System.Text.RegularExpressions.Regex.Matches(
+            index,
+            @"\]\(([^)#]+?\.md)\)",
+            System.Text.RegularExpressions.RegexOptions.None,
+            TimeSpan.FromSeconds(1)))
+        {
+            var target = link.Groups[1].Value;
+            Assert.True(File.Exists(Path.Combine(RepoRoot, target)), $"Broken Documentation Index link: {target}");
+        }
     }
 
     [Theory]
