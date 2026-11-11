@@ -9,7 +9,7 @@ RUNNER_BASE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOGS_DIR="$RUNNER_BASE/logs"
 cd "$RUNNER_BASE/.." || exit 1
 
-export PATH="/home/linuxbrew/.linuxbrew/bin:$HOME/.opencode/bin:$HOME/.gemini/antigravity-cli/bin:$HOME/.local/bin:${DOTNET_ROOT:-$HOME/.dotnet}:$HOME/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+export PATH="/home/linuxbrew/.linuxbrew/bin:$HOME/.opencode/bin:$HOME/.gemini/antigravity-cli/bin:$HOME/.local/bin:${DOTNET_ROOT:-$HOME/.dotnet}:$HOME/dotnet:$HOME/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 
 if [[ -z "${DOTNET_ROOT:-}" ]]; then
     RUNNER_DOTNET_EXE=$(command -v dotnet || true)

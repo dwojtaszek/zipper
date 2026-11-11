@@ -214,8 +214,12 @@ if [[ "$RUN_UNIT_TESTS" == "true" ]]; then
             fi
             echo "✓ DocsDriftTests passed (skipping full unit suite for docs-only branch)"
             if [[ "$ANY_RUNNER_ONLY" == "true" ]]; then
-                python3 .github/scripts/run-check.py --log "$(mktemp -t zipper-runner-check.XXXXXX)" -- \
-                    python3 -m unittest discover -s .zipper-runner/tests -p 'test_*.py' || exit 1
+                (
+                    # Fixtures create other repositories; hook-local Git variables must stay here.
+                    while IFS= read -r git_env; do unset "$git_env"; done < <(git rev-parse --local-env-vars)
+                    python3 .github/scripts/run-check.py --log "$(mktemp -t zipper-runner-check.XXXXXX)" -- \
+                        python3 -m unittest discover -s .zipper-runner/tests -p 'test_*.py'
+                ) || exit 1
             fi
         fi
         RUN_UNIT_TESTS=false

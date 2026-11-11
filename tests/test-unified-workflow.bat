@@ -145,7 +145,7 @@ if errorlevel 1 (
 REM Check for matrix strategy in build job
 echo.
 echo 7. Checking build-and-test job matrix strategy...
-powershell -NoProfile -Command "if ((Select-String -Path '%SHARED_WORKFLOW_FILE%' -Pattern 'build-and-test:' -Context 0,10 | Out-String) -match 'matrix:') { exit 0 } else { exit 1 }" > nul
+powershell -NoProfile -Command "$job = [regex]::Match((Get-Content -Raw '%SHARED_WORKFLOW_FILE%'), '(?ms)^  build-and-test:\r?\n(.*?)(?=^  [A-Za-z0-9_-]+:|\z)'); if ($job.Success -and $job.Groups[1].Value -match '(?m)^      matrix:') { exit 0 } else { exit 1 }" > nul
 if errorlevel 1 (
     echo [FAIL] Build-and-test job missing matrix strategy
     exit /b 1

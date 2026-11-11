@@ -160,6 +160,47 @@ class RunnerHookTests(unittest.TestCase):
             self.assertTrue(helper.exists(), 'unstaged work must be restored after failed validation')
             self.assertFalse((root / '.git/zipper-hooks/pre-commit.pending').exists())
 
+    def test_runner_gates_isolate_git_fixture_environment(self):
+        for mode in ('commit', 'push'):
+            with self.subTest(mode=mode), self.fixture() as (root, env, git, _, base):
+                work = root
+                if mode == 'commit':
+                    work = root.parent / 'linked'
+                    git('worktree', 'add', '-b', 'runner-check', str(work))
+                test = work / '.zipper-runner/tests/test_outcome.py'
+                test.write_text(
+                    'import os, pathlib, subprocess, tempfile, unittest\n'
+                    'class Outcome(unittest.TestCase):\n'
+                    '    def test_git_fixture(self):\n'
+                    '        for name in ("GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE", "GIT_COMMON_DIR"):\n'
+                    '            self.assertNotIn(name, os.environ)\n'
+                    '        with tempfile.TemporaryDirectory() as directory:\n'
+                    '            subprocess.run(["git", "init", "--bare", directory], check=True, capture_output=True)\n'
+                    '            result = subprocess.check_output(["git", "--git-dir", directory, "rev-parse", "--is-bare-repository"], text=True)\n'
+                    '            self.assertEqual(result.strip(), "true")\n')
+                subprocess.run(['git', 'add', '.zipper-runner'], cwd=work, env=env, check=True)
+                expected = git('ls-tree', '-r', '--name-only', 'HEAD').stdout
+                if mode == 'commit':
+                    hooks = root / '.git/hooks'
+                    hook = hooks / 'pre-commit'
+                    shutil.copy(ROOT / '.github/hooks/pre-commit', hook)
+                    hook.chmod(0o755)
+                    git('config', 'core.hooksPath', str(hooks))
+                    result = subprocess.run(['git', 'commit', '-m', 'test: linked runner gate'],
+                                            cwd=work, env=env, text=True, capture_output=True)
+                else:
+                    git('commit', '-m', 'test: runner gate')
+                    head = git('rev-parse', 'HEAD').stdout.decode().strip()
+                    hook_env = {**env, 'GIT_DIR': str(root / '.git'),
+                                'GIT_INDEX_FILE': str(root / '.git/index'),
+                                'GIT_COMMON_DIR': str(root / '.git'), 'GIT_WORK_TREE': str(root)}
+                    result = self.push(root, hook_env, head, base)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(git('config', '--get', 'core.bare').stdout.strip(), b'false')
+                actual = subprocess.check_output(['git', 'ls-tree', '-r', '--name-only', 'HEAD'],
+                                                 cwd=work, env=env)
+                self.assertEqual(actual, expected, 'fixture Git must preserve the committed snapshot')
+
     def test_precommit_product_to_docs_rename_keeps_product_checks(self):
         with self.fixture() as (root, env, git, calls, _):
             (root / 'docs').mkdir()

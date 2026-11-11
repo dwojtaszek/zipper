@@ -92,3 +92,35 @@ class PreflightTests(unittest.TestCase):
                                     cwd=root.parent, text=True, capture_output=True)
             self.assertEqual(result.returncode, 7, result.stdout + result.stderr)
             self.assertIn('PREFLIGHT_REACHED', result.stdout)
+
+    def test_cron_launcher_preserves_home_sdk_locations_and_explicit_root(self):
+        for location in ('dotnet', '.dotnet', 'custom-sdk'):
+            with self.subTest(location=location), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                base = root / '.zipper-runner'
+                base.mkdir()
+                shutil.copy(BASE / 'cron-wrapper.sh', base / 'cron-wrapper.sh')
+                home = root / 'home'
+                sdk = home / location
+                sdk.mkdir(parents=True)
+                executable = sdk / 'dotnet'
+                executable.write_text('#!/bin/sh\necho SDK_DISCOVERED\n')
+                executable.chmod(0o755)
+                (base / 'runner.py').write_text(
+                    'import os, pathlib, shutil, subprocess\n'
+                    'sdk = pathlib.Path(os.environ["EXPECTED_SDK"])\n'
+                    'assert str(sdk) in os.environ["PATH"].split(os.pathsep), os.environ["PATH"]\n'
+                    'local_paths = [p for p in os.environ["PATH"].split(os.pathsep) '
+                    'if p.startswith(os.environ["HOME"] + os.sep)]\n'
+                    'dotnet = shutil.which("dotnet", path=os.pathsep.join(local_paths))\n'
+                    'assert dotnet == str(sdk / "dotnet"), dotnet\n'
+                    'assert subprocess.check_output([dotnet], text=True).strip() == "SDK_DISCOVERED"\n')
+                env = {**os.environ, 'HOME': str(home), 'PATH': '/usr/bin:/bin',
+                       'EXPECTED_SDK': str(sdk)}
+                env.pop('DOTNET_ROOT', None)
+                if location == 'custom-sdk':
+                    env['DOTNET_ROOT'] = str(sdk)
+                result = subprocess.run(['bash', str(base / 'cron-wrapper.sh'), '--preflight'],
+                                        env=env, cwd=root.parent, text=True,
+                                        capture_output=True, timeout=10)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

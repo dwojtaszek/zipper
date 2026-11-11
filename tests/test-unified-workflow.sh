@@ -126,7 +126,10 @@ fi
 
 # Check for matrix strategy in build-and-test job
 echo "7. Checking build-and-test job matrix strategy..."
-if grep -A 10 "build-and-test:" "$SHARED_WORKFLOW_FILE" | grep -q "matrix:"; then
+if awk '/^  build-and-test:/ { in_job=1; next }
+        in_job && /^  [[:alnum:]_-]+:/ { exit }
+        in_job && /^      matrix:/ { found=1 }
+        END { exit !found }' "$SHARED_WORKFLOW_FILE"; then
     echo "✓ Build-and-test job has matrix strategy"
 else
     echo "✗ Build-and-test job missing matrix strategy"

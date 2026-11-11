@@ -118,8 +118,12 @@ if [[ "$DOCS_ONLY" == "true" || "$RUNNER_ONLY" == "true" ]]; then
     fi
     if [[ "$RUNNER_ONLY" == "true" ]]; then
         echo "▶ Running runner tests for the staged runner-only change..."
-        python3 .github/scripts/run-check.py --log "$(mktemp -t zipper-runner-check.XXXXXX)" -- \
-            python3 -m unittest discover -s .zipper-runner/tests -p 'test_*.py' || exit 1
+        (
+            # Fixtures create other repositories; hook-local Git variables must stay here.
+            while IFS= read -r git_env; do unset "$git_env"; done < <(git rev-parse --local-env-vars)
+            python3 .github/scripts/run-check.py --log "$(mktemp -t zipper-runner-check.XXXXXX)" -- \
+                python3 -m unittest discover -s .zipper-runner/tests -p 'test_*.py'
+        ) || exit 1
         record_verified_scope runner
     fi
     echo "✓ Pre-commit: documentation/runner gates passed; unchanged product unit suite skipped."

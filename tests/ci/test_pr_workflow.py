@@ -18,6 +18,27 @@ class PrWorkflowTraceabilityTests(unittest.TestCase):
         self.pr_workflow_path = ROOT / ".github/workflows/pr.yml"
         self.workflow_text = self.pr_workflow_path.read_text(encoding="utf-8")
 
+    @unittest.skipIf(shutil.which('bash') is None, 'requires Bash')
+    def test_unified_matrix_check_uses_job_boundaries_instead_of_line_count(self):
+        for missing_matrix in (False, True):
+            with self.subTest(missing_matrix=missing_matrix), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                shutil.copytree(ROOT / '.github', root / '.github')
+                workflow = root / '.github/workflows/ci.yml'
+                text = workflow.read_text()
+                text = text.replace('  build-and-test:\n',
+                                    '  build-and-test:\n' + '    # Additional job documentation\n' * 30, 1)
+                if missing_matrix:
+                    start = text.index('  build-and-test:\n')
+                    text = text[:start] + text[start:].replace('      matrix:\n', '      removed_matrix:\n', 1)
+                workflow.write_text(text)
+                result = subprocess.run(['bash', str(ROOT / 'tests/test-unified-workflow.sh')],
+                                        cwd=root, text=True, capture_output=True)
+                self.assertEqual(result.returncode, 1 if missing_matrix else 0,
+                                 result.stdout + result.stderr)
+                if missing_matrix:
+                    self.assertIn('Build-and-test job missing matrix strategy', result.stdout)
+
     def test_docs_only_job_runs_deterministic_traceability_gate(self):
         """Docs-only PRs must run validate-req-traceability.sh --strict so REQ immutability is enforced."""
         try:
