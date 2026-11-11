@@ -24,6 +24,10 @@ on:
         description: Source SHA for release/recovery (empty for PR checkout)
         type: string
         default: ''
+      runner_only:
+        description: Run runner and static gates without rebuilding unchanged product artifacts
+        type: boolean
+        default: false
       publish_mode:
         description: >-
           self-contained = publish per-RID binaries for the release job;
@@ -51,14 +55,17 @@ jobs:
           persist-credentials: false
           ref: ${{ inputs.source_sha || github.sha }}
       - uses: eifinger/actionlint-action@1fc89649be682d16ec5cf65ea16e269eb88d3982 # v1.10.2
-      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+      - if: ${{ !inputs.runner_only }}
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           global-json-file: global.json
           cache: true
           cache-dependency-path: '**/packages.lock.json'
       - name: Restore (locked)
+        if: ${{ !inputs.runner_only }}
         run: dotnet restore zipper.sln --locked-mode
       - name: Lint code style
+        if: ${{ !inputs.runner_only }}
         run: dotnet format --verify-no-changes --no-restore
       - name: Validate requirement traceability
         shell: bash
@@ -171,6 +178,7 @@ jobs:
   # handoff. As its own job it runs in parallel; a failure still fails the
   # caller's `ci` job and therefore `ci-gate`.
   version-metadata:
+    if: ${{ !inputs.runner_only }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: lint
@@ -191,6 +199,7 @@ jobs:
         run: bash tests/test-build-version.sh
 
   build-and-test:
+    if: ${{ !inputs.runner_only }}
     # `runner-tests` is deliberately NOT a dependency: a flaky runner suite must
     # not skip the build, unit tests, coverage gate, and E2E legs behind it.
     # The caller's `ci` job already requires every job here to succeed, so

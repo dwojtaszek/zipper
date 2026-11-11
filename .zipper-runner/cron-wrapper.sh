@@ -4,12 +4,20 @@
 
 export HOME="${HOME:-/home/$(whoami)}"
 export USER="${USER:-$(whoami)}"
-export DOTNET_ROOT="${DOTNET_ROOT:-$HOME/dotnet}"
 
 RUNNER_BASE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOGS_DIR="$RUNNER_BASE/logs"
+cd "$RUNNER_BASE/.." || exit 1
 
-export PATH="/home/linuxbrew/.linuxbrew/bin:$HOME/.opencode/bin:$HOME/.gemini/antigravity-cli/bin:$HOME/.local/bin:$DOTNET_ROOT:$HOME/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+export PATH="/home/linuxbrew/.linuxbrew/bin:$HOME/.opencode/bin:$HOME/.gemini/antigravity-cli/bin:$HOME/.local/bin:${DOTNET_ROOT:-$HOME/.dotnet}:$HOME/dotnet:$HOME/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+
+if [[ -z "${DOTNET_ROOT:-}" ]]; then
+    RUNNER_DOTNET_EXE=$(command -v dotnet || true)
+    if [[ -n "$RUNNER_DOTNET_EXE" ]]; then
+        DOTNET_ROOT=$(python3 -c 'import os, sys; print(os.path.dirname(os.path.realpath(sys.argv[1])))' "$RUNNER_DOTNET_EXE")
+        export DOTNET_ROOT
+    fi
+fi
 
 mkdir -p "$LOGS_DIR"
 find "$LOGS_DIR" -type f -name "run_*.log" -mtime +7 -delete 2>/dev/null || true
@@ -32,4 +40,7 @@ echo "==== Starting Autonomous Runner Cron Run: $(date) ====" >> "$LOG_FILE"
 /usr/bin/env python3 -u "$RUNNER_BASE/runner.py" "$@" >> "$LOG_FILE" 2>&1
 RUNNER_EXIT_CODE=$?
 echo "==== Finished Autonomous Runner Cron Run: $(date) with exit code $RUNNER_EXIT_CODE ====" >> "$LOG_FILE"
+if [[ " $* " == *" --preflight "* ]]; then
+    tail -n 40 "$LOG_FILE"
+fi
 exit $RUNNER_EXIT_CODE

@@ -10,7 +10,7 @@ How code travels from a local edit to a tagged release in Zipper, and the gates 
 flowchart TD
     subgraph local["Local machine (git hooks)"]
         edit["Edit code"]
-        precommit["pre-commit:<br/>format staged .cs + unit tests<br/>(docs-only short-circuit)"]
+        precommit["pre-commit:<br/>format staged .cs + unit tests<br/>(docs/runner-only short-circuits)"]
         postcommit["post-commit:<br/>write pre-commit.ok marker"]
         prepush["pre-push:<br/>unit tests (skip if marker fresh)<br/>+ mutation smoke (changed files)<br/>+ basic E2E smoke"]
         edit --> precommit --> postcommit --> prepush
@@ -24,7 +24,9 @@ flowchart TD
         shared["ci.yml (reusable workflow):<br/>lint + runner-tests + version-metadata<br/>+ build-and-test matrix linux/win/macos,<br/>full E2E (coverage gate + goldens<br/>candidate on Linux)"]
         gold["goldens:<br/>content-hash parity check"]
         gate["ci-gate<br/>(required merge gate)"]
-        docsonly -->|not docs-only| shared --> gold --> gate
+        runneronly["runner-only:<br/>lint + runner tests + golden helper tests<br/>+ DocsDriftTests"]
+        docsonly -->|runner-only| runneronly --> gate
+        docsonly -->|product/shared change| shared --> gold --> gate
         docsonly -->|docs-only: req traceability gate| gate
     end
 
@@ -66,7 +68,7 @@ For interactive local verification before committing, `./dev.sh` (`dev.bat` on W
 
 | Hook | Trigger | Does |
 |------|---------|------|
-| `pre-commit` | `git commit` | Short-circuits full build/test if every staged file is docs (`*.md`, `docs/`), running only `DocsDriftTests`. Else stashes unstaged changes (and untracked files under `src/`), runs `dotnet format` on staged `*.cs`, runs all unit tests, and records the staged tree hash in `pre-commit.pending`. Fails (exit 1) if `dotnet` is missing. |
+| `pre-commit` | `git commit` | Short-circuits full build/test if every staged file is docs (`*.md`, `docs/`), running only `DocsDriftTests`. Runner-only changes run runner tests and DocsDriftTests instead of the product unit suite. Else stashes unstaged changes (and untracked files under `src/`), runs `dotnet format` on staged `*.cs`, runs all unit tests, and records the staged tree hash in `pre-commit.pending`. Fails (exit 1) if `dotnet` is missing. |
 | `post-commit` | after commit object exists | Verifies `HEAD^{tree}` matches `pre-commit.pending` and writes `pre-commit.ok` marker (timestamp + new HEAD) so pre-push can skip redundant unit tests. |
 | `pre-push` | `git push` | Ref verification (stdin refs must match working tree) + unit tests (skipped if marker is <10 min old on outgoing commits) + mutation smoke on changed `.cs` source files (`tests/run-mutation-smoke.sh` with `MUTATION_SMOKE_SKIP_BASELINE=1`, targeted `*Tests` fast-path, and SHA-256 content-hash mutant result caching under `.git/zipper-hooks/mutation-cache/`; hard gate: all mutants must be killed) + basic E2E smoke (`tests/run-e2e-basic.sh` / `.bat` via `cmd.exe`, skipped when no CLI source or basic E2E script files changed). Fails (exit 1) if `dotnet` is missing. |
 
@@ -74,7 +76,7 @@ Bypass (not recommended): `git commit --no-verify`, `git push --no-verify`. Muta
 
 ### 2. PR Checks — [`pr.yml`](../.github/workflows/pr.yml)
 
-Trigger: `pull_request` → `main`. Concurrency-cancels superseded runs. Jobs are gated on `docs-only` so a pure-docs PR skips build/test entirely.
+Trigger: `pull_request` → `main`. Concurrency-cancels superseded runs. The shared classifier gates docs-only and runner-only PRs. Pure docs retain traceability and DocsDriftTests; runner-only changes also run static, runner, and golden helper gates, while unchanged product builds/artifacts are skipped.
 
 1. **docs-only** — diffs base..head; if **every** changed file matches a docs pattern, sets `only_docs=true`, runs `tests/validate-req-traceability.sh --strict` and `DocsDriftTests` to ensure requirement traceability, reference integrity, and domain terminology/flag tables remain intact, and skips the rest of the pipeline. A failed diff or zero changed files is treated as non-docs (fail-safe).
 2. **ci** (reusable workflow, [ci.yml](../.github/workflows/ci.yml)) — the shared job graph, identical for PRs and main. Keeping it in one file is what stops the two callers drifting apart: the `git config user.name` guard that reddened main CI for 15 hours (#1173) existed on the PR side only, and both callers now get every gate from the same definition. Inputs: `publish_mode: goldens` on PRs (stages the accepted self-contained Linux candidate as `zipper-cli-linux` for the caller's `goldens` job), `self-contained` on main (publishes per-RID release binaries), `version` on main. A PR that edits `ci.yml` is checked out with a read-only token, so a change is validated by the version it ships with.
@@ -206,3 +208,7 @@ the 10-minute job timeout is not a guarantee that the full budget completes
 under sustained slow responses. Request counts and paid API usage are not reduced
 by concurrent jobs. Keep performance measurements isolated, and do not overlap
 publish/E2E builds against shared `bin`/`obj` outputs.
+
+Runner-only eligibility is shared by `dev.sh`, hooks, and PR CI through `.github/scripts/change-scope.py`. Product/shared/gate paths and unknown paths retain broader gates. Main/release calls default to the full matrix. Use `.github/scripts/run-check.py --log <path> -- <command>` to preserve full logs and real exit status with bounded console output.
+
+Runner-only hook success uses a tree-bound `scope=runner` receipt. Pre-push reuses it only for the same clean, fresh HEAD after classifying every outgoing ref as documentation/runner-only; mixed product refs still require product checks. Full-unit receipts retain their existing credit.

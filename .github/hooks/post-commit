@@ -55,8 +55,19 @@ if [[ -n "$PENDING_TREE" && -n "$HEAD_TREE" && "$PENDING_TREE" != "$HEAD_TREE" ]
     exit 0
 fi
 
+PENDING_SCOPE=$(grep '^scope=' "$PENDING" 2>/dev/null | cut -d= -f2 || true)
+PENDING_SCOPE="${PENDING_SCOPE:-full}"
+if [[ "$PENDING_SCOPE" != "full" && "$PENDING_SCOPE" != "runner" ]]; then
+    rm -f "$PENDING"
+    exit 0
+fi
+if [[ "$PENDING_SCOPE" == "runner" && ( -z "$PENDING_TREE" || "$PENDING_TREE" != "$HEAD_TREE" ) ]]; then
+    rm -f "$PENDING"
+    exit 0
+fi
+
 mkdir -p "$MARKER_DIR" 2>/dev/null || exit 0
-printf 'timestamp=%s\nhead=%s\n' "$NOW" "$HEAD_HASH" > "$OK" 2>/dev/null || true
+printf 'timestamp=%s\nhead=%s\nscope=%s\n' "$NOW" "$HEAD_HASH" "$PENDING_SCOPE" > "$OK" 2>/dev/null || true
 rm -f "$PENDING" 2>/dev/null || true
 
 exit 0

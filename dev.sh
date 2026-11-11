@@ -114,7 +114,13 @@ run_step() {
         return 0
     fi
     echo "==> [dev] $label"
-    "$@"
+    local log_dir="${DEV_CHECK_LOG_DIR:-}"
+    if [[ -z "$log_dir" ]]; then
+        log_dir=$(mktemp -d "${TMPDIR:-/tmp}/zipper-dev.XXXXXX") || return 1
+    else
+        mkdir -p "$log_dir"
+    fi
+    python3 .github/scripts/run-check.py --log "$(mktemp "$log_dir/check.XXXXXX")" -- "$@"
 }
 
 ensure_release_build() {
@@ -159,15 +165,14 @@ collect_changed_files() {
         return 1
     fi
 
-    {
-        git diff --name-only "${base_commit}...HEAD" 2>/dev/null || true
-        git diff --cached --name-only 2>/dev/null || true
-        git diff --name-only 2>/dev/null || true
-        git ls-files --others --exclude-standard 2>/dev/null || true
-    } | sed '/^[[:space:]]*$/d' | sort -u
+    local committed staged working untracked
+    committed=$(git diff --name-only --no-renames "${base_commit}...HEAD") || return 1
+    staged=$(git diff --cached --name-only --no-renames) || return 1
+    working=$(git diff --name-only --no-renames) || return 1
+    untracked=$(git ls-files --others --exclude-standard) || return 1
+    printf '%s\n' "$committed" "$staged" "$working" "$untracked" | sed '/^[[:space:]]*$/d' | sort -u
 }
 
-DOCS_REGEX='(^|/)(docs/|CHANGELOG(\.md)?$|.*\.(md|markdown)$)'
 
 run_check() {
     local raw_files
@@ -195,8 +200,15 @@ run_check() {
     local need_runner_tests=0
     local specific_e2e_scripts=()
 
+    local scope
+    scope=$(printf '%s\0' "${changed_files[@]}" | python3 .github/scripts/change-scope.py)
+    if [[ "$scope" == *"only_runner=true"* ]]; then
+        need_runner_tests=1
+        need_docs_drift=1
+    else
     for file in "${changed_files[@]}"; do
-        if echo "$file" | grep -q -E "$DOCS_REGEX"; then
+        scope=$(printf '%s\0' "$file" | python3 .github/scripts/change-scope.py)
+        if [[ "$scope" == *"only_docs=true"* ]]; then
             need_docs_drift=1
             continue
         fi
@@ -254,6 +266,8 @@ run_check() {
                 ;;
         esac
     done
+
+    fi
 
     # Full unit test suite already includes DocsDriftTests
     if [[ "$need_unit_tests" -eq 1 ]]; then

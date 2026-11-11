@@ -83,14 +83,13 @@ get_changes_for_ref() {
     fi
     local changed_since_base
     if [[ -n "$merge_base" && "$merge_base" != "$commit" ]]; then
-        changed_since_base=$(git diff --name-only "$merge_base" "$commit" 2>/dev/null || true)
+        changed_since_base=$(git diff --name-only --no-renames "$merge_base" "$commit") || return 1
     else
-        changed_since_base=$(git diff-tree --root --no-commit-id --name-only -r "$commit" 2>/dev/null || true)
+        changed_since_base=$(git diff-tree --root --no-commit-id --name-only --no-renames -r "$commit") || return 1
     fi
-    {
-        printf '%s\n' "$changed_since_base"
-        git diff --name-only "$commit" 2>/dev/null || true
-    } | sed '/^$/d' | sort -u
+    local working_changes
+    working_changes=$(git diff --name-only --no-renames "$commit") || return 1
+    printf '%s\n' "$changed_since_base" "$working_changes" | sed '/^$/d' | sort -u
 }
 
 # Fallback for manual invocation or piped runs with no ref lines
@@ -125,16 +124,22 @@ done
 RUN_UNIT_TESTS=true
 MARKER=$(git rev-parse --git-path zipper-hooks/pre-commit.ok 2>/dev/null || echo "")
 MARKER_VALID=false
+RUNNER_MARKER_VALID=false
+MARKER_SCOPE=full
 MARKER_HEAD=""
 AGE=0
 if [[ -n "$MARKER" && -f "$MARKER" ]] && git diff --quiet 2>/dev/null && git diff --cached --quiet 2>/dev/null; then
     MARKER_TS=$(grep '^timestamp=' "$MARKER" | cut -d= -f2)
+    MARKER_SCOPE=$(grep '^scope=' "$MARKER" | cut -d= -f2)
+    MARKER_SCOPE="${MARKER_SCOPE:-full}"
     MARKER_HEAD=$(grep '^head=' "$MARKER" | cut -d= -f2)
     if [[ -n "$MARKER_TS" && -n "$MARKER_HEAD" ]]; then
         NOW=$(date +%s)
         AGE=$((NOW - MARKER_TS))
         if [[ "$AGE" -ge 0 && "$AGE" -lt "$SKIP_WINDOW_SECONDS" ]]; then
-            MARKER_VALID=true
+            if [[ "$MARKER_SCOPE" == "full" || "$MARKER_SCOPE" == "runner" ]]; then
+                MARKER_VALID=true
+            fi
         fi
     fi
 fi
@@ -153,7 +158,11 @@ if [[ "$MARKER_VALID" == "true" && ${#REFS_TO_CHECK[@]} -gt 0 ]]; then
         fi
     done
     if [[ "$ALL_MATCH" == "true" ]]; then
-        RUN_UNIT_TESTS=false
+        if [[ "$MARKER_SCOPE" == "runner" ]]; then
+            RUNNER_MARKER_VALID=true
+        else
+            RUN_UNIT_TESTS=false
+        fi
     fi
 fi
 
@@ -163,6 +172,7 @@ fi
 
 if [[ "$RUN_UNIT_TESTS" == "true" ]]; then
     ALL_REFS_DOCS_ONLY=true
+    ANY_RUNNER_ONLY=false
     for entry in "${REFS_TO_CHECK[@]}"; do
         local_ref="${entry%% *}"
         local_sha="${entry##* }"
@@ -171,26 +181,47 @@ if [[ "$RUN_UNIT_TESTS" == "true" ]]; then
             break
         fi
         TOTAL_CHANGED=$(printf '%s\n' "$ALL_BRANCH_CHANGES" | grep -c . || true)
-        DOCS_CHANGED=$(printf '%s\n' "$ALL_BRANCH_CHANGES" | grep -c -E '(^|/)(docs/|CHANGELOG(\.md)?$|.*\.(md|markdown)$)' || true)
-        if [[ "$TOTAL_CHANGED" -eq 0 || "$DOCS_CHANGED" -ne "$TOTAL_CHANGED" ]]; then
+        DOCS_CHANGED=$(printf '%s\n' "$ALL_BRANCH_CHANGES" | grep -c -E '^(docs/|CHANGELOG(\.md)?$|.*\.(md|markdown)$)' || true)
+        SCOPE=""
+        if [[ -f .github/scripts/change-scope.py ]]; then
+            SCOPE=$(printf '%s\n' "$ALL_BRANCH_CHANGES" | python3 .github/scripts/change-scope.py --lines) || exit 1
+            if [[ "$SCOPE" == *"only_runner=true"* ]]; then
+                ANY_RUNNER_ONLY=true
+            elif [[ "$SCOPE" != *"only_docs=true"* ]]; then
+                ALL_REFS_DOCS_ONLY=false
+                break
+            fi
+        elif [[ "$TOTAL_CHANGED" -eq 0 || "$DOCS_CHANGED" -ne "$TOTAL_CHANGED" ]]; then
             ALL_REFS_DOCS_ONLY=false
             break
         fi
     done
 
     if [[ "$ALL_REFS_DOCS_ONLY" == "true" ]]; then
-        echo ""
-        echo "▶ Docs-only branch diff detected; running DocsDriftTests..."
-        DRIFT_ARGS=(dotnet test src/Zipper.Tests/Zipper.Tests.csproj --filter "FullyQualifiedName~DocsDriftTests" --logger "console;verbosity=quiet" --nologo)
-        if [[ -f "src/Zipper.Tests/obj/project.assets.json" ]]; then
-            DRIFT_ARGS+=(--no-restore)
-        fi
-        if ! "${DRIFT_ARGS[@]}"; then
+        if [[ "$RUNNER_MARKER_VALID" == "true" ]]; then
+            echo "✓ Runner and DocsDrift tests already passed for this clean HEAD; skipping duplicate checks."
+        else
             echo ""
-            echo "❌ DocsDriftTests failed. Push aborted."
-            exit 1
+            echo "▶ Documentation/runner-only branch diff detected; running DocsDriftTests..."
+            DRIFT_ARGS=(dotnet test src/Zipper.Tests/Zipper.Tests.csproj --filter "FullyQualifiedName~DocsDriftTests" --logger "console;verbosity=quiet" --nologo)
+            if [[ -f "src/Zipper.Tests/obj/project.assets.json" ]]; then
+                DRIFT_ARGS+=(--no-restore)
+            fi
+            if ! "${DRIFT_ARGS[@]}"; then
+                echo ""
+                echo "❌ DocsDriftTests failed. Push aborted."
+                exit 1
+            fi
+            echo "✓ DocsDriftTests passed (skipping full unit suite for docs-only branch)"
+            if [[ "$ANY_RUNNER_ONLY" == "true" ]]; then
+                (
+                    # Fixtures create other repositories; hook-local Git variables must stay here.
+                    while IFS= read -r git_env; do unset "$git_env"; done < <(git rev-parse --local-env-vars)
+                    python3 .github/scripts/run-check.py --log "$(mktemp -t zipper-runner-check.XXXXXX)" -- \
+                        python3 -m unittest discover -s .zipper-runner/tests -p 'test_*.py'
+                ) || exit 1
+            fi
         fi
-        echo "✓ DocsDriftTests passed (skipping full unit suite for docs-only branch)"
         RUN_UNIT_TESTS=false
     fi
 fi

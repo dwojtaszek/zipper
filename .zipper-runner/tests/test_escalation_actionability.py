@@ -290,3 +290,40 @@ class HandOrphanPrBackTests(_EscalationFixture):
             self.runner._hand_orphan_pr_back(99, "42", "fix/ISSUE-42-proof", HEAD_A, "CI is failing")
         self.assertIn("Cannot Be Babied", self.sent[0][0])
         self.assertIn("2 unresolved review threads", self.sent[0][1])
+
+
+class ActiveMissionEscalationTests(_EscalationFixture):
+    def test_active_mission_defers_alert_until_lock_released(self):
+        import subprocess
+        wt = self.root / "worktrees" / "issue-1206"
+        wt.mkdir(parents=True)
+        branch = "feat/ISSUE-1206-docs"
+        subprocess.run(["git", "init", "-b", branch, str(wt)], check=True, capture_output=True)
+        self.runner.WORKTREES_BASE = str(wt.parent)
+        pr = self.pr(number=1419)
+        pr.update(headRefName=branch, body="Closes #1206")
+        import sys
+        script = ("import fcntl, sys; lock=open(sys.argv[1], 'a+'); "
+                  "fcntl.flock(lock, fcntl.LOCK_EX); print('ready', flush=True); sys.stdin.read()")
+        with subprocess.Popen([sys.executable, '-c', script, self.runner._worktree_mission_lock_path(str(wt))],
+                              stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True) as child:
+            try:
+                self.assertEqual(child.stdout.readline().strip(), 'ready')
+                self.escalate(pr, require_green_and_stale=False)
+                self.assertEqual(self.sent, [])
+            finally:
+                child.communicate(input='done', timeout=5)
+            self.assertEqual(child.returncode, 0)
+        self.escalate(pr, require_green_and_stale=False)
+        self.assertEqual(len(self.sent), 1)
+        self.assertNotIn("name the issue", self.sent[0][1])
+
+    def test_existing_provenance_suppresses_stale_no_record_alert(self):
+        wt = self.root / "worktrees" / "issue-1206"
+        wt.mkdir(parents=True)
+        self.runner.WORKTREES_BASE = str(wt.parent)
+        pr = self.pr(number=1419)
+        pr["headRefName"] = "feat/ISSUE-1206-docs"
+        self.runner._save_pr_state("1206", "1419", pr["headRefName"], HEAD_A)
+        self.escalate(pr, require_green_and_stale=False)
+        self.assertEqual(self.sent, [])

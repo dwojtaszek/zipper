@@ -204,12 +204,15 @@ parser.add_argument("--dry-run", action="store_true")
 parser.add_argument("--babysit-only", action="store_true")
 parser.add_argument("--refresh-models", action="store_true")
 parser.add_argument("--status", action="store_true")
+parser.add_argument("--preflight", action="store_true", help="Validate runtime tools, repository, GitHub access, and agent health before starting work.")
 parser.add_argument("--agent", choices=sorted(AGENT_PLUGINS), help="Prefer this enabled, healthy agent for this run; retain normal fallbacks.")
 parser.add_argument("--model", type=str, default=None, help="Prefer this model for the selected agent; retain normal fallbacks.")
 args = parser.parse_args() if __name__ == "__main__" else parser.parse_args([])
 ACTIVE_AGENT = args.agent or ACTIVE_AGENT
 ACTIVE_MODEL = args.model or os.environ.get("ACTIVE_MODEL")
 DRY_RUN = args.dry_run
+if args.preflight and DRY_RUN:
+    parser.error("--preflight requires live checks; omit --dry-run")
 if DRY_RUN:
     print("WARNING: Running in DRY-RUN mode. No changes will be committed, pushed, or mailed.")
 
@@ -221,7 +224,7 @@ REFRESH_MODELS = args.refresh_models
 if REFRESH_MODELS:
     print("INFO: Running in REFRESH-MODELS mode. Probing all agents and updating AGENT_PREFERENCES.md.")
 
-STATUS_ONLY = args.status
+STATUS_ONLY = args.status or args.preflight
 if STATUS_ONLY:
     print("INFO: Running in STATUS-ONLY diagnostics mode.")
 
@@ -283,12 +286,35 @@ QUOTA_EXHAUSTION_KEYWORDS = [
 ]
 
 def is_quota_exhausted(output: str, stderr: str = "") -> bool:
-    """Returns True if the output or stderr indicates model quota or rate limit exhaustion."""
-    combined = (output + "\n" + stderr).lower()
-    if any(kw in combined for kw in QUOTA_EXHAUSTION_KEYWORDS):
-        return True
-    if re.search(r"\b(429|402)\b", combined) and any(w in combined for w in ("quota", "rate", "limit", "exhaust", "credit", "subscription", "resource", "payment")):
-        return True
+    """Recognize provider failures, excluding quoted messages and tool events."""
+    for stream in (output, stderr):
+        fenced = False
+        for line in _reason_lines(stream):
+            if line.startswith("```"):
+                fenced = not fenced
+                continue
+            if fenced:
+                continue
+            try:
+                event = json.loads(line)
+            except (ValueError, TypeError):
+                event = None
+            if isinstance(event, dict):
+                if event.get("type") not in (None, "error", "turn.failed"):
+                    continue
+                if not ("error" in event or event.get("type") == "error" or "error_code" in event):
+                    continue
+                message = json.dumps(event).lower()
+            else:
+                message = line.lower()
+                if not (re.match(r"^(error\b|agy_error:|api\s*error|providererror|ratelimiterror|(?:openai|anthropic|litellm)\.ratelimiterror:|you have |you've |status:|429\b|402\b)", message)
+                        or any(message.startswith(keyword) for keyword in QUOTA_EXHAUSTION_KEYWORDS)):
+                    continue
+            if any(keyword in message for keyword in QUOTA_EXHAUSTION_KEYWORDS):
+                return True
+            if re.search(r"\b(429|402)\b", message) and any(
+                    word in message for word in ("quota", "rate", "limit", "exhaust", "credit", "subscription", "resource", "payment")):
+                return True
     return False
 
 
@@ -435,6 +461,18 @@ def _mission_failure_reason(out: str, err: str) -> str:
         block = _last_error_block(lines)
         if block:
             return _one_line_reason(block)
+        for line in reversed(lines):
+            try:
+                event = json.loads(line)
+            except (ValueError, TypeError):
+                continue
+            if not isinstance(event, dict) or event.get("type") not in ("error", "turn.failed"):
+                continue
+            message = event.get("message") or event.get("error")
+            if isinstance(message, dict):
+                message = message.get("message")
+            if isinstance(message, str) and message.strip():
+                return _one_line_reason("Error: " + message)
     reported = [line for line in err_lines if line]
     return _one_line_reason(reported[-1]) if reported else ""
 
@@ -1977,6 +2015,8 @@ def probe_and_select_agents() -> list[tuple[str, str | None]]:
                 "<h3>No agent has a working API token/credits at startup.</h3>"
                 "<p>All agents failed health checks. Runner will retry next cron cycle.</p>"
             )
+        if STATUS_ONLY:
+            return []
         sys.exit(0)
 
     def _sort_key(c: tuple[int, str, str | None]) -> tuple[int, int, str, str]:
@@ -3096,7 +3136,7 @@ def _escalate_blocked_worktree(pr_number, issue_number, branch, *, require_green
         # The runner is holding this worktree, or is scanning this PR, yet it has
         # no usable record for it, so nothing can ever authorize it. Report that
         # rather than retrying silently.
-        _escalate_unrecorded_pr(pr, require_green_and_stale=require_green_and_stale)
+        _escalate_unrecorded_pr(pr, require_green_and_stale=require_green_and_stale, expected_branch=branch)
         return
     recorded = state.get("authorized_head") or ""
     refusal = _authorization_refusal(pr, branch)
@@ -5328,7 +5368,7 @@ def _recreate_worktree_for_pr(issue_number: str, branch: str, pr_number, expecte
     return False
 
 
-def _escalate_unrecorded_pr(pr: dict, *, require_green_and_stale: bool = True) -> None:
+def _escalate_unrecorded_pr(pr: dict, *, require_green_and_stale: bool = True, expected_branch: str | None = None) -> None:
     """Surface a PR the runner cannot authorize because it holds no record for it.
 
     A PR is only authorizable through the issue state the runner wrote when it
@@ -5345,6 +5385,17 @@ def _escalate_unrecorded_pr(pr: dict, *, require_green_and_stale: bool = True) -
     stall whatever CI says. It never merges: an unverifiable origin stays
     fail-closed.
     """
+    branch = _pr_head_ref(pr)
+    for issue_number in _live_worktree_issue_numbers():
+        if _pr_state_matches(_load_pr_state(issue_number), pr.get("number"), expected_branch or branch):
+            return
+        wt_path = os.path.join(WORKTREES_BASE, f"issue-{issue_number}")
+        # Our own scanner holds this lock too; only another holder can still be publishing.
+        if not _mission_lock_held_for(wt_path) and _lock_is_held(_worktree_mission_lock_path(wt_path)):
+            code, active_branch, _ = run_cmd(["git", "branch", "--show-current"], cwd=wt_path)
+            if code == 0 and active_branch.strip() == branch:
+                print(f"[authorization] Deferring PR #{pr.get('number')} alert while its mission is active.")
+                return
     if _pr_author_login(pr) not in TRUSTED_AUTHORS:
         return
     if _pr_is_draft(pr):
@@ -5359,6 +5410,9 @@ def _escalate_unrecorded_pr(pr: dict, *, require_green_and_stale: bool = True) -
     pr_num = pr.get("number")
     subject = f"[Runner] PR #{pr_num} Cannot Be Authorized"
     waited = f" It has been waiting longer than {STALLED_PR_HOURS:g}h." if require_green_and_stale else ""
+    has_reference = re.search(r"(?i)issue-\d+|#\d+", branch + " " + str(pr.get("body") or ""))
+    remediation = ("verify this PR origin and restore its runner provenance record" if has_reference
+                   else "name the issue the PR serves in its body or branch if it does not already")
     _send_pr_escalation(
         pr_num, _pr_head_sha(pr), subject,
         f"<h3>PR <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_num}\">#{pr_num}</a> "
@@ -5369,7 +5423,7 @@ def _escalate_unrecorded_pr(pr: dict, *, require_green_and_stale: bool = True) -
         f"and will not merge it automatically. That happens when the branch, title, and body carry no issue "
         f"reference, or when they name an issue the runner never recorded work for.{waited}</p>"
         f"<p><b>To unblock:</b> "
-        f"{html.escape(_unblock_steps(pr_num, provenance='name the issue the PR serves in its body or branch if it does not already'))}.</p>"
+        f"{html.escape(_unblock_steps(pr_num, provenance=remediation))}.</p>"
     )
 
 
@@ -6475,7 +6529,35 @@ def _describe_worktree_mission_lock(wt_path: str) -> str:
     return f"HELD by pid {pid}{age}"
 
 
+def runtime_preflight() -> bool:
+    """Validate the same working directory and tools used by the cron launcher."""
+    missing = [name for name in ("git", "gh", "dotnet") if shutil.which(name) is None]
+    if missing:
+        print("Preflight failed: missing tools: " + ", ".join(missing))
+        return False
+    if os.path.realpath(os.getcwd()) != os.path.realpath(REPO_PATH):
+        print(f"Preflight failed: working directory must be {REPO_PATH}; use cron-wrapper.sh --preflight.")
+        return False
+    checks = [
+        (["git", "rev-parse", "--show-toplevel"], "Git repository"),
+        (["dotnet", "--version"], "Configured .NET SDK"),
+        (["gh", "auth", "status"], "GitHub authentication"),
+        (["gh", "api", "rate_limit", "--jq", ".rate.remaining"], "GitHub API"),
+    ]
+    valid = True
+    for command, label in checks:
+        code, output, _ = run_cmd(command, cwd=REPO_PATH, timeout=30)
+        passed = code == 0
+        if label == "Git repository" and passed:
+            passed = os.path.realpath(output.strip()) == os.path.realpath(REPO_PATH)
+        print(f"{label}: {'OK' if passed else 'FAILED'}")
+        valid = valid and passed
+    return valid
+
+
 def show_status():
+    if not DRY_RUN and not runtime_preflight():
+        sys.exit(1)
     print("=== Zipper Runner Diagnostics ===")
     for label, path in (("Runner", LOCK_FILE_PATH), ("Babysit", BABYSIT_LOCK_PATH),
                         ("Main checkout", REPO_MUTATION_LOCK_PATH)):
@@ -6529,8 +6611,9 @@ def show_status():
     else:
         print("  None")
 
-    print("\nStatus check completed cleanly.")
-    sys.exit(0)
+    success = bool(candidates) and code == 0
+    print("\nStatus check completed." if success else "\nStatus check failed: no healthy agent or GitHub query failed.")
+    sys.exit(0 if success or DRY_RUN else 1)
 
 
 def _heartbeat_path(kind: str = "runner") -> str:
@@ -6838,6 +6921,10 @@ _LONG_COMMAND_INSTRUCTION = (
 def main():
     global AGENT_CANDIDATES
 
+    if args.preflight:
+        if not runtime_preflight():
+            sys.exit(1)
+        sys.exit(0 if probe_and_select_agents() else 1)
     if STATUS_ONLY:
         show_status()
 

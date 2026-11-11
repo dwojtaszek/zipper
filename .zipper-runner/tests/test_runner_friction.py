@@ -81,6 +81,13 @@ class AgentOverrideTests(unittest.TestCase):
     def test_status_explicitAgentBeatsEnvDefaults_withoutChangingPreferences(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            subprocess.run(["git", "init", str(root)], check=True, capture_output=True)
+            gh = root / "gh"
+            gh.write_text("#!/bin/sh\ncase \"$1 $2\" in\n  'pr list') echo '[]';;\n  'api rate_limit') echo 100;;\nesac\n")
+            gh.chmod(0o755)
+            dotnet = root / "dotnet"
+            dotnet.write_text("#!/bin/sh\necho 10.0.402\n")
+            dotnet.chmod(0o755)
             shutil.copy(BASE / "runner.py", root / "runner.py")
             (root / ".env").write_text("ACTIVE_AGENT=agy\n")
             (root / "plugins").mkdir()
@@ -93,7 +100,7 @@ class AgentOverrideTests(unittest.TestCase):
                 )
             prefs = "| Agent | Model | Priority |\n| agy | default | 1 |\n| droid | default | 3 |\n"
             (root / "AGENT_PREFERENCES.md").write_text(prefs)
-            env = {**os.environ, "RUNNER_BASE": directory, "REPO_PATH": directory,
+            env = {**os.environ, "PATH": directory + os.pathsep + os.environ["PATH"], "RUNNER_BASE": directory, "REPO_PATH": directory,
                    "PLUGINS_DIR": str(root / "plugins"), "ACTIVE_AGENT": "agy",
                    "LOCK_FILE_PATH": str(root / "runner.lock")}
             for arguments, preference, enabled, expected in (
@@ -106,7 +113,7 @@ class AgentOverrideTests(unittest.TestCase):
                     (root / "AGENT_PREFERENCES.md").write_text(current_prefs)
                     result = subprocess.run(
                         [sys.executable, str(root / "runner.py"), "--status", "--dry-run", *arguments],
-                        env={**env, "ACTIVE_AGENT": preference}, capture_output=True, text=True, timeout=5,
+                        env={**env, "ACTIVE_AGENT": preference}, cwd=root, capture_output=True, text=True, timeout=5,
                     )
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertIn(f"Selected top candidate: {expected}/default", result.stdout)
@@ -117,7 +124,7 @@ class AgentOverrideTests(unittest.TestCase):
                 "def check_token_health(): return True", "def check_token_health(): return False"))
             result = subprocess.run(
                 [sys.executable, str(root / "runner.py"), "--status", "--agent", "droid"],
-                env=env, capture_output=True, text=True, timeout=5,
+                env=env, cwd=root, capture_output=True, text=True, timeout=5,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("Selected top candidate: agy/default", result.stdout)
@@ -125,6 +132,9 @@ class AgentOverrideTests(unittest.TestCase):
 
 
 class RunnerCycleTests(unittest.TestCase):
+    def test_codex_publication_returns_pending_ci_to_babysitter(self):
+        self._check_wip_resume(exit_code=0, codex_handoff=True)
+
     def test_babysitOnly_reviewsLocalWipCompletion_beforeRunnerPublication(self):
         self._check_wip_resume(exit_code=0)
 
@@ -182,7 +192,7 @@ class RunnerCycleTests(unittest.TestCase):
     def test_babysitOnly_laterPageThreadResolution_countsAsProgress(self):
         self._check_wip_resume(exit_code=0, publish=False, thread_progress=True)
 
-    def _check_wip_resume(self, exit_code, dry_run=False, repeat_scan=False, publish=True, thread_progress=False, reject_push=False, retry_push=False, ordinary_repair=False, prior_gate_failure=False, remote_changed=False, no_pr=False, keep_wip=False, late_remote_change=False, initial_unpublished=False, committed_failure=False, dirty_failure=False, revoke_approval=False):
+    def _check_wip_resume(self, exit_code, dry_run=False, repeat_scan=False, publish=True, thread_progress=False, reject_push=False, retry_push=False, ordinary_repair=False, prior_gate_failure=False, remote_changed=False, no_pr=False, keep_wip=False, late_remote_change=False, initial_unpublished=False, committed_failure=False, dirty_failure=False, revoke_approval=False, codex_handoff=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             base = root / "runner"
@@ -222,6 +232,24 @@ class RunnerCycleTests(unittest.TestCase):
                 f"    if {dirty_failure}: Path(cwd, 'unfinished.txt').write_text('preserved edits')\n"
                 f"    return {exit_code}, 'done', ''\n"
             )
+            if codex_handoff:
+                fixture = root / "mission_fixture.py"
+                shutil.copy(base / "plugins/droid.py", fixture)
+                shutil.copy(BASE / "plugins/codex.py", base / "plugins/droid.py")
+                (base / "AGENT_PREFERENCES.md").write_text("| Agent | Model | Priority |\n| droid | openai/gpt-6.1-sol | 1 |\n")
+                cli = root / "codex"
+                cli.write_text(
+                    "#!/usr/bin/env python3\nimport contextlib, importlib.util, io, json, os, sys\n"
+                    "if sys.argv[-1] == 'say ok': print('ok'); raise SystemExit(0)\n"
+                    f"spec=importlib.util.spec_from_file_location('fixture', {str(fixture)!r})\n"
+                    "module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)\n"
+                    "with contextlib.redirect_stdout(io.StringIO()) as captured:\n"
+                    "    code, out, err=module.run_mission(sys.stdin.read(), os.getcwd(), is_continue=True)\n"
+                    "print(json.dumps({'type':'item.completed','item':{'type':'agent_message','text':captured.getvalue()+out}}))\n"
+                    "print(json.dumps({'type':'turn.completed'}))\n"
+                    "raise SystemExit(code)\n"
+                )
+                cli.chmod(0o755)
             repo = root / "repo"
             def git(*args, cwd=repo):
                 return subprocess.run(["git", "-C", str(cwd), *args], check=True, stdout=subprocess.PIPE, text=True).stdout.strip()
@@ -279,6 +307,7 @@ class RunnerCycleTests(unittest.TestCase):
                 "        head = subprocess.check_output(['git','--git-dir',os.environ['TEST_ORIGIN'],'rev-parse','refs/heads/fix/ISSUE-42-smooth'],text=True).strip()\n"
                 "        subject = subprocess.check_output(['git','--git-dir',os.environ['TEST_ORIGIN'],'log','-1','--format=%s','refs/heads/fix/ISSUE-42-smooth'],text=True).strip()\n"
                 f"        checks = [{{'__typename':'CheckRun','name':'ci-gate','status':'COMPLETED','conclusion':'SUCCESS' if subject == 'fix: finish work' else 'FAILURE'}}] if {ordinary_repair or (no_pr and not keep_wip)} else []\n"
+                "        if os.environ.get('CI_PENDING') == '1': checks=[{'__typename':'CheckRun','name':'ci-gate','status':'IN_PROGRESS','conclusion':None}]\n"
                 "        print(json.dumps({'number':99,'state':'OPEN','updatedAt':'2099-01-01T00:00:00Z','statusCheckRollup':checks, 'headRefOid': head}))\n"
                 "elif command == ['pr','merge']:\n"
                 f"    if not {ordinary_repair}:\n"
@@ -348,6 +377,19 @@ class RunnerCycleTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertEqual(result.stdout.count("WIP_MISSION_CALLED"), 0 if dry_run else 1, result.stdout)
+            if codex_handoff:
+                published = git("--git-dir", str(root / "origin"), "rev-parse", "refs/heads/fix/ISSUE-42-smooth")
+                self.assertEqual(published, git("rev-parse", "HEAD", cwd=wt))
+                self.assertEqual(git("status", "--porcelain", cwd=wt), "")
+                self.assertFalse((root / "state/pr-99-coderabbit-gate.json").exists())
+                pending = subprocess.run(arguments, env={**env, "CI_PENDING": "1"},
+                                         capture_output=True, text=True, timeout=15)
+                self.assertEqual(pending.returncode, 0, pending.stdout + pending.stderr)
+                self.assertNotIn("WIP_MISSION_CALLED", pending.stdout)
+                self.assertFalse((root / "merged").exists())
+                state = json.loads((root / "state/issue-42.json").read_text())
+                self.assertEqual(state["authorized_head"], published)
+                return
             if no_pr:
                 state = json.loads((root / "state/issue-42.json").read_text())
                 self.assertEqual(state["authorized_head"], git("--git-dir", str(root / "origin"), "rev-parse", "refs/heads/fix/ISSUE-42-smooth"))
