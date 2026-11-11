@@ -91,7 +91,7 @@ Trigger: `pull_request` → `main`. Concurrency-cancels superseded runs. The sha
 
 - **perf-guard** — [`perf-guard.yml`](../.github/workflows/perf-guard.yml), triggered on product code under `src/**` (excluding test and analyzer projects). Runs `measure.sh` 5×, takes the median, and compares to `tests/perf/baselines.json` via [`.github/scripts/perf-compare.py`](../.github/scripts/perf-compare.py). **RSS > 1.20× baseline is advisory**, as is `wall_s` (shared-runner variance); measurement and comparison errors still fail. Posts/updates one PR comment with the result table.
 - **Functional QA PR report** — [`qa-pr-report.yml`](../.github/workflows/qa-pr-report.yml), on every `pull_request_target` against `main` (`contents: read`, `pull-requests: write`). Posts or updates one `## QA Report` comment stating that credentialed QA runs only after merge: fork PRs because GitHub never exposes `FACTORY_API_KEY` to them, same-repo PRs because the Droid run is restricted to protected `main` and manual dispatch. **Advisory and never blocking** — it reports the gate's precondition and tests nothing. The real QA run is [`qa.yml`](../.github/workflows/qa.yml) (§5).
-- **SonarCloud / CodeRabbit / CodeQL** — see [CI.md](../CI.md). SonarCloud is **not** surfaced as a GitHub check; fetch it manually after CI completes. CodeQL failures block merge. CodeRabbit blocking issues required, nitpicks optional.
+- **SonarCloud / CodeRabbit / CodeQL** — see [CI.md](../CI.md). SonarCloud is **not** surfaced as a GitHub check; fetch it manually after CI completes. CodeQL runs through GitHub default setup, but is not a required merge check (see the dated evidence in CI.md). CodeRabbit blocking issues required, nitpicks optional.
 - **typesafe-audit** — [`typesafe-audit.yml`](../.github/workflows/typesafe-audit.yml), **advisory only** (never blocks). Path-filtered on PR (`Requirements.md`, `docs/`, `src/`, `tests/`, `tools/typesafe-audit/`), a weekly full audit (Monday 06:00 UTC), and manual `workflow_dispatch` (`changed`/`full`). Runs the Python audit runner in `tools/typesafe-audit/` with the `TYPESAFE_API_KEY` repository secret; fork PRs (no secret access) skip with a neutral summary. Emits structured machine-readable assurance results (`assurance-result.json`, outputs, and step summary) distinguishing executed from unavailable checks, uploads reports (7-day retention, `if-no-files-found: warn`), and writes a job summary. Remote failures are always non-blocking. See [CI.md](../CI.md#typesafe-audit).
   - **Bounded concurrent audits** — the five audit checks run as matrix jobs with `max-parallel: 2` and `fail-fast: false`. Each job has an isolated checkout, summary, and `typesafe-audit-report-<check>` artifact; the independent PR specification review retains its own artifact. No native `background`/`wait` syntax is used: local actionlint 1.7.12 rejects those keywords. Build, E2E, coverage, goldens, and release gates remain unchanged.
   - **Foundation audit (#955)** — fixed sample scope via `tools/typesafe-audit/runner.py`.
@@ -126,6 +126,23 @@ Large-scale validation (100 GB+ generation / 100-million-record scenarios) is **
 
 ## Gates summary
 
+Required status checks for `main`: `ci-gate`.
+
+This declaration lists GitHub-required check contexts, not every job aggregated by
+`ci-gate`. The blocking workflow rows below run in-repo; scheduled audit gates
+block their own runs, not PR merges. External review policies are distinguished
+from required status checks.
+
+[Protection drift](../.github/workflows/protection-drift.yml) compares this declaration
+with live branch protection and effective branch rules on every push to `main`,
+daily, and on manual dispatch. Any mismatch or API failure fails the workflow;
+it never changes repository settings. It is a monitoring check, not a required PR
+check. Configure repository secret `PROTECTION_READ_TOKEN` with a fine-grained
+repository token granting **Administration: read** (and automatic Metadata read).
+The default Actions token may not read protection; without suitable access this
+check fails visibly, rather than claiming protection was verified. Review the
+failed workflow, reconcile settings and this declaration, then rerun it.
+
 | Gate | Where | Blocking? |
 |------|-------|-----------|
 | Format (`dotnet format`) | pre-commit, lint | Yes |
@@ -148,9 +165,9 @@ Large-scale validation (100 GB+ generation / 100-million-record scenarios) is **
 | E2E `.sh`/`.bat` parity | lint | Yes |
 | Perf RSS ≤ 1.20× | perf-guard | No (advisory; measurement errors block) |
 | Perf wall_s | perf-guard | No (informational) |
-| SonarCloud BLOCKER/MAJOR | external | Yes (manual fetch) |
-| CodeQL | external | Yes |
-| CodeRabbit blocking | external | Yes (nitpicks optional) |
+| SonarCloud BLOCKER/MAJOR | external | No (manual review policy; fetch before merge) |
+| CodeQL | GitHub default setup (repository settings) | No (not required by protection) |
+| CodeRabbit blocking | external | No (review policy; unresolved threads block via conversation resolution) |
 | TypeSafe audit findings | typesafe-audit | No (advisory; never blocks) |
 
 ## Quick Reference for Agents

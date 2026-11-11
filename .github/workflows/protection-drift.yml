@@ -1,0 +1,31 @@
+name: Protection drift
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  protection-drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Compare documented checks with live protection
+        env:
+          # Fine-grained token: this repository only, Administration read.
+          GH_TOKEN: ${{ secrets.PROTECTION_READ_TOKEN || github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/branches/main/protection" > "$RUNNER_TEMP/protection.json"
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/rules/branches/main?per_page=100" \
+            | jq 'add' > "$RUNNER_TEMP/rules.json"
+          python3 .github/scripts/protection-drift.py docs/cicd.md "$RUNNER_TEMP/protection.json" "$RUNNER_TEMP/rules.json"
