@@ -17,13 +17,19 @@ Read the section selected by [AGENTS.md](../AGENTS.md). Shared Git policy govern
 
 ### Testing & Debugging
 - NEVER test just mocked behavior. Tests must verify real outcomes.
-- Fix all tests that fail, even if your change didn't break them.
+- Fix failures caused by the change. Report unrelated failures separately, with evidence and their effect on validation; expand scope only with user authorization. If an unrelated failure blocks a required gate, report the gate as blocked rather than bypassing it or claiming success.
 - Always root cause bugs. Never fix just the symptom. Never implement a workaround.
 - If you cannot find the root cause, stop and compile what you've learned.
 - **Property-Based Testing (`FsCheck.Xunit`):** When adding or modifying serializers/parsers, path/metadata sanitizers, Bates/distribution/volume planners, Chaos Engine appliers, or Production Manifest Comparison logic, add or update `[Property]` tests in `src/Zipper.Tests/Properties/` following [docs/property-based-testing.md](../docs/property-based-testing.md). Verify real production seams (never copy-paste production logic into test helpers), draw seed ranges in the arbitraries with `Gen.Choose` (fall back to `Math.Abs((long)seed)` only for raw `int` seeds) to avoid `int.MinValue` overflow during shrinking, and keep each property's 100 cases under 500 ms.
 - **Catalog growth:** When proposing or adding a Chaos Engine Anomaly Type or an Archive Test Case Key, follow [Catalog governance](../docs/archive-test-suites.md#catalog-governance): cite a documented real-world failure in the issue, and turn every fixed real-world parse/import defect into a pinned Case Key or Anomaly Type with a minimized regression seed and a test.
 
 **See also:** [docs/property-based-testing.md](../docs/property-based-testing.md), `.claude/skills/test-driven-development/SKILL.md`, `.claude/skills/testing-anti-patterns/SKILL.md`, `.claude/skills/systematic-debugging/SKILL.md`, `.claude/skills/root-cause-tracing/SKILL.md`
+
+### Workflow Selection
+
+- Follow a user-named workflow first; otherwise choose one primary workflow matching the task: diagnosis for an unknown failure, implementation for a bounded change, or review for a requested review. Load supporting skills only for distinct requirements, not synonymous versions of the same workflow. Required host skill triggers and repository gates still apply.
+- Use Wayfinder for uncertain work spanning multiple sessions, and Retro after repeated corrections or a costly session. Neither is a mandatory step for routine patches. Keep Wayfinder decision tickets outside runner intake; resolve decisions before handing implementation issues to the runner.
+- Caveman and Ponytail behavior comes from the shared host rules. Reuse discovered skills rather than installing additional copies or loading equivalent guidance from multiple sources.
 
 ### Runtime Capabilities
 
@@ -83,12 +89,13 @@ dev.bat                                  # Windows equivalent
 
 # Local iteration vs. Git hook gates:
 # - Local builds (`dotnet build`) automatically install/sync `.github/hooks/*` via `Directory.Build.props` (`SyncGitHooks` target, skipped in CI).
-# - While iterating, run `./dev.sh` (or focused tests `--filter "FullyQualifiedName~ClassName"` and `bash tests/run-mutation-smoke.sh`).
+# - Preview affected gates with `./dev.sh --dry-run`, then run `./dev.sh`; use focused tests for the changed behavior while iterating.
 # - `run-mutation-smoke.sh` caches killed and compile-error mutants by SHA-256 content hash under `.git/zipper-hooks/mutation-cache/` (bypass with `--no-cache` or `MUTATION_SMOKE_CACHE=0`).
 # - Do NOT manually run the full unit test suite right before `git commit` or `git push`:
 #   * `pre-commit` automatically runs `dotnet format --verify-no-changes src/` + unit tests (or `DocsDriftTests` on docs-only commits) and writes `.git/zipper-hooks/pre-commit.ok`.
 #   * `pre-push` reuses a fresh `pre-commit.ok` to skip re-running unit tests, skips the redundant baseline test run in `run-mutation-smoke.sh` (and reuses cached mutant results), and skips `run-e2e-basic.sh` when no CLI/E2E files changed.
-# - Run the full manual gate below only when hooks are not installed or when validating without committing:
+# - Let hooks validate reuse; do not create or copy success markers. Changes after a successful check require rerunning the affected gates.
+# - Without active hooks, or when validating without committing, use the affected gates above; use the full manual gate below when the change requires the full suite:
 dotnet build zipper.sln && dotnet format --verify-no-changes src/ && dotnet test src/Zipper.Tests/Zipper.Tests.csproj --no-build && dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj --no-build && MUTATION_SMOKE_SKIP_BASELINE=1 bash tests/run-mutation-smoke.sh
 
 # Full E2E suite (`_zipper-cli` builds Release automatically once per suite; standalone suites run in parallel on Unix, override with `--serial` or `--jobs N`)
@@ -245,7 +252,7 @@ If the user names an issue number or says "skip roadmap," follow the user. Still
    - If the newest substantive comment contradicts the body, follow the comment and say so in the PR.
    - If the issue itself is stale (the code it describes no longer exists, or another change already resolved it), do not implement it as written — comment on the issue with evidence and a recommendation (close or retarget), then stop.
 6. Write a failing test first (TDD), then implement the fix
-7. Run focused tests (`dotnet test --filter ...`) after each behavior change. When modifying `src/Zipper.Analyzers/`, run `dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj`. When modifying production `.cs` files, run `bash tests/run-mutation-smoke.sh` (which supports uncommitted changes and runs matching `*Tests` classes first before falling back to the full suite). Do not manually re-run the full unit test suite or `dotnet build -c Release` immediately before `git commit` / `git push` when git hooks are active: `pre-commit` enforces format + unit tests (and writes `pre-commit.ok`), and `pre-push` reuses `pre-commit.ok`, enforces `run-mutation-smoke.sh` without repeating the baseline test run, and runs `run-e2e-basic.sh` only when CLI/E2E files changed. If mutants survive, add targeted unit tests in `src/Zipper.Tests/` exercising those specific conditions/operators until all mutants are killed. Never bypass with `SKIP_MUTATION_SMOKE`. Repeat affected gates after review-driven fixes.
+7. Run focused tests after each behavior change and the affected final gates using [Commands](#commands), including analyzer tests when touching `src/Zipper.Analyzers/` and mutation smoke when modifying production `.cs` files. If mutants survive, add targeted unit tests in `src/Zipper.Tests/` exercising those conditions/operators until all mutants are killed. Never bypass with `SKIP_MUTATION_SMOKE`. Reuse hook evidence as documented there; repeat affected gates after review-driven fixes.
 8. Run autoreview before creating PR (see Adversarial Review section below). *Required for any change touching logic, error handling, or public contracts. For docs-only, version-bump, or single-line fixes, a self-review suffices — note the exemption in the PR.* Then run the local CodeRabbit CLI pre-PR gate (see CodeRabbit Local Pre-PR Review below) and fix or skip-with-reason every finding before submitting the PR.
 9. For requested PR delivery or a runner dispatch, commit and create the PR — include `## Release Notes` per the [Release Notes Mandate](#release-notes-mandate) below. Reference `Fixes #NNN`. If the work advances a Roadmap phase, mention the roadmap issue in the PR body (do not auto-close it).
 10. Runner-dispatched implementation missions return after step 9; the parent runner owns steps 10–14, including CI and reviewer waits. For interactive PR work within the authorized delivery scope, monitor CI until all checks pass; fix failures before requesting review. Reproduce each gate locally first — see the [docs/cicd.md](../docs/cicd.md#quick-reference-for-agents) gate-to-command table so you fail fast instead of waiting on CI minutes. If a CI failure appears flaky (same test passes locally, or failure is in an unrelated component), re-run once. If it fails again, document the flake in the PR and proceed to request review. Before pushing any update to a PR, run the local CodeRabbit CLI review gate (`coderabbit review --committed --base main --agent`) and address all findings first. Push fixes via `git commit --amend --no-edit && git push --force-with-lease`.

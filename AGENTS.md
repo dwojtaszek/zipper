@@ -17,10 +17,12 @@ Lower-numbered principles take precedence. Critical rules below remain ordered b
 - A runner dispatch explicitly supplies an issue branch/worktree; use that checkout throughout the mission.
 - At task start, state the delivery scope: local commit, prepared PR, or merge/deploy. A PR-only request ends with a reviewed PR; merge/deploy requests include rollout verification. Ask once only if the scope remains unclear, and retain approvals within their stated scope.
 - Return implementation missions after local validation and publication. The parent runner owns remote CI waits and subsequent repair missions.
+- Keep one automation owner per issue/PR. Check active branches, PRs, and runner ownership before starting interactive work; use a separate worktree for independent work. Amp schedules and event subscriptions may report progress, but must not launch competing intake, repair, publication, or merge work for runner-owned PRs without an explicit handoff.
 - Keep checkouts clean. Before changing the shared main checkout, prevent concurrent runner/deploy mutations without discarding active work.
 
 ## Read when relevant
 
+- Task workflow: [workflow selection](docs/agent-workflow.md#workflow-selection). Choose one primary workflow; retain required domain checks and review gates.
 - Product behavior: [Requirements.md](Requirements.md). Domain language: [UBIQUITOUS_LANGUAGE.md](UBIQUITOUS_LANGUAGE.md). Usage: [README.md](README.md).
 - Any implementation or test change: [testing and debugging](docs/agent-workflow.md#testing--debugging). Use real outcomes; preserve behavioral coverage. Parser/planner/sanitizer/comparison changes also require [property-based tests](docs/property-based-testing.md).
 - Autonomous issue selection or triage: [queue ranking, roadmap, and blockers](docs/agent-workflow.md#issue-selection-mandatory-for-autonomous--next-issue-work).
@@ -33,7 +35,7 @@ Lower-numbered principles take precedence. Critical rules below remain ordered b
 
 ## Check output
 
-Use existing affected gates via `./dev.sh`. For long checks, retain the full log and bound displayed output:
+Use existing affected gates via `./dev.sh`; follow [gate selection and hook reuse](docs/agent-workflow.md#commands) rather than duplicating full-suite runs. For long checks, retain the full log and bound displayed output:
 
 ```bash
 python3 .github/scripts/run-check.py --log /tmp/zipper-check.log -- <command> <args>
