@@ -81,7 +81,7 @@ Exit 3 exists to close a false-pass hole: an unreadable thread list used to be r
 
 The script prints a machine-readable contract on stdout: one `REVIEWER-OUTCOME <bot>=<state>` line per reviewer (`reviewed`, `skipped`, `silent`, `skipped-by-policy`) and a final `REVIEW-GATE-RESULT unresolved=<n|unknown>` line. The autonomous runner consumes these to track reviewer availability, and passes `WAIT_FOR_REVIEWS_SKIP=<bot>,<bot>` to skip waiting on a reviewer it has already recorded as unavailable. Only `reviewed` is evidence that a reviewer answers, so only `reviewed` clears its record: `skipped-by-policy` is what the gate reports for a reviewer the caller parked, and treating that as "answering again" would delete the park on the very next cycle.
 
-**The review bots are a convenience, not the authority.** The merge gate is the required `ci-gate` context (the zipper test suite) plus SonarCloud; both always run, because they are repository workflows rather than an external app's discretion. The two bots are not: CodeRabbit declines this repository outright (public OSS, fewer than 10 stars) and rate-limits itself to a few reviews per rolling hour, and Codex sometimes does not answer. Not waiting on them is safe because unresolved review threads still block the merge through required conversation resolution, so a bot that answers late with findings still stops it. That is the whole basis for skipping the wait: "we stopped waiting", never "we stopped checking".
+**The review bots are a convenience, not the authority.** The required status check is `ci-gate` (the zipper test suite). SonarCloud is a separate manual review policy, not a required GitHub status check. The two bots are not: CodeRabbit declines this repository outright (public OSS, fewer than 10 stars) and rate-limits itself to a few reviews per rolling hour, and Codex sometimes does not answer. Not waiting on them is safe because unresolved review threads still block the merge through required conversation resolution, so a bot that answers late with findings still stops it. That is the whole basis for skipping the wait: "we stopped waiting", never "we stopped checking".
 
 Caveats:
 - A "pass" check status from a review bot can mean "review skipped" (rate limit) — never treat check status as approval.
@@ -151,7 +151,23 @@ Address blocking issues (required). Nitpicks are optional.
 
 ## CodeQL
 
-Failures block merge — must fix.
+Verified on 2026-11-11 using GitHub's REST API for `dwojtaszek/zipper`:
+
+- `GET /repos/dwojtaszek/zipper/code-scanning/default-setup` reports
+  `state: configured`, languages `actions`, `csharp`, `python`, default query
+  suite, and weekly schedule. CodeQL uses GitHub default setup in repository
+  Settings → Code security; it does not need an in-repo workflow.
+- `GET /repos/dwojtaszek/zipper/code-scanning/analyses?per_page=3` returned CodeQL
+  analyses on `refs/heads/main` dated 2026-11-11, confirming execution.
+- `GET /repos/dwojtaszek/zipper/branches/main/protection` requires only `ci-gate`.
+  `GET /repos/dwojtaszek/zipper/rules/branches/main` returned no additional required
+  status checks. CodeQL is therefore **not a required merge gate**. Inspect results
+  in the repository Security → Code scanning tab; do not describe a CodeQL failure
+  as automatically blocking merge.
+
+See [protection drift monitoring](docs/cicd.md#gates-summary) for the automated
+read-only comparison and its token requirements. This records GitHub evidence;
+no separate external CodeQL enforcement path was identified.
 
 ## TypeSafe Audit
 
