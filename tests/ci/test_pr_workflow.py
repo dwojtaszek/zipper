@@ -128,13 +128,13 @@ class PrWorkflowTraceabilityTests(unittest.TestCase):
             return condition.group(1) if condition else "True"
 
         trace = condition_for(self.workflow_text, "run: bash tests/validate-req-traceability.sh --strict")
-        self.assertEqual(condition_for(ci_text, "run: bash tests/validate-req-traceability.sh --strict"), "True")
+        self.assertEqual("True", condition_for(ci_text, "run: bash tests/validate-req-traceability.sh --strict"))
         for docs, runner in ((True, False), (False, True), (False, False)):
             with self.subTest(docs=docs, runner=runner):
                 condition = trace.replace("steps.check.outputs.only_docs", repr(str(docs).lower()))
                 condition = condition.replace("steps.check.outputs.only_runner", repr(str(runner).lower()))
                 classifier_runs = eval(condition.replace("||", " or ").replace("&&", " and "), {"__builtins__": {}})
-                self.assertEqual(int(classifier_runs) + int(not docs), 1)
+                self.assertEqual(1, int(classifier_runs) + int(not docs))
 
         embedded = condition_for(ci_text, "tests/goldens/run-goldens.sh")
         pr_mode = re.search(r"(?m)^      publish_mode: (.*)$", self.workflow_text).group(1)
