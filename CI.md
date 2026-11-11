@@ -66,7 +66,7 @@ After creating a PR — and after every subsequent push — run the review-wait 
 bash tests/wait-for-reviews.sh <PR-number> [timeout-minutes]   # default timeout: 20
 ```
 
-The script blocks until each expected bot (CodeRabbit, Codex) has posted a completed review for the current head, posted a completed current-head marker, or declared a rate-limit skip, then lists every unresolved review thread and exits non-zero while any remain. Fix or reply-with-reason on each thread, resolve it, and re-run until exit 0. A bot that stays silent past the timeout produces a warning, not a failure.
+The script waits for CodeRabbit to post a completed current-head review or a skip, then checks unresolved review threads from **every author**, including retired bots. Fix or reply-with-reason on each thread, resolve it, and re-run until exit 0. A silent reviewer produces a warning, not a failure. Codex PR review is retired: no completion-marker parsing, refresh requests, or waits. Codex CLI remains available as a coding agent.
 
 Exit codes are distinct because they mean different things:
 
@@ -76,20 +76,19 @@ Exit codes are distinct because they mean different things:
 | 1 | Unresolved review threads | Fix, or reply with a skip reason and resolve |
 | 2 | Usage error / missing `gh` or `jq` | Fix the environment |
 | 3 | Review state could not be read, or the head changed | Retry; this is environmental, not a verdict |
-| 4 | A current review is active, or a fresh review request is needed | Retry later; do not merge or launch a repair mission |
+| 4 | A current-head review is active | Retry later; do not merge or launch a repair mission |
 
 Exit 3 exists to close a false-pass hole: an unreadable thread list used to be read as "zero unresolved threads", which would let a PR merge with its review threads unverified. A caller must never treat exit 3 as either a pass or a review failure.
 
 The script prints a machine-readable contract on stdout: one `REVIEWER-OUTCOME <bot>=<state>` line per reviewer (`reviewed`, `skipped`, `silent`, `skipped-by-policy`, `pending`) and a final `REVIEW-GATE-RESULT unresolved=<n|unknown>` line. The autonomous runner consumes these to track reviewer availability, and passes `WAIT_FOR_REVIEWS_SKIP=<bot>,<bot>` to skip waiting on a reviewer it has already recorded as unavailable. Only `reviewed` is evidence that a reviewer answers, so only `reviewed` clears its record: `skipped-by-policy` is what the gate reports for a reviewer the caller parked, and treating that as "answering again" would delete the park on the very next cycle.
 
-**The review bots are a convenience, not the authority.** The merge gate is the required `ci-gate` context (the zipper test suite) plus SonarCloud; both always run, because they are repository workflows rather than an external app's discretion. The two bots are not: CodeRabbit declines this repository outright (public OSS, fewer than 10 stars) and rate-limits itself to a few reviews per rolling hour, and Codex sometimes does not answer. Not waiting on them is safe because unresolved review threads still block the merge through required conversation resolution, so a bot that answers late with findings still stops it. That is the whole basis for skipping the wait: "we stopped waiting", never "we stopped checking".
+**Remote reviews are optional; required checks are not.** GitHub requires `ci-gate` and conversation resolution; SonarCloud is an additional runner/manual policy check, not a required GitHub status. CodeRabbit can decline reviews or rate-limit itself. Skipping an unavailable reviewer's wait does not waive its unresolved threads.
 
 Caveats:
 - A "pass" check status from a review bot can mean "review skipped" (rate limit) — never treat check status as approval.
 - Resolving a thread without a reply is prohibited; the thread must carry a fix reference or a skip reason.
-- Codex sometimes reports a finished review as a summary issue comment carrying a `codex-review-state:v1` marker instead of a formal review object. The gate counts that marker in either carrier, because it cannot otherwise see such a review at all and waits out its entire timeout on a PR the bot has already reviewed — measured at 20 minutes on PR #1328.
 
-An active current-head review or a needed refresh is reported as `pending` and returns exit 4 after the wait budget. Once a trusted refresh request exists, no current-head activity after the next wait budget is reported as `silent`, not `reviewed`; stale history cannot make an optional reviewer mandatory forever. The runner retries without a repair mission while that review is pending. Active reviews have a 20-minute window per PR, head, and reviewer, shared across quick passes and process restarts. If activity never completes within that window, it becomes `silent` without review credit and uses the existing unavailable-reviewer fallback. The first-observation records live under `STATE_DIR/review-waits`, or local Git metadata for standalone calls; dry runs do not write them. A head change invalidates the gate and returns exit 3. Explicit skips and genuinely silent reviewers retain the optional-reviewer policy. For a stale Codex review with no current-head review running, the parent runner requests a fresh review once per head. Interactive callers can follow the gate’s `REVIEW-REQUEST` hint.
+An active current-head review is reported as `pending` and returns exit 4 after the wait budget. The runner retries without a repair mission. Active reviews have a persistent 20-minute window per PR, head, and reviewer; abandoned activity becomes `silent`, never `reviewed`. Records live under `STATE_DIR/review-waits`, or local Git metadata for standalone calls; dry runs do not write them. A head change invalidates the gate with exit 3. Temporary skips must name the head; standing repository refusals remain valid. Historical reviews never grant current-head credit.
 
 Use the [single CI watcher](docs/runner-operations.md#ci-monitoring) and its local snapshot for progress updates.
 
@@ -156,7 +155,23 @@ Address blocking issues (required). Nitpicks are optional.
 
 ## CodeQL
 
-Failures block merge — must fix.
+Verified on 2026-11-11 using GitHub's REST API for `dwojtaszek/zipper`:
+
+- `GET /repos/dwojtaszek/zipper/code-scanning/default-setup` reports
+  `state: configured`, languages `actions`, `csharp`, `python`, default query
+  suite, and weekly schedule. CodeQL uses GitHub default setup in repository
+  Settings → Code security; it does not need an in-repo workflow.
+- `GET /repos/dwojtaszek/zipper/code-scanning/analyses?per_page=3` returned CodeQL
+  analyses on `refs/heads/main` dated 2026-11-11, confirming execution.
+- `GET /repos/dwojtaszek/zipper/branches/main/protection` requires only `ci-gate`.
+  `GET /repos/dwojtaszek/zipper/rules/branches/main` returned no additional required
+  status checks. CodeQL is therefore **not a required merge gate**. Inspect results
+  in the repository Security → Code scanning tab; do not describe a CodeQL failure
+  as automatically blocking merge.
+
+See [protection drift monitoring](docs/cicd.md#gates-summary) for the automated
+read-only comparison and its token requirements. This records GitHub evidence;
+no separate external CodeQL enforcement path was identified.
 
 ## TypeSafe Audit
 
@@ -210,11 +225,13 @@ Bot infra errors — retry, don't block merge.
 
 `dynamic/agents/github-advanced-security` ("Code scanning AI findings on PR #N") is GitHub-owned infrastructure, not a repo workflow — it cannot be edited from this repo, so no `concurrency:` group and no retry policy can be added to it, and it re-runs on every `pull_request` event regardless of repo-level cancellation. It is **not** in `ci-gate`'s needs, not in branch protection (required: `ci-gate` only), and not even surfaced in `gh pr checks`. Its failures are Copilot agent runtime flakes (proxy/runtime download, sandbox setup) and, when the monthly Copilot quota is exhausted, `SessionModelError: You have exceeded your monthly quota` — both outside this repository's control. Treat exactly like factory-droid: advisory noise, never a merge blocker, never worth chasing. Do not investigate its logs during PR closeout; if curious, re-run the workflow instead. The only in-repo lever is a repo setting (disable the dynamic agent), which is an admin action, not a PR.
 
-## Pullfrog
+## Retired integrations: Pullfrog, Codex PR review, Tessl
 
-[`pullfrog.yml`](.github/workflows/pullfrog.yml) is an external-app check, not a repo gate: the workflow file only declares the manual `workflow_dispatch` entry point, while the PR check is posted by the Pullfrog service (`https://pullfrog.com/repo/<owner>/<repo>/workflow-run/...`). It is **not** in `ci-gate`'s needs and **not** in branch protection (required: `ci-gate` only), so it never blocks a merge.
+The manual Pullfrog workflow is removed. Observed PR checks failed in its hosted provider's streaming parser, outside repository code. The hosted GitHub App can still post checks until repository access is removed in [GitHub installed applications](https://github.com/settings/installations) or its dashboard. Its legacy check remains explicitly advisory in the runner so residual hosted failures cannot trigger repair missions.
 
-It has failed every observed run with the external `provider error: Not Found`, which is the service's upstream dependency, not this repository. Treat it like `factory-droid`: advisory noise, never worth chasing. Do not investigate its logs during PR closeout; re-running the workflow is the only in-repo lever.
+Disable automatic Codex reviews for this repository in Codex settings. Removing the runner's requests does not change that hosted setting. Do not remove Codex CLI credentials or the runner coding-agent plugin.
+
+Tessl has no tracked packages or populated project rules. The repository no longer loads its empty host rules. Global Tessl installations and other projects are untouched; an ignored local editor MCP declaration is not repository configuration and must be removed separately if no longer wanted. Do not delete shared provider secrets: other workflows may use them.
 
 ## Goldens
 
@@ -239,4 +256,3 @@ Implementation:
   - The bypass requires an `APPROVED` review from a merge maintainer on the exact current head. The `security` label does **not** authorize it: GitHub applies that label automatically to Dependabot security-update PRs, so it cannot state intent.
   - The directive must be a line of its own: `authorize-security`, or `authorize-security:` followed by a reason (`authorize-security: CVE-2026-0001`). The token must be the first thing on the line and only a colon may follow it, so a sentence that mentions, quotes, or negates the token does not authorize the bypass — including `authorize-security should not be used here`, which a start-of-line check alone would accept. Write the reason above the directive if you need to explain it.
 - Reviewers should verify the NuGet/GitHub release date before approving a dependency PR.
-

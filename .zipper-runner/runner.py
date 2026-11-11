@@ -99,11 +99,8 @@ REVIEW_GATE_SCRIPT = "tests/wait-for-reviews.sh"
 GITHUB_REPOSITORY = "dwojtaszek/zipper"
 
 # Robot reviewers are a convenience, not an authority: the merge gate is the
-# required `ci-gate` context (the zipper test suite) plus SonarCloud, both of which
-# are always present because they run as repository workflows rather than as an
-# external app's discretion. The two review bots are neither: CodeRabbit declines
-# this repository outright (public OSS, fewer than 10 stars) and rate-limits itself
-# to a few reviews per hour, and Codex sometimes does not answer at all. Waiting the
+# required `ci-gate` context, with SonarCloud also checked by runner policy.
+# CodeRabbit can decline public OSS reviews or rate-limit itself. Waiting the
 # full gate timeout for a bot that was never going to reply is the delay this
 # tracking removes -- and it removes only the *wait*: unresolved review threads
 # still block the merge through required conversation resolution, so a bot that
@@ -2672,26 +2669,6 @@ class ReviewGate(NamedTuple):
     detail: str
 
 
-def _request_head_review(pr_number, head: str, cwd: str) -> None:
-    if DRY_RUN:
-        print(f"[DRY RUN] Would request a Codex review for {head} on PR #{pr_number}")
-        return
-    os.makedirs(STATE_DIR, exist_ok=True)
-    claim = os.path.join(STATE_DIR, f"pr-{pr_number}-review-request-{head}")
-    with open(claim + ".lock", "a") as lock:
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            return
-        if os.path.exists(claim + ".sent"):
-            return
-        requested, _, _ = run_cmd(["gh", "pr", "comment", str(pr_number), "--body",
-            f"@codex review\n<!-- zipper-review-head:{head} -->"], cwd=cwd, timeout=60)
-        if requested == 0:
-            with open(claim + ".sent", "w") as receipt:
-                receipt.write(head)
-
-
 def _run_review_gate(pr_number, cwd: str, wait_minutes: int | None = None,
                      timeout: int = 1500) -> ReviewGate:
     """Wait for robot reviews, skipping reviewers already known to be gone.
@@ -2717,10 +2694,6 @@ def _run_review_gate(pr_number, cwd: str, wait_minutes: int | None = None,
     # queued reviewer to answer, so their silences must not count as strikes.
     if code in (0, 1, 4):
         _record_reviewer_outcomes(out, count_silence=wait_minutes is None)
-    # Updated heads may need an explicit Codex trigger; claim once across runner processes.
-    request = re.search(r"^REVIEW-REQUEST codex ([0-9a-f]{40})$", out, re.MULTILINE) if code == 4 else None
-    if request:
-        _request_head_review(pr_number, request.group(1), cwd)
     # Only exit 1 is a verdict on the code (unresolved threads exist). Everything
     # else nonzero means review is pending or unavailable: REVIEW_GATE_ENVIRONMENTAL_EXIT
     # is the gate's own environmental code, 2 means `gh` was missing or `gh repo view`

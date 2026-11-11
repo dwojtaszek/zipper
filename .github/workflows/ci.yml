@@ -467,7 +467,7 @@ jobs:
           call tests\test-published-artifact.bat
 
       - name: Golden parity against shipped Linux candidate
-        if: inputs.publish_mode != 'none' && matrix.coverage == true
+        if: inputs.publish_mode == 'self-contained' && matrix.coverage == true
         shell: bash
         run: ZIPPER_CLI="$PWD/publish/linux-x64/zipper-linux-x64" bash tests/goldens/run-goldens.sh
 

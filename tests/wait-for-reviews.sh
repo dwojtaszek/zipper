@@ -10,7 +10,7 @@
 # Exit:    0 = all bots accounted for, no unresolved review threads
 #          1 = unresolved review threads exist (fix or reply + resolve, re-run)
 #          2 = usage error / missing prerequisites
-#          4 = a current-head review is active, or a fresh request is needed; retry
+#          4 = a current-head review is active; retry
 #          3 = could not determine review state (API failure) — environmental,
 #              not a review outcome
 #
@@ -32,15 +32,10 @@ set -euo pipefail
 
 EXPECTED_BOTS=(
     "coderabbitai[bot]"
-    "chatgpt-codex-connector[bot]"
 )
 # Matches both explicit skip declarations (rate limits, repo star threshold) and
 # CodeRabbit's walkthrough-only responses, which carry no formal review object.
 SKIP_PATTERN='usage limit|rate limit|review limit|Review skipped|skip review|Review available on request|Walkthrough|fewer than 10 stars|does not receive automatic reviews'
-# Codex reports some finished reviews as a summary issue comment carrying a
-# machine-readable completion marker instead of a formal review object. Without
-# this the gate cannot see that review at all and waits out its whole timeout on a
-# PR Codex has already finished — measured at 20 minutes on PR #1328.
 POLL_SECONDS=30
 
 # Reviewers the caller already knows to be unavailable (a rate-limit window, a
@@ -196,72 +191,30 @@ bot_query() {
 bot_has_reviewed() {
     local bot="$1"
     bot_query "$bot" '
-      def completed_marker:
-        try ((capture("codex-review-state:v1 (?<payload>[^\\n]+) -->").payload
-          | fromjson | [.code_review, .security_review]
-          | map(select(.commit_sha == $head)))
-          | length > 0 and all(.[]; .status == "completed")) catch false;
       any($reviews[]; .user.login == $bot and .commit_id == $head
-        and (.state == "APPROVED" or .state == "COMMENTED" or .state == "CHANGES_REQUESTED")
-        and (if ((.body // "") | contains("<!-- codex-review-state:v1 "))
-             then ((.body | completed_marker) // false) else true end))
-      or any($comments[]; .user.login == $bot and (((.body // "") | completed_marker) // false))
+        and (.state == "APPROVED" or .state == "COMMENTED" or .state == "CHANGES_REQUESTED"))
     '
 }
 
 bot_declared_skip() {
     local bot="$1"
     bot_query "$bot" '
-      def trusted: .user.login == $owner or .user.login == "github-actions[bot]"
-        or .author_association == "OWNER" or .author_association == "MEMBER" or .author_association == "COLLABORATOR";
-      [$comments[] | select(trusted and ((.body // "") | startswith("@codex review\n")
-        and contains("<!-- zipper-review-head:" + $head + " -->"))) | .created_at // empty] | min as $requested |
       any($comments[]; .user.login == $bot and ((.body // "") | test($skip; "i"))
-        and (((.body // "") | contains($head)
-          or test("fewer than 10 stars|does not receive automatic reviews"; "i"))
-          or ($bot == "chatgpt-codex-connector[bot]" and $requested != null
-              and (.created_at // "") >= $requested)))'
-}
-
-bot_has_review_activity() {
-    local bot="$1"
-    bot_query "$bot" '
-      any($reviews[]; .user.login == $bot)
-      or any($comments[]; .user.login == $bot and ((.body // "") | contains("<!-- codex-review-state:v1 ")))
-    '
+        and ((.body // "") | contains($head)
+          or test("fewer than 10 stars|does not receive automatic reviews"; "i")))'
 }
 
 bot_has_current_activity() {
     local bot="$1"
     bot_query "$bot" '
       any($reviews[]; .user.login == $bot and .commit_id == $head and .state == "PENDING")
-      or any(($comments + $reviews)[]; .user.login == $bot and (try (
-        .body | capture("codex-review-state:v1 (?<payload>[^\\n]+) -->").payload | fromjson
-        | [.code_review, .security_review][]
-        | .commit_sha == $head and (.status == "running" or .status == "queued" or .status == "pending")
-      ) catch false))
     '
-}
-
-head_was_requested() {
-    bot_query "" 'any($comments[];
-      (.user.login == $owner or .user.login == "github-actions[bot]"
-       or .author_association == "OWNER" or .author_association == "MEMBER" or .author_association == "COLLABORATOR")
-      and ((.body // "") | startswith("@codex review\n") and contains("<!-- zipper-review-head:" + $head + " -->")))'
 }
 
 bot_has_current_response() {
     local bot="$1"
     bot_query "$bot" '
-      def current_marker:
-        (.body // "") as $body |
-        try ($body | capture("codex-review-state:v1 (?<payload>[^\\n]+) -->").payload | fromjson
-          | [.code_review, .security_review] | any(.[]; .commit_sha == $head))
-        catch ($body | contains($head));
       any($reviews[]; .user.login == $bot and .commit_id == $head)
-      or any(($comments + $reviews)[]; .user.login == $bot
-        and ((.body // "") | contains("<!-- codex-review-state:v1 "))
-        and current_marker)
     '
 }
 
@@ -341,14 +294,10 @@ while [[ ${#pending[@]} -gt 0 ]]; do
     [[ ${#pending[@]} -eq 0 ]] && break
     if [[ $(date +%s) -ge $DEADLINE ]]; then
         for bot in "${pending[@]}"; do
-            if bot_has_current_activity "$bot" \
-                    || { [[ "$bot" == "chatgpt-codex-connector[bot]" ]] && bot_has_review_activity "$bot" && ! head_was_requested; }; then
+            if bot_has_current_activity "$bot"; then
                 print_warn "$bot has not completed a review of $REVIEW_HEAD; retry later."
                 set_outcome "$bot" "pending"
                 REVIEW_PENDING=1
-                if [[ "$bot" == "chatgpt-codex-connector[bot]" ]] && ! bot_has_current_activity "$bot" && ! head_was_requested; then
-                    echo "REVIEW-REQUEST codex $REVIEW_HEAD"
-                fi
             else
                 print_warn "$bot did not respond within ${TIMEOUT_MINUTES}m — proceeding without it."
                 set_outcome "$bot" "silent"

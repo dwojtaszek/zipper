@@ -110,6 +110,7 @@ class DevCliAndLocalWorkflowTests(unittest.TestCase):
         res_all = self._run_dev("all", "--dry-run")
         self.assertEqual(res_all.returncode, 0, res_all.stderr)
         self.assertEqual(res_all.stdout.count("Build solution (Release)"), 1)
+        self.assertEqual(res_all.stdout.count("Run zipper-runner tests"), 1)
         self.assertIn("Run Roslyn analyzer tests", res_all.stdout)
         self.assertIn("Run incremental mutation smoke", res_all.stdout)
         self.assertIn("Run basic E2E smoke", res_all.stdout)

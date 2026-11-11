@@ -87,11 +87,13 @@ Trigger: `pull_request` → `main`. Concurrency-cancels superseded runs. The sha
 3. **goldens** — downloads the Linux CLI artifact and runs golden scenarios (content-hash parity). See [CI.md](../CI.md#goldens) to regenerate.
 4. **ci-gate** — aggregate merge gate; branch protection requires exactly this check context and nothing else. It always runs (even on docs-only PRs where the other build/test jobs are skipped), and judges each needed job against an allowlist: `docs-only` must be `success`, and `ci`/`goldens` must be `success` or a `skipped` justified by `docs-only`'s `only_docs` output. It is an allowlist rather than a blocklist of failure names because GitHub reports results that cannot be enumerated in advance — `abandoned` is outside the documented set and appears when a caller's reusable workflow is torn down mid-run — and a blocklist lets an unanticipated one through as a pass. Any other result, a job missing from the payload, an unreadable payload, or a skip with no docs-only fast path blocks the merge. A PR that edits `pr.yml` is judged by the version it ships, so the gate cannot defend against a PR skipping its own jobs.
 
+Golden scenarios run once per product PR, in the `goldens` job against the downloaded Linux candidate. The reusable workflow runs them internally only for main/release (`publish_mode: self-contained`), before publication. Requirement traceability runs in the classifier for docs-only PRs and in shared `lint` for runner/product PRs. Runner-only `DocsDriftTests` remain in the classifier; they are not repeated by shared CI. `./dev.sh all` includes runner tests as well as product gates. See [retired integrations](../CI.md#retired-integrations-pullfrog-codex-pr-review-tessl) for hosted cleanup that repository changes cannot perform.
+
 ### 3. Side checks (parallel on PR)
 
 - **perf-guard** — [`perf-guard.yml`](../.github/workflows/perf-guard.yml), triggered on product code under `src/**` (excluding test and analyzer projects). Runs `measure.sh` 5×, takes the median, and compares to `tests/perf/baselines.json` via [`.github/scripts/perf-compare.py`](../.github/scripts/perf-compare.py). **RSS > 1.20× baseline is advisory**, as is `wall_s` (shared-runner variance); measurement and comparison errors still fail. Posts/updates one PR comment with the result table.
 - **Functional QA PR report** — [`qa-pr-report.yml`](../.github/workflows/qa-pr-report.yml), on every `pull_request_target` against `main` (`contents: read`, `pull-requests: write`). Posts or updates one `## QA Report` comment stating that credentialed QA runs only after merge: fork PRs because GitHub never exposes `FACTORY_API_KEY` to them, same-repo PRs because the Droid run is restricted to protected `main` and manual dispatch. **Advisory and never blocking** — it reports the gate's precondition and tests nothing. The real QA run is [`qa.yml`](../.github/workflows/qa.yml) (§5).
-- **SonarCloud / CodeRabbit / CodeQL** — see [CI.md](../CI.md). SonarCloud is **not** surfaced as a GitHub check; fetch it manually after CI completes. CodeQL failures block merge. CodeRabbit blocking issues required, nitpicks optional.
+- **SonarCloud / CodeRabbit / CodeQL** — see [CI.md](../CI.md). SonarCloud is **not** surfaced as a GitHub check; fetch it manually after CI completes. CodeQL runs through GitHub default setup, but is not a required merge check (see the dated evidence in CI.md). CodeRabbit blocking issues required, nitpicks optional.
 - **typesafe-audit** — [`typesafe-audit.yml`](../.github/workflows/typesafe-audit.yml), **advisory only** (never blocks). Path-filtered on PR (`Requirements.md`, `docs/`, `src/`, `tests/`, `tools/typesafe-audit/`), a weekly full audit (Monday 06:00 UTC), and manual `workflow_dispatch` (`changed`/`full`). Runs the Python audit runner in `tools/typesafe-audit/` with the `TYPESAFE_API_KEY` repository secret; fork PRs (no secret access) skip with a neutral summary. Emits structured machine-readable assurance results (`assurance-result.json`, outputs, and step summary) distinguishing executed from unavailable checks, uploads reports (7-day retention, `if-no-files-found: warn`), and writes a job summary. Remote failures are always non-blocking. See [CI.md](../CI.md#typesafe-audit).
   - **Bounded concurrent audits** — the five audit checks run as matrix jobs with `max-parallel: 2` and `fail-fast: false`. Each job has an isolated checkout, summary, and `typesafe-audit-report-<check>` artifact; the independent PR specification review retains its own artifact. No native `background`/`wait` syntax is used: local actionlint 1.7.12 rejects those keywords. Build, E2E, coverage, goldens, and release gates remain unchanged.
   - **Foundation audit (#955)** — fixed sample scope via `tools/typesafe-audit/runner.py`.
@@ -115,14 +117,33 @@ Trigger: `push` → `main`, stable tags `v*`, and manual recovery via `workflow_
 
 ### 5. Scheduled / bot
 
-- **perf-baseline-refresh** — [`perf-baseline-refresh.yml`](../.github/workflows/perf-baseline-refresh.yml), Monday 04:00 UTC (or manual `workflow_dispatch`). Re-measures (5 runs, take max), and if any metric drifts ≥5% opens a `chore: refresh perf baselines` PR with a review checklist. **Requires the `PERF_BASELINE_TOKEN` repository secret** (a fine-grained PAT with `contents:pull-requests:write`): the action opens the PR from a branch it pushes, and a branch pushed with the default `GITHUB_TOKEN` makes the PR author `github-actions[bot]`, which GitHub holds at `action_required` — so `PR Checks` never runs, `ci-gate` never posts, and the PR can never be merged (observed on PR #1187). Without the secret the workflow now **fails explicitly** instead of silently opening an unmergeable PR.
+- **perf-baseline-refresh** — [`perf-baseline-refresh.yml`](../.github/workflows/perf-baseline-refresh.yml), Monday 04:00 UTC (or manual `workflow_dispatch`). Re-measures (5 runs, take median), and if any metric drifts ≥5% opens a `chore: refresh perf baselines` PR with a review checklist. **Requires the `PERF_BASELINE_TOKEN` repository secret** (a fine-grained PAT with `contents:pull-requests:write`): the action opens the PR from a branch it pushes, and a branch pushed with the default `GITHUB_TOKEN` makes the PR author `github-actions[bot]`, which GitHub holds at `action_required` — so `PR Checks` never runs, `ci-gate` never posts, and the PR can never be merged (observed on PR #1187). Without the secret the workflow now **fails explicitly** instead of silently opening an unmergeable PR.
 - **Dependabot** — [`dependabot.yml`](../.github/dependabot.yml). NuGet daily (grouped minor/patch vs major), GitHub Actions weekly. Subject to the **3-day waiting period** before merge: configured via `cooldown` in `.github/dependabot.yml` and enforced deterministically by `.zipper-runner` (`babysit_dependabot_prs`), which verifies upstream release timestamps (NuGet package registration date; GitHub Actions release `published_at` timestamp) before auto-merge, requiring explicit auditable recorded authorization for security update exceptions — see [CI.md](../CI.md#dependency-update-policy).
 - **Weekly functional QA** — [`qa.yml`](../.github/workflows/qa.yml), Monday 04:17 UTC (or manual `workflow_dispatch` from protected `main`, which requires an ancestor `base_sha`). All jobs run on `ubuntu-latest` only — cross-platform E2E lives in `build-and-test.yml`, not here. `weekly-smoke` builds Zipper and runs the `tests/run-e2e-basic.sh` basic CLI smoke with no Factory credits (schedule only). `qa` then runs the Droid functional suite (model `gpt-5.6-sol`) only when the diff since the 7-day ancestor touches the CLI path patterns configured in `.factory/skills/qa/config.yaml` and `FACTORY_API_KEY` is available in the `QA` environment; its report is gated on per-case terminal snapshots, not prose. Each scheduled run opens or updates one `testing`/`P3` issue. Never runs on PRs — see [weekly-qa.md](weekly-qa.md).
-- **Nightly Zip64 scale test** — [`zip64-nightly.yml`](../.github/workflows/zip64-nightly.yml), nightly at 01:00 UTC. Exercises 100GB+ generation and Zip64 entry bounds on large runner storage.
-- **TypeSafe quality prioritization audit** — [`typesafe-quality-audit.yml`](../.github/workflows/typesafe-quality-audit.yml), Monday 06:00 UTC (or manual `workflow_dispatch`). Runs coverage gap extraction, two parallel Stryker mutation testing shards, and TypeSafe scoring.
+- **Nightly Zip64 scale test** — [`zip64-nightly.yml`](../.github/workflows/zip64-nightly.yml), daily at 03:00 UTC. Runs [`tests/test-zip64-boundary.sh`](../tests/test-zip64-boundary.sh) for the 70,000-entry Zip64 count boundary and the 4,500 MB size boundary (`RUN_4GB_CASE=true` on scheduled runs).
+- **TypeSafe quality prioritization audit** — [`typesafe-quality-audit.yml`](../.github/workflows/typesafe-quality-audit.yml), Monday 08:00 UTC (or manual `workflow_dispatch`). Runs coverage gap extraction, two parallel Stryker mutation testing shards, and TypeSafe scoring.
 - **TypeSafe full audit** — [`typesafe-audit.yml`](../.github/workflows/typesafe-audit.yml), Monday 06:00 UTC. Full audit of requirements, traceability, and architecture seams.
 
+Large-scale validation (100 GB+ generation / 100-million-record scenarios) is **manual-only**, not nightly or CI proof. The README's "scales to 100+ million records" remains a capability claim; see REQ_E-009 in [Requirements.md](../Requirements.md) and the manual [`tests/stress/stress-100m-loadfile.sh`](../tests/stress/stress-100m-loadfile.sh) Load File contract check.
+
 ## Gates summary
+
+Required status checks for `main`: `ci-gate`.
+
+This declaration lists GitHub-required check contexts, not every job aggregated by
+`ci-gate`. The blocking workflow rows below run in-repo; scheduled audit gates
+block their own runs, not PR merges. External review policies are distinguished
+from required status checks.
+
+[Protection drift](../.github/workflows/protection-drift.yml) compares this declaration
+with live branch protection and effective branch rules on every push to `main`,
+daily, and on manual dispatch. Any mismatch or API failure fails the workflow;
+it never changes repository settings. It is a monitoring check, not a required PR
+check. Configure repository secret `PROTECTION_READ_TOKEN` with a fine-grained
+repository token granting **Administration: read** (and automatic Metadata read).
+The default Actions token may not read protection; without suitable access this
+check fails visibly, rather than claiming protection was verified. Review the
+failed workflow, reconcile settings and this declaration, then rerun it.
 
 | Gate | Where | Blocking? |
 |------|-------|-----------|
@@ -146,9 +167,9 @@ Trigger: `push` → `main`, stable tags `v*`, and manual recovery via `workflow_
 | E2E `.sh`/`.bat` parity | lint | Yes |
 | Perf RSS ≤ 1.20× | perf-guard | No (advisory; measurement errors block) |
 | Perf wall_s | perf-guard | No (informational) |
-| SonarCloud BLOCKER/MAJOR | external | Yes (manual fetch) |
-| CodeQL | external | Yes |
-| CodeRabbit blocking | external | Yes (nitpicks optional) |
+| SonarCloud BLOCKER/MAJOR | external | No (manual review policy; fetch before merge) |
+| CodeQL | GitHub default setup (repository settings) | No (not required by protection) |
+| CodeRabbit blocking | external | No (review policy; unresolved threads block via conversation resolution) |
 | TypeSafe audit findings | typesafe-audit | No (advisory; never blocks) |
 
 ## Quick Reference for Agents
