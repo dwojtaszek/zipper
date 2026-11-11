@@ -153,6 +153,12 @@ class ReviewGateWrapperTests(unittest.TestCase):
         self.assertFalse(result.ok)
         self.assertTrue(result.environmental)
 
+    def test_dry_run_cannot_change_reviewer_availability(self):
+        with patch.object(runner, 'DRY_RUN', True):
+            self._run(4, out=f"REVIEWER-OUTCOME {CODERABBIT}=silent")
+            self._run(4, out=f"REVIEWER-OUTCOME {CODERABBIT}=skipped")
+        self.assertEqual(runner._load_reviewer_availability(), {})
+
     def test_invalidated_head_cannot_park_a_reviewer(self):
         result, _ = self._run(3, out=f"REVIEWER-OUTCOME {CODEX}=skipped")
         self.assertTrue(result.environmental)

@@ -136,6 +136,24 @@ class ReviewWaitGateTests(unittest.TestCase):
                           comments=[{"user": {"login": CODERABBIT}, "body": CODERABBIT_SKIP}])
         self.assert_outcome(stub.run_gate(), "pending", code=4)
 
+    def test_terminal_skip_must_be_newer_than_current_activity(self):
+        for timestamp, review_id, state, code in (
+            ("2026-11-11T00:00:00Z", 10, "skipped", 0),
+            ("2026-11-11T00:00:02Z", 10, "pending", 4),
+            ("2026-11-11T00:00:01Z", 10, "skipped", 0),
+            ("2026-11-11T00:00:01Z", 30, "pending", 4),
+        ):
+            with self.subTest(timestamp=timestamp, review_id=review_id), tempfile.TemporaryDirectory() as directory:
+                stub = _StubGh(Path(directory), reviews=[{
+                    "user": {"login": CODERABBIT}, "state": "PENDING",
+                    "id": review_id, "submitted_at": timestamp,
+                }], comments=[{
+                    "user": {"login": CODERABBIT}, "id": 20,
+                    "created_at": "2026-11-11T00:00:01Z",
+                    "body": "Review skipped: rate limit " + HEAD_SHA,
+                }])
+                self.assert_outcome(stub.run_gate(), state, code=code)
+
     def test_large_comment_payload_cannot_hide_current_activity(self):
         stub = self._gate(reviews=[{"user": {"login": CODERABBIT}, "state": "PENDING"}],
                           comments=[{"user": {"login": "maintainer"}, "body": "x" * 50000} for _ in range(3)])

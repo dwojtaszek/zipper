@@ -65,6 +65,41 @@ def finish_child(child):
         stop_owned_group(child)
 
 
+class OwnedCommand:
+    def __init__(self):
+        self.child = None
+        self.interruption = 0
+
+    def interrupted(self, number, _frame):
+        # A handler must not raise between process creation and ownership assignment.
+        self.interruption = number
+
+    def check_interruption(self):
+        if not self.interruption:
+            return
+        if self.child is not None:
+            try:
+                os.killpg(self.child.pid, self.interruption)
+            except ProcessLookupError:
+                pass
+        raise SystemExit(128 + self.interruption)
+
+    def run(self, arguments):
+        self.check_interruption()
+        self.child = subprocess.Popen(arguments, cwd=ROOT, start_new_session=True)
+        while True:
+            self.check_interruption()
+            try:
+                code = self.child.wait(timeout=0.1)
+                break
+            except subprocess.TimeoutExpired:
+                continue
+        self.check_interruption()
+        stop_owned_group(self.child)
+        self.child = None
+        return code if code >= 0 else 128 - code
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', nargs=argparse.REMAINDER)
@@ -72,47 +107,32 @@ def main():
     command = args.command[1:] if args.command[:1] == ['--'] else args.command
     if not command:
         parser.error('provide a maintenance command after --')
-    child = None
+    owned = OwnedCommand()
     restore = []
     status = 1
     state = Path(os.environ.get('STATE_DIR', ROOT / '.zipper-runner/state'))
     state.mkdir(parents=True, exist_ok=True)
     lock = (state / 'maintenance.lock').open('a')
 
-    def interrupted(number, _frame):
-        if child is not None:
-            try:
-                os.killpg(child.pid, number)
-            except ProcessLookupError:
-                pass
-        raise SystemExit(128 + number)
-
-    def run(arguments):
-        nonlocal child
-        child = subprocess.Popen(arguments, cwd=ROOT, start_new_session=True)
-        code = child.wait()
-        stop_owned_group(child)
-        child = None
-        return code if code >= 0 else 128 - code
-
     for number in (signal.SIGINT, signal.SIGTERM):
-        signal.signal(number, interrupted)
+        signal.signal(number, owned.interrupted)
     try:
-        status = run(['bash', str(ROOT / '.zipper-runner/cron-wrapper.sh'), '--preflight'])
+        status = owned.run(['bash', str(ROOT / '.zipper-runner/cron-wrapper.sh'), '--preflight'])
         if status:
             return status
         # One owner spans the snapshot, command, and restoration interval.
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         restore = active_timers()
+        owned.check_interruption()
         if restore:
             subprocess.run(['systemctl', '--user', 'stop', *restore], check=True, timeout=30)
-        status = run(command)
+        status = owned.run(command)
     finally:
         for number in (signal.SIGINT, signal.SIGTERM):
             signal.signal(number, signal.SIG_IGN)
         try:
-            if child is not None:
-                finish_child(child)
+            if owned.child is not None:
+                finish_child(owned.child)
         finally:
             try:
                 restore_timers(restore)

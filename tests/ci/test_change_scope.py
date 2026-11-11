@@ -12,12 +12,24 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 SCOPE = ROOT / '.github/scripts/change-scope.py'
 CHECK = ROOT / '.github/scripts/run-check.py'
-def git_bash(git):
-    for parent in tuple(Path(git).parents)[:3]:
+def find_git_bash(location):
+    for parent in tuple(Path(location).parents)[:4]:
         candidate = parent / 'bin/bash.exe'
         if candidate.is_file():
             return str(candidate)
     return None
+
+
+def git_bash(git):
+    direct = find_git_bash(git)
+    if direct:
+        return direct
+    try:
+        execution = subprocess.check_output([str(git), '--exec-path'], text=True,
+                                            encoding='utf-8', timeout=10).strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return find_git_bash(execution)
 
 
 BASH = shutil.which('bash')
@@ -35,6 +47,20 @@ class ChangeScopeTests(unittest.TestCase):
             for relative in ('cmd/git.exe', 'mingw64/bin/git.exe', 'bin/git.exe'):
                 self.assertEqual(git_bash(root / relative), str(bash))
             self.assertIsNone(git_bash(Path(directory) / 'other/git.exe'))
+
+    @unittest.skipIf(os.name == 'nt', 'POSIX executable shim fixture')
+    def test_git_bash_discovery_follows_a_git_shim(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bash = root / 'Git/bin/bash.exe'
+            bash.parent.mkdir(parents=True)
+            bash.touch()
+            shim = root / 'shims/git'
+            shim.parent.mkdir()
+            execution = root / 'Git/mingw64/libexec/git-core'
+            shim.write_bytes(f'#!{sys.executable}\nprint({str(execution)!r})\n'.encode())
+            shim.chmod(0o755)
+            self.assertEqual(git_bash(shim), str(bash))
 
     def test_runner_only_never_admits_product_or_gate_changes(self):
         for paths, expected in [

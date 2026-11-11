@@ -28,11 +28,13 @@ class MaintenanceTests(unittest.TestCase):
         control = binary / 'systemctl'
         control.write_text(
             '#!' + sys.executable + '\n'
-            'import json, os, pathlib, sys\n'
+            'import json, os, pathlib, signal, sys\n'
             'root = pathlib.Path(os.environ["CONTROL_ROOT"])\n'
             'state = json.loads((root / "state.json").read_text())\n'
             'args = [arg for arg in sys.argv[2:] if arg != "--quiet"]\n'
             'with (root / "calls").open("a") as log: log.write(json.dumps(args) + "\\n")\n'
+            'if args[0] == "is-active" and os.environ.get("INTERRUPT_SNAPSHOT"):\n'
+            '    os.kill(os.getppid(), signal.SIGTERM)\n'
             'if args[0] == "is-active":\n'
             '    print(state[args[1]])\n'
             '    raise SystemExit(0 if state[args[1]] == "active" else 3)\n'
@@ -93,7 +95,9 @@ class MaintenanceTests(unittest.TestCase):
         self.assertFalse((self.root / 'calls').exists())
 
     def test_partial_stop_failure_still_restores_original_state(self):
-        result = self.run_command('raise AssertionError("must not run")', STOP_FAIL='1')
+        sentinel = self.root / 'unexpected-stop-command'
+        result = self.run_command(f'__import__("pathlib").Path({str(sentinel)!r}).touch()', STOP_FAIL='1')
+        self.assertFalse(sentinel.exists(), 'command ran after the stop failure')
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(self.state(), self.original)
 
@@ -196,7 +200,9 @@ class MaintenanceTests(unittest.TestCase):
             while not ready.exists() and time.monotonic() < deadline:
                 time.sleep(0.02)
             self.assertTrue(ready.exists())
-            second = self.run_command('raise AssertionError("overlap ran")')
+            sentinel = self.root / 'unexpected-overlap-command'
+            second = self.run_command(f'__import__("pathlib").Path({str(sentinel)!r}).touch()')
+            self.assertFalse(sentinel.exists(), 'overlapping command ran')
             self.assertNotEqual(second.returncode, 0)
             self.assertTrue(all(value == 'inactive' for value in self.state().values()))
             first.terminate()
@@ -204,3 +210,57 @@ class MaintenanceTests(unittest.TestCase):
             self.assertEqual(self.state(), self.original)
         finally:
             self.cleanup_process(first, ready)
+
+    def test_cancellation_during_snapshot_never_stops_timers(self):
+        result = self.run_command('raise AssertionError("cancelled command ran")', INTERRUPT_SNAPSHOT='1')
+        self.assertEqual(result.returncode, 143, result.stdout + result.stderr)
+        self.assertEqual(self.state(), self.original)
+        calls = [json.loads(line) for line in (self.root / 'calls').read_text().splitlines()]
+        self.assertFalse(any(call[0] == 'stop' for call in calls))
+
+    def test_signal_between_spawn_and_assignment_keeps_child_owned(self):
+        ready = self.root / 'spawned-pid'
+        bootstrap = self.root / 'spawn-boundary.py'
+        bootstrap.write_text(
+            'import os, pathlib, runpy, signal, subprocess, sys\n'
+            'original = subprocess.Popen\n'
+            'def spawn(args, *rest, **kwargs):\n'
+            '    child = original(args, *rest, **kwargs)\n'
+            '    if args[:2] == [sys.executable, "-c"]:\n'
+            f'        pathlib.Path({str(ready)!r}).write_text(str(child.pid))\n'
+            '        os.kill(os.getpid(), signal.SIGTERM)\n'
+            '    return child\n'
+            'subprocess.Popen = spawn\n'
+            f'sys.argv = [{str(self.root / ".zipper-runner/maintenance.py")!r}, *sys.argv[1:]]\n'
+            'runpy.run_path(sys.argv[0], run_name="__main__")\n')
+        process = subprocess.Popen([sys.executable, str(bootstrap), *self.command[2:],
+                                    'import time; time.sleep(60)'], env=self.env,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            output, error = process.communicate(timeout=9)
+            self.assertEqual(process.returncode, 143, output + error)
+            self.assertEqual(self.state(), self.original)
+            with self.assertRaises(ProcessLookupError):
+                os.kill(int(ready.read_text()), 0)
+        finally:
+            self.cleanup_process(process, ready)
+
+    def test_signal_at_cleanup_entry_cannot_skip_restoration(self):
+        bootstrap = self.root / 'cleanup-boundary.py'
+        bootstrap.write_text(
+            'import os, runpy, signal, sys\n'
+            'original = signal.signal\n'
+            'sent = False\n'
+            'def install(number, handler):\n'
+            '    global sent\n'
+            '    if handler == signal.SIG_IGN and not sent:\n'
+            '        sent = True\n'
+            '        os.kill(os.getpid(), signal.SIGTERM)\n'
+            '    return original(number, handler)\n'
+            'signal.signal = install\n'
+            f'sys.argv = [{str(self.root / ".zipper-runner/maintenance.py")!r}, *sys.argv[1:]]\n'
+            'runpy.run_path(sys.argv[0], run_name="__main__")\n')
+        result = subprocess.run([sys.executable, str(bootstrap), *self.command[2:], 'pass'],
+                                env=self.env, capture_output=True, text=True, timeout=10)
+        self.assertEqual(self.state(), self.original, result.stdout + result.stderr)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

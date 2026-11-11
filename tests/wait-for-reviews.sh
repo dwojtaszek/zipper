@@ -179,7 +179,7 @@ fetch_review_state() {
 bot_query() {
     local status=0 bot="$1" expression="$2"
     printf '%s\n%s\n' "$reviews_json" "$comments_json" | jq -se \
-      --arg bot "$bot" --arg head "$REVIEW_HEAD" --arg skip "$SKIP_PATTERN" --arg owner "$OWNER" \
+      --arg bot "$bot" --arg head "$REVIEW_HEAD" --arg skip "$SKIP_PATTERN" \
       '.[0] as $reviews | .[1] as $comments | '"$expression" >/dev/null 2>&1 || status=$?
     if [[ "$status" -gt 1 ]]; then
         print_error "Review data could not be evaluated; retry the gate."
@@ -199,9 +199,15 @@ bot_has_reviewed() {
 bot_declared_skip() {
     local bot="$1"
     bot_query "$bot" '
-      any($comments[]; .user.login == $bot and ((.body // "") | test($skip; "i"))
-        and ((.body // "") | contains($head)
-          or test("fewer than 10 stars|does not receive automatic reviews"; "i")))'
+      def response_time: .updated_at // .submitted_at // .created_at // "";
+      any($comments[]; . as $skip_comment |
+        .user.login == $bot and ((.body // "") | test($skip; "i"))
+        and (((.body // "") | contains($head))
+          or ((.body // "") | test("fewer than 10 stars|does not receive automatic reviews"; "i")))
+        and all($reviews[] | select(.user.login == $bot and .commit_id == $head);
+          response_time != "" and (response_time < ($skip_comment.created_at // "")
+            or (response_time == ($skip_comment.created_at // "")
+              and (.id // 0) < ($skip_comment.id // 0)))))'
 }
 
 bot_has_current_activity() {
@@ -211,17 +217,9 @@ bot_has_current_activity() {
     '
 }
 
-bot_has_current_response() {
-    local bot="$1"
-    bot_query "$bot" '
-      any($reviews[]; .user.login == $bot and .commit_id == $head)
-    '
-}
-
 bot_accounted_for() {
     local bot="$1"
     if bot_has_reviewed "$bot"; then return 0; fi
-    if bot_has_current_response "$bot"; then return 1; fi
     bot_declared_skip "$bot"
 }
 

@@ -230,6 +230,18 @@ class CodeRabbitPrePrCheckTests(unittest.TestCase):
         self.assertFalse(gate.skipped, "a real review is not a skip")
         self.assertEqual(gate.detail, "")
 
+    def test_cli_requests_a_fresh_review(self):
+        calls = Path(self.temp_dir) / 'arguments'
+        self._create_fake_cr(f"printf '%s\\n' \"$@\" > '{calls}'\necho '{{\"type\":\"complete\",\"status\":\"review_completed\",\"findings\":0}}'")
+        self.assertTrue(runner._run_coderabbit_pre_pr_check(self.temp_dir).ok)
+        self.assertIn('--fresh', calls.read_text().splitlines())
+
+    def test_reused_cli_completion_cannot_authorize_a_new_review(self):
+        self._create_fake_cr("echo '{\"type\":\"complete\",\"status\":\"review_completed\",\"findings\":0,\"reused\":true}'")
+        gate = runner._run_coderabbit_pre_pr_check(self.temp_dir)
+        self.assertFalse(gate.ok)
+        self.assertFalse(gate.skipped)
+
     def test_sameReviewedCommits_reusesReview_untilHeadOrBaseChanges(self):
         repo = os.path.join(self.temp_dir, "repo")
         os.makedirs(repo)
