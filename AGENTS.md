@@ -13,7 +13,7 @@ Lower-numbered principles take precedence. Critical rules below remain ordered b
 
 ## Delivery and Git scope
 
-- Interactive work follows shared host policy: commit to main unless the user requests a PR, branch, or worktree.
+- Follow the shared Git policy: create branches or worktrees as needed for authorized work and use a PR when branch protection requires it.
 - A runner dispatch explicitly supplies an issue branch/worktree; use that checkout throughout the mission.
 - At task start, state the delivery scope: local commit, prepared PR, or merge/deploy. A PR-only request ends with a reviewed PR; merge/deploy requests include rollout verification. Ask once only if the scope remains unclear, and retain approvals within their stated scope.
 - Return implementation missions after local validation and publication. The parent runner owns remote CI waits and subsequent repair missions.

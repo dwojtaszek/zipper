@@ -237,7 +237,7 @@ If the user names an issue number or says "skip roadmap," follow the user. Still
 
 **Per-issue workflow:**
 1. **Select issue** via [Issue selection](#issue-selection-mandatory-for-autonomous--next-issue-work) (or user-named issue).
-2. For interactive work, follow the shared Git policy: commit to main unless the user requests a PR, branch, or worktree. When a PR is requested, update a clean main checkout before creating the branch. Respect the runner's main-checkout mutation lock when it is active.
+2. Follow the shared Git policy: create branches or worktrees as needed for authorized work, including a PR required by branch protection. Base new work on current main. Preserve any completed local commits when moving existing work to a PR branch. Respect the runner's main-checkout mutation lock when it is active.
 3. Runner-dispatched work uses the issue branch and worktree supplied by the parent runner. Do not switch that checkout to main. For a user-requested PR, use `fix/`, `feat/`, `refactor/`, `test/`, or `docs/` per issue type.
 4. Use Conventional Commits for commit messages (`fix:`, `feat:`, `refactor:`, `test:`, `docs:`, `chore:`, `deps:`)
 5. Read the issue body **and all comments** (`gh issue view NNN --comments`); refresh labels and linked blockers before coding:
