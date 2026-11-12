@@ -9,6 +9,30 @@ namespace Zipper.Tests;
 public class ChaosExpectationValidatorTests : TempDirectoryTestBase
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Validate_LargeLoadFile_ShouldCheckFinalRow(bool opt)
+    {
+        const int count = 100_000;
+        var loadFile = Path.Combine(this.TempDir, opt ? "loadfile.opt" : "loadfile.dat");
+        using (var writer = new StreamWriter(loadFile))
+        {
+            if (!opt)
+                writer.WriteLine(DatHeader);
+            for (int index = 0; index < count - 1; index++)
+                writer.WriteLine(opt ? "DOC1,VOL001,image.tif,Y,,,1" : DatRow("DOC1", "Alice"));
+            writer.WriteLine("BROKEN");
+        }
+        var sidecar = WriteFile("loadfile_chaos_expectations.json",
+            SidecarJson(count, loadFile: Path.GetFileName(loadFile), format: opt ? "opt" : "dat"));
+
+        var result = new ChaosExpectationValidator().Validate(loadFile, sidecar, CreateDatRequest());
+
+        Assert.Single(result.Findings);
+        Assert.Equal(opt ? count : count + 1, result.Findings[0].LineNumber);
+    }
+
+    [Theory]
     [InlineData(null, "IFD 1", false)]
     [InlineData("IFD 1", "IFD 1", false)]
     [InlineData("IFD 2", "IFD 1", true)]

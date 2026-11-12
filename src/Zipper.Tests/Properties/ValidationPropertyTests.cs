@@ -21,6 +21,35 @@ namespace Zipper.Tests.Properties;
 public sealed class ValidationPropertyTests : IDisposable
 {
     [Property]
+    public void Validate_StreamedRows_ShouldPreserveRecordCount(byte count, bool opt)
+    {
+        var directory = this.CreateCaseDirectory("streamed-count");
+        var loadFile = Path.Combine(directory, opt ? "loadfile.opt" : "loadfile.dat");
+        var sidecar = Path.Combine(directory, "loadfile_chaos_expectations.json");
+        using (var writer = new StreamWriter(loadFile))
+        {
+            if (!opt)
+                writer.WriteLine("DOCID\u0014AUTHOR");
+            for (int index = 0; index < count; index++)
+                writer.WriteLine(opt ? "DOC1,VOL001,image.tif,Y,,,1" : "DOC1\u0014Alice");
+        }
+        File.WriteAllText(sidecar, System.Text.Json.JsonSerializer.Serialize(new
+        {
+            schemaVersion = 1,
+            loadFile = Path.GetFileName(loadFile),
+            loadFileFormat = opt ? "opt" : "dat",
+            totalAnomalies = 0,
+            invariants = new { expectedDataRecords = count, remainingRecordsParseCleanly = true },
+            anomalies = Array.Empty<object>(),
+        }));
+        var validator = new ChaosExpectationValidator();
+        Assert.False(validator.Validate(loadFile, sidecar, new FileGenerationRequest()).HasErrors);
+        File.AppendAllText(loadFile, opt ? "DOC2,VOL001,image.tif,Y,,,1\n" : "DOC2\u0014Bob\n");
+        Assert.Contains(validator.Validate(loadFile, sidecar, new FileGenerationRequest()).Findings,
+            finding => finding.Message.Contains("Produced record count", StringComparison.Ordinal));
+    }
+
+    [Property]
     public void Validate_NativeFileAnomalyLine_ShouldNotChangeLoadFileRowChecks(NativeAnomalyLineInput input, bool email)
     {
         var caseDirectory = this.CreateCaseDirectory("native-scope");

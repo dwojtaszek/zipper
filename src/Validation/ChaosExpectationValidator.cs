@@ -310,9 +310,10 @@ public sealed class ChaosExpectationValidator
             return;
         }
 
-        var lines = File.ReadAllLines(loadFilePath, ResolveEncoding(format, request));
+        var lines = File.ReadLines(loadFilePath, ResolveEncoding(format, request));
+        long lineCount = lines.LongCount();
         int dataStartIndex = format == LoadFileFormat.Opt ? 0 : 1;
-        if (format != LoadFileFormat.Opt && lines.Length == 0)
+        if (format != LoadFileFormat.Opt && lineCount == 0)
         {
             AddError(result, loadFilePath, "Produced Load File is empty.");
             return;
@@ -354,7 +355,7 @@ public sealed class ChaosExpectationValidator
         // Independent invariant: the produced row count must match the sidecar even when the
         // header is damaged and the column-count oracle is unreliable.
         long expectedPhysicalRows = expectedDataRecords + splitLines.Count;
-        long actualPhysicalRows = Math.Max(0, lines.Length - dataStartIndex - trailingFragments);
+        long actualPhysicalRows = Math.Max(0, lineCount - dataStartIndex - trailingFragments);
         if (actualPhysicalRows != expectedPhysicalRows)
         {
             AddError(result, loadFilePath, $"Produced record count {actualPhysicalRows} does not match the expectation sidecar's {expectedPhysicalRows} ({expectedDataRecords} expected data records plus {splitLines.Count} record splits).");
@@ -368,15 +369,22 @@ public sealed class ChaosExpectationValidator
             return;
         }
 
-        int expectedFieldCount = format == LoadFileFormat.Opt ? 7 : ParseFieldCount(lines[0], format, request);
+        int expectedFieldCount = format == LoadFileFormat.Opt ? 7 : ParseFieldCount(lines.First(), format, request);
 
-        int lastRecordIndex = Math.Max(dataStartIndex, lines.Length - trailingFragments);
-        for (int index = dataStartIndex; index < lastRecordIndex; index++)
+        long lastRecordIndex = Math.Max(dataStartIndex, lineCount - trailingFragments);
+        var anomalyFieldCounts = new Dictionary<long, int>();
+        long lineNumber = dataStartIndex;
+        foreach (var line in lines.Skip(dataStartIndex))
         {
-            long lineNumber = index + 1;
+            lineNumber++;
+            int fieldCount = ParseFieldCount(line, format, request);
+            if (damagedLines.Contains(lineNumber))
+                anomalyFieldCounts[lineNumber] = fieldCount;
+            if (lineNumber > lastRecordIndex)
+                continue;
             if (remainingRecordsParseCleanly
                 && !damagedLines.Contains(lineNumber)
-                && ParseFieldCount(lines[index], format, request) != expectedFieldCount)
+                && fieldCount != expectedFieldCount)
             {
                 AddError(result, loadFilePath, $"Record on line {lineNumber} does not parse cleanly into {expectedFieldCount} columns.", lineNumber);
             }
@@ -395,24 +403,23 @@ public sealed class ChaosExpectationValidator
                 continue;
             }
 
-            long lineNumber = PhysicalLine(logicalLine);
-            if (lineNumber <= dataStartIndex || lineNumber > lines.Length)
+            long anomalyLine = PhysicalLine(logicalLine);
+            if (anomalyLine <= dataStartIndex || !anomalyFieldCounts.TryGetValue(anomalyLine, out int fieldCount))
             {
                 continue;
             }
 
-            int fieldCount = ParseFieldCount(lines[lineNumber - 1], format, request);
             if (ChaosExpectationOracle.StructuralCountTypes.Contains(anomaly.ErrorType)
                 && string.Equals(anomaly.OutcomeClass, ChaosOutcomeClasses.ParseFails, StringComparison.Ordinal)
                 && fieldCount == expectedFieldCount)
             {
-                AddError(result, loadFilePath, $"Anomaly '{anomaly.ErrorType}' declares parse-fails but record on line {lineNumber} parses cleanly into {expectedFieldCount} columns.", lineNumber);
+                AddError(result, loadFilePath, $"Anomaly '{anomaly.ErrorType}' declares parse-fails but record on line {anomalyLine} parses cleanly into {expectedFieldCount} columns.", anomalyLine);
             }
             else if (ChaosExpectationOracle.ValueLevelTypes.Contains(anomaly.ErrorType)
                 && string.Equals(anomaly.OutcomeClass, ChaosOutcomeClasses.ParseSucceedsWithLoss, StringComparison.Ordinal)
                 && fieldCount != expectedFieldCount)
             {
-                AddError(result, loadFilePath, $"Anomaly '{anomaly.ErrorType}' declares parse-succeeds-with-loss but record on line {lineNumber} does not parse cleanly.", lineNumber);
+                AddError(result, loadFilePath, $"Anomaly '{anomaly.ErrorType}' declares parse-succeeds-with-loss but record on line {anomalyLine} does not parse cleanly.", anomalyLine);
             }
         }
     }
