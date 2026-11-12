@@ -27,6 +27,32 @@ public sealed class LoadFileComposerAndEmitterPropertyTests
     }
 
     [Property]
+    public void RenderAndApply_LoadfileOnlyWithoutChaos_ShouldPreserveComposingWriterBytes(EmitterPropertyInput input)
+    {
+        var request = new FileGenerationRequest
+        {
+            LoadfileOnly = true,
+            Output = new OutputConfig { FileCount = input.RecordCount },
+            Metadata = new MetadataConfig { Seed = input.Seed },
+            LoadFile = new LoadFileConfig { Encoding = input.EncodingName, IsEncodingExplicit = true },
+            Delimiters = new DelimiterConfig { EndOfLine = input.EndOfLine },
+            Chaos = new ChaosConfig { ChaosAmount = "0" },
+        };
+        var result = CrossFormatLoadFileRenderer.RenderAndApply(request, request, [], WriterMode.LoadfileOnly,
+            "loadfile.dat", "loadfile.opt", CancellationToken.None);
+        foreach (var (format, lines) in new[] { (LoadFileFormat.Dat, result.DatLines), (LoadFileFormat.Opt, result.OptLines) })
+        {
+            using var expected = new MemoryStream();
+            LoadFileWriterFactory.CreateWriter(format, WriterMode.LoadfileOnly)
+                .WriteAsync(expected, request, []).GetAwaiter().GetResult();
+            using var actual = new MemoryStream();
+            var policy = new TextOutputPolicy(request, format, WriterMode.LoadfileOnly, hasChaos: true);
+            LoadFileEmitter.EmitRenderedLinesAsync(actual, lines, policy.Encoding, policy.EndOfLine).GetAwaiter().GetResult();
+            Assert.Equal(expected.ToArray(), actual.ToArray());
+        }
+    }
+
+    [Property]
     public void DatStandardComposer_Compose_HeaderColumnCountShouldAlwaysEqualEveryRecordValueCount(
         MetadataFlagCombinationInput input)
     {

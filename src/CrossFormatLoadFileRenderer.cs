@@ -1,28 +1,31 @@
-using System.Text;
 using Zipper.LoadFiles;
 
 namespace Zipper;
 
 /// <summary>
-/// Renders the DAT and OPT Load Files to line buffers and applies a coordinated
-/// cross-format Chaos Scenario across both before they are written to disk.
+/// Composes and serializes DAT and OPT line buffers before applying coordinated anomalies.
+/// Encoding and Line Ending belong to the Emitter, after this string transformation.
 /// </summary>
 internal static class CrossFormatLoadFileRenderer
 {
-    public static async Task<CrossFormatAnomalyResult> RenderAndApplyAsync(
+    public static CrossFormatAnomalyResult RenderAndApply(
         FileGenerationRequest datRequest,
         FileGenerationRequest optRequest,
         IReadOnlyList<FileData> records,
-        Func<LoadFileFormat, WriterMode, ILoadFileWriter> createWriter,
         WriterMode writerMode,
         string datFileName,
         string optFileName,
-        Encoding datEncoding,
-        Encoding optEncoding,
         CancellationToken cancellationToken)
     {
-        var datLines = await RenderLinesAsync(datRequest, LoadFileFormat.Dat, records, createWriter, writerMode, datEncoding, cancellationToken).ConfigureAwait(false);
-        var optLines = await RenderLinesAsync(optRequest, LoadFileFormat.Opt, records, createWriter, writerMode, optEncoding, cancellationToken).ConfigureAwait(false);
+        var datComposer = new DatComposer(datRequest, writerMode);
+        var optComposer = new OptComposer(optRequest, writerMode);
+        if (writerMode == WriterMode.Standard && !optRequest.LoadfileOnly)
+        {
+            OptComposingWriter.WarnUnsupportedStandardColumns(optRequest);
+        }
+
+        var datLines = RenderLines(datComposer, new DatSerializer(datRequest), records, new TextOutputPolicy(datRequest, LoadFileFormat.Dat, writerMode, hasChaos: true), cancellationToken, datComposer.TrailingEmptyRows);
+        var optLines = RenderLines(optComposer, new OptSerializer(), records, new TextOutputPolicy(optRequest, LoadFileFormat.Opt, writerMode, hasChaos: true), cancellationToken);
 
         return ChaosEngine.ApplyCrossFormat(
             datLines,
@@ -37,234 +40,46 @@ internal static class CrossFormatLoadFileRenderer
             datRequest.Delimiters.NewlineDelimiter);
     }
 
-    private static async Task<List<string>> RenderLinesAsync(
-        FileGenerationRequest request,
-        LoadFileFormat format,
+    internal static List<string> RenderLines(
+        ILoadFileComposer composer,
+        ILoadFileSerializer serializer,
         IReadOnlyList<FileData> records,
-        Func<LoadFileFormat, WriterMode, ILoadFileWriter> createWriter,
-        WriterMode writerMode,
-        Encoding encoding,
-        CancellationToken cancellationToken)
+        TextOutputPolicy policy,
+        CancellationToken cancellationToken,
+        int trailingEmptyRows = 0)
     {
-        var eol = LoadFileEmitter.GetEolString(request.Delimiters?.EndOfLine!);
-        using var stream = new LineBufferingStream(encoding, eol);
-        var writer = createWriter(format, writerMode);
-        await writer.WriteAsync(stream, request, records, null, cancellationToken).ConfigureAwait(false);
-        return stream.Complete();
-    }
-
-    private sealed class LineBufferingStream : Stream
-    {
-        private readonly Decoder decoder;
-        private readonly byte[] preamble;
-        private readonly byte[] pendingPreamble;
-        private readonly char[] decodedCharacters;
-        private readonly List<string> lines = [];
-        private readonly StringBuilder currentLine = new();
-        private readonly string eol;
-        private int pendingPreambleLength;
-        private bool preambleResolved;
-        private bool pendingCarriageReturn;
-        private bool completed;
-
-        public LineBufferingStream(Encoding encoding, string? eol = null)
+        cancellationToken.ThrowIfCancellationRequested();
+        var lines = new List<string>();
+        if (composer.HeaderColumns.Count > 0)
         {
-            this.decoder = encoding.GetDecoder();
-            this.preamble = encoding.GetPreamble();
-            this.pendingPreamble = new byte[this.preamble.Length];
-            this.preambleResolved = this.preamble.Length == 0;
-            this.decodedCharacters = new char[encoding.GetMaxCharCount(4096)];
-            this.eol = string.IsNullOrEmpty(eol) ? "\r\n" : eol;
+            AddLine(serializer.RenderHeader(composer.HeaderColumns));
         }
 
-        public override bool CanRead => false;
-
-        public override bool CanSeek => false;
-
-        public override bool CanWrite => true;
-
-        public override long Length => throw new NotSupportedException();
-
-        public override long Position
-        {
-            get => throw new NotSupportedException();
-            set => throw new NotSupportedException();
-        }
-
-        public List<string> Complete()
-        {
-            if (this.completed)
-            {
-                return this.lines;
-            }
-
-            if (!this.preambleResolved && this.pendingPreambleLength > 0)
-            {
-                this.preambleResolved = true;
-                this.Decode(this.pendingPreamble.AsSpan(0, this.pendingPreambleLength), flush: false);
-            }
-
-            this.Decode(ReadOnlySpan<byte>.Empty, flush: true);
-            if (this.pendingCarriageReturn)
-            {
-                this.currentLine.Append('\r');
-                this.pendingCarriageReturn = false;
-            }
-
-            if (this.currentLine.Length > 0)
-            {
-                this.lines.Add(this.currentLine.ToString());
-            }
-
-            this.completed = true;
-            return this.lines;
-        }
-
-        public override void Flush()
-        {
-        }
-
-        public override Task FlushAsync(CancellationToken cancellationToken)
+        foreach (var record in composer.Compose(records))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            return Task.CompletedTask;
+            AddLine(serializer.RenderRecord(record));
         }
 
-        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-
-        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
-
-        public override void SetLength(long value) => throw new NotSupportedException();
-
-        public override void Write(byte[] buffer, int offset, int count)
-        {
-            ArgumentNullException.ThrowIfNull(buffer);
-            this.ProcessBytes(buffer.AsSpan(offset, count));
-        }
-
-        public override void Write(ReadOnlySpan<byte> buffer) => this.ProcessBytes(buffer);
-
-        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        for (int i = 0; i < trailingEmptyRows; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            this.Write(buffer, offset, count);
-            return Task.CompletedTask;
+            lines.Add(string.Empty);
         }
 
-        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            this.ProcessBytes(buffer.Span);
-            return ValueTask.CompletedTask;
-        }
+        return lines;
 
-        private void ProcessBytes(ReadOnlySpan<byte> bytes)
+        void AddLine(string line)
         {
-            if (!this.preambleResolved)
+            line = policy.NormalizeForAnomalies(line);
+            // The legacy stream split physical lines before applying coordinated anomalies.
+            if (line.Contains(policy.EndOfLine, StringComparison.Ordinal))
             {
-                while (!bytes.IsEmpty && !this.preambleResolved)
-                {
-                    byte nextByte = bytes[0];
-                    bytes = bytes[1..];
-                    int preambleIndex = this.pendingPreambleLength++;
-                    this.pendingPreamble[preambleIndex] = nextByte;
-
-                    if (nextByte != this.preamble[preambleIndex])
-                    {
-                        this.preambleResolved = true;
-                        this.Decode(this.pendingPreamble.AsSpan(0, this.pendingPreambleLength), flush: false);
-                    }
-                    else if (this.pendingPreambleLength == this.preamble.Length)
-                    {
-                        this.preambleResolved = true;
-                    }
-                }
+                lines.AddRange(line.Split(policy.EndOfLine, StringSplitOptions.None));
             }
-
-            if (this.preambleResolved && !bytes.IsEmpty)
+            else
             {
-                this.Decode(bytes, flush: false);
-            }
-        }
-
-        private void Decode(ReadOnlySpan<byte> bytes, bool flush)
-        {
-            while (true)
-            {
-                this.decoder.Convert(
-                    bytes,
-                    this.decodedCharacters,
-                    flush,
-                    out int bytesUsed,
-                    out int charactersUsed,
-                    out bool completed);
-                this.AppendCharacters(this.decodedCharacters.AsSpan(0, charactersUsed));
-                bytes = bytes[bytesUsed..];
-
-                if (completed)
-                {
-                    return;
-                }
-
-                if (bytesUsed == 0 && charactersUsed == 0)
-                {
-                    throw new InvalidOperationException("The Load File encoding decoder could not make progress.");
-                }
-            }
-        }
-
-        private void AppendCharacters(ReadOnlySpan<char> characters)
-        {
-            foreach (char character in characters)
-            {
-                if (this.eol == "\n")
-                {
-                    if (character == '\n')
-                    {
-                        this.lines.Add(this.currentLine.ToString());
-                        this.currentLine.Clear();
-                    }
-                    else
-                    {
-                        this.currentLine.Append(character);
-                    }
-                }
-                else if (this.eol == "\r")
-                {
-                    if (character == '\r')
-                    {
-                        this.lines.Add(this.currentLine.ToString());
-                        this.currentLine.Clear();
-                    }
-                    else
-                    {
-                        this.currentLine.Append(character);
-                    }
-                }
-                else
-                {
-                    if (this.pendingCarriageReturn)
-                    {
-                        this.pendingCarriageReturn = false;
-                        if (character == '\n')
-                        {
-                            this.lines.Add(this.currentLine.ToString());
-                            this.currentLine.Clear();
-                            continue;
-                        }
-
-                        this.currentLine.Append('\r');
-                    }
-
-                    if (character == '\r')
-                    {
-                        this.pendingCarriageReturn = true;
-                    }
-                    else
-                    {
-                        this.currentLine.Append(character);
-                    }
-                }
+                lines.Add(line);
             }
         }
     }

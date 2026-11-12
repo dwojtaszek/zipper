@@ -24,6 +24,18 @@ public class TextOutputPolicyTests
         };
     }
 
+    [Theory]
+    [InlineData("ANSI", "ASCII", "ASCII")]
+    [InlineData("ANSI", "漢Āé😀", "?Aé??")]
+    [InlineData("ASCII", "漢Āé😀", "?????")]
+    [InlineData("UTF-8", "漢Āé😀", "漢Āé😀")]
+    [InlineData("UTF-16", "漢Āé😀", "漢Āé😀")]
+    public void NormalizeForAnomalies_SingleByteFallback_MatchesEncodedCharacters(string encoding, string value, string expected)
+    {
+        var policy = new TextOutputPolicy(Req(LoadFileFormat.Opt, encoding, isExplicit: true), LoadFileFormat.Opt, WriterMode.LoadfileOnly, hasChaos: true);
+        Assert.Equal(expected, policy.NormalizeForAnomalies(value));
+    }
+
     [Fact]
     public void Opt_Standard_NoExplicitEncoding_DefaultsToAnsi()
     {
