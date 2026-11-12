@@ -559,7 +559,7 @@ for TYPE in eml tiff; do
             EXTRA=(--production-set --rolling-count 2 --production-id FIRST,SECOND --bates-prefix TEST)
         fi
         zipper --type "$TYPE" --count 2 --loadfile-format dat --chaos-mode --chaos-types "$ANOMALY" \
-            --chaos-amount 1 --seed 42 --output-path "$OUT_DIR" "${EXTRA[@]}"
+            --chaos-amount 1 --seed 42 --output-path "$OUT_DIR" ${EXTRA[@]+"${EXTRA[@]}"}
         EXPECTED=1
         if [[ "$MODE" == rolling ]]; then EXPECTED=4; fi
         FOUND=0
