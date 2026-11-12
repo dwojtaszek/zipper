@@ -743,7 +743,8 @@ internal record FileData
     public (string filename, byte[] content)? Attachment { get; init; }
 
     /// <summary>
-    /// Generated Attachment payloads, retained only until Archive emission.
+    /// Generated Attachment payloads, retained until Archive emission (and inspected via
+    /// GetAttachmentPayloads() in ProductionSetOrchestratorTests).
     /// </summary>
     public IReadOnlyList<(string filename, byte[] content)> AttachmentPayloads { get; init; }
         = Array.Empty<(string filename, byte[] content)>();

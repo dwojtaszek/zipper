@@ -51,6 +51,57 @@ public class ProductionSetValidationTests : IDisposable
     }
 
     [Fact]
+    public async Task Validate_MalformedAuditAfterValidExemption_ShouldRetainMissingImageError()
+    {
+        var request = this.CreateTestRequest(count: 1);
+        var generated = await ProductionSetGenerator.GenerateAsync(request);
+        var image = File.ReadLines(generated.OptFilePath).First().Split(',')[2];
+        File.Delete(Path.Combine(generated.ProductionPath, image.Replace('\\', '/')));
+        File.WriteAllText(generated.OptFilePath + "_properties.json",
+            """{"chaosMode":{"injectedAnomalies":[{"file":"loadfile.opt","lineNumber":"1","errorType":"desync-path"},{}]}}""");
+        var result = new PostGenerationValidator().Validate(new ValidationContext
+        {
+            ProductionSetPath = generated.ProductionPath,
+            Request = request,
+            IsChaosMode = true,
+        });
+
+        Assert.Contains(result.Findings, finding => finding.Category == "PathExistence"
+            && finding.FilePath == "DATA/loadfile.opt");
+    }
+
+    [Theory]
+    [InlineData("dat")]
+    [InlineData("opt")]
+    [InlineData("text")]
+    [InlineData("image")]
+    public async Task Validate_CrossFormatChaos_ShouldRejectMissingArtifacts(string artifact)
+    {
+        var request = this.CreateTestRequest();
+        request.Chaos = new ChaosConfig { ChaosMode = true, ChaosScenario = "cross-format-desync", ChaosAmount = "1" };
+        var generated = await ProductionSetGenerator.GenerateAsync(request);
+        var path = artifact switch
+        {
+            "dat" => generated.DatFilePath,
+            "opt" => generated.OptFilePath,
+            "text" => Directory.GetFiles(Path.Combine(generated.ProductionPath, "TEXT"), "*", SearchOption.AllDirectories)[0],
+            _ => Directory.GetFiles(Path.Combine(generated.ProductionPath, "IMAGES"), "*", SearchOption.AllDirectories)[0],
+        };
+        File.Delete(path);
+        var context = new ValidationContext
+        {
+            ProductionSetPath = generated.ProductionPath,
+            Request = request,
+            IsChaosMode = true,
+        };
+
+        var result = new PostGenerationValidator().Validate(context);
+
+        Assert.Contains(result.Findings, finding => finding.Category == "PathExistence"
+            && finding.Severity == ValidationSeverity.Error);
+    }
+
+    [Fact]
     public async Task Validate_ValidProductionSet_ShouldWritePassingReport()
     {
         var request = this.CreateTestRequest();

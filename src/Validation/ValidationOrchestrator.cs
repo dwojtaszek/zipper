@@ -22,8 +22,8 @@ public static class ValidationOrchestrator
         // Dogfood the Chaos expectation oracle: when a chaos run emitted a sidecar, verify the
         // produced Load File against it in the same run. Discovery is limited to eligible chaos
         // runs so a stale sidecar beside a reused output path cannot fail an unrelated run.
-        // Normal validation remains skipped for chaos runs.
-        if (context.IsChaosMode)
+        // Native File chaos still runs normal Load File validation.
+        if (context.IsChaosMode || context.ValidateChaosExpectations)
         {
             var expectationValidator = new ChaosExpectationValidator();
             foreach (var (formatName, loadFilePath) in context.LoadFiles)
@@ -34,6 +34,28 @@ public static class ValidationOrchestrator
                     vr.AddRange(expectationValidator.Validate(loadFilePath, sidecarPath, context.Request).Findings);
                 }
             }
+        }
+
+        if (context.ProductionSetReport is { } report)
+        {
+            var recorded = report.Findings.Select(finding => new ValidationFinding(
+                finding.Severity == "error" ? ValidationSeverity.Error : ValidationSeverity.Warning,
+                finding.Code, finding.Message, finding.Path, finding.Line)).ToHashSet();
+            foreach (var finding in vr.Findings)
+            {
+                if (!recorded.Add(finding))
+                    continue;
+                bool error = finding.Severity == ValidationSeverity.Error;
+                report.Findings.Add(error
+                    ? ValidationReportFinding.Error(finding.Category, finding.FilePath, finding.Message, finding.LineNumber)
+                    : ValidationReportFinding.Warning(finding.Category, finding.FilePath, finding.Message, finding.LineNumber));
+                if (error)
+                    report.ErrorCount++;
+                else
+                    report.WarningCount++;
+            }
+            if (vr.HasErrors)
+                report.Status = "failed";
         }
 
         if (vr.HasErrors || vr.HasWarnings)
@@ -73,8 +95,10 @@ public static class ValidationOrchestrator
         try
         {
             using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(sidecarPath));
-            return document.RootElement.TryGetProperty("loadFile", out var loadFile)
-                && string.Equals(loadFile.GetString(), loadFileName, StringComparison.Ordinal);
+            return document.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object
+                || !document.RootElement.TryGetProperty("loadFile", out var loadFile)
+                || loadFile.ValueKind != System.Text.Json.JsonValueKind.String
+                || string.Equals(loadFile.GetString(), loadFileName, StringComparison.Ordinal);
         }
         catch (System.Text.Json.JsonException)
         {

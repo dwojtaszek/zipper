@@ -20,6 +20,78 @@ namespace Zipper.Tests.Properties;
 [Properties(Arbitrary = [typeof(ZipperArbitraries)], MaxTest = 100)]
 public sealed class ValidationPropertyTests : IDisposable
 {
+    [Property]
+    public void Validate_StreamedRows_ShouldPreserveRecordCount(byte count, bool opt)
+    {
+        var directory = this.CreateCaseDirectory("streamed-count");
+        var loadFile = Path.Combine(directory, opt ? "loadfile.opt" : "loadfile.dat");
+        var sidecar = Path.Combine(directory, "loadfile_chaos_expectations.json");
+        using (var writer = new StreamWriter(loadFile))
+        {
+            if (!opt)
+                writer.WriteLine("DOCID\u0014AUTHOR");
+            for (int index = 0; index < count; index++)
+                writer.WriteLine(opt ? "DOC1,VOL001,image.tif,Y,,,1" : "DOC1\u0014Alice");
+        }
+        File.WriteAllText(sidecar, System.Text.Json.JsonSerializer.Serialize(new
+        {
+            schemaVersion = 1,
+            loadFile = Path.GetFileName(loadFile),
+            loadFileFormat = opt ? "opt" : "dat",
+            totalAnomalies = 0,
+            invariants = new { expectedDataRecords = count, remainingRecordsParseCleanly = true },
+            anomalies = Array.Empty<object>(),
+        }));
+        var validator = new ChaosExpectationValidator();
+        Assert.False(validator.Validate(loadFile, sidecar, new FileGenerationRequest()).HasErrors);
+        File.AppendAllText(loadFile, opt ? "DOC2,VOL001,image.tif,Y,,,1\n" : "DOC2\u0014Bob\n");
+        Assert.Contains(validator.Validate(loadFile, sidecar, new FileGenerationRequest()).Findings,
+            finding => finding.Message.Contains("Produced record count", StringComparison.Ordinal));
+    }
+
+    [Property]
+    public void Validate_NativeFileAnomalyLine_ShouldNotChangeLoadFileRowChecks(NativeAnomalyLineInput input, bool email)
+    {
+        var caseDirectory = this.CreateCaseDirectory("native-scope");
+        var loadFile = Path.Combine(caseDirectory, "native-scope.dat");
+        var sidecar = Path.Combine(caseDirectory, "native-scope_chaos_expectations.json");
+        var file = email ? "00000001.eml" : "00000001.tiff";
+        var location = email ? "Subject header" : "IFD 1";
+        var request = new FileGenerationRequest { Chaos = new ChaosConfig { ChaosMode = true } };
+        // Keep the Native File line number on a data row so the damaged row and the Native File
+        // line coincide: a validator that conflates them exempts exactly that row.
+        long anomalyLine = input.Line;
+        var json = LoadFileAuditWriter.GenerateExpectationSidecarJson(loadFile, request, Array.Empty<FileData>(),
+            new[] { new ChaosAnomaly { File = file, Location = location, LineNumber = anomalyLine.ToString(CultureInfo.InvariantCulture),
+                ErrorType = email ? "mime-boundary" : "tiff-truncated-ifd", RecordID = "DOC1" } }, expectedDataRecords: anomalyLine - 1);
+        using var document = System.Text.Json.JsonDocument.Parse(json);
+        var anomaly = document.RootElement.GetProperty("anomalies")[0];
+        Assert.Equal(file, anomaly.GetProperty("file").GetString());
+        Assert.Equal(location, anomaly.GetProperty("location").GetString());
+        File.WriteAllText(sidecar, json);
+
+        var rows = Enumerable.Range(1, (int)anomalyLine - 1).Select(row => $"DOC{row}\u0014Alice").ToArray();
+        File.WriteAllText(loadFile, "DOCID\u0014AUTHOR\n" + string.Join("\n", rows) + "\n");
+
+        var auditAnomalies = new[] { new ChaosAnomaly { File = file, Location = location,
+            LineNumber = anomalyLine.ToString(CultureInfo.InvariantCulture),
+            ErrorType = email ? "mime-boundary" : "tiff-truncated-ifd", RecordID = "DOC1" } };
+        File.WriteAllText(Path.Combine(caseDirectory, "native-scope_properties.json"),
+            LoadFileAuditWriter.GenerateAuditJson(loadFile, request, Array.Empty<FileData>(), auditAnomalies));
+        Assert.False(new ChaosExpectationValidator().Validate(loadFile, sidecar, request).HasErrors);
+        var changedSidecar = JsonNode.Parse(json)!;
+        changedSidecar["anomalies"]![0]!["location"] = location + " changed";
+        File.WriteAllText(sidecar, changedSidecar.ToJsonString());
+        Assert.Contains(new ChaosExpectationValidator().Validate(loadFile, sidecar, request).Findings,
+            finding => finding.Message.Contains("not recorded in the produced Audit File", StringComparison.Ordinal));
+        File.WriteAllText(sidecar, json);
+
+        rows[^1] = $"DOC{anomalyLine - 1}";
+        File.WriteAllText(loadFile, "DOCID\u0014AUTHOR\n" + string.Join("\n", rows) + "\n");
+        Assert.Contains(new ChaosExpectationValidator().Validate(loadFile, sidecar, request).Findings,
+            finding => finding.FilePath == loadFile && finding.Message.Contains("columns", StringComparison.Ordinal));
+    }
+
     private const char ColDelim = '\x14';
     private const char QuoteDelim = '\xfe';
     private const string PriorPrefix = "SUPP";

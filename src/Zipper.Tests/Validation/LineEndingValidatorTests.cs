@@ -37,31 +37,17 @@ public class LineEndingValidatorTests
         Assert.Throws<ArgumentNullException>(() => validator.Validate("line1\nline2\n", "\n", "test.dat", null!));
     }
 
-    [Fact]
-    public void LineEndingValidator_Validate_ExpectedCr_DetectsLf()
+    [Theory]
+    [InlineData("line1\nline2\n")]
+    [InlineData("line1\r\nline2\r\n")]
+    [InlineData("line1\rline2\nline3\r\n")]
+    [InlineData("line1\rline2\r\nline3\n")]
+    public void Validate_ExpectedCrWithOtherLineEndings_ShouldReportError(string content)
     {
-        // NOTE: Current implementation does not flag LF content when expectedEol is CR.
-        // This pins that behavior; file a separate issue if strict CR matching is required.
         var result = new ValidationResult();
-        var validator = new LineEndingValidator();
-
-        validator.Validate("line1\nline2\n", "\r", "test.dat", result);
-
-        Assert.False(result.HasErrors);
-    }
-
-    [Fact]
-    public void LineEndingValidator_Validate_ExpectedCr_DetectsCrlf()
-    {
-        // NOTE: Current implementation treats CRLF as valid when expectedEol is CR
-        // because it advances past the LF after the CR. This pins that behavior;
-        // file a separate issue if CR-only strictness is required.
-        var result = new ValidationResult();
-        var validator = new LineEndingValidator();
-
-        validator.Validate("line1\r\nline2\r\n", "\r", "test.dat", result);
-
-        Assert.False(result.HasErrors);
+        new LineEndingValidator().Validate(content, "\r", "test.dat", result);
+        Assert.Contains(result.Findings, finding =>
+            finding.Severity == ValidationSeverity.Error && finding.Category == "LineEnding");
     }
 
     [Fact]
@@ -80,17 +66,12 @@ public class LineEndingValidatorTests
     [Fact]
     public void LineEndingValidator_Validate_ContentWithLoneCr_PassesWhenExpectedCr()
     {
-        // NOTE: Current implementation treats lone CR as invalid when expectedEol is CR
-        // because it requires a trailing LF. This pins that behavior;
-        // file a separate issue if lone CR should be accepted.
         var result = new ValidationResult();
         var validator = new LineEndingValidator();
 
         validator.Validate("line1\rline2\r", "\r", "test.dat", result);
 
-        Assert.True(result.HasErrors);
-        Assert.Contains(result.Findings, finding =>
-            finding.Severity == ValidationSeverity.Error && finding.Category == "LineEnding");
+        Assert.False(result.HasErrors);
     }
 
     [Fact]

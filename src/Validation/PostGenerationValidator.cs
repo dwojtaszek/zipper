@@ -9,7 +9,7 @@ public sealed class PostGenerationValidator
         ArgumentNullException.ThrowIfNull(context);
         var result = new ValidationResult();
 
-        if (context.IsChaosMode)
+        if (context.IsChaosMode && context.ProductionSetPath is null)
             return result;
 
         if (context.ProductionSetPath is not null)
@@ -58,20 +58,31 @@ public sealed class PostGenerationValidator
     private static void ValidateProductionSet(ValidationContext context, ValidationResult result)
     {
         var report = ProductionSetPostValidator.Validate(context.ProductionSetPath!, context.Request);
+        context.ProductionSetReport = report;
+        var injectedImageLines = context.IsChaosMode ? ReadInjectedImageLines(context.ProductionSetPath!) : [];
         foreach (var finding in report.Findings)
         {
-            result.Add(new ValidationFinding(
-                string.Equals(finding.Severity, "error", StringComparison.OrdinalIgnoreCase)
-                    ? ValidationSeverity.Error
-                    : ValidationSeverity.Warning,
-                finding.Code,
-                finding.Message,
-                finding.Path,
-                finding.Line));
+            // Only audited OPT path divergence or synthesized continuation images may be absent.
+            bool injectedImagePath = finding.Code == "PathExistence"
+                && finding.Path == "DATA/loadfile.opt"
+                && finding.Line is { } line && injectedImageLines.Contains(line)
+                && finding.Message.StartsWith("Referenced image file", StringComparison.Ordinal);
+            if (!context.IsChaosMode || (!injectedImagePath && finding.Code is
+                "PathExistence" or "MetadataAzureConstraint" or "ManifestSyntax" or "InvalidValue"))
+            {
+                result.Add(new ValidationFinding(
+                    string.Equals(finding.Severity, "error", StringComparison.OrdinalIgnoreCase)
+                        ? ValidationSeverity.Error
+                        : ValidationSeverity.Warning,
+                    finding.Code,
+                    finding.Message,
+                    finding.Path,
+                    finding.Line));
+            }
         }
 
         // EOL validation for production set load files (ProductionSetPostValidator doesn't check this)
-        var eol = GetExpectedEol(context.Request);
+        var eol = context.SkipEolValidation ? null : GetExpectedEol(context.Request);
         if (eol is not null)
         {
             var runner = new ValidatorRunner();
@@ -84,6 +95,40 @@ public sealed class PostGenerationValidator
                 result.AddRange(vr.Findings);
             }
         }
+    }
+
+    private static HashSet<long> ReadInjectedImageLines(string productionPath)
+    {
+        var path = Path.Combine(productionPath, "DATA", "loadfile.opt_properties.json");
+        var lines = new HashSet<long>();
+        if (!File.Exists(path))
+            return lines;
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+            if (document.RootElement.TryGetProperty("chaosMode", out var chaos)
+                && chaos.TryGetProperty("injectedAnomalies", out var anomalies))
+            {
+                foreach (var anomaly in anomalies.EnumerateArray())
+                {
+                    if (anomaly.GetProperty("file").GetString() != "loadfile.opt"
+                        || !long.TryParse(anomaly.GetProperty("lineNumber").GetString(),
+                            System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out long line))
+                        continue;
+                    var type = anomaly.GetProperty("errorType").GetString();
+                    if (type == "desync-path")
+                        lines.Add(line);
+                    else if (type == "desync-pagecount"
+                        && anomaly.GetProperty("description").GetString()?.StartsWith("Duplicated OPT page row", StringComparison.Ordinal) == true)
+                        lines.Add(line + 1);
+                }
+            }
+        }
+        // Malformed audit data must never exempt missing artifacts.
+        catch (System.Text.Json.JsonException) { lines.Clear(); }
+        catch (InvalidOperationException) { lines.Clear(); }
+        catch (KeyNotFoundException) { lines.Clear(); }
+        return lines;
     }
 
     private static string? GetExpectedEol(FileGenerationRequest request)

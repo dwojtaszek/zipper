@@ -1102,6 +1102,70 @@ class OpenCodeSessionScopingTests(unittest.TestCase):
             )
 
 
+class IssueSelectionAndBabysitPromptTests(unittest.TestCase):
+    def test_selectNextIssue_skipsOpenBlockersAndHonorsPriorityWithinTier(self):
+        issues = [
+            {
+                "number": 1432,
+                "title": "Refactor A",
+                "body": "Depends on #1430 (closed).\nBlocked by #1433.",
+                "labels": [{"name": "refactor"}, {"name": "P2"}],
+                "assignees": [],
+                "author": {"login": "dwojtaszek"},
+            },
+            {
+                "number": 1433,
+                "title": "Refactor B",
+                "body": "Depends on #1430.",
+                "labels": [{"name": "refactor"}, {"name": "P3"}],
+                "assignees": [],
+                "author": {"login": "dwojtaszek"},
+            },
+            {
+                "number": 1434,
+                "title": "Refactor C",
+                "body": "Depends on #1430.",
+                "labels": [{"name": "refactor"}, {"name": "P2"}],
+                "assignees": [],
+                "author": {"login": "dwojtaszek"},
+            },
+        ]
+
+        def fake_run_cmd(cmd, cwd=None, timeout=60):
+            if cmd[:3] == ["gh", "issue", "list"]:
+                return 0, json.dumps(issues), ""
+            if cmd[:3] == ["gh", "pr", "list"]:
+                return 0, "[]", ""
+            if cmd[:2] == ["git", "branch"]:
+                return 0, "origin/main\n", ""
+            return 0, "", ""
+
+        with tempfile.TemporaryDirectory() as tmpdir, \
+                patch.object(runner, "WORKTREES_BASE", tmpdir), \
+                patch.object(runner, "run_cmd", side_effect=fake_run_cmd):
+            selected = runner.select_next_issue()
+
+        self.assertIsNotNone(selected)
+        # #1432 is blocked by open #1433; between eligible #1433 (P3) and #1434 (P2), P2 wins.
+        self.assertEqual(selected["number"], 1434)
+
+    def test_quotaStatePath_normalizesRedundantAgentPrefix(self):
+        self.assertEqual(
+            runner._quota_state_path("opencode", "opencode/big-pickle"),
+            runner._quota_state_path("opencode", "big-pickle"),
+        )
+
+    def test_buildCoderabbitBabysitPrompt_includesIssueDataAndArchitectureGuardrail(self):
+        with patch.object(runner, "_fetch_issue_body", return_value=("Eliminate duplicate pass", "Reuse ProductionSetReport")):
+            prompt = runner._build_coderabbit_babysit_prompt(
+                "1431", 1437, "finding detail", "Robot reviews passed, but local CodeRabbit review failed"
+            )
+        self.assertIn("<issue-data>", prompt)
+        self.assertIn("Eliminate duplicate pass", prompt)
+        self.assertIn("Never apply a reviewer suggestion that reverts an explicit requirement", prompt)
+        self.assertNotIn("coderabbit review --committed --base main --agent --fresh", prompt)
+
+
 if __name__ == "__main__":
     unittest.main()
 

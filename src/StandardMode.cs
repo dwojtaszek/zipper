@@ -84,6 +84,11 @@ internal class StandardMode : IGenerationMode
             Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Load file created: {0}", result.LoadFilePath));
         }
 
+        ValidateLoadFiles(request, result);
+    }
+
+    private static void ValidateLoadFiles(FileGenerationRequest request, FileGenerationResult result)
+    {
         if (!string.IsNullOrEmpty(result.LoadFilePath))
         {
             var context = new ValidationContext
@@ -93,9 +98,45 @@ internal class StandardMode : IGenerationMode
                     ? result.LoadFilePaths
                     : BuildDefaultLoadFiles(result, request),
                 Request = request,
+                ValidateChaosExpectations = request.Chaos.ChaosMode,
                 SkipEolValidation = true, // ponytail: StandardMode uses Environment.NewLine regardless of --eol config
             };
-            ValidationOrchestrator.RunAfterGeneration(context);
+            if (request.Output.IncludeLoadFile && request.Chaos.ChaosMode)
+                ValidateArchivedLoadFiles(context);
+            else
+                ValidationOrchestrator.RunAfterGeneration(context);
+        }
+    }
+
+    private static void ValidateArchivedLoadFiles(ValidationContext context)
+    {
+        var directory = Directory.CreateTempSubdirectory("zipper-validation-");
+        try
+        {
+            using var archive = System.IO.Compression.ZipFile.OpenRead(context.ArchiveFilePath!);
+            var paths = new Dictionary<string, string>();
+            foreach (var (format, target) in context.LoadFiles)
+            {
+                var fileName = Path.GetFileName(target);
+                var baseName = Path.GetFileNameWithoutExtension(fileName);
+                string[] names = [fileName, fileName + "_properties.json", baseName + "_properties.json",
+                    fileName + "_chaos_expectations.json", baseName + "_chaos_expectations.json"];
+                foreach (var name in names)
+                {
+                    var entry = archive.GetEntry(name);
+                    if (entry is null)
+                        continue;
+                    using var input = entry.Open();
+                    using var output = File.Create(Path.Combine(directory.FullName, name));
+                    input.CopyTo(output);
+                }
+                paths[format] = Path.Combine(directory.FullName, fileName);
+            }
+            ValidationOrchestrator.RunAfterGeneration(context with { LoadFiles = paths });
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
         }
     }
 
@@ -112,6 +153,7 @@ internal class StandardMode : IGenerationMode
                 LoadFileFormat.Opt => "opt",
                 LoadFileFormat.Csv => "csv",
                 LoadFileFormat.Concordance => "concordance",
+                LoadFileFormat.EdrmXml => "edrmxml",
                 _ => "dat",
             };
             var ext = format switch
@@ -121,8 +163,6 @@ internal class StandardMode : IGenerationMode
                 LoadFileFormat.EdrmXml => ".xml",
                 _ => ".dat",
             };
-            if (format == LoadFileFormat.EdrmXml)
-                continue;
             paths[name] = Path.Combine(directory, baseName + ext);
         }
         return paths;

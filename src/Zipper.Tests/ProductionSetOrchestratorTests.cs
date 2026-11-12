@@ -6,6 +6,163 @@ namespace Zipper.Tests;
 
 public class ProductionSetOrchestratorTests
 {
+    [Theory]
+    [InlineData(1, false, false)]
+    [InlineData(2, false, false)]
+    [InlineData(2, true, false)]
+    [InlineData(2, false, true)]
+    public async Task GenerateAsync_NativeFileRemovedBeforeValidation_ShouldFailBeforeZipAndRetainFailedSet(int damagedSet, bool failReportWrite, bool crossFormatChaos)
+    {
+        var output = Path.Combine(Path.GetTempPath(), "native-validation-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var request = CreateRequest(1, "pdf", output);
+            if (crossFormatChaos)
+                request.Chaos = new ChaosConfig { ChaosMode = true, ChaosScenario = "cross-format-desync", ChaosAmount = "1" };
+            request.Production = request.Production with { RollingCount = 2, ProductionId = "FIRST,SECOND", ProductionZip = true };
+            var setName = damagedSet == 1 ? "FIRST" : "SECOND";
+            var reportPath = Path.Combine(output, setName, "_validation_report.json");
+            var removed = false;
+            var materializer = new FaultingMaterializerDecorator(new ProductionFileMaterializer())
+            {
+                BeforeWriteText = path =>
+                {
+                    if (path == reportPath && removed && failReportWrite)
+                        throw new IOException("Injected report write failure.");
+                },
+                AfterWriteText = path =>
+                {
+                    if (path == Path.Combine(output, setName, "_manifest.json") && !removed)
+                    {
+                        File.Delete(Directory.GetFiles(Path.Combine(output, setName, "NATIVES"), "*.pdf", SearchOption.AllDirectories).Single());
+                        removed = true;
+                    }
+                },
+            };
+            await Assert.ThrowsAsync<Zipper.Validation.ValidationFailedException>(() =>
+                ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer()));
+            Assert.True(Directory.Exists(Path.Combine(output, setName)));
+            if (failReportWrite)
+                Assert.False(File.Exists(reportPath));
+            else
+            {
+                Assert.False(File.ReadAllBytes(reportPath).AsSpan().StartsWith(Encoding.UTF8.Preamble));
+                using var report = System.Text.Json.JsonDocument.Parse(File.ReadAllText(reportPath));
+                Assert.Equal("failed", report.RootElement.GetProperty("status").GetString());
+                var findings = report.RootElement.GetProperty("findings").EnumerateArray().ToArray();
+                Assert.Contains(findings, finding => finding.GetProperty("code").GetString() == "PathExistence");
+                Assert.DoesNotContain(findings, finding => finding.GetProperty("code").GetString() == "PostGeneration");
+                Assert.Equal(findings.Count(finding => finding.GetProperty("severity").GetString() == "error"),
+                    report.RootElement.GetProperty("errorCount").GetInt32());
+            }
+            Assert.False(File.Exists(Path.Combine(output, setName + ".zip")));
+            if (damagedSet == 2)
+                Assert.True(File.Exists(Path.Combine(output, "FIRST.zip")));
+        }
+        finally
+        {
+            if (Directory.Exists(output)) Directory.Delete(output, true);
+        }
+    }
+
+    [Theory]
+    [InlineData(1, false)]
+    [InlineData(2, false)]
+    [InlineData(1, true)]
+    [InlineData(2, true)]
+    public async Task GenerateAsync_EachRollingSet_ShouldValidateLineEndingsBeforeZip(int damagedSet, bool crossFormatChaos)
+    {
+        var output = Path.Combine(Path.GetTempPath(), "rolling-validation-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var request = CreateRequest(1, "pdf", output);
+            request.Delimiters = request.Delimiters with { EndOfLine = "LF" };
+            if (crossFormatChaos)
+                request.Chaos = new ChaosConfig { ChaosMode = true, ChaosScenario = "cross-format-desync", ChaosAmount = "1" };
+            request.Production = request.Production with { RollingCount = 2, ProductionId = "FIRST,SECOND", ProductionZip = true };
+            var setName = damagedSet == 1 ? "FIRST" : "SECOND";
+            var materializer = new FaultingMaterializerDecorator(new ProductionFileMaterializer())
+            {
+                AfterWriteText = path =>
+                {
+                    if (path == Path.Combine(output, setName, "_manifest.json"))
+                    {
+                        var dat = Path.Combine(output, setName, "DATA", "loadfile.dat");
+                        File.WriteAllText(dat, File.ReadAllText(dat).Replace("\n", "\r\n", StringComparison.Ordinal));
+                    }
+                },
+            };
+
+            await Assert.ThrowsAsync<Zipper.Validation.ValidationFailedException>(() =>
+                ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer()));
+            using var failedReport = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(output, setName, "_validation_report.json")));
+            Assert.Equal("failed", failedReport.RootElement.GetProperty("status").GetString());
+            Assert.Contains(failedReport.RootElement.GetProperty("findings").EnumerateArray(),
+                finding => finding.GetProperty("code").GetString() == "LineEnding"
+                    && finding.GetProperty("path").GetString() == Path.Combine(output, setName, "DATA", "loadfile.dat")
+                    && finding.GetProperty("message").GetString()!.Contains("Inconsistent line ending", StringComparison.Ordinal));
+            Assert.False(File.Exists(Path.Combine(output, setName + ".zip")));
+        }
+        finally
+        {
+            if (Directory.Exists(output)) Directory.Delete(output, true);
+        }
+    }
+
+    [Theory]
+    [InlineData("eml", "header-fold", 1, "loadfile", false)]
+    [InlineData("eml", "header-fold", 1, "loadfile.opt", false)]
+    [InlineData("eml", "header-fold", 2, "loadfile", false)]
+    [InlineData("eml", "header-fold", 2, "loadfile.opt", false)]
+    [InlineData("tiff", "tiff-truncated-ifd", 1, "loadfile", false)]
+    [InlineData("tiff", "tiff-truncated-ifd", 1, "loadfile.opt", false)]
+    [InlineData("tiff", "tiff-truncated-ifd", 2, "loadfile", false)]
+    [InlineData("tiff", "tiff-truncated-ifd", 2, "loadfile.opt", false)]
+    [InlineData("eml", "header-fold", 1, "loadfile", true)]
+    [InlineData("tiff", "tiff-truncated-ifd", 2, "loadfile.opt", true)]
+    public async Task GenerateAsync_EachRollingSet_ShouldVerifyNativeChaosSidecar(string type, string anomaly, int damagedSet, string sidecarBase, bool malformedName)
+    {
+        var output = Path.Combine(Path.GetTempPath(), "rolling-chaos-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var request = CreateRequest(1, type, output);
+            request.Chaos = new ChaosConfig { ChaosMode = true, ChaosAmount = "1", ChaosTypes = anomaly };
+            request.Production = request.Production with { RollingCount = 2, ProductionId = "FIRST,SECOND", ProductionZip = true };
+            var setName = damagedSet == 1 ? "FIRST" : "SECOND";
+            var materializer = new FaultingMaterializerDecorator(new ProductionFileMaterializer())
+            {
+                AfterWriteText = path =>
+                {
+                    if (path == Path.Combine(output, setName, "_manifest.json"))
+                    {
+                        var sidecar = Path.Combine(output, setName, "DATA", sidecarBase + "_chaos_expectations.json");
+                        var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(sidecar))!;
+                        if (malformedName)
+                            json["loadFile"] = 42;
+                        else
+                            json["invariants"]!["expectedDataRecords"] = 99;
+                        File.WriteAllText(sidecar, json.ToJsonString());
+                    }
+                },
+            };
+
+            await Assert.ThrowsAsync<Zipper.Validation.ValidationFailedException>(() =>
+                ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer()));
+            using var failedReport = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(output, setName, "_validation_report.json")));
+            Assert.Equal("failed", failedReport.RootElement.GetProperty("status").GetString());
+            Assert.Contains(failedReport.RootElement.GetProperty("findings").EnumerateArray(),
+                finding => finding.GetProperty("code").GetString() == "ChaosExpectation"
+                    && finding.GetProperty("path").GetString() == Path.Combine(output, setName, "DATA", malformedName
+                        ? sidecarBase + "_chaos_expectations.json" : sidecarBase == "loadfile" ? "loadfile.dat" : "loadfile.opt")
+                    && finding.GetProperty("message").GetString()!.Contains(malformedName ? "unexpected JSON type" : "Produced record count", StringComparison.Ordinal));
+            Assert.False(File.Exists(Path.Combine(output, setName + ".zip")));
+        }
+        finally
+        {
+            if (Directory.Exists(output)) Directory.Delete(output, true);
+        }
+    }
+
     [Fact]
     public async Task GenerateAsync_DelegatesDiskWrites_ToMaterializer()
     {
@@ -113,6 +270,8 @@ public class ProductionSetOrchestratorTests
 
             Assert.NotNull(result1);
             Assert.NotNull(result2);
+            Assert.False(File.ReadAllBytes(Path.Combine(result1.ProductionPath, "_validation_report.json"))
+                .AsSpan().StartsWith(Encoding.UTF8.Preamble));
 
             var manifest1 = GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(result1.ProductionPath);
             var manifest2 = GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(result2.ProductionPath);

@@ -25,7 +25,16 @@ public sealed class LineEndingValidator
 
                 if (i + 1 < span.Length && span[i + 1] == '\n')
                 {
+                    if (expectedEol == "\r")
+                    {
+                        consistent = false;
+                        break;
+                    }
                     i += 2;
+                }
+                else if (expectedEol == "\r")
+                {
+                    i++;
                 }
                 else
                 {
@@ -36,7 +45,7 @@ public sealed class LineEndingValidator
             }
             else if (span[i] == '\n')
             {
-                if (expectedEol == "\r\n")
+                if (expectedEol is "\r\n" or "\r")
                 {
                     consistent = false;
                     break;

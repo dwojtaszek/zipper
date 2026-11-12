@@ -1,5 +1,3 @@
-using Zipper.Validation;
-
 namespace Zipper;
 
 /// <summary>
@@ -46,22 +44,5 @@ internal class ProductionSetMode : IGenerationMode
             Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  ZIP: {0}", result.ZipFilePath));
         }
 
-        var loadFiles = new Dictionary<string, string>();
-        if (!string.IsNullOrEmpty(result.DatFilePath) && File.Exists(result.DatFilePath))
-            loadFiles["dat"] = result.DatFilePath;
-        if (!string.IsNullOrEmpty(result.OptFilePath) && File.Exists(result.OptFilePath))
-            loadFiles["opt"] = result.OptFilePath;
-
-        if (loadFiles.Count > 0)
-        {
-            var context = new ValidationContext
-            {
-                ProductionSetPath = result.ProductionPath,
-                LoadFiles = loadFiles,
-                Request = result.EffectiveRequest ?? request,
-                IsChaosMode = ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario),
-            };
-            ValidationOrchestrator.RunAfterGeneration(context);
-        }
     }
 }

@@ -283,7 +283,6 @@ internal static class ProductionSetOrchestrator
             BatesRange = $"{plans[0].BatesNumber} - {plans[^1].BatesNumber}",
             VolumeCount = volumeCount,
             GenerationTime = stopwatch.Elapsed,
-            EffectiveRequest = request,
         };
     }
 
@@ -718,16 +717,52 @@ internal static class ProductionSetOrchestrator
     {
         if (materializer.ShouldValidate)
         {
-            var report = Validation.ProductionSetPostValidator.Validate(productionPath, request);
             var reportPath = Path.Combine(productionPath, "_validation_report.json");
-            var reportJson = System.Text.Json.JsonSerializer.Serialize(report, ValidationReportSerializerOptions);
-            await materializer.WriteTextAsync(reportPath, reportJson, new UTF8Encoding(false), cancellationToken).ConfigureAwait(false);
-
-            if (string.Equals(report.Status, "failed", StringComparison.OrdinalIgnoreCase)
-                && !(request.Chaos.ChaosMode && ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario)))
+            var context = new Validation.ValidationContext
             {
-                throw new Validation.ValidationFailedException($"Production Set validation failed: {report.ErrorCount} error(s) found. See '_validation_report.json' for details.");
+                ProductionSetPath = productionPath,
+                LoadFiles = new Dictionary<string, string>
+                {
+                    ["dat"] = Path.Combine(productionPath, "DATA", "loadfile.dat"),
+                    ["opt"] = Path.Combine(productionPath, "DATA", "loadfile.opt"),
+                },
+                Request = request,
+                // Cross-format chaos deliberately breaks DAT↔OPT structure, so its report
+                // findings are expected; Native File chaos keeps the structural contract.
+                IsChaosMode = ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario),
+                ValidateChaosExpectations = request.Chaos.ChaosMode,
+            };
+            try
+            {
+                Validation.ValidationOrchestrator.RunAfterGeneration(context);
             }
+            catch (InvalidOperationException exception)
+            {
+                if (context.ProductionSetReport is { } failedReport)
+                {
+                    if (failedReport.Status != "failed")
+                    {
+                        failedReport.Status = "failed";
+                        failedReport.ErrorCount++;
+                        failedReport.Findings.Add(Validation.ValidationReportFinding.Error(
+                            "PostGeneration", productionPath, exception.Message));
+                    }
+                    var failedJson = System.Text.Json.JsonSerializer.Serialize(failedReport, ValidationReportSerializerOptions);
+                    try
+                    {
+                        await materializer.WriteTextAsync(reportPath, failedJson, new UTF8Encoding(false), cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (Exception writeException) when (writeException is IOException or UnauthorizedAccessException or OperationCanceledException)
+                    {
+                        throw new Validation.ValidationFailedException("Production Set validation failed; could not save the failed Validation Report.", writeException);
+                    }
+                }
+                // Keep failed Production Sets for inspection, matching structural validation failures.
+                throw new Validation.ValidationFailedException("Production Set validation failed. See '_validation_report.json' for details.", exception);
+            }
+
+            var reportJson = System.Text.Json.JsonSerializer.Serialize(context.ProductionSetReport, ValidationReportSerializerOptions);
+            await materializer.WriteTextAsync(reportPath, reportJson, new UTF8Encoding(false), cancellationToken).ConfigureAwait(false);
         }
     }
 

@@ -5,4 +5,26 @@ reviews:
       instructions: >
         Do NOT suggest adding copyright headers, license headers, or file-level
         comments such as `// <copyright ...>`. This project intentionally does
-        not use file-level copyright headers.
+        not use file-level copyright headers. Consult `docs/code-review-guidelines.md`
+        and `docs/architecture.md` before flagging project-specific patterns as defects.
+    - path: "src/**"
+      instructions: >
+        In post-generation validation (`ProductionSetOrchestrator`, `StandardMode`,
+        `ValidationOrchestrator`, `PostGenerationValidator`):
+        (1) `ProductionSetOrchestrator` invokes `ValidationOrchestrator.RunAfterGeneration`
+        once per Rolling Production Set before ZIP creation and persists `context.ProductionSetReport`
+        afterward; `RunAfterGeneration` throws `InvalidOperationException` whenever any validation
+        error exists, so execution never reaches ZIP creation when validation fails.
+        (2) `ProductionSetResult.EffectiveRequest` was intentionally removed because per-set
+        validation now runs inside `ProductionSetOrchestrator.ValidateProductionSetAsync`.
+        (3) In `StandardMode`, `LoadFileOrchestrator` writes `--include-load-file` entries at
+        the ZIP root and always populates `result.LoadFilePath`, while `StandardMode` leaves
+        `IsChaosMode = false` and sets `ValidateChaosExpectations = request.Chaos.ChaosMode`
+        so normal disk-file validation still runs alongside sidecar validation.
+        (4) In `PostGenerationValidator`, cross-format chaos intentionally exempts structural
+        DAT/OPT findings (`OptBoundary`, `CrossReference`, etc.) while keeping `PathExistence`
+        (except audited `desync-path`/`desync-pagecount` image rows), `MetadataAzureConstraint`,
+        `ManifestSyntax`, and `InvalidValue`, and `ChaosExpectationValidator` verifies that
+        every non-audited row parses cleanly.
+        (5) `ProductionSetOrchestrator` always emits `TEXT/` files in Production Set mode
+        regardless of `OutputConfig.WithText`.

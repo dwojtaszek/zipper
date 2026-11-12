@@ -1,6 +1,6 @@
 # Zipper agent instructions
 
-Read shared host rules at @/home/dom/.agents/SHARED-AGENT-RULES.md and Tessl rules at @/home/dom/.tessl/RULES.md.
+Read shared host rules at @/home/dom/.agents/SHARED-AGENT-RULES.md.
 
 ## Principles
 

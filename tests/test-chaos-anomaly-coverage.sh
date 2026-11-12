@@ -548,6 +548,31 @@ for SCENARIO in cross-format-desync broken-families; do
     print_success "B5 Production Set scenario '$SCENARIO' — PASSED (both audits and validation report)"
 done
 
+# Native File scope survives schema-version-1 sidecars in Standard and Rolling Production Sets.
+for TYPE in eml tiff; do
+    if [[ "$TYPE" == eml ]]; then ANOMALY=header-fold; else ANOMALY=tiff-truncated-ifd; fi
+    for MODE in standard rolling; do
+        TOTAL=$((TOTAL + 1))
+        OUT_DIR="$TEST_OUTPUT_DIR/native_${TYPE}_${MODE}"
+        EXTRA=(--load-file-formats dat,edrm-xml)
+        if [[ "$MODE" == rolling ]]; then
+            EXTRA=(--loadfile-format dat --production-set --rolling-count 2 --production-id FIRST,SECOND --bates-prefix TEST)
+        fi
+        zipper --type "$TYPE" --count 2 --chaos-mode --chaos-types "$ANOMALY" \
+            --chaos-amount 1 --seed 42 --output-path "$OUT_DIR" ${EXTRA[@]+"${EXTRA[@]}"}
+        EXPECTED=2
+        if [[ "$MODE" == rolling ]]; then EXPECTED=4; fi
+        FOUND=0
+        while IFS= read -r SIDECAR; do
+            jq -e --arg suffix ".$TYPE" '.schemaVersion == 1 and .totalAnomalies == 1 and (.anomalies | length) == 1 and all(.anomalies[]; (.file | endswith($suffix)) and (.location | length > 0))' "$SIDECAR" >/dev/null \
+                || print_error "Native File scope missing in $SIDECAR"
+            FOUND=$((FOUND + 1))
+        done < <(find "$OUT_DIR" -name '*_chaos_expectations.json' -type f)
+        [[ "$FOUND" -eq "$EXPECTED" ]] || print_error "Expected $EXPECTED Native File sidecars, found $FOUND"
+        PASSED=$((PASSED + 1))
+    done
+done
+
 # ---------------------------------------------------------------------------
 # Cleanup & summary
 # ---------------------------------------------------------------------------

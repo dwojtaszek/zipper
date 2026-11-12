@@ -138,13 +138,14 @@ graph LR
 
     subgraph Validation
         VO["ValidationOrchestrator<br/>(shared post-generation tail)"]
-        PGV["PostGenerationValidator<br/>(Standard / Loadfile-Only / Production Set)"]
+        PGV["PostGenerationValidator<br/>(Load Files, Line Endings)"]
         Runner["ValidatorRunner"]
         PSPV["ProductionSetPostValidator"]
         SuppV["SupplementalValidator<br/>(pre-output, supplemental mode)"]
         VO --> PGV
         PGV --> Runner
-        PGV --> PSPV
+        PGV -->|"once per set"| PSPV
+        PSO -->|"each set, before report and ZIP"| VO
     end
 
     subgraph Manifest Comparison
@@ -165,7 +166,6 @@ graph LR
     Program -->|"SelectMode(request)"| PSMode
     StdMode --> VO
     LFMode --> VO
-    PSMode --> VO
     PSO --> SuppV
     FGR --> File Generators
     FGR --> Load File Seam
@@ -178,9 +178,10 @@ graph LR
 
 ## Post-Generation Validation
 
-Each mode adapter delegates to `ValidationOrchestrator.RunAfterGeneration(ValidationContext)` after its generator completes:
+Standard and Loadfile-Only mode adapters delegate to `ValidationOrchestrator.RunAfterGeneration(ValidationContext)` after generation. Production Set generation invokes the same tail for each Rolling Production Set before ZIP creation:
 
-- **Standard / Loadfile-Only / Production Set**: `StandardMode`, `LoadFileOnlyMode`, and `ProductionSetMode` each build a mode-specific `ValidationContext` and pass it to `ValidationOrchestrator`, which runs `PostGenerationValidator` (driving `ValidatorRunner` over emitted Load Files, plus `ProductionSetPostValidator.Validate` for Production Sets) and throws on any validation errors.
+- **Standard / Loadfile-Only**: The adapters build a mode-specific `ValidationContext` and pass it to `ValidationOrchestrator`, which runs `PostGenerationValidator` over emitted Load Files and throws on validation errors.
+- **Production Set**: `ProductionSetOrchestrator` invokes `ValidationOrchestrator` once per set. Its `PostGenerationValidator` runs `ProductionSetPostValidator.Validate` once and checks Line Endings. The orchestrator writes the resulting report after validation, marking it failed when any validation step fails. Cross-format chaos exempts structural findings except missing Native Files; Native File chaos keeps normal validation. Both run the Chaos Expectation Validator.
 - **Supplemental**: `SupplementalValidator.ValidateAsync` runs during supplemental Production Set generation (before output is written) to validate Bates Number ranges against prior Production Manifests.
 - **Manifest Comparison**: `--compare-production-manifests` short-circuits normal generation in `Program.cs` and dispatches directly to `ProductionManifestComparer.CompareAndReportAsync`, which writes the comparison JSON report. This path bypasses `ValidationOrchestrator` and `PostGenerationValidator` entirely.
 
@@ -201,6 +202,7 @@ The four delimited formats (DAT, OPT, CSV, Concordance) are produced by three de
 - **Composer** (`ILoadFileComposer`) — column authority: header columns + lazy `LoadFileRecord`s with raw values held as parallel arrays aligned by index (handles modes + column profiles internally).
 - **Serializer** (`ILoadFileSerializer`) — render authority: record/header → one escaped line. Pure (no stream, EOL, or chaos).
 - **Emitter** (`LoadFileEmitter`) — I/O + per-format chaos authority: encoding preamble (BOM), end-of-line, batching, and the single-format Chaos Engine pipeline. Ordinary paths stream lazily (O(1) auxiliary memory); coordinated DAT/OPT scenarios buffer the rendered lines, mutate them together, then emit them through the Emitter.
+- **Roslyn analyzer `ZIP001` (`LoadFileSeamInvariantAnalyzer`)** — enforces this seam across the solution by flagging any `Write`/`WriteLine`/`WriteAsync`/`WriteLineAsync` invocation inside a class whose name contains `Composer`, `Serializer`, or `Emitter`.
 
 ```mermaid
 graph TD
