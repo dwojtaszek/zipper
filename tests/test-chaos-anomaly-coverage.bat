@@ -103,6 +103,11 @@ call :assert_production_set_cross_format "broken-families" "eml" "--with-familie
 call :adversarial_values
 
 REM --- Cleanup ---
+call :assert_native_scope eml header-fold standard
+call :assert_native_scope tiff tiff-truncated-ifd standard
+call :assert_native_scope eml header-fold rolling
+call :assert_native_scope tiff tiff-truncated-ifd rolling
+
 if %FAILED% equ 0 if exist "%TEST_OUTPUT_DIR%" rmdir /s /q "%TEST_OUTPUT_DIR%"
 
 echo.
@@ -254,5 +259,24 @@ goto :eof
 
 :production_set_cross_format_failed
 echo [ ERROR ] FAIL: %SCEN% Production Set cross-format output, audit, or validation
+set /a FAILED+=1
+goto :eof
+
+:assert_native_scope
+set "NATIVE_TYPE=%~1"
+set "NATIVE_MODE=%~3"
+set "NATIVE_DIR=%TEST_OUTPUT_DIR%\native_%~1_%~3"
+set "NATIVE_EXTRA="
+set "NATIVE_EXPECTED=1"
+if "%~3"=="rolling" set "NATIVE_EXTRA=--production-set --rolling-count 2 --production-id FIRST,SECOND --bates-prefix TEST"
+if "%~3"=="rolling" set "NATIVE_EXPECTED=4"
+%ZIPPER_CMD% --type %~1 --count 2 --loadfile-format dat --chaos-mode --chaos-types %~2 --chaos-amount 1 --seed 42 --output-path "%NATIVE_DIR%" %NATIVE_EXTRA% >nul 2>&1
+if errorlevel 1 goto :native_scope_failed
+powershell -NoProfile -Command "$files=@(Get-ChildItem -Recurse $env:NATIVE_DIR -Filter '*_chaos_expectations.json'); if ($files.Count -ne [int]$env:NATIVE_EXPECTED) { exit 1 }; foreach ($f in $files) { $s=Get-Content -Raw $f.FullName | ConvertFrom-Json; if ($s.schemaVersion -ne 1 -or $s.totalAnomalies -ne 1) { exit 1 }; foreach ($a in $s.anomalies) { if (-not $a.file.EndsWith('.'+$env:NATIVE_TYPE) -or -not $a.location) { exit 1 } } }" >nul 2>&1
+if errorlevel 1 goto :native_scope_failed
+set /a PASSED+=1
+goto :eof
+:native_scope_failed
+echo [ ERROR ] Native File sidecar scope: %~1 %~3
 set /a FAILED+=1
 goto :eof

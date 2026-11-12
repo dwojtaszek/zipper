@@ -7,6 +7,30 @@ namespace Zipper.Tests;
 
 public class PostGenerationValidatorTests : TempDirectoryTestBase
 {
+    [Fact]
+    public void Validate_ProductionSet_ConsumesSuppliedReportWithoutReadingProductionSet()
+    {
+        var context = new ValidationContext
+        {
+            ProductionSetPath = Path.Combine(this.TempDir, "not-on-disk"),
+            ProductionSetReport = new ProductionSetValidationReport(),
+        };
+        Assert.Empty(new PostGenerationValidator().Validate(context).Findings);
+        context.ProductionSetReport.Findings.Add(new ValidationReportFinding
+        {
+            Severity = "error",
+            Code = "SavedFinding",
+            Message = "Already validated",
+            Path = "original.dat",
+            Line = 3,
+        });
+        var finding = Assert.Single(new PostGenerationValidator().Validate(context).Findings);
+        Assert.Equal("SavedFinding", finding.Category);
+        Assert.Equal(ValidationSeverity.Error, finding.Severity);
+        Assert.Equal("original.dat", finding.FilePath);
+        Assert.Equal(3, finding.LineNumber);
+    }
+
     // ---- ValidationFinding tests ----
 
     [Fact]

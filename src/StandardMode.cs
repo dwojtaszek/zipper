@@ -93,6 +93,7 @@ internal class StandardMode : IGenerationMode
                     ? result.LoadFilePaths
                     : BuildDefaultLoadFiles(result, request),
                 Request = request,
+                ValidateChaosExpectations = request.Chaos.ChaosMode,
                 SkipEolValidation = true, // ponytail: StandardMode uses Environment.NewLine regardless of --eol config
             };
             ValidationOrchestrator.RunAfterGeneration(context);

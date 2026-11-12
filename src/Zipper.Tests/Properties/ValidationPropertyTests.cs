@@ -20,6 +20,30 @@ namespace Zipper.Tests.Properties;
 [Properties(Arbitrary = [typeof(ZipperArbitraries)], MaxTest = 100)]
 public sealed class ValidationPropertyTests : IDisposable
 {
+    [Property]
+    public void Validate_NativeFileAnomalyLine_ShouldNotChangeLoadFileRowChecks(FsCheck.PositiveInt input, bool email)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        var loadFile = Path.Combine(this.tempRoot, "native-scope.dat");
+        var sidecar = Path.Combine(this.tempRoot, "native-scope_chaos_expectations.json");
+        var file = email ? "00000001.eml" : "00000001.tiff";
+        var location = email ? "Subject header" : "IFD 1";
+        var request = new FileGenerationRequest();
+        var json = LoadFileAuditWriter.GenerateExpectationSidecarJson(loadFile, request, Array.Empty<FileData>(),
+            new[] { new ChaosAnomaly { File = file, Location = location, LineNumber = (input.Get % 20 + 1).ToString(CultureInfo.InvariantCulture),
+                ErrorType = email ? "mime-boundary" : "tiff-truncated-ifd", RecordID = "DOC1" } }, expectedDataRecords: 1);
+        using var document = System.Text.Json.JsonDocument.Parse(json);
+        var anomaly = document.RootElement.GetProperty("anomalies")[0];
+        Assert.Equal(file, anomaly.GetProperty("file").GetString());
+        Assert.Equal(location, anomaly.GetProperty("location").GetString());
+        File.WriteAllText(sidecar, json);
+        File.WriteAllText(loadFile, "DOCID\u0014AUTHOR\nDOC1\u0014Alice\n");
+        Assert.False(new ChaosExpectationValidator().Validate(loadFile, sidecar, request).HasErrors);
+        File.WriteAllText(loadFile, "DOCID\u0014AUTHOR\nDOC1\n");
+        Assert.Contains(new ChaosExpectationValidator().Validate(loadFile, sidecar, request).Findings,
+            finding => finding.FilePath == loadFile && finding.Message.Contains("columns", StringComparison.Ordinal));
+    }
+
     private const char ColDelim = '\x14';
     private const char QuoteDelim = '\xfe';
     private const string PriorPrefix = "SUPP";

@@ -129,7 +129,10 @@ public sealed class ChaosExpectationValidator
 
         if (format is LoadFileFormat.Dat or LoadFileFormat.Opt or LoadFileFormat.Csv or LoadFileFormat.Concordance)
         {
-            ValidateProducedRows(loadFilePath, format, request, expectedDataRecords, remainingRecordsParseCleanly, anomalies, result);
+            var loadFileAnomalies = anomalies.Where(a =>
+                !ChaosAnomalyTypes.IsEmail(a.ErrorType) && !ChaosAnomalyTypes.IsTiff(a.ErrorType)
+                && (string.IsNullOrEmpty(a.File) || string.Equals(a.File, Path.GetFileName(loadFilePath), StringComparison.Ordinal))).ToArray();
+            ValidateProducedRows(loadFilePath, format, request, expectedDataRecords, remainingRecordsParseCleanly, loadFileAnomalies, result);
         }
     }
 
@@ -151,7 +154,13 @@ public sealed class ChaosExpectationValidator
             AddError(result, sidecarPath, $"Anomaly '{errorType}' records unknown outcome class '{outcomeClass}'.");
         }
 
-        return new SidecarAnomaly(errorType, outcomeClass, lineNumber, recordId);
+        string? file = element.TryGetProperty("file", out var fileElement) ? fileElement.GetString() : null;
+        if (element.TryGetProperty("location", out var locationElement)
+            && locationElement.ValueKind is not (JsonValueKind.String or JsonValueKind.Null))
+        {
+            AddError(result, sidecarPath, "Expectation sidecar anomaly location must be a string or null.");
+        }
+        return new SidecarAnomaly(errorType, outcomeClass, lineNumber, recordId, file);
     }
 
     private static bool TryParseFormat(JsonElement root, out LoadFileFormat format)
@@ -262,7 +271,9 @@ public sealed class ChaosExpectationValidator
                 int index = unmatched.FindIndex(anomaly =>
                     string.Equals(anomaly.ErrorType, errorType, StringComparison.Ordinal)
                     && string.Equals(anomaly.LineNumber, lineNumber, StringComparison.Ordinal)
-                    && string.Equals(anomaly.RecordId, recordId, StringComparison.Ordinal));
+                    && string.Equals(anomaly.RecordId, recordId, StringComparison.Ordinal)
+                    && (anomaly.File is null || (entry.TryGetProperty("file", out var fileElement)
+                        && string.Equals(anomaly.File, fileElement.GetString(), StringComparison.Ordinal))));
                 if (index >= 0)
                 {
                     unmatched.RemoveAt(index);
@@ -486,5 +497,5 @@ public sealed class ChaosExpectationValidator
     private static void AddError(ValidationResult result, string path, string message, long? lineNumber = null) =>
         result.Add(new ValidationFinding(ValidationSeverity.Error, Category, message, path, lineNumber));
 
-    private sealed record SidecarAnomaly(string ErrorType, string OutcomeClass, string LineNumber, string RecordId);
+    private sealed record SidecarAnomaly(string ErrorType, string OutcomeClass, string LineNumber, string RecordId, string? File);
 }

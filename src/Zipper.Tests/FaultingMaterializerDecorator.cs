@@ -17,6 +17,8 @@ internal sealed class FaultingMaterializerDecorator : IFileMaterializer
 
     public IFileMaterializer Inner => this._inner;
 
+    public Action<string>? AfterWriteText { get; set; }
+
     public Func<string, byte[], CancellationToken, Task<bool>>? OnWriteBytesAsync { get; set; }
 
     public Func<string, string, Config.ZipCompressionMethod, CancellationToken, Task>? OnCreateZipAsync { get; set; }
@@ -38,8 +40,11 @@ internal sealed class FaultingMaterializerDecorator : IFileMaterializer
         await this._inner.WriteBytesAsync(path, content, cancellationToken).ConfigureAwait(false);
     }
 
-    public Task WriteTextAsync(string path, string text, Encoding encoding, CancellationToken cancellationToken = default)
-        => this._inner.WriteTextAsync(path, text, encoding, cancellationToken);
+    public async Task WriteTextAsync(string path, string text, Encoding encoding, CancellationToken cancellationToken = default)
+    {
+        await this._inner.WriteTextAsync(path, text, encoding, cancellationToken).ConfigureAwait(false);
+        this.AfterWriteText?.Invoke(path);
+    }
 
     public Stream OpenWriteStream(string path)
         => this._inner.OpenWriteStream(path);

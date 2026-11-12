@@ -8,6 +8,57 @@ namespace Zipper.Tests;
 
 public class ChaosExpectationValidatorTests : TempDirectoryTestBase
 {
+    [Theory]
+    [InlineData("00000001.tiff", "tiff-truncated-ifd", "1")]
+    [InlineData("00000001.eml", "header-fold", "2")]
+    [InlineData(null, "tiff-truncated-ifd", "1")]
+    [InlineData(null, "header-fold", "2")]
+    public void Validate_NativeFileAnomaly_DoesNotHideMalformedLoadFileRow(string? file, string type, string line)
+    {
+        var loadFile = WriteLoadFile(DatHeader, "DOC1");
+        var sidecar = WriteFile("loadfile_chaos_expectations.json", SidecarJson(1, anomalies: new object[]
+        {
+            new { errorType = type, outcomeClass = "parse-fails", lineNumber = line, recordID = "DOC1", file, location = "native bytes" },
+        }));
+
+        var result = new ChaosExpectationValidator().Validate(loadFile, sidecar, CreateDatRequest());
+
+        Assert.Contains(result.Findings, finding => finding.FilePath == loadFile && finding.Message.Contains("columns", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("eml", false)]
+    [InlineData("tiff", false)]
+    [InlineData("eml", true)]
+    [InlineData("tiff", true)]
+    public async Task StandardMode_NativeChaos_ValidatesBothLoadFileAndSidecar(string type, bool corruptLoadFile)
+    {
+        var request = CreateDatRequest();
+        request.Output = request.Output with { FileType = type };
+        var loadFile = WriteLoadFile(DatHeader, corruptLoadFile ? "DOC1" : DatRow("DOC1", "Alice"));
+        if (!corruptLoadFile)
+            WriteFile("loadfile_chaos_expectations.json", SidecarJson(99));
+        var mode = new StandardMode((_, _) => Task.FromResult(new FileGenerationResult
+        {
+            LoadFilePath = loadFile,
+            LoadFilePaths = new Dictionary<string, string> { ["dat"] = loadFile },
+        }));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => mode.RunAsync(request));
+    }
+
+    [Theory]
+    [InlineData("file")]
+    [InlineData("location")]
+    public void Validate_WrongTypedOptionalScope_ReturnsFinding(string field)
+    {
+        var loadFile = WriteLoadFile(DatHeader, DatRow("DOC1", "Alice"));
+        var json = System.Text.Json.Nodes.JsonNode.Parse(SidecarJson(1, anomalies: new[] { ValueAnomaly("2", "DOC1") }))!;
+        json["anomalies"]![0]![field] = 42;
+        var sidecar = WriteFile("loadfile_chaos_expectations.json", json.ToJsonString());
+        Assert.True(new ChaosExpectationValidator().Validate(loadFile, sidecar, CreateDatRequest()).HasErrors);
+    }
+
     private const char DatColumnDelimiter = '\u0014';
 
     private FileGenerationRequest CreateDatRequest() => new()

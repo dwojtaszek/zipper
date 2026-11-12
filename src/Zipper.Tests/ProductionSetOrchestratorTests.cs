@@ -6,6 +6,88 @@ namespace Zipper.Tests;
 
 public class ProductionSetOrchestratorTests
 {
+    [Theory]
+    [InlineData(1, false)]
+    [InlineData(2, false)]
+    [InlineData(1, true)]
+    [InlineData(2, true)]
+    public async Task GenerateAsync_EachRollingSet_ValidatesLineEndingsBeforeZip(int damagedSet, bool crossFormatChaos)
+    {
+        var output = Path.Combine(Path.GetTempPath(), "rolling-validation-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var request = CreateRequest(1, "pdf", output);
+            request.Delimiters = request.Delimiters with { EndOfLine = "LF" };
+            if (crossFormatChaos)
+                request.Chaos = new ChaosConfig { ChaosMode = true, ChaosScenario = "cross-format-desync", ChaosAmount = "1" };
+            request.Production = request.Production with { RollingCount = 2, ProductionId = "FIRST,SECOND", ProductionZip = true };
+            var setName = damagedSet == 1 ? "FIRST" : "SECOND";
+            var materializer = new FaultingMaterializerDecorator(new ProductionFileMaterializer())
+            {
+                AfterWriteText = path =>
+                {
+                    if (path == Path.Combine(output, setName, "_validation_report.json"))
+                    {
+                        var dat = Path.Combine(output, setName, "DATA", "loadfile.dat");
+                        File.WriteAllText(dat, File.ReadAllText(dat).Replace("\n", "\r\n", StringComparison.Ordinal));
+                    }
+                },
+            };
+
+            await Assert.ThrowsAsync<Zipper.Validation.ValidationFailedException>(() =>
+                ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer()));
+            Assert.True(File.Exists(Path.Combine(output, setName, "_validation_report.json")));
+            Assert.False(File.Exists(Path.Combine(output, setName + ".zip")));
+        }
+        finally
+        {
+            if (Directory.Exists(output)) Directory.Delete(output, true);
+        }
+    }
+
+    [Theory]
+    [InlineData("eml", "header-fold", 1, "loadfile")]
+    [InlineData("eml", "header-fold", 1, "loadfile.opt")]
+    [InlineData("eml", "header-fold", 2, "loadfile")]
+    [InlineData("eml", "header-fold", 2, "loadfile.opt")]
+    [InlineData("tiff", "tiff-truncated-ifd", 1, "loadfile")]
+    [InlineData("tiff", "tiff-truncated-ifd", 1, "loadfile.opt")]
+    [InlineData("tiff", "tiff-truncated-ifd", 2, "loadfile")]
+    [InlineData("tiff", "tiff-truncated-ifd", 2, "loadfile.opt")]
+    public async Task GenerateAsync_EachRollingSet_VerifiesNativeChaosSidecar(string type, string anomaly, int damagedSet, string sidecarBase)
+    {
+        var output = Path.Combine(Path.GetTempPath(), "rolling-chaos-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var request = CreateRequest(1, type, output);
+            request.Chaos = new ChaosConfig { ChaosMode = true, ChaosAmount = "1", ChaosTypes = anomaly };
+            request.Production = request.Production with { RollingCount = 2, ProductionId = "FIRST,SECOND", ProductionZip = true };
+            var setName = damagedSet == 1 ? "FIRST" : "SECOND";
+            var materializer = new FaultingMaterializerDecorator(new ProductionFileMaterializer())
+            {
+                AfterWriteText = path =>
+                {
+                    if (path == Path.Combine(output, setName, "_validation_report.json"))
+                    {
+                        var sidecar = Path.Combine(output, setName, "DATA", sidecarBase + "_chaos_expectations.json");
+                        var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(sidecar))!;
+                        json["invariants"]!["expectedDataRecords"] = 99;
+                        File.WriteAllText(sidecar, json.ToJsonString());
+                    }
+                },
+            };
+
+            await Assert.ThrowsAsync<Zipper.Validation.ValidationFailedException>(() =>
+                ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer()));
+            Assert.True(File.Exists(Path.Combine(output, setName, "_validation_report.json")));
+            Assert.False(File.Exists(Path.Combine(output, setName + ".zip")));
+        }
+        finally
+        {
+            if (Directory.Exists(output)) Directory.Delete(output, true);
+        }
+    }
+
     [Fact]
     public async Task GenerateAsync_DelegatesDiskWrites_ToMaterializer()
     {

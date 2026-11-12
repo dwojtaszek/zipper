@@ -126,6 +126,8 @@ internal static class LoadFileAuditWriter
                 ? new List<ChaosExpectationAnomaly>()
                 : anomalies.Select(a => new ChaosExpectationAnomaly
                 {
+                    File = a.File,
+                    Location = a.Location,
                     ErrorType = a.ErrorType,
                     OutcomeClass = ChaosExpectationOracle.ExpectedOutcomeClass(a.ErrorType),
                     LineNumber = a.LineNumber,
@@ -501,6 +503,10 @@ internal static class LoadFileAuditWriter
 
     private record ChaosExpectationAnomaly
     {
+        public string? File { get; init; }
+
+        public string? Location { get; init; }
+
         public string ErrorType { get; init; } = string.Empty;
 
         public string OutcomeClass { get; init; } = string.Empty;

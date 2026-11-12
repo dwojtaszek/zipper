@@ -9,7 +9,7 @@ public sealed class PostGenerationValidator
         ArgumentNullException.ThrowIfNull(context);
         var result = new ValidationResult();
 
-        if (context.IsChaosMode)
+        if (context.IsChaosMode && context.ProductionSetPath is null)
             return result;
 
         if (context.ProductionSetPath is not null)
@@ -57,21 +57,24 @@ public sealed class PostGenerationValidator
 
     private static void ValidateProductionSet(ValidationContext context, ValidationResult result)
     {
-        var report = ProductionSetPostValidator.Validate(context.ProductionSetPath!, context.Request);
-        foreach (var finding in report.Findings)
+        if (!context.IsChaosMode)
         {
-            result.Add(new ValidationFinding(
-                string.Equals(finding.Severity, "error", StringComparison.OrdinalIgnoreCase)
-                    ? ValidationSeverity.Error
-                    : ValidationSeverity.Warning,
-                finding.Code,
-                finding.Message,
-                finding.Path,
-                finding.Line));
+            var report = context.ProductionSetReport ?? ProductionSetPostValidator.Validate(context.ProductionSetPath!, context.Request);
+            foreach (var finding in report.Findings)
+            {
+                result.Add(new ValidationFinding(
+                    string.Equals(finding.Severity, "error", StringComparison.OrdinalIgnoreCase)
+                        ? ValidationSeverity.Error
+                        : ValidationSeverity.Warning,
+                    finding.Code,
+                    finding.Message,
+                    finding.Path,
+                    finding.Line));
+            }
         }
 
         // EOL validation for production set load files (ProductionSetPostValidator doesn't check this)
-        var eol = GetExpectedEol(context.Request);
+        var eol = context.SkipEolValidation ? null : GetExpectedEol(context.Request);
         if (eol is not null)
         {
             var runner = new ValidatorRunner();

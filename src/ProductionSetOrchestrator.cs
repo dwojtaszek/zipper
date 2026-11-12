@@ -728,6 +728,28 @@ internal static class ProductionSetOrchestrator
             {
                 throw new Validation.ValidationFailedException($"Production Set validation failed: {report.ErrorCount} error(s) found. See '_validation_report.json' for details.");
             }
+
+            try
+            {
+                Validation.ValidationOrchestrator.RunAfterGeneration(new Validation.ValidationContext
+                {
+                    ProductionSetPath = productionPath,
+                    ProductionSetReport = report,
+                    LoadFiles = new Dictionary<string, string>
+                    {
+                        ["dat"] = Path.Combine(productionPath, "DATA", "loadfile.dat"),
+                        ["opt"] = Path.Combine(productionPath, "DATA", "loadfile.opt"),
+                    },
+                    Request = request,
+                    IsChaosMode = request.Chaos.ChaosMode && ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario),
+                    ValidateChaosExpectations = request.Chaos.ChaosMode,
+                });
+            }
+            catch (InvalidOperationException exception)
+            {
+                // Keep failed Production Sets for inspection, matching structural validation failures.
+                throw new Validation.ValidationFailedException(exception.Message, exception);
+            }
         }
     }
 
