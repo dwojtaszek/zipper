@@ -80,17 +80,12 @@ public class LineEndingValidatorTests
     [Fact]
     public void LineEndingValidator_Validate_ContentWithLoneCr_PassesWhenExpectedCr()
     {
-        // NOTE: Current implementation treats lone CR as invalid when expectedEol is CR
-        // because it requires a trailing LF. This pins that behavior;
-        // file a separate issue if lone CR should be accepted.
         var result = new ValidationResult();
         var validator = new LineEndingValidator();
 
         validator.Validate("line1\rline2\r", "\r", "test.dat", result);
 
-        Assert.True(result.HasErrors);
-        Assert.Contains(result.Findings, finding =>
-            finding.Severity == ValidationSeverity.Error && finding.Category == "LineEnding");
+        Assert.False(result.HasErrors);
     }
 
     [Fact]

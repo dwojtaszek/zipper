@@ -28,7 +28,7 @@ public sealed class ValidationPropertyTests : IDisposable
         var sidecar = Path.Combine(this.tempRoot, "native-scope_chaos_expectations.json");
         var file = email ? "00000001.eml" : "00000001.tiff";
         var location = email ? "Subject header" : "IFD 1";
-        var request = new FileGenerationRequest();
+        var request = new FileGenerationRequest { Chaos = new ChaosConfig { ChaosMode = true } };
         // Keep the Native File line number on a data row so the damaged row and the Native File
         // line coincide: a validator that conflates them exempts exactly that row.
         long anomalyLine = input.Get % 19 + 2;
@@ -43,7 +43,19 @@ public sealed class ValidationPropertyTests : IDisposable
 
         var rows = Enumerable.Range(1, (int)anomalyLine - 1).Select(row => $"DOC{row}\u0014Alice").ToArray();
         File.WriteAllText(loadFile, "DOCID\u0014AUTHOR\n" + string.Join("\n", rows) + "\n");
+
+        var auditAnomalies = new[] { new ChaosAnomaly { File = file, Location = location,
+            LineNumber = anomalyLine.ToString(CultureInfo.InvariantCulture),
+            ErrorType = email ? "mime-boundary" : "tiff-truncated-ifd", RecordID = "DOC1" } };
+        File.WriteAllText(Path.Combine(this.tempRoot, "native-scope_properties.json"),
+            LoadFileAuditWriter.GenerateAuditJson(loadFile, request, Array.Empty<FileData>(), auditAnomalies));
         Assert.False(new ChaosExpectationValidator().Validate(loadFile, sidecar, request).HasErrors);
+        var changedSidecar = JsonNode.Parse(json)!;
+        changedSidecar["anomalies"]![0]!["location"] = location + " changed";
+        File.WriteAllText(sidecar, changedSidecar.ToJsonString());
+        Assert.Contains(new ChaosExpectationValidator().Validate(loadFile, sidecar, request).Findings,
+            finding => finding.Message.Contains("not recorded in the produced Audit File", StringComparison.Ordinal));
+        File.WriteAllText(sidecar, json);
 
         rows[^1] = $"DOC{anomalyLine - 1}";
         File.WriteAllText(loadFile, "DOCID\u0014AUTHOR\n" + string.Join("\n", rows) + "\n");

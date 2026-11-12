@@ -27,6 +27,10 @@ public sealed class LineEndingValidator
                 {
                     i += 2;
                 }
+                else if (expectedEol == "\r")
+                {
+                    i++;
+                }
                 else
                 {
                     consistent = false;

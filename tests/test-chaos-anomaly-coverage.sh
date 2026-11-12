@@ -554,13 +554,13 @@ for TYPE in eml tiff; do
     for MODE in standard rolling; do
         TOTAL=$((TOTAL + 1))
         OUT_DIR="$TEST_OUTPUT_DIR/native_${TYPE}_${MODE}"
-        EXTRA=()
+        EXTRA=(--load-file-formats dat,edrm-xml)
         if [[ "$MODE" == rolling ]]; then
-            EXTRA=(--production-set --rolling-count 2 --production-id FIRST,SECOND --bates-prefix TEST)
+            EXTRA=(--loadfile-format dat --production-set --rolling-count 2 --production-id FIRST,SECOND --bates-prefix TEST)
         fi
-        zipper --type "$TYPE" --count 2 --loadfile-format dat --chaos-mode --chaos-types "$ANOMALY" \
+        zipper --type "$TYPE" --count 2 --chaos-mode --chaos-types "$ANOMALY" \
             --chaos-amount 1 --seed 42 --output-path "$OUT_DIR" ${EXTRA[@]+"${EXTRA[@]}"}
-        EXPECTED=1
+        EXPECTED=2
         if [[ "$MODE" == rolling ]]; then EXPECTED=4; fi
         FOUND=0
         while IFS= read -r SIDECAR; do

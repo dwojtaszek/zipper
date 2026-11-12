@@ -155,12 +155,17 @@ public sealed class ChaosExpectationValidator
         }
 
         string? file = element.TryGetProperty("file", out var fileElement) ? fileElement.GetString() : null;
+        string? location = null;
         if (element.TryGetProperty("location", out var locationElement)
             && locationElement.ValueKind is not (JsonValueKind.String or JsonValueKind.Null))
         {
             AddError(result, sidecarPath, "Expectation sidecar anomaly location must be a string or null.");
         }
-        return new SidecarAnomaly(errorType, outcomeClass, lineNumber, recordId, file);
+        else if (locationElement.ValueKind == JsonValueKind.String)
+        {
+            location = locationElement.GetString();
+        }
+        return new SidecarAnomaly(errorType, outcomeClass, lineNumber, recordId, file, location);
     }
 
     private static bool TryParseFormat(JsonElement root, out LoadFileFormat format)
@@ -273,7 +278,9 @@ public sealed class ChaosExpectationValidator
                     && string.Equals(anomaly.LineNumber, lineNumber, StringComparison.Ordinal)
                     && string.Equals(anomaly.RecordId, recordId, StringComparison.Ordinal)
                     && (anomaly.File is null || (entry.TryGetProperty("file", out var fileElement)
-                        && string.Equals(anomaly.File, fileElement.GetString(), StringComparison.Ordinal))));
+                        && string.Equals(anomaly.File, fileElement.GetString(), StringComparison.Ordinal)))
+                    && (anomaly.Location is null || (entry.TryGetProperty("location", out var locationElement)
+                        && string.Equals(anomaly.Location, locationElement.GetString(), StringComparison.Ordinal))));
                 if (index >= 0)
                 {
                     unmatched.RemoveAt(index);
@@ -497,5 +504,5 @@ public sealed class ChaosExpectationValidator
     private static void AddError(ValidationResult result, string path, string message, long? lineNumber = null) =>
         result.Add(new ValidationFinding(ValidationSeverity.Error, Category, message, path, lineNumber));
 
-    private sealed record SidecarAnomaly(string ErrorType, string OutcomeClass, string LineNumber, string RecordId, string? File);
+    private sealed record SidecarAnomaly(string ErrorType, string OutcomeClass, string LineNumber, string RecordId, string? File, string? Location);
 }

@@ -265,11 +265,11 @@ goto :eof
 :assert_native_scope
 set "NATIVE_TYPE=%~1"
 set "NATIVE_DIR=%TEST_OUTPUT_DIR%\native_%~1_%~3"
-set "NATIVE_EXTRA="
-set "NATIVE_EXPECTED=1"
-if "%~3"=="rolling" set "NATIVE_EXTRA=--production-set --rolling-count 2 --production-id FIRST,SECOND --bates-prefix TEST"
+set "NATIVE_EXTRA=--load-file-formats dat,edrm-xml"
+set "NATIVE_EXPECTED=2"
+if "%~3"=="rolling" set "NATIVE_EXTRA=--loadfile-format dat --production-set --rolling-count 2 --production-id FIRST,SECOND --bates-prefix TEST"
 if "%~3"=="rolling" set "NATIVE_EXPECTED=4"
-%ZIPPER_CMD% --type %~1 --count 2 --loadfile-format dat --chaos-mode --chaos-types %~2 --chaos-amount 1 --seed 42 --output-path "%NATIVE_DIR%" %NATIVE_EXTRA% >nul 2>&1
+%ZIPPER_CMD% --type %~1 --count 2 --chaos-mode --chaos-types %~2 --chaos-amount 1 --seed 42 --output-path "%NATIVE_DIR%" %NATIVE_EXTRA% >nul 2>&1
 if errorlevel 1 goto :native_scope_failed
 powershell -NoProfile -Command "$ErrorActionPreference='Stop'; try { $files=@(Get-ChildItem -Recurse $env:NATIVE_DIR -Filter '*_chaos_expectations.json'); if ($files.Count -ne [int]$env:NATIVE_EXPECTED) { exit 1 }; foreach ($f in $files) { $s=Get-Content -Raw $f.FullName | ConvertFrom-Json; if ($s.schemaVersion -ne 1 -or $s.totalAnomalies -ne 1 -or @($s.anomalies).Count -ne 1) { exit 1 }; foreach ($a in $s.anomalies) { if (-not $a.file -or -not $a.file.EndsWith('.'+$env:NATIVE_TYPE) -or -not $a.location) { exit 1 } } } } catch { exit 1 }" >nul 2>&1
 if errorlevel 1 goto :native_scope_failed

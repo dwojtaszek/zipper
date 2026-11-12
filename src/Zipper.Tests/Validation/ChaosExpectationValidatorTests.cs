@@ -9,6 +9,37 @@ namespace Zipper.Tests;
 public class ChaosExpectationValidatorTests : TempDirectoryTestBase
 {
     [Theory]
+    [InlineData(null, "IFD 1", false)]
+    [InlineData("IFD 1", "IFD 1", false)]
+    [InlineData("IFD 2", "IFD 1", true)]
+    [InlineData("IFD 1", null, true)]
+    public void Validate_NativeLocationComparedWithAudit_PreservesOptionalScope(string? location, string? auditLocation, bool hasErrors)
+    {
+        var loadFile = WriteLoadFile(DatHeader, DatRow("DOC1", "Alice"));
+        var sidecar = WriteFile("loadfile_chaos_expectations.json", SidecarJson(1, anomalies: new[]
+        {
+            new { errorType = "tiff-truncated-ifd", outcomeClass = "parse-fails", lineNumber = "1", recordID = "DOC1", file = "00000001.tiff", location },
+        }));
+        WriteFile("loadfile_properties.json", JsonSerializer.Serialize(new
+        {
+            chaosMode = new
+            {
+                totalAnomalies = 1,
+                injectedAnomalies = new[]
+                {
+                    new { errorType = "tiff-truncated-ifd", lineNumber = "1", recordID = "DOC1", file = "00000001.tiff", location = auditLocation },
+                },
+            },
+        }));
+
+        var result = new ChaosExpectationValidator().Validate(loadFile, sidecar, CreateDatRequest());
+
+        Assert.Equal(hasErrors, result.HasErrors);
+        if (hasErrors)
+            Assert.Contains(result.Findings, finding => finding.Message.Contains("not recorded in the produced Audit File", StringComparison.Ordinal));
+    }
+
+    [Theory]
     [InlineData("00000001.tiff", "tiff-truncated-ifd", "1")]
     [InlineData("00000001.eml", "header-fold", "2")]
     [InlineData(null, "tiff-truncated-ifd", "1")]
@@ -55,6 +86,51 @@ public class ChaosExpectationValidatorTests : TempDirectoryTestBase
                 loadFile, Path.Combine(this.TempDir, "loadfile_chaos_expectations.json"), request);
             Assert.Contains(result.Findings, finding => finding.Message.Contains("Produced record count 1 does not match", StringComparison.Ordinal));
         }
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task StandardMode_NativeChaosFallback_RejectsIncorrectSidecarCount(bool embedded, bool xml)
+    {
+        var request = CreateDatRequest();
+        request.Output = request.Output with { FileType = "tiff", IncludeLoadFile = embedded };
+        request.LoadFile = request.LoadFile with { Formats = new[] { xml ? LoadFileFormat.EdrmXml : LoadFileFormat.Dat } };
+        var fileName = xml ? "loadfile.xml" : "loadfile.dat";
+        var loadFile = WriteFile(fileName, xml ? "<Root><Document /></Root>" : DatHeader + "\n" + DatRow("DOC1", "Alice") + "\n");
+        var sidecarJson = System.Text.Json.Nodes.JsonNode.Parse(SidecarJson(99))!;
+        sidecarJson["loadFile"] = fileName;
+        sidecarJson["loadFileFormat"] = xml ? "edrmxml" : "dat";
+        var sidecar = WriteFile("loadfile_chaos_expectations.json", sidecarJson.ToJsonString());
+        var findings = new ChaosExpectationValidator().Validate(loadFile, sidecar, request).Findings;
+        Assert.Contains(findings, finding => finding.Message.Contains(
+            xml ? "EDRM-XML document count" : "Produced record count", StringComparison.Ordinal));
+        var zipPath = Path.Combine(this.TempDir, "output.zip");
+        using (var archive = System.IO.Compression.ZipFile.Open(zipPath, System.IO.Compression.ZipArchiveMode.Create))
+        {
+            if (embedded)
+            {
+                System.IO.Compression.ZipFileExtensions.CreateEntryFromFile(archive, loadFile, fileName);
+                System.IO.Compression.ZipFileExtensions.CreateEntryFromFile(archive, sidecar, Path.GetFileName(sidecar));
+            }
+        }
+        if (embedded)
+        {
+            File.Delete(loadFile);
+            File.Delete(sidecar);
+        }
+        var mode = new StandardMode((_, _) => Task.FromResult(new FileGenerationResult
+        {
+            LoadFilePath = embedded ? fileName : loadFile,
+            ZipFilePath = zipPath,
+        }));
+
+        var (_, _, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(async () =>
+            await Assert.ThrowsAsync<InvalidOperationException>(() => mode.RunAsync(request)));
+        Assert.Contains("ChaosExpectation", stderr, StringComparison.Ordinal);
+
     }
 
     [Theory]
