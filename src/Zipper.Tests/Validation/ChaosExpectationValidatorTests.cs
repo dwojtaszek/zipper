@@ -9,6 +9,28 @@ namespace Zipper.Tests;
 public class ChaosExpectationValidatorTests : TempDirectoryTestBase
 {
     [Theory]
+    [InlineData("[]")]
+    [InlineData("null")]
+    [InlineData("42")]
+    public async Task RunAfterGeneration_NonObjectSidecar_ShouldReportSchemaFinding(string json)
+    {
+        var loadFile = WriteLoadFile(DatHeader, DatRow("DOC1", "Alice"));
+        WriteFile("loadfile_chaos_expectations.json", json);
+        var context = new ValidationContext
+        {
+            IsChaosMode = true,
+            LoadFiles = new Dictionary<string, string> { ["dat"] = loadFile },
+            Request = CreateDatRequest(),
+        };
+        var (_, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() =>
+        {
+            Assert.Throws<InvalidOperationException>(() => ValidationOrchestrator.RunAfterGeneration(context));
+            return Task.CompletedTask;
+        });
+        Assert.Contains("ChaosExpectation: 1 error(s)", stderr, StringComparison.Ordinal);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void Validate_LargeLoadFile_ShouldCheckFinalRow(bool opt)

@@ -116,6 +116,8 @@ For extra review context (notes, evidence), read the relevant files yourself and
 
 The review runs entirely in the current coding agent. Both Claude Code and Cursor dispatch subagents via the `Agent` tool with `run_in_background=true`. No script, no external engine, no network egress of your code.
 
+**Headless / resumed CLI fallback:** In headless or resumed CLI sessions (such as `codex exec resume`) where subagent spawning fails (e.g., `collab spawn failed` / `invalid thread-store request: no rollout found`), do NOT retry subagent spawns — immediately run the detected specialist checklists inline in the current session.
+
 ### Steps
 
 1. **Produce the diff** for the chosen target (see Pick Target). Then gather context yourself:

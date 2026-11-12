@@ -95,7 +95,8 @@ public static class ValidationOrchestrator
         try
         {
             using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(sidecarPath));
-            return !document.RootElement.TryGetProperty("loadFile", out var loadFile)
+            return document.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object
+                || !document.RootElement.TryGetProperty("loadFile", out var loadFile)
                 || loadFile.ValueKind != System.Text.Json.JsonValueKind.String
                 || string.Equals(loadFile.GetString(), loadFileName, StringComparison.Ordinal);
         }

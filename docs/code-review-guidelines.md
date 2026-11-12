@@ -57,3 +57,9 @@ See [docs/property-based-testing.md](property-based-testing.md) for the full gui
   - `#pragma warning disable CA5394` in property tests that exercise `Distributions`, `ChaosSampler`, or `DataGenerator`: those production APIs require `System.Random` for deterministic seeded replay (`REQ-075`).
   - Returning `bool` or `FsCheck.Property` instead of `void` with `Assert.*`: both are idiomatic `FsCheck.Xunit` styles (`Property` with `.Label(...)` is preferred when counterexample diagnostics need context).
 
+## 7. Post-generation validation & Chaos Mode contracts
+
+- `ProductionSetOrchestrator.ValidateProductionSetAsync` invokes `ValidationOrchestrator.RunAfterGeneration` once per Rolling Production Set before ZIP creation; `PostGenerationValidator` runs `ProductionSetPostValidator.Validate` once, populates `context.ProductionSetReport`, and `ValidationOrchestrator` merges any post-generation findings into that report before throwing on errors. Do NOT suggest re-running `ProductionSetPostValidator.Validate` a second time or restoring `ProductionSetResult.EffectiveRequest`.
+- In `StandardMode`, `LoadFileOrchestrator` writes `--include-load-file` entries at the ZIP root and always populates `result.LoadFilePath`, while `StandardMode` leaves `IsChaosMode = false` and sets `ValidateChaosExpectations = request.Chaos.ChaosMode` so normal Load File validation runs alongside Chaos Expectation Sidecar verification.
+- In cross-format chaos Production Sets, `_validation_report.json` intentionally records the raw `ProductionSetPostValidator` structural findings while `PostGenerationValidator` exempts structural DAT/OPT findings (preserving artifact `PathExistence`, `ManifestSyntax`, `MetadataAzureConstraint`, and `InvalidValue`) and `ChaosExpectationValidator` verifies non-audited rows.
+

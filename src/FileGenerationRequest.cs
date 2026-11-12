@@ -40,7 +40,11 @@ public class FileGenerationRequest
     /// <summary>Gets the validated Source Record paths retained for path-pointer collision checks.</summary>
     internal IReadOnlySet<string>? SourcePaths { get; set; }
 
-    /// <summary>Cached synthetic Email thread plan shared by File Generation and Load File composers.</summary>
+    /// <summary>
+    /// Cached synthetic Email thread plan shared by File Generation and Load File composers.
+    /// EmailThreadPlan.GetOrCreate validates cached Seed, Bates, and FileCount values against
+    /// the request so mutating a cloned FileGenerationRequest invalidates stale plans.
+    /// </summary>
     internal Emails.EmailThreadPlan? ThreadPlan;
 
     public FileGenerationRequest Clone()
