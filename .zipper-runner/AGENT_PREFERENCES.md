@@ -77,7 +77,7 @@ Set priority: `0` = don't use, `1` = best, `2` = good, `3` = fallback.
 | `hermes` | `default` | 0|
 | `hermes` | `stepfun/step-3.7-flash:free` | 0|
 | `hermes` | `deepseek-ai/deepseek-v4-flash` | 0|
-| `droid` | `claude-haiku-5-5` | 3|
+| `droid` | `deepseek-v4.1-flash-1017` | 3|
 | `codex` | `openai/gpt-5.6-terra` | 0|
 | `codex` | `openai/gpt-5.5` | 0|
 | `codex` | `openai/gpt-5.4` | 0|
