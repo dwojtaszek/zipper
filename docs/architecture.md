@@ -138,7 +138,7 @@ graph LR
 
     subgraph Validation
         VO["ValidationOrchestrator<br/>(shared post-generation tail)"]
-        PGV["PostGenerationValidator<br/>(Standard / Loadfile-Only / Production Set)"]
+        PGV["PostGenerationValidator<br/>(Load Files, Line Endings)"]
         Runner["ValidatorRunner"]
         PSPV["ProductionSetPostValidator"]
         SuppV["SupplementalValidator<br/>(pre-output, supplemental mode)"]
@@ -167,7 +167,6 @@ graph LR
     Program -->|"SelectMode(request)"| PSMode
     StdMode --> VO
     LFMode --> VO
-    PSMode --> VO
     PSO --> SuppV
     FGR --> File Generators
     FGR --> Load File Seam

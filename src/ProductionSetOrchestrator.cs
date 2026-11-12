@@ -283,7 +283,6 @@ internal static class ProductionSetOrchestrator
             BatesRange = $"{plans[0].BatesNumber} - {plans[^1].BatesNumber}",
             VolumeCount = volumeCount,
             GenerationTime = stopwatch.Elapsed,
-            EffectiveRequest = request,
         };
     }
 

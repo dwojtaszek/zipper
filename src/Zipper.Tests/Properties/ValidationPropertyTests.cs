@@ -29,17 +29,24 @@ public sealed class ValidationPropertyTests : IDisposable
         var file = email ? "00000001.eml" : "00000001.tiff";
         var location = email ? "Subject header" : "IFD 1";
         var request = new FileGenerationRequest();
+        // Keep the Native File line number on a data row so the damaged row and the Native File
+        // line coincide: a validator that conflates them exempts exactly that row.
+        long anomalyLine = input.Get % 19 + 2;
         var json = LoadFileAuditWriter.GenerateExpectationSidecarJson(loadFile, request, Array.Empty<FileData>(),
-            new[] { new ChaosAnomaly { File = file, Location = location, LineNumber = (input.Get % 20 + 1).ToString(CultureInfo.InvariantCulture),
-                ErrorType = email ? "mime-boundary" : "tiff-truncated-ifd", RecordID = "DOC1" } }, expectedDataRecords: 1);
+            new[] { new ChaosAnomaly { File = file, Location = location, LineNumber = anomalyLine.ToString(CultureInfo.InvariantCulture),
+                ErrorType = email ? "mime-boundary" : "tiff-truncated-ifd", RecordID = "DOC1" } }, expectedDataRecords: anomalyLine - 1);
         using var document = System.Text.Json.JsonDocument.Parse(json);
         var anomaly = document.RootElement.GetProperty("anomalies")[0];
         Assert.Equal(file, anomaly.GetProperty("file").GetString());
         Assert.Equal(location, anomaly.GetProperty("location").GetString());
         File.WriteAllText(sidecar, json);
-        File.WriteAllText(loadFile, "DOCID\u0014AUTHOR\nDOC1\u0014Alice\n");
+
+        var rows = Enumerable.Range(1, (int)anomalyLine - 1).Select(row => $"DOC{row}\u0014Alice").ToArray();
+        File.WriteAllText(loadFile, "DOCID\u0014AUTHOR\n" + string.Join("\n", rows) + "\n");
         Assert.False(new ChaosExpectationValidator().Validate(loadFile, sidecar, request).HasErrors);
-        File.WriteAllText(loadFile, "DOCID\u0014AUTHOR\nDOC1\n");
+
+        rows[^1] = $"DOC{anomalyLine - 1}";
+        File.WriteAllText(loadFile, "DOCID\u0014AUTHOR\n" + string.Join("\n", rows) + "\n");
         Assert.Contains(new ChaosExpectationValidator().Validate(loadFile, sidecar, request).Findings,
             finding => finding.FilePath == loadFile && finding.Message.Contains("columns", StringComparison.Ordinal));
     }
