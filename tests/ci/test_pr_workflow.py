@@ -118,6 +118,48 @@ class PrWorkflowTraceabilityTests(unittest.TestCase):
                 "ci-gate must list docs-only in its needs dependencies",
             )
 
+    def test_traceability_and_goldens_have_one_owner_per_pr_path(self):
+        ci_text = (ROOT / ".github/workflows/ci.yml").read_text()
+
+        def condition_for(text, command):
+            steps = re.findall(r"(?m)^      - name:.*(?:\n(?!      - name:).*)*", text)
+            step = next(step for step in steps if command in step)
+            condition = re.search(r"(?m)^        if: (.*)$", step)
+            return condition.group(1) if condition else "True"
+
+        trace = condition_for(self.workflow_text, "run: bash tests/validate-req-traceability.sh --strict")
+        self.assertEqual("True", condition_for(ci_text, "run: bash tests/validate-req-traceability.sh --strict"))
+        for docs, runner in ((True, False), (False, True), (False, False)):
+            with self.subTest(docs=docs, runner=runner):
+                condition = trace.replace("steps.check.outputs.only_docs", repr(str(docs).lower()))
+                condition = condition.replace("steps.check.outputs.only_runner", repr(str(runner).lower()))
+                classifier_runs = eval(condition.replace("||", " or ").replace("&&", " and "), {"__builtins__": {}})
+                self.assertEqual(1, int(classifier_runs) + int(not docs))
+
+        embedded = condition_for(ci_text, "tests/goldens/run-goldens.sh")
+        pr_mode = re.search(r"(?m)^      publish_mode: (.*)$", self.workflow_text).group(1)
+        goldens = self.workflow_text.split("\n  goldens:\n", 1)[1].split("\n  ci-gate:\n", 1)[0]
+        self.assertIn("needs: [docs-only, ci]", goldens)
+        self.assertIn("tests/goldens/run-goldens.sh", goldens)
+        downstream = re.search(r"(?m)^    if: (.*)$", goldens).group(1)
+        for docs, runner, expected in ((True, False, 0), (False, True, 0), (False, False, 1)):
+            with self.subTest(docs=docs, runner=runner):
+                condition = downstream.replace("needs.docs-only.outputs.only_docs", repr(str(docs).lower()))
+                condition = condition.replace("needs.docs-only.outputs.only_runner", repr(str(runner).lower()))
+                downstream_runs = eval(condition.replace("&&", " and ").replace("false", "False"), {"__builtins__": {}})
+                self.assertEqual(int(downstream_runs), expected)
+                condition = embedded.replace("inputs.publish_mode", repr(pr_mode)).replace("matrix.coverage", "True")
+                embedded_runs = eval(condition.replace("&&", " and ").replace("true", "True"), {"__builtins__": {}})
+                self.assertEqual(int(embedded_runs) + int(downstream_runs), expected)
+        for mode, expected in (("self-contained", True), ("none", False)):
+            with self.subTest(mode=mode):
+                condition = embedded.replace("inputs.publish_mode", repr(mode)).replace("matrix.coverage", "True")
+                embedded_runs = eval(condition.replace("&&", " and ").replace("true", "True"), {"__builtins__": {}})
+                self.assertEqual(embedded_runs, expected)
+        upload = re.search(r"Upload CLI artifact for goldens.*?\n          name: (.*)$", ci_text, re.MULTILINE | re.DOTALL)
+        download = re.search(r"Download CLI artifact.*?\n          name: (.*)$", goldens, re.MULTILINE | re.DOTALL)
+        self.assertEqual(upload.group(1).splitlines()[0], download.group(1).splitlines()[0])
+
     @unittest.skipIf(os.name == "nt" or shutil.which("bash") is None, "POSIX bash execution boundary")
     def test_traceability_script_detects_stale_tsv_row_on_deleted_req(self):
         """If a REQ is deleted/renumbered in Requirements.md but remains in TSV, gate must fail strict."""

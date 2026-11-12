@@ -37,7 +37,7 @@ jobs:
 
           python3 .github/scripts/change-scope.py --base "$base" --head "$head" >> "$GITHUB_OUTPUT"
       - name: Validate requirement traceability
-        if: steps.check.outputs.only_docs == 'true' || steps.check.outputs.only_runner == 'true'
+        if: steps.check.outputs.only_docs == 'true'
         shell: bash
         run: bash tests/validate-req-traceability.sh --strict
       - name: Setup .NET for DocsDriftTests

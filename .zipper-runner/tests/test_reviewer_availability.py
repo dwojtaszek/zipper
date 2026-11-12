@@ -3,10 +3,9 @@
 
 The merge gate is the required `ci-gate` context (the zipper test suite) plus
 SonarCloud. Both are always present, because they run as repository workflows
-rather than at an external app's discretion. The two review bots are neither:
+rather than at an external app's discretion. Remote review can be unavailable:
 CodeRabbit declines this repository outright (public OSS, fewer than 10 stars)
-and rate-limits itself to a few reviews per rolling hour, and Codex sometimes
-does not answer at all.
+and rate-limits itself to a few reviews per rolling hour.
 
 Waiting the full gate timeout for a reviewer that was never going to reply is the
 delay this tracking removes. It removes only the *wait*: unresolved review threads
@@ -156,8 +155,8 @@ class ReviewGateWrapperTests(unittest.TestCase):
 
     def test_dry_run_cannot_change_reviewer_availability(self):
         with patch.object(runner, 'DRY_RUN', True):
-            self._run(4, out=f"REVIEWER-OUTCOME {CODEX}=silent")
-            self._run(4, out=f"REVIEWER-OUTCOME {CODEX}=skipped")
+            self._run(4, out=f"REVIEWER-OUTCOME {CODERABBIT}=silent")
+            self._run(4, out=f"REVIEWER-OUTCOME {CODERABBIT}=skipped")
         self.assertEqual(runner._load_reviewer_availability(), {})
 
     def test_invalidated_head_cannot_park_a_reviewer(self):
@@ -176,43 +175,13 @@ class ReviewGateWrapperTests(unittest.TestCase):
         self.assertTrue(result.environmental)
         self.assertIn("command not found", result.detail)
 
-    def test_staleReview_shouldRequestCurrentHeadOnlyOnce(self):
+    def test_retired_review_hints_never_post_or_record_a_request(self):
         out = "REVIEW-REQUEST codex " + "a" * 40
-        with patch.object(runner, "run_cmd", side_effect=[(4, out, ""), (0, "", ""), (4, out, "")]) as command:
-            first = runner._run_review_gate(42, self._tmp.name)
-            second = runner._run_review_gate(42, self._tmp.name)
-        self.assertTrue(first.environmental)
-        self.assertTrue(second.environmental)
-        self.assertEqual(command.call_count, 3)
-        self.assertEqual(command.call_args_list[1].args[0][:4], ["gh", "pr", "comment", "42"])
-
-    def test_interruptedRequest_shouldBeRetriedAfterRestart(self):
-        out = "REVIEW-REQUEST codex " + "a" * 40
-        with patch.object(runner, "run_cmd", side_effect=[(4, out, ""), KeyboardInterrupt(),
-                                                         (4, out, ""), (0, "", "")]) as command:
-            with self.assertRaises(KeyboardInterrupt):
-                runner._run_review_gate(42, self._tmp.name)
-            result = runner._run_review_gate(42, self._tmp.name)
-        self.assertTrue(result.environmental)
-        self.assertEqual(command.call_count, 4)
-
-    def test_failedRequest_shouldBeRetried(self):
-        out = "REVIEW-REQUEST codex " + "a" * 40
-        with patch.object(runner, "run_cmd", side_effect=[(4, out, ""), (1, "", "API failure"),
-                                                         (4, out, ""), (0, "", "")]) as command:
-            runner._run_review_gate(42, self._tmp.name)
-            result = runner._run_review_gate(42, self._tmp.name)
-        self.assertTrue(result.environmental)
-        self.assertEqual(command.call_count, 4)
-
-    def test_dryRun_never_posts_or_records_a_review_request(self):
-        out = "REVIEW-REQUEST codex " + "a" * 40
-        with patch.object(runner, "DRY_RUN", True), patch.object(runner, "run_cmd", return_value=(4, out, "")) as command:
+        with patch.object(runner, "run_cmd", return_value=(4, out, "")) as command:
             result = runner._run_review_gate(42, self._tmp.name)
         self.assertTrue(result.environmental)
         self.assertEqual(command.call_count, 1)
         self.assertEqual(list(Path(self._tmp.name).glob('*review-request*')), [])
-        self.assertTrue(runner._is_mutating_cmd(['gh', 'pr', 'comment', '42', '--body', '@codex review']))
 
     def test_pendingReview_shouldRetryWithoutRepairMission(self):
         result, _ = self._run(4, out="REVIEWER-OUTCOME %s=pending" % CODEX)
@@ -374,9 +343,10 @@ class ReviewGateEndToEndTests(unittest.TestCase):
         result = self._run_gate_with_stub_env()
 
         self.assertFalse(result.environmental, result.detail)
-        # CodeRabbit was parked, so only Codex is asked -- and it times out at 0m.
+        # The only configured remote reviewer was parked; no bot is polled.
         self.assertNotIn(f"{CODERABBIT} did not respond", result.detail)
-        self.assertIn(f"{CODEX} did not respond", result.detail)
+        self.assertNotIn("did not respond", result.detail)
+        self.assertIn(f"REVIEWER-OUTCOME {CODERABBIT}=skipped-by-policy", result.detail)
 
     def test_skippedByPolicy_shouldKeepTheParkAcrossCycles(self):
         """The park must outlast the gate run that skipped the reviewer.

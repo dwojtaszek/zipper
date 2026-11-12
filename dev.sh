@@ -366,6 +366,7 @@ case "$COMMAND" in
         run_step "Validate E2E .sh/.bat parity" bash tests/validate-e2e-parity.sh
         run_step "Validate build properties contract" bash tests/test-ci-build-props.sh
         run_step "Run CI workflow contract tests" python3 -m unittest discover -s tests/ci -p "test_*.py"
+        run_step "Run zipper-runner tests" python3 -m unittest discover -s .zipper-runner/tests -p "test_*.py"
         run_step "Run workflow artifact handling check" bash tests/test-artifact-handling.sh
         run_step "Run coverage gate action tests" bash .github/actions/coverage-gate/test-coverage-gate.sh
         ensure_release_build
