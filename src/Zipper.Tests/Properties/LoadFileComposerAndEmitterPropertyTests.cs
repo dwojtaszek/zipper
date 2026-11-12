@@ -27,7 +27,7 @@ public sealed class LoadFileComposerAndEmitterPropertyTests
     }
 
     [Property]
-    public void CrossFormatLoadFileRenderer_RenderAndApply_ShouldPreserveComposingWriterBytes(EmitterPropertyInput input)
+    public void RenderAndApply_LoadfileOnlyWithoutChaos_ShouldPreserveComposingWriterBytes(EmitterPropertyInput input)
     {
         var request = new FileGenerationRequest
         {
