@@ -1,5 +1,11 @@
 namespace Zipper.Validation;
 
+/// <summary>
+/// One parsed OPT page row: the raw comma-split columns plus its DocBreak classification.
+/// Key, volume, and image-path extraction (and any trimming) stays with the caller.
+/// </summary>
+internal sealed record OptPageRow(string[] Columns, bool IsDocumentBreak);
+
 /// <summary>Resolved DAT header column positions (-1 when the column is absent).</summary>
 internal sealed record DatHeaderSchema(
     int DocIdIndex,
@@ -43,9 +49,9 @@ internal static class DatOptDocumentMatcher
     {
         for (int i = 0; i < headers.Count; i++)
         {
-            foreach (var name in columnNames)
+            for (int j = 0; j < columnNames.Length; j++)
             {
-                if (string.Equals(headers[i], name, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(headers[i], columnNames[j], StringComparison.OrdinalIgnoreCase))
                 {
                     return i;
                 }
@@ -85,6 +91,13 @@ internal static class DatOptDocumentMatcher
         var trimmed = docBreakField.Trim();
         return string.Equals(trimmed, "Y", StringComparison.OrdinalIgnoreCase)
             || string.Equals(trimmed, "1", StringComparison.Ordinal);
+    }
+
+    /// <summary>Splits an OPT line into columns and classifies its DocBreak field (column 4).</summary>
+    public static OptPageRow ParseOptPageRow(string line)
+    {
+        var columns = line.Split(',');
+        return new OptPageRow(columns, columns.Length > 3 && IsOptDocumentBreak(columns[3]));
     }
 
     /// <summary>

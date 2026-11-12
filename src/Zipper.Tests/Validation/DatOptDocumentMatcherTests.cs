@@ -47,6 +47,19 @@ public sealed class DatOptDocumentMatcherTests
         Assert.Equal(expected, DatOptDocumentMatcher.IsOptDocumentBreak(field));
     }
 
+    [Theory]
+    [InlineData("ABC,VOL001,img.tif,Y,,,1", true, 7)]
+    [InlineData("ABC,VOL001,img.tif,1,,,1", true, 7)]
+    [InlineData("ABC,VOL001,img.tif,,,,", false, 7)]
+    [InlineData("ABC,VOL001,img.tif", false, 3)]
+    public void ParseOptPageRow_SplitsColumnsAndClassifiesDocBreak(string line, bool expectedBreak, int expectedColumns)
+    {
+        var row = DatOptDocumentMatcher.ParseOptPageRow(line);
+
+        Assert.Equal(expectedColumns, row.Columns.Length);
+        Assert.Equal(expectedBreak, row.IsDocumentBreak);
+    }
+
     [Fact]
     public void FindMatchingOptByKey_MatchesFirstPageSuffixForm()
     {

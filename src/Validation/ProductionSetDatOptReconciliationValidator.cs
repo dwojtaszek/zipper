@@ -156,7 +156,13 @@ internal static class ProductionSetDatOptReconciliationValidator
             }
         }
 
-        var datDocMap = DatOptDocumentMatcher.BuildDatIndex(datRecords, datDoc => datDoc.DocId, datDoc => datDoc.BatesNumber, includeBates: true);
+        // Bates takes precedence in both lookup directions: a record with a Bates Number is keyed
+        // only by Bates, so an OPT document naming its DocId still reports as unmatched in DAT.
+        var datDocMap = DatOptDocumentMatcher.BuildDatIndex(
+            datRecords,
+            datDoc => string.IsNullOrEmpty(datDoc.BatesNumber) ? datDoc.DocId : null,
+            datDoc => datDoc.BatesNumber,
+            includeBates: true);
 
         foreach (var datDoc in datRecords)
         {

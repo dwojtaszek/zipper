@@ -425,3 +425,11 @@
 - **telemetry**: host=antigravity mode=branch specialists=4 bundle=~53Kc
 - **lessons**: Python subprocess on Windows emits `\r\n` without universal newlines; child stdout assertions must normalize CRLF.
 - **suppressions**: none
+
+### 2026-11-12 droid:local:issue-1432-coderabbit-fixes
+
+- **findings**: 3 (0 ACTION, 3 INFO — all testing coverage gaps)
+- **outcome**: no actionable findings; INFO items noted (empty-Bates cell case, null lookup-guard cases, full header-role theory), not fixed — pre-existing coverage gaps on unchanged matcher code
+- **telemetry**: host=droid mode=local specialists=6 bundle=9187c
+- **lessons**: none
+- **suppressions**: none

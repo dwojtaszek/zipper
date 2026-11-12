@@ -641,8 +641,7 @@ internal sealed class ProductionSetPostValidator
                 if (string.IsNullOrEmpty(line))
                     continue;
 
-                var columns = line.Split(',');
-                ValidateOptRow(state, columns, i + 1, ref firstOptBates, ref lastOptBates);
+                ValidateOptRow(state, DatOptDocumentMatcher.ParseOptPageRow(line), i + 1, ref firstOptBates, ref lastOptBates);
             }
 
             ProductionSetDatOptReconciliationValidator.ValidateOptPageCounts(
@@ -668,8 +667,9 @@ internal sealed class ProductionSetPostValidator
         }
     }
 
-    private static void ValidateOptRow(ValidationState state, string[] columns, long lineNumber, ref string? firstOptBates, ref string? lastOptBates)
+    private static void ValidateOptRow(ValidationState state, OptPageRow row, long lineNumber, ref string? firstOptBates, ref string? lastOptBates)
     {
+        var columns = row.Columns;
         if (columns.Length != 7)
         {
             state.Findings.Add(ValidationReportFinding.Error(
@@ -682,25 +682,20 @@ internal sealed class ProductionSetPostValidator
         var optBatesVal = columns.Length > 0 ? columns[0] : string.Empty;
         var volumeVal = columns.Length > 1 ? columns[1] : string.Empty;
         var imagePathVal = columns.Length > 2 ? columns[2] : string.Empty;
-        var isDocBreak = columns.Length > 3 && DatOptDocumentMatcher.IsOptDocumentBreak(columns[3]);
         var pageCountRaw = columns.Length > 6 ? columns[6].Trim() : string.Empty;
 
         // OPT Bates uniqueness
-        if (columns.Length > 0)
+        if (!string.IsNullOrEmpty(optBatesVal))
         {
-            var optBates = columns[0];
-            if (!string.IsNullOrEmpty(optBates))
+            firstOptBates ??= optBatesVal;
+            lastOptBates = optBatesVal;
+            if (!state.SeenOptBates.Add(optBatesVal))
             {
-                firstOptBates ??= optBates;
-                lastOptBates = optBates;
-                if (!state.SeenOptBates.Add(optBates))
-                {
-                    state.Findings.Add(ValidationReportFinding.Error(
-                        "UniqueId",
-                        state.OptRelPath,
-                        $"Duplicate Bates Number in OPT: '{optBates}'",
-                        lineNumber));
-                }
+                state.Findings.Add(ValidationReportFinding.Error(
+                    "UniqueId",
+                    state.OptRelPath,
+                    $"Duplicate Bates Number in OPT: '{optBatesVal}'",
+                    lineNumber));
             }
         }
 
@@ -718,48 +713,57 @@ internal sealed class ProductionSetPostValidator
             lineNumber,
             state.Findings);
 
+        TrackOptDocumentRow(state, row.IsDocumentBreak, optBatesVal, imagePathVal, pageCountRaw, lineNumber);
+    }
+
+    private static void TrackOptDocumentRow(
+        ValidationState state,
+        bool isDocBreak,
+        string optBatesVal,
+        string imagePathVal,
+        string pageCountRaw,
+        long lineNumber)
+    {
         if (isDocBreak)
         {
-            var doc = new OptDocumentInfo
+            state.OptDocuments.Add(new OptDocumentInfo
             {
                 DocKey = optBatesVal,
                 BreakLineNumber = lineNumber,
                 DeclaredPageCountRaw = string.IsNullOrEmpty(pageCountRaw) ? null : pageCountRaw,
                 FirstImagePath = imagePathVal,
-            };
-            state.OptDocuments.Add(doc);
+            });
+            return;
+        }
+
+        if (state.OptDocuments.Count > 0)
+        {
+            var currentOptDoc = state.OptDocuments[^1];
+            currentOptDoc.PageCount++;
+            ProductionSetDatOptReconciliationValidator.ValidateContinuationPage(
+                state.OptRelPath,
+                currentOptDoc,
+                optBatesVal,
+                imagePathVal,
+                lineNumber,
+                state.Findings);
         }
         else
         {
-            if (state.OptDocuments.Count > 0)
-            {
-                var currentOptDoc = state.OptDocuments[^1];
-                currentOptDoc.PageCount++;
-                ProductionSetDatOptReconciliationValidator.ValidateContinuationPage(
-                    state.OptRelPath,
-                    currentOptDoc,
-                    optBatesVal,
-                    imagePathVal,
-                    lineNumber,
-                    state.Findings);
-            }
-            else
-            {
-                state.Findings.Add(ValidationReportFinding.Error(
-                    "OptBoundary",
-                    state.OptRelPath,
-                    $"OPT line {lineNumber} is a page without a preceding document break.",
-                    lineNumber));
-            }
+            state.Findings.Add(ValidationReportFinding.Error(
+                "OptBoundary",
+                state.OptRelPath,
+                $"OPT line {lineNumber} is a page without a preceding document break.",
+                lineNumber));
+        }
 
-            if (!string.IsNullOrEmpty(pageCountRaw))
-            {
-                state.Findings.Add(ValidationReportFinding.Error(
-                    "OptBoundary",
-                    state.OptRelPath,
-                    $"OPT page '{optBatesVal}' on line {lineNumber} is not a document break but specifies page count '{pageCountRaw}'.",
-                    lineNumber));
-            }
+        if (!string.IsNullOrEmpty(pageCountRaw))
+        {
+            state.Findings.Add(ValidationReportFinding.Error(
+                "OptBoundary",
+                state.OptRelPath,
+                $"OPT page '{optBatesVal}' on line {lineNumber} is not a document break but specifies page count '{pageCountRaw}'.",
+                lineNumber));
         }
     }
 

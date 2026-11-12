@@ -227,11 +227,12 @@ internal static class CrossFormatAnomalyApplier
                 continue;
             }
 
-            var cols = line.Split(',');
+            var row = DatOptDocumentMatcher.ParseOptPageRow(line);
+            var cols = row.Columns;
             string key = cols.Length > 0 ? cols[0].Trim() : string.Empty;
             string vol = cols.Length > 1 ? cols[1].Trim() : string.Empty;
             string img = cols.Length > 2 ? cols[2].Trim() : string.Empty;
-            bool isBreak = cols.Length > 3 && DatOptDocumentMatcher.IsOptDocumentBreak(cols[3]);
+            bool isBreak = row.IsDocumentBreak;
 
             if (isBreak || currentOptDoc is null)
             {
