@@ -52,7 +52,7 @@ ARCHITECTURE_DOC = REPO_ROOT / "docs" / "architecture.md"
 
 SEAM_PREFIXES = (
     "src/LoadFiles/",
-    "src/ProductionSets/",
+    "src/ProductionSet",  # matches src/ProductionSet*.cs and legacy src/ProductionSets/ paths
     "src/Validation/",
     "src/Cli/Modules/",
 )

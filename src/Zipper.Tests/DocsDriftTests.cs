@@ -481,5 +481,148 @@ public class DocsDriftTests
 
         Assert.Empty(terminatingSubroutines);
     }
+
+    [Fact]
+    public void Markdown_RelativeLinksAndAnchors_ExpectedAllResolve()
+    {
+        var markdownFiles = new List<string>
+        {
+            Path.Combine(RepoRoot, "AGENTS.md"),
+            Path.Combine(RepoRoot, "CLAUDE.md"),
+            Path.Combine(RepoRoot, "README.md"),
+            Path.Combine(RepoRoot, "CI.md"),
+            Path.Combine(RepoRoot, "Requirements.md"),
+            Path.Combine(RepoRoot, "UBIQUITOUS_LANGUAGE.md"),
+        };
+        markdownFiles.AddRange(Directory.GetFiles(Path.Combine(RepoRoot, "docs"), "*.md"));
+        markdownFiles.AddRange(Directory.GetFiles(Path.Combine(RepoRoot, "docs", "adr"), "*.md"));
+
+        var anchorsByFile = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        HashSet<string> GetAnchors(string path)
+        {
+            if (!anchorsByFile.TryGetValue(path, out var anchors))
+            {
+                anchors = new HashSet<string>(StringComparer.Ordinal);
+                var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+                var inFence = false;
+                foreach (var line in File.ReadLines(path))
+                {
+                    if (line.TrimStart().StartsWith("```", StringComparison.Ordinal))
+                    {
+                        inFence = !inFence;
+                        continue;
+                    }
+                    if (inFence)
+                    {
+                        continue;
+                    }
+
+                    var headingMatch = System.Text.RegularExpressions.Regex.Match(
+                        line,
+                        @"^#{1,6}\s+(.+?)\s*$",
+                        System.Text.RegularExpressions.RegexOptions.None,
+                        TimeSpan.FromSeconds(1));
+                    if (!headingMatch.Success)
+                    {
+                        continue;
+                    }
+
+                    var heading = headingMatch.Groups[1].Value;
+                    heading = System.Text.RegularExpressions.Regex.Replace(
+                        heading,
+                        @"\[([^\]]+)\]\([^)]+\)",
+                        "$1",
+                        System.Text.RegularExpressions.RegexOptions.None,
+                        TimeSpan.FromSeconds(1));
+                    heading = heading.Replace("`", string.Empty, StringComparison.Ordinal).ToLowerInvariant();
+                    var slug = System.Text.RegularExpressions.Regex.Replace(
+                        heading,
+                        @"[^\p{L}\p{N} _-]",
+                        string.Empty,
+                        System.Text.RegularExpressions.RegexOptions.None,
+                        TimeSpan.FromSeconds(1)).Replace(' ', '-');
+
+                    if (counts.TryGetValue(slug, out var seen))
+                    {
+                        counts[slug] = seen + 1;
+                        anchors.Add($"{slug}-{seen}");
+                    }
+                    else
+                    {
+                        counts[slug] = 1;
+                        anchors.Add(slug);
+                    }
+                }
+
+                anchorsByFile[path] = anchors;
+            }
+
+            return anchors;
+        }
+
+        var failures = new List<string>();
+        foreach (var file in markdownFiles)
+        {
+            var raw = File.ReadAllText(file);
+            var stripped = System.Text.RegularExpressions.Regex.Replace(
+                raw,
+                @"```.*?```",
+                string.Empty,
+                System.Text.RegularExpressions.RegexOptions.Singleline,
+                TimeSpan.FromSeconds(2));
+            var codeSpans = System.Text.RegularExpressions.Regex.Matches(
+                    stripped,
+                    @"`[^`\r\n]+`",
+                    System.Text.RegularExpressions.RegexOptions.None,
+                    TimeSpan.FromSeconds(1))
+                .Select(m => (Start: m.Index, End: m.Index + m.Length))
+                .ToList();
+
+            foreach (System.Text.RegularExpressions.Match link in System.Text.RegularExpressions.Regex.Matches(
+                stripped,
+                @"\[[^\]]+\]\(([^)\s]+)\)",
+                System.Text.RegularExpressions.RegexOptions.None,
+                TimeSpan.FromSeconds(1)))
+            {
+                var linkStart = link.Index;
+                var linkEnd = link.Index + link.Length;
+                if (codeSpans.Any(span => span.Start <= linkStart && span.End >= linkEnd))
+                {
+                    continue;
+                }
+                var target = link.Groups[1].Value;
+                if (target.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                    || target.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+                    || target.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var hashIndex = target.IndexOf('#', StringComparison.Ordinal);
+                var filePart = hashIndex >= 0 ? target[..hashIndex] : target;
+                var fragment = hashIndex >= 0 ? target[(hashIndex + 1)..] : string.Empty;
+
+                var targetPath = string.IsNullOrEmpty(filePart)
+                    ? Path.GetFullPath(file)
+                    : Path.GetFullPath(Path.Combine(Path.GetDirectoryName(file)!, filePart));
+
+                var relSource = Path.GetRelativePath(RepoRoot, file);
+                if (!File.Exists(targetPath) && !Directory.Exists(targetPath))
+                {
+                    failures.Add($"{relSource}: missing link target '{target}'");
+                    continue;
+                }
+
+                if (!string.IsNullOrEmpty(fragment)
+                    && string.Equals(Path.GetExtension(targetPath), ".md", StringComparison.OrdinalIgnoreCase)
+                    && !GetAnchors(targetPath).Contains(fragment))
+                {
+                    failures.Add($"{relSource}: missing anchor '#{fragment}' in '{target}'");
+                }
+            }
+        }
+
+        Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
+    }
 }
 

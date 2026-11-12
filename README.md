@@ -341,7 +341,8 @@ We welcome contributions! Please see our [Contributing Guide](docs/contributing.
 ## Documentation Index
 
 - [Contributing Guide](docs/contributing.md) — Build, test, and developer workflow (Windows, macOS, Linux)
-- [Agent Workflow](docs/agent-workflow.md) — Testing, issue delivery, release notes, and review gates
+- [Agent Workflow](docs/agent-workflow.md) — Testing, runtime commands, stuck protocol, and project structure
+- [Issue Workflow](docs/issue-workflow.md) — Issue selection, per-issue PR flow, release notes, and review gates
 - [Agent Review Standards](docs/agent-review-standards.md) — Code style, test naming, and review responsibilities
 - [Code Review Guidelines](docs/code-review-guidelines.md) — Deliberate project patterns and review guardrails
 - [Property-Based Testing](docs/property-based-testing.md) — FsCheck properties, generators, and behavioral coverage

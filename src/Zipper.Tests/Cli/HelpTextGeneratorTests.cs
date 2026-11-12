@@ -28,6 +28,8 @@ public class HelpTextGeneratorTests
             .ToArray();
         Assert.Contains("--chaos-mode Enable Chaos Engine processing", normalizedHelpLines);
         Assert.Contains("--chaos-amount <value> Target count: percentage (1%) or exact (500)", normalizedHelpLines);
+        Assert.Contains("EML (--type eml): mime-boundary,encoded-word,header-fold,rf822-depth", normalizedHelpLines);
+        Assert.Contains("TIFF (--type tiff): tiff-dimension-lie,tiff-truncated-ifd,tiff-tag-count-lie,tiff-strip-offset", normalizedHelpLines);
         Assert.Contains("--chaos-scenario <name> Predefined scenario; conflicts with --chaos-types; adversarial-values emits valid DAT values", normalizedHelpLines);
         Assert.Contains(string.Join(", ", ArchiveTestCatalog.SupportedSuites), stderr, StringComparison.Ordinal);
         Assert.Contains("Production Set Options:", stderr, StringComparison.Ordinal);
@@ -63,5 +65,24 @@ public class HelpTextGeneratorTests
         Assert.NotNull(compressionLine);
         Assert.True(compressionLine.IndexOf("not yet supported", StringComparison.OrdinalIgnoreCase) >= 0,
             $"Expected deflate64/bzip2 marked not yet supported in help compression line: {compressionLine}");
+    }
+
+    [Fact]
+    public void Show_IncludesAllCanonicalChaosAnomalyTypes_ExpectedCompleteHelpText()
+    {
+        var (_, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(HelpTextGenerator.Show);
+
+        var allAnomalyTypes = ChaosAnomalyTypes.Dat
+            .Concat(ChaosAnomalyTypes.Opt)
+            .Concat(ChaosAnomalyTypes.Csv)
+            .Concat(ChaosAnomalyTypes.Concordance)
+            .Concat(ChaosAnomalyTypes.EdrmXml)
+            .Concat(ChaosAnomalyTypes.Email)
+            .Concat(ChaosAnomalyTypes.Tiff);
+
+        foreach (var anomalyType in allAnomalyTypes)
+        {
+            Assert.Contains(anomalyType, stderr, StringComparison.Ordinal);
+        }
     }
 }

@@ -197,7 +197,7 @@ Reproduce each CI gate locally **before** pushing — CI minutes are slow feedba
 **Rules of the road:**
 - Install the hooks once (`./setup-hook.sh`) so format + tests run before every commit/push.
 - A docs-only PR skips the build matrix — don't wait on jobs that won't run.
-- Don't merge until PR Checks **and** side checks are green and all reviewer comments are addressed ([AGENTS.md workflow steps 9–12](../AGENTS.md#workflow-for-github-issues)).
+- Don't merge until PR Checks **and** side checks are green and all reviewer comments are addressed ([issue-workflow.md steps 9–12](issue-workflow.md#workflow-for-github-issues)).
 - Changing a shared gate? Edit [ci.yml](../.github/workflows/ci.yml) — it applies to PRs **and** main, so one diff covers both. Main therefore inherits every PR gate, including the time-varying ones (see §4). Editing a caller (`pr.yml`, `build-and-test.yml`) is only for wiring: triggers, `docs-only` gating, `goldens`, version computation, and release publication.
 - Changing a workflow? `actionlint` runs in `lint`; pin any new action to a full commit SHA (SonarCloud flags unpinned actions as security hotspots — see [CI.md](../CI.md#quality-gate-vs-code-issues)). Local check before pushing: `actionlint`.
 - A behavior change that alters output **bytes** will trip goldens; performance changes produce advisory warnings from perf-guard.

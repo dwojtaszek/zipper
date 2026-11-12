@@ -50,6 +50,7 @@ class WatchedFilesTests(unittest.TestCase):
     def test_watched_files_withExpandedSeamPaths_ExpectedKeptSorted(self):
         changed = [
             "src/ProductionSets/ProductionSetOrchestrator.cs",
+            "src/ProductionSetOrchestrator.cs",
             "src/Validation/ValidationOrchestrator.cs",
             "src/Cli/Modules/ArchiveTestModule.cs",
             "tests/test.sh",
@@ -58,6 +59,7 @@ class WatchedFilesTests(unittest.TestCase):
             arch_check.watched_files(changed),
             [
                 "src/Cli/Modules/ArchiveTestModule.cs",
+                "src/ProductionSetOrchestrator.cs",
                 "src/ProductionSets/ProductionSetOrchestrator.cs",
                 "src/Validation/ValidationOrchestrator.cs",
             ],
@@ -73,6 +75,18 @@ class WatchedFilesTests(unittest.TestCase):
 
     def test_carve_out_without_doc_update_withOtherSeamFile_ExpectedFalse(self):
         self.assertFalse(arch_check.carve_out_without_doc_update(["src/LoadFiles/DatComposer.cs"]))
+
+    def test_seam_prefixes_withRepoSourceTree_ExpectedAllMatchRealFiles(self):
+        repo_root = Path(__file__).resolve().parents[3]
+        src_files = [
+            f"src/{p.relative_to(repo_root / 'src').as_posix()}"
+            for p in (repo_root / "src").rglob("*.cs")
+        ]
+        for prefix in arch_check.SEAM_PREFIXES:
+            self.assertTrue(
+                any(f.startswith(prefix) for f in src_files),
+                f"SEAM_PREFIXES entry '{prefix}' matched no .cs files under src/",
+            )
 
 
 class BuildQuestionsTests(unittest.TestCase):

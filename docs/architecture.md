@@ -19,8 +19,8 @@ The diagrams in this file are a **contract**, not just documentation:
 | Mode | Trigger | Adapter | Generator |
 |------|---------|---------|-----------|
 | **Standard** | default | `StandardMode` | `ParallelFileGenerator.GenerateFilesAsync()` → Archive (.zip) + Load File |
-| **Loadfile-Only** | `--loadfile-only` | `LoadFileOnlyMode` | `LoadFileOnlyGenerator.GenerateAsync()` → Load File + `_properties.json` audit |
-| **Production Set** | `--production-set` | `ProductionSetMode` | `ProductionSetGenerator.GenerateAsync()` → Directory tree (NATIVES/IMAGES/DATA/TEXT) + Load Files |
+| **Loadfile-Only** | `--loadfile-only` | `LoadFileOnlyMode` | `LoadFileOnlyGenerator.GenerateAsync()` → Load File + `_properties.json` audit (+ `_chaos_expectations.json` when Anomalies are injected) |
+| **Production Set** | `--production-set` | `ProductionSetMode` | `ProductionSetGenerator.GenerateAsync()` → Directory tree (DATA/IMAGES/NATIVES/TEXT; REDACTED/ when redacted; ORIGINALS/ in `originals` mode) + Load Files + Production Manifest + Validation Report |
 
 ## Standard Pipeline
 
@@ -37,7 +37,7 @@ Source-Driven Generation has exactly one semantic seam: `SourceRecordIntake` (in
 
 ## Chaos Engine and Cross-Format Anomalies
 
-`ChaosEngine` uses Floyd's algorithm for O(k) exact random sampling of lines to corrupt. Per-format anomaly catalogs live in `ChaosAnomalyTypes.cs` (DAT, OPT, CSV, Concordance, EDRM-XML), and single-format anomalies run in Loadfile-Only Mode through `LoadFileEmitter`. EDRM-XML applies document-scoped anomalies inside the `XmlLoadFileWriter` carve-out. Email anomalies (`ChaosAnomalyTypes.Email`) sample the `.eml` work items with the same sampler, and `EmailAnomalyApplier` applies one deterministic anomaly to each sampled Email. Each mutation depends only on the run seed and the work item index, so concurrent producers produce the same output and audit. TIFF anomalies (`ChaosAnomalyTypes.Tiff`) follow the same pattern: `TiffAnomalyApplier` applies one deterministic header or IFD anomaly to the first IFD of each sampled TIFF, `TiffPreflightValidator` (in `src/Validation/`) checks TIFF bytes for each type. Generation does not run it.
+`ChaosEngine` uses Floyd's algorithm for O(k) exact random sampling of lines to corrupt. Per-format anomaly catalogs live in `ChaosAnomalyTypes.cs` (DAT, OPT, CSV, Concordance, EDRM-XML), and single-format anomalies run in Loadfile-Only Mode through `LoadFileEmitter`. EDRM-XML applies document-scoped anomalies inside the `XmlLoadFileWriter` carve-out. Email anomalies (`ChaosAnomalyTypes.Email`) sample the `.eml` work items with the same sampler, and `EmailAnomalyApplier` applies one deterministic anomaly to each sampled Email. Each mutation depends only on the run seed and the work item index, so concurrent producers produce the same output and audit. TIFF anomalies (`ChaosAnomalyTypes.Tiff`) follow the same pattern: `TiffAnomalyApplier` applies one deterministic header or IFD anomaly to the first IFD of each sampled TIFF. `TiffPreflightValidator` (in `src/Validation/`) checks TIFF bytes for each type; generation does not run it.
 
 The `cross-format-desync` and `broken-families` scenarios coordinate DAT and OPT in Loadfile-Only Mode or Production Set mode. `CrossFormatLoadFileRenderer` composes and serializes both formats directly into line buffers, `CrossFormatAnomalyApplier` mutates the coordinated view, and `LoadFileEmitter` writes the final lines. This path buffers both rendered Load Files; ordinary generation and single-format chaos retain their streaming behavior. Each Audit File records the peer Load File and line.
 
@@ -59,17 +59,17 @@ graph TD
     LFO --> LF1["Load Files + Audit Files"]
 
     LoadFileOnlyMode --> LOG["LoadFileOnlyGenerator"]
-    LOG --> LF2["Load Files (DAT/OPT/CSV/Concordance/EDRM-XML)"]
     LOG -->|"optional"| Chaos["ChaosEngine (Floyd's algorithm)"]
-    Chaos --> Audit["_properties.json Audit"]
+    LOG --> LF2["Load Files + Audit Files<br/>(+ _chaos_expectations.json when Anomalies are injected)"]
+    LOG -->|"coordinated DAT/OPT"| LFO
 
     ProductionSetMode --> PSG["ProductionSetGenerator (thin facade)"]
     PSG --> PSO["ProductionSetOrchestrator"]
     PSO --> PSP["ProductionSetPlanner (no I/O)"]
-    PSP --> Tree["Directory Tree (NATIVES/IMAGES/DATA/TEXT; ORIGINALS in source-path-mode originals)"]
+    PSP --> Tree["Directory Tree (NATIVES/IMAGES/DATA/TEXT; REDACTED when redacted; ORIGINALS in source-path-mode originals)"]
     PSO --> LFO
     LFO --> LF3["Load Files + Audit Files"]
-    PSO --> Manifest["Production Manifest"]
+    PSO --> Manifest["Production Manifest + _validation_report.json"]
 ```
 
 ## Component Map
@@ -140,9 +140,12 @@ graph LR
         VO["ValidationOrchestrator<br/>(shared post-generation tail)"]
         PGV["PostGenerationValidator<br/>(Load Files, Line Endings)"]
         Runner["ValidatorRunner"]
-        PSPV["ProductionSetPostValidator"]
+        PSPV["ProductionSetPostValidator<br/>(+ ProductionSetDatOptReconciliationValidator)"]
+        CEV["ChaosExpectationValidator<br/>(_chaos_expectations.json)"]
         SuppV["SupplementalValidator<br/>(pre-output, supplemental mode)"]
+        TPV["TiffPreflightValidator<br/>(standalone; not run by generation)"]
         VO --> PGV
+        VO -->|"Chaos runs"| CEV
         PGV --> Runner
         PGV -->|"once per set"| PSPV
         PSO -->|"each set, before report and ZIP"| VO
@@ -180,8 +183,8 @@ graph LR
 
 Standard and Loadfile-Only mode adapters delegate to `ValidationOrchestrator.RunAfterGeneration(ValidationContext)` after generation. Production Set generation invokes the same tail for each Rolling Production Set before ZIP creation:
 
-- **Standard / Loadfile-Only**: The adapters build a mode-specific `ValidationContext` and pass it to `ValidationOrchestrator`, which runs `PostGenerationValidator` over emitted Load Files and throws on validation errors.
-- **Production Set**: `ProductionSetOrchestrator` invokes `ValidationOrchestrator` once per set. Its `PostGenerationValidator` runs `ProductionSetPostValidator.Validate` once and checks Line Endings. The orchestrator writes the resulting report after validation, marking it failed when any validation step fails. Cross-format chaos exempts structural findings except missing Native Files; Native File chaos keeps normal validation. Both run the Chaos Expectation Validator.
+- **Standard / Loadfile-Only**: The adapters build a mode-specific `ValidationContext` and pass it to `ValidationOrchestrator`, which runs `PostGenerationValidator` over emitted Load Files (plus `ChaosExpectationValidator` when Chaos is active; `StandardMode` extracts archived Load Files and sidecars when `--include-load-file` and `--chaos-mode` are combined) and throws on validation errors.
+- **Production Set**: `ProductionSetOrchestrator` invokes `ValidationOrchestrator` once per set. Its `PostGenerationValidator` runs `ProductionSetPostValidator.Validate` once and checks Line Endings. The orchestrator writes the resulting report after validation, marking it failed when any validation step fails. Cross-format chaos exempts structural DAT/OPT findings while preserving `PathExistence` (except audited injected OPT image paths), `MetadataAzureConstraint`, `ManifestSyntax`, and `InvalidValue`; Native File chaos keeps normal validation. Both run `ChaosExpectationValidator`.
 - **Supplemental**: `SupplementalValidator.ValidateAsync` runs during supplemental Production Set generation (before output is written) to validate Bates Number ranges against prior Production Manifests.
 - **Manifest Comparison**: `--compare-production-manifests` short-circuits normal generation in `Program.cs` and dispatches directly to `ProductionManifestComparer.CompareAndReportAsync`, which writes the comparison JSON report. This path bypasses `ValidationOrchestrator` and `PostGenerationValidator` entirely.
 
@@ -189,15 +192,15 @@ Standard and Loadfile-Only mode adapters delegate to `ValidationOrchestrator.Run
 
 Standard Archive generation (`ZipArchiveSink`) delegates entry creation and stream compression directly to `System.IO.Compression.ZipArchive`, mapping `--compression store` to `CompressionLevel.NoCompression` (method 0) and `--compression deflate` to `CompressionLevel.Optimal` (method 8).
 
-In contrast, Archive Test Fixture generation (`src/ArchiveTests/`, ADR-0008) is decoupled from the runtime sink and uses `ICSharpCode.SharpZipLib.Zip` within its own fixture generator to construct frozen test vectors with exact wire method codes (`store`, `deflate`, `deflate64`, `bzip2`), explicit local/central directory method numbers, and bit-level header mutations. This preserves the simplicity and streaming invariants of `ZipArchiveSink` while allowing full test fixture coverage for foreign codecs.
+In contrast, Archive Test Fixture generation (`src/ArchiveTests/`, ADR-0008) is decoupled from the runtime sink and uses `System.IO.Compression.ZipArchive` for ordinary stored/deflate recipes alongside `ICSharpCode.SharpZipLib.BZip2` and hand-built ZIP header serialization/mutation within `ArchiveFixtureBuilder` and `ArchiveFixtureMutator` to construct frozen test vectors with exact wire method codes (`store`, `deflate`, `deflate64`, `bzip2`), explicit local/central directory method numbers, and bit-level header mutations. This preserves the simplicity and streaming invariants of `ZipArchiveSink` while allowing full test fixture coverage for foreign codecs.
 
 ## Semantic Architecture Seam Lint (Critical Rule 5)
 
-An advisory Jev architecture seam lint (`tools/typesafe-audit/checks/architecture/run_check.py`, invoked via `typesafe-audit.yml`) semantically guards Critical Rule 5 on PRs touching `src/LoadFiles/**`, `src/ProductionSets/**`, `src/Validation/**`, `src/Cli/Modules/**`, or `docs/architecture.md`. It evaluates diffs for `seam_bypass` (verifying all delimited formats remain within `composer → serializer → emitter` with format dispatch in `LoadFileOrchestrator`, production sets route through `ProductionSetOrchestrator`, validation remains decoupled in `ValidationOrchestrator`, and CLI modules adhere to `ICliModule`) and `diagram_stale` (verifying architecture diagrams remain accurate after changes). Findings are advisory and surface for human review.
+An advisory Jev architecture seam lint (`tools/typesafe-audit/checks/architecture/run_check.py`, invoked via `typesafe-audit.yml`) semantically guards Critical Rule 5 on PRs touching `src/LoadFiles/**`, `src/ProductionSet*.cs`, `src/Validation/**`, `src/Cli/Modules/**`, or `docs/architecture.md`. It evaluates diffs for `seam_bypass` (verifying all delimited formats remain within `composer → serializer → emitter` with format dispatch in `LoadFileOrchestrator`, production sets route through `ProductionSetOrchestrator`, validation remains decoupled in `ValidationOrchestrator`, and CLI modules adhere to `CliModule`) and `diagram_stale` (verifying architecture diagrams remain accurate after changes). Findings are advisory and surface for human review.
 
 ## Load File Composition Seam
 
-The four delimited formats (DAT, OPT, CSV, Concordance) are produced by three deep modules; EDRM-XML is the carve-out. `LoadFileOrchestrator` owns format dispatch for Standard and Production Set output and coordinated DAT/OPT emission in Loadfile-Only Mode — for each requested format it creates the writer, opens the output stream (ZIP entry or disk file), writes, and emits the Audit File. ZipArchiveSink (Standard mode) and ProductionSetGenerator (Production Set mode) delegate to it. Loadfile-Only Mode keeps its own loop for per-format chaos; coordinated DAT/OPT scenarios delegate to `LoadFileOrchestrator`, which uses `CrossFormatLoadFileRenderer` and passes final rendered lines to `LoadFileEmitter` for output. `LoadFileAuditWriter` owns Audit File and optional Chaos Expectation Sidecar emission through caller-supplied stream targets. See the [Architecture Invariants](#architecture-invariants-human-approval-required) — the composer/serializer/emitter shape must not be collapsed back into fat writers without human approval.
+The four delimited formats (DAT, OPT, CSV, Concordance) are produced by three deep modules; EDRM-XML is the carve-out. `LoadFileOrchestrator` owns format dispatch for Standard and Production Set output and coordinated DAT/OPT emission in Loadfile-Only Mode — for each requested format it creates the writer, opens the output stream (ZIP entry or disk file), writes, and emits the Audit File. `ZipArchiveSink` (Standard mode) and `ProductionSetOrchestrator` (Production Set mode) delegate to it. Loadfile-Only Mode keeps its own loop for per-format chaos; coordinated DAT/OPT scenarios delegate to `LoadFileOrchestrator`, which uses `CrossFormatLoadFileRenderer` and passes final rendered lines to `LoadFileEmitter` for output. `LoadFileAuditWriter` owns Audit File and optional Chaos Expectation Sidecar emission through caller-supplied stream targets. See the [Architecture Invariants](#architecture-invariants-human-approval-required) — the composer/serializer/emitter shape must not be collapsed back into fat writers without human approval.
 
 - **Composer** (`ILoadFileComposer`) — column authority: header columns + lazy `LoadFileRecord`s with raw values held as parallel arrays aligned by index (handles modes + column profiles internally).
 - **Serializer** (`ILoadFileSerializer`) — render authority: record/header → one escaped line. Pure (no stream, EOL, or chaos).
