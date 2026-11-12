@@ -12,14 +12,14 @@ from unittest.mock import patch
 spec = importlib.util.spec_from_file_location("droid_plugin", Path(__file__).resolve().parents[1] / "plugins" / "droid.py")
 plugin = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(plugin)
-assert plugin.list_models() == ["claude-haiku-5-5"]
+assert plugin.list_models() == ["deepseek-v4.1-flash-1017"]
 with patch.object(plugin.subprocess, "run") as run:
     run.return_value.returncode = 0
     run.return_value.stdout = "pong"
     run.return_value.stderr = ""
     assert plugin.check_token_health()
     args = run.call_args.args[0]
-    assert args[2:6] == ["--model", "claude-haiku-5-5", "--reasoning-effort", "xhigh"]
+    assert args[2:6] == ["--model", "deepseek-v4.1-flash-1017", "--reasoning-effort", "max"]
     run.return_value.returncode = 1
     run.return_value.stdout = ""
     run.return_value.stderr = "unauthorized"
@@ -36,7 +36,7 @@ with tempfile.TemporaryDirectory() as directory:
             assert code == 0
             assert not err
             args = json.loads(out.splitlines()[0])
-            assert args == ["exec", "--model", model or "claude-haiku-5-5", "--reasoning-effort", "xhigh", "--auto", "high", "--output-format", "stream-json", "--cwd", directory, prompt]
+            assert args == ["exec", "--model", model or "deepseek-v4.1-flash-1017", "--reasoning-effort", "max", "--auto", "high", "--output-format", "stream-json", "--cwd", directory, prompt]
         assert plugin.check_token_health()
 # Successful missions preserve background children that release captured pipes.
 with tempfile.TemporaryDirectory() as directory:

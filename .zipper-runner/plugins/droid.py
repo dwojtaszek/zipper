@@ -18,8 +18,8 @@ import json
 import selectors
 import time
 
-DEFAULT_MODEL = "claude-haiku-5-5"
-REASONING_EFFORT = "xhigh"
+DEFAULT_MODEL = "deepseek-v4.1-flash-1017"
+REASONING_EFFORT = "max"
 # droid is the one agent that emits a real liveness signal: `assistant progress`
 # on each assistant message, streamed as droid produces it, plus the commits it
 # makes in the worktree. So droid is bounded by *silence*, not by the clock: a
