@@ -22,6 +22,9 @@ internal static class LoadFileOrchestrator
     /// <param name="getTargets">Resolves the Load File and audit targets for a format (target naming is a caller quirk).</param>
     /// <param name="openTarget">Opens the output stream for a target (ZIP entry or disk file).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
+    /// <param name="anomalies">Pre-built anomalies list for the Audit File (used when chaos ran outside this loop, e.g. native-file anomalies).</param>
+    /// <param name="chaosEngineFactory">Optional per-format chaos engine factory. When non-null, the engine is built per format and passed to the writer; its anomalies are forwarded to the Audit File emission. Mutually exclusive with <paramref name="anomalies"/>.</param>
+    /// <param name="perFormatTransform">Optional per-format request transform (e.g. stable OPT page counts). Applied before writing each format.</param>
     /// <returns>The target of the last emitted Load File.</returns>
     public static async Task<string> EmitAllAsync(
         FileGenerationRequest request,
@@ -31,25 +34,34 @@ internal static class LoadFileOrchestrator
         Func<LoadFileFormat, ILoadFileWriter, (string LoadFileTarget, string AuditTarget)> getTargets,
         Func<string, System.IO.Stream> openTarget,
         CancellationToken cancellationToken = default,
-        System.Collections.Generic.IReadOnlyList<ChaosAnomaly>? anomalies = null)
+        System.Collections.Generic.IReadOnlyList<ChaosAnomaly>? anomalies = null,
+        Func<FileGenerationRequest, IReadOnlyList<FileData>, LoadFileFormat, ChaosEngine?>? chaosEngineFactory = null,
+        Func<FileGenerationRequest, LoadFileFormat, FileGenerationRequest>? perFormatTransform = null)
     {
         string lastLoadFileTarget = string.Empty;
 
         foreach (var format in formats)
         {
+            var formatRequest = perFormatTransform is not null
+                ? perFormatTransform(request, format)
+                : request;
+
             var writer = LoadFileWriterFactory.CreateWriter(format, mode);
             var (loadFileTarget, auditTarget) = getTargets(format, writer);
+
+            ChaosEngine? chaosEngine = chaosEngineFactory?.Invoke(formatRequest, processedFiles, format);
 
             var loadFileStream = openTarget(loadFileTarget);
             await using (loadFileStream.ConfigureAwait(false))
             {
-                await writer.WriteAsync(loadFileStream, request, processedFiles, cancellationToken: cancellationToken).ConfigureAwait(false);
+                await writer.WriteAsync(loadFileStream, formatRequest, processedFiles, chaosEngine, cancellationToken).ConfigureAwait(false);
             }
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            await LoadFileAuditWriter.EmitAsync(loadFileTarget, auditTarget, request, processedFiles,
-                openTarget, anomalies, format, cancellationToken: cancellationToken).ConfigureAwait(false);
+            var effectiveAnomalies = chaosEngine?.Anomalies ?? anomalies;
+            await LoadFileAuditWriter.EmitAsync(loadFileTarget, auditTarget, formatRequest, processedFiles,
+                openTarget, effectiveAnomalies, format, cancellationToken: cancellationToken).ConfigureAwait(false);
 
             lastLoadFileTarget = loadFileTarget;
         }
