@@ -8,27 +8,25 @@ namespace Zipper.Tests;
 public class PostGenerationValidatorTests : TempDirectoryTestBase
 {
     [Fact]
-    public void Validate_ProductionSet_ConsumesSuppliedReportWithoutReadingProductionSet()
+    public void Validate_StaleProductionSetReport_ShouldRevalidateCurrentFiles()
     {
         var context = new ValidationContext
         {
             ProductionSetPath = Path.Combine(this.TempDir, "not-on-disk"),
             ProductionSetReport = new ProductionSetValidationReport(),
         };
-        Assert.Empty(new PostGenerationValidator().Validate(context).Findings);
-        context.ProductionSetReport.Findings.Add(new ValidationReportFinding
+        var savedReport = context.ProductionSetReport;
+        var result = new PostGenerationValidator().Validate(context);
+        Assert.True(result.HasErrors);
+        Assert.NotSame(savedReport, context.ProductionSetReport);
+        Assert.Equal("failed", context.ProductionSetReport!.Status);
+        foreach (var source in context.ProductionSetReport.Findings)
         {
-            Severity = "error",
-            Code = "SavedFinding",
-            Message = "Already validated",
-            Path = "original.dat",
-            Line = 3,
-        });
-        var finding = Assert.Single(new PostGenerationValidator().Validate(context).Findings);
-        Assert.Equal("SavedFinding", finding.Category);
-        Assert.Equal(ValidationSeverity.Error, finding.Severity);
-        Assert.Equal("original.dat", finding.FilePath);
-        Assert.Equal(3, finding.LineNumber);
+            Assert.Contains(result.Findings, finding => finding.Category == source.Code
+                && finding.Message == source.Message && finding.FilePath == source.Path
+                && finding.LineNumber == source.Line
+                && finding.Severity == (source.Severity == "error" ? ValidationSeverity.Error : ValidationSeverity.Warning));
+        }
     }
 
     // ---- ValidationFinding tests ----

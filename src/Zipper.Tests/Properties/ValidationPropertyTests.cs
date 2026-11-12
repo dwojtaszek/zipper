@@ -21,9 +21,8 @@ namespace Zipper.Tests.Properties;
 public sealed class ValidationPropertyTests : IDisposable
 {
     [Property]
-    public void Validate_NativeFileAnomalyLine_ShouldNotChangeLoadFileRowChecks(FsCheck.PositiveInt input, bool email)
+    public void Validate_NativeFileAnomalyLine_ShouldNotChangeLoadFileRowChecks(NativeAnomalyLineInput input, bool email)
     {
-        ArgumentNullException.ThrowIfNull(input);
         var loadFile = Path.Combine(this.tempRoot, "native-scope.dat");
         var sidecar = Path.Combine(this.tempRoot, "native-scope_chaos_expectations.json");
         var file = email ? "00000001.eml" : "00000001.tiff";
@@ -31,7 +30,7 @@ public sealed class ValidationPropertyTests : IDisposable
         var request = new FileGenerationRequest { Chaos = new ChaosConfig { ChaosMode = true } };
         // Keep the Native File line number on a data row so the damaged row and the Native File
         // line coincide: a validator that conflates them exempts exactly that row.
-        long anomalyLine = input.Get % 19 + 2;
+        long anomalyLine = input.Line;
         var json = LoadFileAuditWriter.GenerateExpectationSidecarJson(loadFile, request, Array.Empty<FileData>(),
             new[] { new ChaosAnomaly { File = file, Location = location, LineNumber = anomalyLine.ToString(CultureInfo.InvariantCulture),
                 ErrorType = email ? "mime-boundary" : "tiff-truncated-ifd", RecordID = "DOC1" } }, expectedDataRecords: anomalyLine - 1);

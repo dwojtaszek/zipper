@@ -368,6 +368,9 @@ public readonly record struct ChaosExpectationCaseInput(
     int TypeSeed,
     int MutationKind);
 
+[StructLayout(LayoutKind.Auto)]
+public readonly record struct NativeAnomalyLineInput(int Line);
+
 /// <summary>
 /// Shared FsCheck Arbitrary registrations for Zipper domain property-based tests.
 /// <para>
@@ -381,6 +384,9 @@ public readonly record struct ChaosExpectationCaseInput(
 /// </summary>
 public static class ZipperArbitraries
 {
+    public static Arbitrary<NativeAnomalyLineInput> NativeAnomalyLineInputArb() =>
+        Gen.Choose(2, 20).Select(line => new NativeAnomalyLineInput(line)).ToArbitrary();
+
     private static readonly string[] SamplePrefixes =
     [
         string.Empty,

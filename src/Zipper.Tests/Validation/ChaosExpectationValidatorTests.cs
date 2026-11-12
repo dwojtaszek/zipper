@@ -13,7 +13,7 @@ public class ChaosExpectationValidatorTests : TempDirectoryTestBase
     [InlineData("IFD 1", "IFD 1", false)]
     [InlineData("IFD 2", "IFD 1", true)]
     [InlineData("IFD 1", null, true)]
-    public void Validate_NativeLocationComparedWithAudit_PreservesOptionalScope(string? location, string? auditLocation, bool hasErrors)
+    public void Validate_NativeLocationComparedWithAudit_ShouldPreserveOptionalScope(string? location, string? auditLocation, bool hasErrors)
     {
         var loadFile = WriteLoadFile(DatHeader, DatRow("DOC1", "Alice"));
         var sidecar = WriteFile("loadfile_chaos_expectations.json", SidecarJson(1, anomalies: new[]
@@ -44,7 +44,7 @@ public class ChaosExpectationValidatorTests : TempDirectoryTestBase
     [InlineData("00000001.eml", "header-fold", "2")]
     [InlineData(null, "tiff-truncated-ifd", "1")]
     [InlineData(null, "header-fold", "2")]
-    public void Validate_NativeFileAnomaly_DoesNotHideMalformedLoadFileRow(string? file, string type, string line)
+    public void Validate_NativeFileAnomaly_ShouldNotHideMalformedLoadFileRow(string? file, string type, string line)
     {
         var loadFile = WriteLoadFile(DatHeader, "DOC1");
         var sidecar = WriteFile("loadfile_chaos_expectations.json", SidecarJson(1, anomalies: new object[]
@@ -62,7 +62,7 @@ public class ChaosExpectationValidatorTests : TempDirectoryTestBase
     [InlineData("tiff", false)]
     [InlineData("eml", true)]
     [InlineData("tiff", true)]
-    public async Task StandardMode_NativeChaos_ValidatesBothLoadFileAndSidecar(string type, bool corruptLoadFile)
+    public async Task StandardMode_NativeChaos_ShouldValidateBothLoadFileAndSidecar(string type, bool corruptLoadFile)
     {
         var request = CreateDatRequest();
         request.Output = request.Output with { FileType = type };
@@ -93,7 +93,7 @@ public class ChaosExpectationValidatorTests : TempDirectoryTestBase
     [InlineData(false, true)]
     [InlineData(true, false)]
     [InlineData(true, true)]
-    public async Task StandardMode_NativeChaosFallback_RejectsIncorrectSidecarCount(bool embedded, bool xml)
+    public async Task StandardMode_NativeChaosFallback_ShouldRejectIncorrectSidecarCount(bool embedded, bool xml)
     {
         var request = CreateDatRequest();
         request.Output = request.Output with { FileType = "tiff", IncludeLoadFile = embedded };
@@ -136,7 +136,7 @@ public class ChaosExpectationValidatorTests : TempDirectoryTestBase
     [Theory]
     [InlineData("file")]
     [InlineData("location")]
-    public void Validate_WrongTypedOptionalScope_ReturnsFinding(string field)
+    public void Validate_WrongTypedOptionalScope_ShouldReturnFinding(string field)
     {
         var loadFile = WriteLoadFile(DatHeader, DatRow("DOC1", "Alice"));
         var json = System.Text.Json.Nodes.JsonNode.Parse(SidecarJson(1, anomalies: new[] { ValueAnomaly("2", "DOC1") }))!;

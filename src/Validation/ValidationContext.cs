@@ -14,7 +14,7 @@ public sealed record ValidationContext
 
     public bool SkipEolValidation { get; init; }
 
-    public ProductionSetValidationReport? ProductionSetReport { get; init; }
+    public ProductionSetValidationReport? ProductionSetReport { get; set; }
 
     public bool ValidateChaosExpectations { get; init; }
 

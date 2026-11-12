@@ -59,7 +59,8 @@ public sealed class PostGenerationValidator
     {
         if (!context.IsChaosMode)
         {
-            var report = context.ProductionSetReport ?? ProductionSetPostValidator.Validate(context.ProductionSetPath!, context.Request);
+            var report = ProductionSetPostValidator.Validate(context.ProductionSetPath!, context.Request);
+            context.ProductionSetReport = report;
             foreach (var finding in report.Findings)
             {
                 result.Add(new ValidationFinding(

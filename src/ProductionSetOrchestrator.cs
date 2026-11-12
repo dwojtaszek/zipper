@@ -728,26 +728,39 @@ internal static class ProductionSetOrchestrator
                 throw new Validation.ValidationFailedException($"Production Set validation failed: {report.ErrorCount} error(s) found. See '_validation_report.json' for details.");
             }
 
+            var context = new Validation.ValidationContext
+            {
+                ProductionSetPath = productionPath,
+                ProductionSetReport = report,
+                LoadFiles = new Dictionary<string, string>
+                {
+                    ["dat"] = Path.Combine(productionPath, "DATA", "loadfile.dat"),
+                    ["opt"] = Path.Combine(productionPath, "DATA", "loadfile.opt"),
+                },
+                Request = request,
+                // Cross-format chaos deliberately breaks DAT↔OPT structure, so its report
+                // findings are expected; Native File chaos keeps the structural contract.
+                IsChaosMode = ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario),
+                ValidateChaosExpectations = request.Chaos.ChaosMode,
+            };
             try
             {
-                Validation.ValidationOrchestrator.RunAfterGeneration(new Validation.ValidationContext
-                {
-                    ProductionSetPath = productionPath,
-                    ProductionSetReport = report,
-                    LoadFiles = new Dictionary<string, string>
-                    {
-                        ["dat"] = Path.Combine(productionPath, "DATA", "loadfile.dat"),
-                        ["opt"] = Path.Combine(productionPath, "DATA", "loadfile.opt"),
-                    },
-                    Request = request,
-                    // Cross-format chaos deliberately breaks DAT↔OPT structure, so its report
-                    // findings are expected; Native File chaos keeps the structural contract.
-                    IsChaosMode = ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario),
-                    ValidateChaosExpectations = request.Chaos.ChaosMode,
-                });
+                Validation.ValidationOrchestrator.RunAfterGeneration(context);
             }
             catch (InvalidOperationException exception)
             {
+                if (context.ProductionSetReport is { Status: "failed" } failedReport)
+                {
+                    var failedJson = System.Text.Json.JsonSerializer.Serialize(failedReport, ValidationReportSerializerOptions);
+                    try
+                    {
+                        await materializer.WriteTextAsync(reportPath, failedJson, new UTF8Encoding(false), cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (Exception writeException) when (writeException is IOException or UnauthorizedAccessException or OperationCanceledException)
+                    {
+                        throw new Validation.ValidationFailedException("Production Set validation failed; could not save the failed Validation Report.", writeException);
+                    }
+                }
                 // Keep failed Production Sets for inspection, matching structural validation failures.
                 throw new Validation.ValidationFailedException(exception.Message, exception);
             }
