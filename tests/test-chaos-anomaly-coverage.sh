@@ -564,7 +564,7 @@ for TYPE in eml tiff; do
         if [[ "$MODE" == rolling ]]; then EXPECTED=4; fi
         FOUND=0
         while IFS= read -r SIDECAR; do
-            jq -e --arg suffix ".$TYPE" '.schemaVersion == 1 and .totalAnomalies == 1 and all(.anomalies[]; (.file | endswith($suffix)) and (.location | length > 0))' "$SIDECAR" >/dev/null \
+            jq -e --arg suffix ".$TYPE" '.schemaVersion == 1 and .totalAnomalies == 1 and (.anomalies | length) == 1 and all(.anomalies[]; (.file | endswith($suffix)) and (.location | length > 0))' "$SIDECAR" >/dev/null \
                 || print_error "Native File scope missing in $SIDECAR"
             FOUND=$((FOUND + 1))
         done < <(find "$OUT_DIR" -name '*_chaos_expectations.json' -type f)

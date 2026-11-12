@@ -44,7 +44,17 @@ public class ChaosExpectationValidatorTests : TempDirectoryTestBase
             LoadFilePaths = new Dictionary<string, string> { ["dat"] = loadFile },
         }));
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => mode.RunAsync(request));
+        var (_, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(async () =>
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(() => mode.RunAsync(request));
+        });
+        if (!corruptLoadFile)
+        {
+            Assert.Contains("ChaosExpectation: 1 error(s)", stderr, StringComparison.Ordinal);
+            var result = new ChaosExpectationValidator().Validate(
+                loadFile, Path.Combine(this.TempDir, "loadfile_chaos_expectations.json"), request);
+            Assert.Contains(result.Findings, finding => finding.Message.Contains("Produced record count 1 does not match", StringComparison.Ordinal));
+        }
     }
 
     [Theory]
@@ -72,7 +82,7 @@ public class ChaosExpectationValidatorTests : TempDirectoryTestBase
     private static string DatRow(string id, string author) => $"{id}{DatColumnDelimiter}{author}";
 
     private string WriteLoadFile(params string[] lines) =>
-        this.WriteFile("loadfile.dat", string.Join(Environment.NewLine, lines) + Environment.NewLine);
+        this.WriteFile("loadfile.dat", string.Join("\r\n", lines) + "\r\n");
 
     private string WriteFile(string name, string content)
     {
