@@ -19,7 +19,7 @@ The diagrams in this file are a **contract**, not just documentation:
 | Mode | Trigger | Adapter | Generator |
 |------|---------|---------|-----------|
 | **Standard** | default | `StandardMode` | `ParallelFileGenerator.GenerateFilesAsync()` → Archive (.zip) + Load File |
-| **Loadfile-Only** | `--loadfile-only` | `LoadFileOnlyMode` | `LoadFileOnlyGenerator.GenerateAsync()` → Load File + `_properties.json` audit (+ `_chaos_expectations.json` on Chaos runs) |
+| **Loadfile-Only** | `--loadfile-only` | `LoadFileOnlyMode` | `LoadFileOnlyGenerator.GenerateAsync()` → Load File + `_properties.json` audit (+ `_chaos_expectations.json` when Anomalies are injected) |
 | **Production Set** | `--production-set` | `ProductionSetMode` | `ProductionSetGenerator.GenerateAsync()` → Directory tree (DATA/IMAGES/NATIVES/TEXT; REDACTED/ when redacted; ORIGINALS/ in `originals` mode) + Load Files + Production Manifest + Validation Report |
 
 ## Standard Pipeline
@@ -60,7 +60,7 @@ graph TD
 
     LoadFileOnlyMode --> LOG["LoadFileOnlyGenerator"]
     LOG -->|"optional"| Chaos["ChaosEngine (Floyd's algorithm)"]
-    LOG --> LF2["Load Files + Audit Files<br/>(+ _chaos_expectations.json on Chaos runs)"]
+    LOG --> LF2["Load Files + Audit Files<br/>(+ _chaos_expectations.json when Anomalies are injected)"]
     LOG -->|"coordinated DAT/OPT"| LFO
 
     ProductionSetMode --> PSG["ProductionSetGenerator (thin facade)"]
@@ -196,7 +196,7 @@ In contrast, Archive Test Fixture generation (`src/ArchiveTests/`, ADR-0008) is 
 
 ## Semantic Architecture Seam Lint (Critical Rule 5)
 
-An advisory Jev architecture seam lint (`tools/typesafe-audit/checks/architecture/run_check.py`, invoked via `typesafe-audit.yml`) semantically guards Critical Rule 5 on PRs touching `src/LoadFiles/**`, `src/ProductionSets/**` (configured prefix; Production Set classes currently live directly under `src/ProductionSet*.cs`), `src/Validation/**`, `src/Cli/Modules/**`, or `docs/architecture.md`. It evaluates diffs for `seam_bypass` (verifying all delimited formats remain within `composer → serializer → emitter` with format dispatch in `LoadFileOrchestrator`, production sets route through `ProductionSetOrchestrator`, validation remains decoupled in `ValidationOrchestrator`, and CLI modules adhere to `CliModule`) and `diagram_stale` (verifying architecture diagrams remain accurate after changes). Findings are advisory and surface for human review.
+An advisory Jev architecture seam lint (`tools/typesafe-audit/checks/architecture/run_check.py`, invoked via `typesafe-audit.yml`) semantically guards Critical Rule 5 on PRs touching `src/LoadFiles/**`, `src/ProductionSet*.cs`, `src/Validation/**`, `src/Cli/Modules/**`, or `docs/architecture.md`. It evaluates diffs for `seam_bypass` (verifying all delimited formats remain within `composer → serializer → emitter` with format dispatch in `LoadFileOrchestrator`, production sets route through `ProductionSetOrchestrator`, validation remains decoupled in `ValidationOrchestrator`, and CLI modules adhere to `CliModule`) and `diagram_stale` (verifying architecture diagrams remain accurate after changes). Findings are advisory and surface for human review.
 
 ## Load File Composition Seam
 

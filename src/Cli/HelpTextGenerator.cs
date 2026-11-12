@@ -66,6 +66,7 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine("                           CSV: csv-quote-escape,csv-embedded-newline,csv-bom");
         Console.Error.WriteLine("                           Concordance: concordance-delimiter,concordance-quote-escape");
         Console.Error.WriteLine("                           EDRM-XML: xml-unclosed-tag,xml-bad-entity,xml-encoding-lie");
+        Console.Error.WriteLine("                           EML (--type eml): mime-boundary,encoded-word,header-fold,rf822-depth");
         Console.Error.WriteLine("                           TIFF (--type tiff): tiff-dimension-lie,tiff-truncated-ifd,tiff-tag-count-lie,tiff-strip-offset");
         Console.Error.WriteLine("                           DAT record anomalies are opt-in; full-chaos enables all types for the selected format");
         Console.Error.WriteLine("                           OPT opt-encoding is opt-in; full-chaos enables it");
