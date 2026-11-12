@@ -23,8 +23,9 @@ public sealed class ValidationPropertyTests : IDisposable
     [Property]
     public void Validate_NativeFileAnomalyLine_ShouldNotChangeLoadFileRowChecks(NativeAnomalyLineInput input, bool email)
     {
-        var loadFile = Path.Combine(this.tempRoot, "native-scope.dat");
-        var sidecar = Path.Combine(this.tempRoot, "native-scope_chaos_expectations.json");
+        var caseDirectory = this.CreateCaseDirectory("native-scope");
+        var loadFile = Path.Combine(caseDirectory, "native-scope.dat");
+        var sidecar = Path.Combine(caseDirectory, "native-scope_chaos_expectations.json");
         var file = email ? "00000001.eml" : "00000001.tiff";
         var location = email ? "Subject header" : "IFD 1";
         var request = new FileGenerationRequest { Chaos = new ChaosConfig { ChaosMode = true } };
@@ -46,7 +47,7 @@ public sealed class ValidationPropertyTests : IDisposable
         var auditAnomalies = new[] { new ChaosAnomaly { File = file, Location = location,
             LineNumber = anomalyLine.ToString(CultureInfo.InvariantCulture),
             ErrorType = email ? "mime-boundary" : "tiff-truncated-ifd", RecordID = "DOC1" } };
-        File.WriteAllText(Path.Combine(this.tempRoot, "native-scope_properties.json"),
+        File.WriteAllText(Path.Combine(caseDirectory, "native-scope_properties.json"),
             LoadFileAuditWriter.GenerateAuditJson(loadFile, request, Array.Empty<FileData>(), auditAnomalies));
         Assert.False(new ChaosExpectationValidator().Validate(loadFile, sidecar, request).HasErrors);
         var changedSidecar = JsonNode.Parse(json)!;
