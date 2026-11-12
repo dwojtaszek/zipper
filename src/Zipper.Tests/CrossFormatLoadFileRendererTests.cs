@@ -103,6 +103,23 @@ public sealed class CrossFormatLoadFileRendererTests
         Assert.All(result.DatLines, line => Assert.DoesNotContain("\n", line, StringComparison.Ordinal));
     }
 
+    [Fact]
+    public void RenderAndApply_StandardMode_SplitsOnlyAtConfiguredLineEnding()
+    {
+        var request = new FileGenerationRequest
+        {
+            Metadata = new MetadataConfig { Seed = 42 },
+            Delimiters = new DelimiterConfig { ColumnDelimiter = Environment.NewLine, EndOfLine = "CR" },
+            Chaos = new ChaosConfig { ChaosAmount = "0" },
+        };
+        var header = new DatSerializer(request).RenderHeader(new DatComposer(request, WriterMode.Standard).HeaderColumns);
+
+        var result = CrossFormatLoadFileRenderer.RenderAndApply(request, request, [], WriterMode.Standard,
+            "loadfile.dat", "loadfile.opt", CancellationToken.None);
+
+        Assert.Equal(header.Split('\r'), result.DatLines);
+    }
+
     [Theory]
     [InlineData("Standard", false)]
     [InlineData("Standard", true)]
