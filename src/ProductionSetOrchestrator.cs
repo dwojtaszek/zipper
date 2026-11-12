@@ -740,7 +740,9 @@ internal static class ProductionSetOrchestrator
                         ["opt"] = Path.Combine(productionPath, "DATA", "loadfile.opt"),
                     },
                     Request = request,
-                    IsChaosMode = request.Chaos.ChaosMode && ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario),
+                    // Cross-format chaos deliberately breaks DAT↔OPT structure, so its report
+                    // findings are expected; Native File chaos keeps the structural contract.
+                    IsChaosMode = ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario),
                     ValidateChaosExpectations = request.Chaos.ChaosMode,
                 });
             }
