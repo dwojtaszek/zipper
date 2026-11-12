@@ -143,9 +143,9 @@ The application operates in three distinct generation modes:
 > [!NOTE]
 > Additional arguments for Load File formats, column profiles, Loadfile-Only Mode, Chaos Engine, benchmarking, and production sets are defined in Sections 9 through 16.
 
-- `--type <pdf|jpg|tiff|eml|docx|xlsx>`: (Required unless `--loadfile-only` or `--production-set`) The type of Native File to generate. Defaults to `pdf` when optional.
-- `--count <number>`: (Required) The total number of Native Files to generate.
-- `--output-path <directory>`: (Required) The directory where the output Archive and Load File will be saved.
+- `--type <pdf|jpg|tiff|eml|docx|xlsx>`: (Required unless `--loadfile-only`, `--production-set`, `--types`, `--input-csv`, `--directory-template`, `--compare-production-manifests`, or `--archive-test-suite`) The type of Native File to generate. Defaults to `pdf` when optional.
+- `--count <number>`: (Required unless `--input-csv`, `--directory-template`, `--compare-production-manifests`, or `--archive-test-suite`) The total number of Native Files to generate (`0` is allowed only with `--chaos-scenario adversarial-values`).
+- `--output-path <directory>`: (Required for generation and `--archive-test-suite`; unused by `--compare-production-manifests`, `--benchmark`, `--chaos-list`, and `--version`) The directory where the output Archive and Load File will be saved.
 - `--folders <number>`: (Optional) The number of Folders to distribute Native Files into. Defaults to 1. Must be between 1 and 100.
 - `--encoding <UTF-8|UTF-16|ANSI>`: (Optional) The text encoding for the Load File. Defaults to UTF-8. `ANSI` corresponds to the Windows-1252 code page.
 - `--distribution <proportional|gaussian|exponential>`: (Optional) The distribution pattern for Native Files across Folders. Defaults to `proportional`.
@@ -275,14 +275,14 @@ The Concordance DAT format is the most widely used Load File format in e-discove
 
 #### Conditional Column Ordering
 **Non-EML Output:**
-- **Standard mode:** Control Number, File Path, [if metadata] Custodian, Date Sent, Author, File Size, Compression Method, [if --bates-prefix] Bates Number, [if type=tiff + --tiff-pages] Page Count, [if --with-text] Extracted Text, [if --with-families] BEGATTACH, ENDATTACH, PARENTDOCID
-- **Production Set mode:** DOCID, BATES_NUMBER, VOLUME, NATIVE_PATH, TEXT_PATH, IMAGE_PATH, CUSTODIAN, DATE_CREATED, FILE_SIZE, FILE_TYPE, [if --with-families] BEGATTACH, ENDATTACH, PARENTDOCID
-- **Loadfile-Only (no profile):** Control Number, File Path, Custodian, Date Sent, Author, File Size, [if metadata] Compression Method, ExtractedText
+- **Standard mode:** Control Number, File Path, [if `--types` mix] File Type, [if metadata] Custodian, Date Sent, Author, File Size, Compression Method, [if `--with-collection-metadata`] Data Source, Collection Date, De-Nisted, Dedupe Group ID, Processing Status, [if `--bates-prefix`] Bates Number, [if type=tiff + `--tiff-pages`] Page Count, [if `--with-text`] Extracted Text, [if `--with-families`] BEGATTACH, ENDATTACH, PARENTDOCID, [if `--with-threading`] Thread ID, Inclusive, Thread Parent
+- **Production Set mode:** DOCID, BATES_NUMBER, VOLUME, NATIVE_PATH, TEXT_PATH, IMAGE_PATH, CUSTODIAN, DATE_CREATED, FILE_SIZE, FILE_TYPE, [if `--redacted-production`] REDACTED_IMAGE_PATH, REDACTED_TEXT_PATH, NATIVE_WITHHELD, REDACTION_REASON, [if `--with-families`] BEGATTACH, ENDATTACH, PARENTDOCID, [if `--with-threading`] Thread ID, Inclusive, Thread Parent
+- **Loadfile-Only (no profile):** Control Number, File Path, Custodian, Date Sent, Author, File Size, [if metadata] Compression Method, EmailSubject, EmailFrom, EmailTo, EmailCC, EmailSentDate, ExtractedText, [if `--with-families`] BEGATTACH, ENDATTACH, PARENTDOCID, [if `--with-threading`] Thread ID, Inclusive, Thread Parent
 
 **EML Output (`--type eml`):**
-- **Standard mode:** Control Number, File Path, Custodian, Date Sent, Author, File Size, Compression Method, To, From, CC, Subject, Sent Date, Attachment, [if --bates-prefix] Bates Number, [if --with-text] Extracted Text, [if --with-families] BEGATTACH, ENDATTACH, PARENTDOCID
-- **Production Set mode:** DOCID, BATES_NUMBER, VOLUME, NATIVE_PATH, TEXT_PATH, IMAGE_PATH, CUSTODIAN, DATE_CREATED, FILE_SIZE, FILE_TYPE, Attachment, EmailSubject, EmailFrom, EmailTo, EmailCC, EmailSentDate, [if --with-families] BEGATTACH, ENDATTACH, PARENTDOCID
-- **Loadfile-Only (no profile):** Control Number, File Path, Custodian, Date Sent, Author, File Size, Compression Method, Attachment, EmailSubject, EmailFrom, EmailTo, EmailCC, EmailSentDate
+- **Standard mode:** Control Number, File Path, [if `--types` mix] File Type, Custodian, Date Sent, Author, File Size, Compression Method, To, From, CC, Subject, Sent Date, Attachment, [if `--with-collection-metadata`] Data Source, Collection Date, De-Nisted, Dedupe Group ID, Processing Status, [if `--bates-prefix`] Bates Number, [if tiff in mix + `--tiff-pages`] Page Count, [if `--with-text`] Extracted Text, [if `--with-families`] BEGATTACH, ENDATTACH, PARENTDOCID, [if `--with-threading`] Thread ID, Inclusive, Thread Parent
+- **Production Set mode:** DOCID, BATES_NUMBER, VOLUME, NATIVE_PATH, TEXT_PATH, IMAGE_PATH, CUSTODIAN, DATE_CREATED, FILE_SIZE, FILE_TYPE, [if `--redacted-production`] REDACTED_IMAGE_PATH, REDACTED_TEXT_PATH, NATIVE_WITHHELD, REDACTION_REASON, Attachment, EmailSubject, EmailFrom, EmailTo, EmailCC, EmailSentDate, [if `--with-families`] BEGATTACH, ENDATTACH, PARENTDOCID, [if `--with-threading`] Thread ID, Inclusive, Thread Parent
+- **Loadfile-Only (no profile):** Control Number, File Path, Custodian, Date Sent, Author, File Size, Compression Method, EmailSubject, EmailFrom, EmailTo, EmailCC, EmailSentDate, ExtractedText, [if `--with-families`] BEGATTACH, ENDATTACH, PARENTDOCID, [if `--with-threading`] Thread ID, Inclusive, Thread Parent
 
 ### 8.3 Opticon (OPT) Format Specification
 
@@ -439,7 +439,7 @@ Based on the above research, the following requirements apply to the Zipper Load
 - **REQ-066**: If `--column-profile` is not specified, only base columns (Control Number, File Path) shall be included in the Load File. The `--with-metadata` flag adds its columns independently.
 - **REQ-067**: **DEPRECATED** — Original requirement for custom field naming. Superseded by REQ-121.
 - **REQ-076**: When both `--column-profile` and `--with-metadata` are specified, the profile columns take precedence, and `--with-metadata` is ignored with a warning.
-- **REQ-077**: When `--type eml` is specified, email-intrinsic columns (From, To, CC, Subject, Sent Date) are always included regardless of the column profile or `--with-metadata` flag.
+- **REQ-077**: When `--type eml` is specified (or `eml` participates in `--types`), email-intrinsic columns (`To`, `From`, `CC`, `Subject`, `Sent Date`, `Attachment` in Standard/CSV/Concordance/EDRM-XML; `Attachment`, `EmailSubject`, `EmailFrom`, `EmailTo`, `EmailCC`, `EmailSentDate` in Production Set DAT; `EmailSubject`, `EmailFrom`, `EmailTo`, `EmailCC`, `EmailSentDate` in non-profile Loadfile-Only DAT) are included regardless of `--with-metadata`, and in CSV/Concordance/EDRM-XML regardless of `--column-profile`. When an explicit `--column-profile` is used with DAT output, the profile defines the emitted DAT columns.
 - **REQ-078**: Custom profiles shall have a maximum of 200 columns. Profiles exceeding this limit shall produce a validation error.
 - **REQ-079**: Custom profile JSON shall be validated on load. Invalid JSON or missing required fields shall produce a descriptive error message.
 - **REQ-080**: The following built-in profiles shall be provided:
@@ -549,21 +549,21 @@ The `concordance` format (`--load-file-format concordance`) is a **distinct** da
 - **Embedded Newlines**: Preserved intact within quote-wrapped field values (`\r`, `\n`, `\r\n` are not replaced with a newline delimiter; Concordance loaders support multiline fields within text qualifiers)
 
 #### Conditional Column Ordering
-**Concordance Standard mode:** BEGATTY (always, empty), ENDATTY (always, empty), CONTROLNUMBER, PATH, [if metadata/eml] CUSTODIAN, DATESENT, AUTHOR, FILESIZE, COMPRESSION_METHOD, [if eml] TO, FROM, SUBJECT, SENTDATE, ATTACHMENT, [if --bates-prefix] BATES, [if type=tiff + --tiff-pages] PAGECOUNT, [if --with-text] TEXT_PATH
+**Concordance Standard mode:** BEGATTY, ENDATTY, CONTROLNUMBER, PATH, [if `--types` mix] FILE_TYPE, [if metadata/eml] CUSTODIAN, DATESENT, AUTHOR, FILESIZE, COMPRESSION_METHOD, [if eml] TO, FROM, CC, SUBJECT, SENTDATE, ATTACHMENT, [if `--with-collection-metadata`] DATA_SOURCE, COLLECTION_DATE, DENISTED, DEDUPE_GROUP_ID, PROCESSING_STATUS, [if --bates-prefix] BATES, [if type=tiff + --tiff-pages] PAGECOUNT, [if --with-text] TEXT_PATH, [if `--with-families`] BEGATTACH, ENDATTACH, PARENTDOCID, [if `--with-threading`] THREAD_ID, INCLUSIVE, THREAD_PARENT, [if `--hash-mode`] MD5HASH / SHA1HASH / SHA256HASH
 
 Leading columns (always present):
 
 | Column | Notes |
 |--------|-------|
-| `BEGATTY` | Beginning attachment Bates. Emitted empty (generator does not track attachment ranges). |
-| `ENDATTY` | Ending attachment Bates. Emitted empty. |
+| `BEGATTY` | Beginning attachment Bates. Populated with `BegAttach` when `--with-families` is enabled; emitted empty otherwise. |
+| `ENDATTY` | Ending attachment Bates. Populated with `EndAttach` when `--with-families` is enabled; emitted empty otherwise. |
 | `CONTROLNUMBER` | Unique document identifier. |
 | `PATH` | Relative Native File path within the Archive. |
 
-Conditional columns append in this order when their feature is active: metadata (`CUSTODIAN`, `DATESENT`, `AUTHOR`, `FILESIZE`, `COMPRESSION_METHOD`), email (`TO`, `FROM`, `SUBJECT`, `SENTDATE`, `ATTACHMENT`), `BATES`, `PAGECOUNT`, `TEXT_PATH`.
+Conditional columns append in this order when their feature is active: `FILE_TYPE` (`--types` mix), metadata (`CUSTODIAN`, `DATESENT`, `AUTHOR`, `FILESIZE`, `COMPRESSION_METHOD`), email (`TO`, `FROM`, `CC`, `SUBJECT`, `SENTDATE`, `ATTACHMENT`), collection metadata (`DATA_SOURCE`, `COLLECTION_DATE`, `DENISTED`, `DEDUPE_GROUP_ID`, `PROCESSING_STATUS`), `BATES`, `PAGECOUNT`, `TEXT_PATH`, families (`BEGATTACH`, `ENDATTACH`, `PARENTDOCID`), threading (`THREAD_ID`, `INCLUSIVE`, `THREAD_PARENT`), and hashes (`MD5HASH`, `SHA1HASH`, `SHA256HASH`).
 
 > [!NOTE]
-> `BEGATTY`/`ENDATTY` are structurally required by the format but are intentionally emitted empty because the generator does not compute attachment parent/child Bates ranges. This is a known limitation, not corruption.
+> `BEGATTY`/`ENDATTY` are structurally required by the format and are emitted empty unless `--with-families` is enabled.
 
 ### 8.8 CSV Format Specification
 
@@ -575,7 +575,7 @@ The `csv` format (`--load-file-format csv`) produces a standard RFC 4180 comma-s
 - **Field Delimiter**: Comma (`,`)
 - **Text Qualifier**: Double quote (`"`)
 - **Header Row**: Present, comma-joined. Headers default to **UPPERCASE** (e.g. `CONTROL NUMBER`, `FILE PATH`) for e-discovery platform compatibility (Section 8.2). A `--column-profile` with an explicit `fieldNamingConvention` overrides this default.
-- **Line Terminator**: Platform newline
+- **Line Terminator**: Platform newline in Standard mode; `--eol` in Loadfile-Only mode
 
 #### RFC 4180 Escaping
 - A field is quoted **only** if it contains a comma, a double quote, CR, or LF.
@@ -583,7 +583,7 @@ The `csv` format (`--load-file-format csv`) produces a standard RFC 4180 comma-s
 - Empty values are emitted as an empty field (no quotes).
 
 #### Conditional Column Ordering
-**CSV Standard mode:** CONTROL NUMBER, FILE PATH, [if metadata/eml] CUSTODIAN, DATE SENT, AUTHOR, FILE SIZE, COMPRESSION METHOD, [if eml] TO, FROM, SUBJECT, SENT DATE, ATTACHMENT, [if --bates-prefix] BATES NUMBER, [if type=tiff + --tiff-pages] PAGE COUNT, [if --with-text] EXTRACTED TEXT
+**CSV Standard mode:** CONTROL NUMBER, FILE PATH, [if `--types` mix] FILE TYPE, [if metadata/eml] CUSTODIAN, DATE SENT, AUTHOR, FILE SIZE, COMPRESSION METHOD, [if eml] TO, FROM, CC, SUBJECT, SENT DATE, ATTACHMENT, [if `--with-collection-metadata`] DATA_SOURCE, COLLECTION_DATE, DENISTED, DEDUPE_GROUP_ID, PROCESSING_STATUS, [if --bates-prefix] BATES NUMBER, [if type=tiff + --tiff-pages] PAGE COUNT, [if --with-text] EXTRACTED TEXT, [if `--with-families`] BEGATTACH, ENDATTACH, PARENTDOCID, [if `--with-threading`] THREAD ID, INCLUSIVE, THREAD PARENT, [if `--hash-mode`] MD5HASH / SHA1HASH / SHA256HASH
 
 #### `--load-file-format csv` vs `--dat-delimiters csv`
 
@@ -986,7 +986,7 @@ The encoding suite includes the #1283 policy-sensitive Case Key `encoding-local-
     - Reply and forward child Emails shall emit an `In-Reply-To` header containing their immediate parent's `Message-ID`, and a `References` header containing the ordered space-delimited list of all ancestor `Message-ID` values ending with the immediate parent.
     - Thread conversation graphs shall be generated deterministically according to the configured Seed and contain only generated Email records; non-Email records in a File Type Mix or Source-Driven Generation run shall not become thread parents.
     - Emails in each conversation shall have strictly increasing `Date` values in emitted order, contextual `Subject` values (`Re:` and `FW:` prefixes), and leaf identification (`Inclusive` = `Y` for leaf Emails in the generated corpus, `N` for non-leaf Emails).
-    - Load Files shall include thread metadata Columns: `Thread ID`, `Inclusive`, and `Thread Parent` in DAT (or `THREAD ID`, `INCLUSIVE`, and `THREAD PARENT` in CSV; `THREAD_ID`, `INCLUSIVE`, and `THREAD_PARENT` in Concordance).
+    - Load Files shall include thread metadata Columns: `Thread ID`, `Inclusive`, and `Thread Parent` in DAT (or `THREAD ID`, `INCLUSIVE`, and `THREAD PARENT` in CSV; `THREAD_ID`, `INCLUSIVE`, and `THREAD_PARENT` in Concordance). When `--column-profile` is also specified on a DAT run, the profile defines the emitted DAT Columns and no thread metadata Columns are added (while RFC 5322 headers are still added to generated Emails).
     - In DAT and Concordance Load Files with parent-child Attachment families (`--with-families`), child Attachment rows shall emit empty strings for thread metadata Columns.
     - When `--with-threading` is specified without `--type eml` (or `eml` participating in `--types`), a warning shall be written to standard error while execution proceeds.
   - When `--with-threading` is omitted or false:
@@ -1050,6 +1050,8 @@ The encoding suite includes the #1283 policy-sensitive Case Key `encoding-local-
   - Every injected TIFF anomaly shall be audited in the Audit File (`_properties.json`) with the TIFF filename, the **Record Id** of the **Load File Record** for that TIFF (its Bates Number when one is assigned, otherwise its Control Number or `DOC` index), line number `1` (a TIFF is a whole-file artifact), the affected column or `N/A`, error type, description, and a location that starts with `IFD 1`. In Production Set mode, the DAT and OPT Audit Files both list the TIFF anomalies. In Standard Mode, the Load File's Audit File lists them.
   - Load File lines are not changed by TIFF anomalies. Load File chaos (REQ-094 through REQ-096) keeps its existing behavior.
   - `TiffPreflightValidator` (`src/Validation/`) shall report the malformations that TIFF anomalies inject, as TIFF preflight findings: a missing or unknown byte-order mark, a wrong magic number, an Image File Directory that runs past the end of the file or loops, entries that are out of tag order or use an invalid field type, missing required tags, dimensions outside 1 to 65535 pixels, and strips that run past the end of the file. Every TIFF anomaly type produces at least one finding. The preflight is a standalone validation check: generation does not invoke it.
+
+## 28. Chaos Expectation Sidecar
 
 - **REQ-242**: Every Chaos run that injects **Anomalies** shall write a schema-versioned **Chaos Expectation Sidecar** (`_chaos_expectations.json`) next to each **Audit File** (`_properties.json`), including Standard mode EDRM XML and sidecars included in an Archive, as a purely additive file that changes no Audit File bytes or semantics:
   - The sidecar records `schemaVersion` (currently `1`), the **Load File** file name, its format (`dat`, `opt`, `csv`, `concordance`, or `edrmxml`), `totalAnomalies`, and `invariants` with `expectedDataRecords` (the produced data-record count) and `remainingRecordsParseCleanly`.
