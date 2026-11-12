@@ -25,9 +25,9 @@ public sealed class CrossFormatLoadFileRendererTests
         Assert.Equal(new[] { "DOCID\u0014TEXT", $"DOC1\u0014{expectedFirst}", $"DÓC2\u0014{expectedSecond}", "last\u0014" }, lines);
         var optLines = CrossFormatLoadFileRenderer.RenderLines(
             new FixedComposer([], [["B1", "VOL001", "IMAGES\\VOL001\\DOC1.tif", "Y", "", "", "1"],
-                ["B2", "VOL001", "IMAGES\\VOL001\\DÓC2.tif", "Y", "", "", "1"]]),
-            new OptSerializer(), Array.Empty<FileData>(), new TextOutputPolicy(request, LoadFileFormat.Dat, WriterMode.LoadfileOnly, hasChaos: true), CancellationToken.None);
-        Assert.Equal(new[] { "B1,VOL001,IMAGES\\VOL001\\DOC1.tif,Y,,,1", "B2,VOL001,IMAGES\\VOL001\\DÓC2.tif,Y,,,1" }, optLines);
+                ["B2", "VOL001", "IMAGES\\VOL001\\DÓC2漢.tif", "Y", "", "", "1"]]),
+            new OptSerializer(), Array.Empty<FileData>(), new TextOutputPolicy(request, LoadFileFormat.Opt, WriterMode.LoadfileOnly, hasChaos: true), CancellationToken.None);
+        Assert.Equal(new[] { "B1,VOL001,IMAGES\\VOL001\\DOC1.tif,Y,,,1", "B2,VOL001,IMAGES\\VOL001\\DÓC2?.tif,Y,,,1" }, optLines);
     }
 
     [Theory]
