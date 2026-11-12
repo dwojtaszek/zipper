@@ -19,7 +19,6 @@ internal sealed class OptDocumentInfo
 
 internal static class ProductionSetDatOptReconciliationValidator
 {
-    private const string FirstPageSuffix = "_001";
     private const string PageNumberFormat = "D3";
 
     internal static void ValidateOptImagePathForm(
@@ -55,8 +54,8 @@ internal static class ProductionSetDatOptReconciliationValidator
         long lineNumber,
         ICollection<ValidationReportFinding> findings)
     {
-        var baseKey = document.DocKey.EndsWith(FirstPageSuffix, StringComparison.OrdinalIgnoreCase)
-            ? document.DocKey[..^FirstPageSuffix.Length]
+        var baseKey = document.DocKey.EndsWith(DatOptDocumentMatcher.FirstPageSuffix, StringComparison.OrdinalIgnoreCase)
+            ? document.DocKey[..^DatOptDocumentMatcher.FirstPageSuffix.Length]
             : document.DocKey;
         var pageNumber = document.PageCount.ToString(PageNumberFormat, System.Globalization.CultureInfo.InvariantCulture);
         var expectedPageKey = $"{baseKey}_{pageNumber}";
@@ -79,8 +78,8 @@ internal static class ProductionSetDatOptReconciliationValidator
         var imageDirectory = Path.GetDirectoryName(firstImagePath)?.Replace('\\', '/') ?? string.Empty;
         var imageExtension = Path.GetExtension(firstImagePath);
         var firstImageName = Path.GetFileNameWithoutExtension(firstImagePath);
-        var baseImageName = firstImageName.EndsWith(FirstPageSuffix, StringComparison.OrdinalIgnoreCase)
-            ? firstImageName[..^FirstPageSuffix.Length]
+        var baseImageName = firstImageName.EndsWith(DatOptDocumentMatcher.FirstPageSuffix, StringComparison.OrdinalIgnoreCase)
+            ? firstImageName[..^DatOptDocumentMatcher.FirstPageSuffix.Length]
             : firstImageName;
         var expectedImageName = $"{baseImageName}_{pageNumber}{imageExtension}";
         var expectedImagePath = string.IsNullOrEmpty(imageDirectory)
@@ -157,21 +156,7 @@ internal static class ProductionSetDatOptReconciliationValidator
             }
         }
 
-        var datDocMap = new Dictionary<string, DatRecordInfo>(StringComparer.OrdinalIgnoreCase);
-        foreach (var datDoc in datRecords)
-        {
-            if (!string.IsNullOrEmpty(datDoc.BatesNumber))
-            {
-                datDocMap.TryAdd(datDoc.BatesNumber, datDoc);
-            }
-        }
-        foreach (var datDoc in datRecords)
-        {
-            if (string.IsNullOrEmpty(datDoc.BatesNumber) && !string.IsNullOrEmpty(datDoc.DocId))
-            {
-                datDocMap.TryAdd(datDoc.DocId, datDoc);
-            }
-        }
+        var datDocMap = DatOptDocumentMatcher.BuildDatIndex(datRecords, datDoc => datDoc.DocId, datDoc => datDoc.BatesNumber, includeBates: true);
 
         foreach (var datDoc in datRecords)
         {
@@ -188,7 +173,7 @@ internal static class ProductionSetDatOptReconciliationValidator
         var matchedDatDocuments = new Dictionary<long, string>();
         foreach (var optDoc in optDocuments)
         {
-            var datDoc = FindMatchingDatRecord(datDocMap, optDoc.DocKey);
+            var datDoc = DatOptDocumentMatcher.FindMatchingDatByOptKey(datDocMap, optDoc.DocKey);
             if (datDoc is null)
             {
                 findings.Add(ValidationReportFinding.Error(
@@ -218,7 +203,7 @@ internal static class ProductionSetDatOptReconciliationValidator
         {
             var datDoc = datRecords[i];
             var optDoc = optDocuments[i];
-            bool matches = AreDocumentKeysMatching(datDoc.DocId, datDoc.BatesNumber, optDoc.DocKey);
+            bool matches = DatOptDocumentMatcher.AreDocumentKeysMatching(datDoc.DocId, datDoc.BatesNumber, optDoc.DocKey);
 
             if (!matches)
             {
@@ -374,73 +359,20 @@ internal static class ProductionSetDatOptReconciliationValidator
             return false;
         }
 
-        return fileOpt.Equals($"{fileDat}{FirstPageSuffix}", StringComparison.OrdinalIgnoreCase);
+        return fileOpt.Equals($"{fileDat}{DatOptDocumentMatcher.FirstPageSuffix}", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool AreDocumentKeysMatching(string? datDocId, string? datBates, string optDocKey)
-    {
-        if (string.IsNullOrEmpty(optDocKey))
-        {
-            return false;
-        }
-
-        if (!string.IsNullOrEmpty(datBates))
-        {
-            return DocumentKeyMatches(datBates, optDocKey);
-        }
-
-        return !string.IsNullOrEmpty(datDocId) && DocumentKeyMatches(datDocId, optDocKey);
-    }
-
-    private static bool DocumentKeyMatches(string datKey, string optKey)
-        => string.Equals(datKey, optKey, StringComparison.OrdinalIgnoreCase)
-            || string.Equals($"{datKey}{FirstPageSuffix}", optKey, StringComparison.OrdinalIgnoreCase);
-
+    // Bates takes precedence and never falls back to DocId when present: a DocId fallback would
+    // hide bates-mismatch anomalies during validation.
     private static OptDocumentInfo? FindMatchingOptDocument(
         IReadOnlyDictionary<string, OptDocumentInfo> optDocuments,
         DatRecordInfo datDocument)
     {
         if (!string.IsNullOrEmpty(datDocument.BatesNumber))
         {
-            if (optDocuments.TryGetValue(datDocument.BatesNumber, out var optDocument))
-            {
-                return optDocument;
-            }
-
-            return optDocuments.TryGetValue($"{datDocument.BatesNumber}{FirstPageSuffix}", out optDocument)
-                ? optDocument
-                : null;
+            return DatOptDocumentMatcher.FindMatchingOptByKey(optDocuments, datDocument.BatesNumber);
         }
 
-        if (!string.IsNullOrEmpty(datDocument.DocId))
-        {
-            if (optDocuments.TryGetValue(datDocument.DocId, out var optDocument))
-            {
-                return optDocument;
-            }
-
-            if (optDocuments.TryGetValue($"{datDocument.DocId}{FirstPageSuffix}", out optDocument))
-            {
-                return optDocument;
-            }
-        }
-
-        return null;
-    }
-
-    private static DatRecordInfo? FindMatchingDatRecord(
-        IReadOnlyDictionary<string, DatRecordInfo> datDocuments,
-        string optDocKey)
-    {
-        if (datDocuments.TryGetValue(optDocKey, out var datDocument))
-        {
-            return datDocument;
-        }
-
-        return optDocKey.EndsWith(FirstPageSuffix, StringComparison.OrdinalIgnoreCase)
-            && optDocKey.Length > FirstPageSuffix.Length
-            && datDocuments.TryGetValue(optDocKey[..^FirstPageSuffix.Length], out datDocument)
-                ? datDocument
-                : null;
+        return DatOptDocumentMatcher.FindMatchingOptByKey(optDocuments, datDocument.DocId);
     }
 }
