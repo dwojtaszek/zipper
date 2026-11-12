@@ -57,11 +57,13 @@ public sealed class PostGenerationValidator
 
     private static void ValidateProductionSet(ValidationContext context, ValidationResult result)
     {
-        if (!context.IsChaosMode)
+        var report = ProductionSetPostValidator.Validate(context.ProductionSetPath!, context.Request);
+        context.ProductionSetReport = report;
+        foreach (var finding in report.Findings)
         {
-            var report = ProductionSetPostValidator.Validate(context.ProductionSetPath!, context.Request);
-            context.ProductionSetReport = report;
-            foreach (var finding in report.Findings)
+            // Cross-format chaos changes DAT/OPT structure, but never Native File existence.
+            if (!context.IsChaosMode || (finding.Code == "PathExistence"
+                && finding.Message.StartsWith("Referenced native file", StringComparison.Ordinal)))
             {
                 result.Add(new ValidationFinding(
                     string.Equals(finding.Severity, "error", StringComparison.OrdinalIgnoreCase)

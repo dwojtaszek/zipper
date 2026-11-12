@@ -983,9 +983,9 @@ REQ-242	unit	ChaosExpectationValidatorTests.Validate_UnrecordedTrailingFragment_
 REQ-242	unit	ValidationPropertyTests.ChaosExpectationValidator_Validate_DamagedHeaderShouldStillReportDriftedRecordCount	Property: record-count invariant survives a damaged header
 REQ-242	unit	ValidationPropertyTests.ChaosExpectationValidator_Validate_GeneratedXmlSidecarShouldMatchProducedDocuments	Property: EDRM-XML sidecar validates against produced Document elements
 REQ-242	unit	ValidationPropertyTests.ChaosExpectationValidator_Validate_DriftedXmlDocumentCountShouldReportError	Property: drifted EDRM-XML document count is rejected
-REQ-242	unit	ChaosExpectationValidatorTests.Validate_NativeFileAnomaly_DoesNotHideMalformedLoadFileRow	Native File line numbers never suppress Load File row checks
+REQ-242	unit	ChaosExpectationValidatorTests.Validate_NativeFileAnomaly_ShouldNotHideMalformedLoadFileRow	Native File line numbers never suppress Load File row checks
 REQ-242	unit	ValidationPropertyTests.Validate_NativeFileAnomalyLine_ShouldNotChangeLoadFileRowChecks	Optional Native File scope survives serialization across line numbers
-REQ-242	unit	ProductionSetOrchestratorTests.GenerateAsync_EachRollingSet_VerifiesNativeChaosSidecar	Both Rolling Production Sets verify Email and TIFF sidecars before ZIP creation
-REQ-242	unit	ProductionSetOrchestratorTests.GenerateAsync_EachRollingSet_ValidatesLineEndingsBeforeZip	Both Rolling Production Sets enforce Line Ending validation before ZIP creation
+REQ-242	unit	ProductionSetOrchestratorTests.GenerateAsync_EachRollingSet_ShouldVerifyNativeChaosSidecar	Both Rolling Production Sets verify Email and TIFF sidecars before ZIP creation
+REQ-242	unit	ProductionSetOrchestratorTests.GenerateAsync_EachRollingSet_ShouldValidateLineEndingsBeforeZip	Both Rolling Production Sets enforce Line Ending validation before ZIP creation
 REQ-242	e2e	test-chaos-anomaly-coverage.sh	Native File scope in Standard and Rolling Production Set sidecars
 REQ-242	e2e	test-chaos-anomaly-coverage.bat	Windows Native File scope in Standard and Rolling Production Set sidecars

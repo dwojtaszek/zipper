@@ -7,26 +7,32 @@ namespace Zipper.Tests;
 public class ProductionSetOrchestratorTests
 {
     [Theory]
-    [InlineData(1, false)]
-    [InlineData(2, false)]
-    [InlineData(2, true)]
-    public async Task GenerateAsync_NativeFileRemovedAfterReport_ShouldFailBeforeZipAndRetainFailedReport(int damagedSet, bool failReportRewrite)
+    [InlineData(1, false, false)]
+    [InlineData(2, false, false)]
+    [InlineData(2, true, false)]
+    [InlineData(2, false, true)]
+    public async Task GenerateAsync_NativeFileRemovedBeforeValidation_ShouldFailBeforeZipAndRetainFailedSet(int damagedSet, bool failReportWrite, bool crossFormatChaos)
     {
         var output = Path.Combine(Path.GetTempPath(), "native-validation-" + Guid.NewGuid().ToString("N"));
         try
         {
             var request = CreateRequest(1, "pdf", output);
+            if (crossFormatChaos)
+                request.Chaos = new ChaosConfig { ChaosMode = true, ChaosScenario = "cross-format-desync", ChaosAmount = "1" };
             request.Production = request.Production with { RollingCount = 2, ProductionId = "FIRST,SECOND", ProductionZip = true };
             var setName = damagedSet == 1 ? "FIRST" : "SECOND";
             var reportPath = Path.Combine(output, setName, "_validation_report.json");
             var removed = false;
             var materializer = new FaultingMaterializerDecorator(new ProductionFileMaterializer())
             {
+                BeforeWriteText = path =>
+                {
+                    if (path == reportPath && removed && failReportWrite)
+                        throw new IOException("Injected report write failure.");
+                },
                 AfterWriteText = path =>
                 {
-                    if (path == reportPath && removed && failReportRewrite)
-                        throw new IOException("Injected report write failure.");
-                    if (path == reportPath && !removed)
+                    if (path == Path.Combine(output, setName, "_manifest.json") && !removed)
                     {
                         File.Delete(Directory.GetFiles(Path.Combine(output, setName, "NATIVES"), "*.pdf", SearchOption.AllDirectories).Single());
                         removed = true;
@@ -35,10 +41,17 @@ public class ProductionSetOrchestratorTests
             };
             await Assert.ThrowsAsync<Zipper.Validation.ValidationFailedException>(() =>
                 ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer()));
-            using var report = System.Text.Json.JsonDocument.Parse(File.ReadAllText(reportPath));
-            Assert.Equal("failed", report.RootElement.GetProperty("status").GetString());
-            Assert.Contains(report.RootElement.GetProperty("findings").EnumerateArray(),
-                finding => finding.GetProperty("code").GetString() == "PathExistence");
+            Assert.True(Directory.Exists(Path.Combine(output, setName)));
+            if (failReportWrite)
+                Assert.False(File.Exists(reportPath));
+            else
+            {
+                Assert.False(File.ReadAllBytes(reportPath).AsSpan().StartsWith(Encoding.UTF8.Preamble));
+                using var report = System.Text.Json.JsonDocument.Parse(File.ReadAllText(reportPath));
+                Assert.Equal("failed", report.RootElement.GetProperty("status").GetString());
+                Assert.Contains(report.RootElement.GetProperty("findings").EnumerateArray(),
+                    finding => finding.GetProperty("code").GetString() == "PathExistence");
+            }
             Assert.False(File.Exists(Path.Combine(output, setName + ".zip")));
             if (damagedSet == 2)
                 Assert.True(File.Exists(Path.Combine(output, "FIRST.zip")));
@@ -69,7 +82,7 @@ public class ProductionSetOrchestratorTests
             {
                 AfterWriteText = path =>
                 {
-                    if (path == Path.Combine(output, setName, "_validation_report.json"))
+                    if (path == Path.Combine(output, setName, "_manifest.json"))
                     {
                         var dat = Path.Combine(output, setName, "DATA", "loadfile.dat");
                         File.WriteAllText(dat, File.ReadAllText(dat).Replace("\n", "\r\n", StringComparison.Ordinal));
@@ -79,7 +92,8 @@ public class ProductionSetOrchestratorTests
 
             await Assert.ThrowsAsync<Zipper.Validation.ValidationFailedException>(() =>
                 ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer()));
-            Assert.True(File.Exists(Path.Combine(output, setName, "_validation_report.json")));
+            using var failedReport = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(output, setName, "_validation_report.json")));
+            Assert.Equal("failed", failedReport.RootElement.GetProperty("status").GetString());
             Assert.False(File.Exists(Path.Combine(output, setName + ".zip")));
         }
         finally
@@ -110,7 +124,7 @@ public class ProductionSetOrchestratorTests
             {
                 AfterWriteText = path =>
                 {
-                    if (path == Path.Combine(output, setName, "_validation_report.json"))
+                    if (path == Path.Combine(output, setName, "_manifest.json"))
                     {
                         var sidecar = Path.Combine(output, setName, "DATA", sidecarBase + "_chaos_expectations.json");
                         var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(sidecar))!;
@@ -122,7 +136,8 @@ public class ProductionSetOrchestratorTests
 
             await Assert.ThrowsAsync<Zipper.Validation.ValidationFailedException>(() =>
                 ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer()));
-            Assert.True(File.Exists(Path.Combine(output, setName, "_validation_report.json")));
+            using var failedReport = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(output, setName, "_validation_report.json")));
+            Assert.Equal("failed", failedReport.RootElement.GetProperty("status").GetString());
             Assert.False(File.Exists(Path.Combine(output, setName + ".zip")));
         }
         finally
@@ -238,6 +253,8 @@ public class ProductionSetOrchestratorTests
 
             Assert.NotNull(result1);
             Assert.NotNull(result2);
+            Assert.False(File.ReadAllBytes(Path.Combine(result1.ProductionPath, "_validation_report.json"))
+                .AsSpan().StartsWith(Encoding.UTF8.Preamble));
 
             var manifest1 = GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(result1.ProductionPath);
             var manifest2 = GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(result2.ProductionPath);

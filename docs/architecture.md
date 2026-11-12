@@ -144,9 +144,8 @@ graph LR
         SuppV["SupplementalValidator<br/>(pre-output, supplemental mode)"]
         VO --> PGV
         PGV --> Runner
-        PGV -->|"standalone validation"| PSPV
-        PSO -->|"once per set"| PSPV
-        PSO -->|"report per set, before ZIP"| VO
+        PGV -->|"once per set"| PSPV
+        PSO -->|"each set, before report and ZIP"| VO
     end
 
     subgraph Manifest Comparison
@@ -182,7 +181,7 @@ graph LR
 Standard and Loadfile-Only mode adapters delegate to `ValidationOrchestrator.RunAfterGeneration(ValidationContext)` after generation. Production Set generation invokes the same tail for each Rolling Production Set before ZIP creation:
 
 - **Standard / Loadfile-Only**: The adapters build a mode-specific `ValidationContext` and pass it to `ValidationOrchestrator`, which runs `PostGenerationValidator` over emitted Load Files and throws on validation errors.
-- **Production Set**: `ProductionSetOrchestrator` runs `ProductionSetPostValidator.Validate` once per set and writes the existing report, then supplies that report to `ValidationOrchestrator`. `PostGenerationValidator` consumes it without rereading the Production Set and checks Line Endings. Cross-format chaos skips normal validation; Native File chaos keeps it. Both run the Chaos Expectation Validator.
+- **Production Set**: `ProductionSetOrchestrator` invokes `ValidationOrchestrator` once per set. Its `PostGenerationValidator` runs `ProductionSetPostValidator.Validate` once and checks Line Endings. The orchestrator writes the resulting report after validation, marking it failed when any validation step fails. Cross-format chaos exempts structural findings except missing Native Files; Native File chaos keeps normal validation. Both run the Chaos Expectation Validator.
 - **Supplemental**: `SupplementalValidator.ValidateAsync` runs during supplemental Production Set generation (before output is written) to validate Bates Number ranges against prior Production Manifests.
 - **Manifest Comparison**: `--compare-production-manifests` short-circuits normal generation in `Program.cs` and dispatches directly to `ProductionManifestComparer.CompareAndReportAsync`, which writes the comparison JSON report. This path bypasses `ValidationOrchestrator` and `PostGenerationValidator` entirely.
 

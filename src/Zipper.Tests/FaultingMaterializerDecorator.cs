@@ -17,6 +17,8 @@ internal sealed class FaultingMaterializerDecorator : IFileMaterializer
 
     public IFileMaterializer Inner => this._inner;
 
+    public Action<string>? BeforeWriteText { get; set; }
+
     public Action<string>? AfterWriteText { get; set; }
 
     public Func<string, byte[], CancellationToken, Task<bool>>? OnWriteBytesAsync { get; set; }
@@ -42,6 +44,7 @@ internal sealed class FaultingMaterializerDecorator : IFileMaterializer
 
     public async Task WriteTextAsync(string path, string text, Encoding encoding, CancellationToken cancellationToken = default)
     {
+        this.BeforeWriteText?.Invoke(path);
         await this._inner.WriteTextAsync(path, text, encoding, cancellationToken).ConfigureAwait(false);
         this.AfterWriteText?.Invoke(path);
     }

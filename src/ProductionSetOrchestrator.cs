@@ -717,21 +717,10 @@ internal static class ProductionSetOrchestrator
     {
         if (materializer.ShouldValidate)
         {
-            var report = Validation.ProductionSetPostValidator.Validate(productionPath, request);
             var reportPath = Path.Combine(productionPath, "_validation_report.json");
-            var reportJson = System.Text.Json.JsonSerializer.Serialize(report, ValidationReportSerializerOptions);
-            await materializer.WriteTextAsync(reportPath, reportJson, new UTF8Encoding(false), cancellationToken).ConfigureAwait(false);
-
-            if (string.Equals(report.Status, "failed", StringComparison.OrdinalIgnoreCase)
-                && !(request.Chaos.ChaosMode && ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario)))
-            {
-                throw new Validation.ValidationFailedException($"Production Set validation failed: {report.ErrorCount} error(s) found. See '_validation_report.json' for details.");
-            }
-
             var context = new Validation.ValidationContext
             {
                 ProductionSetPath = productionPath,
-                ProductionSetReport = report,
                 LoadFiles = new Dictionary<string, string>
                 {
                     ["dat"] = Path.Combine(productionPath, "DATA", "loadfile.dat"),
@@ -749,8 +738,12 @@ internal static class ProductionSetOrchestrator
             }
             catch (InvalidOperationException exception)
             {
-                if (context.ProductionSetReport is { Status: "failed" } failedReport)
+                if (context.ProductionSetReport is { } failedReport)
                 {
+                    failedReport.Status = "failed";
+                    failedReport.ErrorCount++;
+                    failedReport.Findings.Add(Validation.ValidationReportFinding.Error(
+                        "PostGeneration", productionPath, exception.Message));
                     var failedJson = System.Text.Json.JsonSerializer.Serialize(failedReport, ValidationReportSerializerOptions);
                     try
                     {
@@ -762,8 +755,11 @@ internal static class ProductionSetOrchestrator
                     }
                 }
                 // Keep failed Production Sets for inspection, matching structural validation failures.
-                throw new Validation.ValidationFailedException(exception.Message, exception);
+                throw new Validation.ValidationFailedException("Production Set validation failed. See '_validation_report.json' for details.", exception);
             }
+
+            var reportJson = System.Text.Json.JsonSerializer.Serialize(context.ProductionSetReport, ValidationReportSerializerOptions);
+            await materializer.WriteTextAsync(reportPath, reportJson, new UTF8Encoding(false), cancellationToken).ConfigureAwait(false);
         }
     }
 

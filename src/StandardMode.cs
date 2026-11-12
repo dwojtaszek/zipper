@@ -84,6 +84,11 @@ internal class StandardMode : IGenerationMode
             Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "  Load file created: {0}", result.LoadFilePath));
         }
 
+        ValidateLoadFiles(request, result);
+    }
+
+    private static void ValidateLoadFiles(FileGenerationRequest request, FileGenerationResult result)
+    {
         if (!string.IsNullOrEmpty(result.LoadFilePath))
         {
             var context = new ValidationContext
