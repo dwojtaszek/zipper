@@ -740,10 +740,13 @@ internal static class ProductionSetOrchestrator
             {
                 if (context.ProductionSetReport is { } failedReport)
                 {
-                    failedReport.Status = "failed";
-                    failedReport.ErrorCount++;
-                    failedReport.Findings.Add(Validation.ValidationReportFinding.Error(
-                        "PostGeneration", productionPath, exception.Message));
+                    if (failedReport.Status != "failed")
+                    {
+                        failedReport.Status = "failed";
+                        failedReport.ErrorCount++;
+                        failedReport.Findings.Add(Validation.ValidationReportFinding.Error(
+                            "PostGeneration", productionPath, exception.Message));
+                    }
                     var failedJson = System.Text.Json.JsonSerializer.Serialize(failedReport, ValidationReportSerializerOptions);
                     try
                     {

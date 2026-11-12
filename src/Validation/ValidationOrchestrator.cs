@@ -36,6 +36,28 @@ public static class ValidationOrchestrator
             }
         }
 
+        if (context.ProductionSetReport is { } report)
+        {
+            var recorded = report.Findings.Select(finding => new ValidationFinding(
+                finding.Severity == "error" ? ValidationSeverity.Error : ValidationSeverity.Warning,
+                finding.Code, finding.Message, finding.Path, finding.Line)).ToHashSet();
+            foreach (var finding in vr.Findings)
+            {
+                if (!recorded.Add(finding))
+                    continue;
+                bool error = finding.Severity == ValidationSeverity.Error;
+                report.Findings.Add(error
+                    ? ValidationReportFinding.Error(finding.Category, finding.FilePath, finding.Message, finding.LineNumber)
+                    : ValidationReportFinding.Warning(finding.Category, finding.FilePath, finding.Message, finding.LineNumber));
+                if (error)
+                    report.ErrorCount++;
+                else
+                    report.WarningCount++;
+            }
+            if (vr.HasErrors)
+                report.Status = "failed";
+        }
+
         if (vr.HasErrors || vr.HasWarnings)
         {
             Console.Error.WriteLine(vr.GetSummary());
@@ -73,8 +95,9 @@ public static class ValidationOrchestrator
         try
         {
             using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(sidecarPath));
-            return document.RootElement.TryGetProperty("loadFile", out var loadFile)
-                && string.Equals(loadFile.GetString(), loadFileName, StringComparison.Ordinal);
+            return !document.RootElement.TryGetProperty("loadFile", out var loadFile)
+                || loadFile.ValueKind != System.Text.Json.JsonValueKind.String
+                || string.Equals(loadFile.GetString(), loadFileName, StringComparison.Ordinal);
         }
         catch (System.Text.Json.JsonException)
         {

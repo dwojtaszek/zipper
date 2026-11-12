@@ -49,8 +49,11 @@ public class ProductionSetOrchestratorTests
                 Assert.False(File.ReadAllBytes(reportPath).AsSpan().StartsWith(Encoding.UTF8.Preamble));
                 using var report = System.Text.Json.JsonDocument.Parse(File.ReadAllText(reportPath));
                 Assert.Equal("failed", report.RootElement.GetProperty("status").GetString());
-                Assert.Contains(report.RootElement.GetProperty("findings").EnumerateArray(),
-                    finding => finding.GetProperty("code").GetString() == "PathExistence");
+                var findings = report.RootElement.GetProperty("findings").EnumerateArray().ToArray();
+                Assert.Contains(findings, finding => finding.GetProperty("code").GetString() == "PathExistence");
+                Assert.DoesNotContain(findings, finding => finding.GetProperty("code").GetString() == "PostGeneration");
+                Assert.Equal(findings.Count(finding => finding.GetProperty("severity").GetString() == "error"),
+                    report.RootElement.GetProperty("errorCount").GetInt32());
             }
             Assert.False(File.Exists(Path.Combine(output, setName + ".zip")));
             if (damagedSet == 2)
@@ -94,6 +97,10 @@ public class ProductionSetOrchestratorTests
                 ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer()));
             using var failedReport = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(output, setName, "_validation_report.json")));
             Assert.Equal("failed", failedReport.RootElement.GetProperty("status").GetString());
+            Assert.Contains(failedReport.RootElement.GetProperty("findings").EnumerateArray(),
+                finding => finding.GetProperty("code").GetString() == "LineEnding"
+                    && finding.GetProperty("path").GetString() == Path.Combine(output, setName, "DATA", "loadfile.dat")
+                    && finding.GetProperty("message").GetString()!.Contains("Inconsistent line ending", StringComparison.Ordinal));
             Assert.False(File.Exists(Path.Combine(output, setName + ".zip")));
         }
         finally
@@ -103,15 +110,17 @@ public class ProductionSetOrchestratorTests
     }
 
     [Theory]
-    [InlineData("eml", "header-fold", 1, "loadfile")]
-    [InlineData("eml", "header-fold", 1, "loadfile.opt")]
-    [InlineData("eml", "header-fold", 2, "loadfile")]
-    [InlineData("eml", "header-fold", 2, "loadfile.opt")]
-    [InlineData("tiff", "tiff-truncated-ifd", 1, "loadfile")]
-    [InlineData("tiff", "tiff-truncated-ifd", 1, "loadfile.opt")]
-    [InlineData("tiff", "tiff-truncated-ifd", 2, "loadfile")]
-    [InlineData("tiff", "tiff-truncated-ifd", 2, "loadfile.opt")]
-    public async Task GenerateAsync_EachRollingSet_ShouldVerifyNativeChaosSidecar(string type, string anomaly, int damagedSet, string sidecarBase)
+    [InlineData("eml", "header-fold", 1, "loadfile", false)]
+    [InlineData("eml", "header-fold", 1, "loadfile.opt", false)]
+    [InlineData("eml", "header-fold", 2, "loadfile", false)]
+    [InlineData("eml", "header-fold", 2, "loadfile.opt", false)]
+    [InlineData("tiff", "tiff-truncated-ifd", 1, "loadfile", false)]
+    [InlineData("tiff", "tiff-truncated-ifd", 1, "loadfile.opt", false)]
+    [InlineData("tiff", "tiff-truncated-ifd", 2, "loadfile", false)]
+    [InlineData("tiff", "tiff-truncated-ifd", 2, "loadfile.opt", false)]
+    [InlineData("eml", "header-fold", 1, "loadfile", true)]
+    [InlineData("tiff", "tiff-truncated-ifd", 2, "loadfile.opt", true)]
+    public async Task GenerateAsync_EachRollingSet_ShouldVerifyNativeChaosSidecar(string type, string anomaly, int damagedSet, string sidecarBase, bool malformedName)
     {
         var output = Path.Combine(Path.GetTempPath(), "rolling-chaos-" + Guid.NewGuid().ToString("N"));
         try
@@ -128,7 +137,10 @@ public class ProductionSetOrchestratorTests
                     {
                         var sidecar = Path.Combine(output, setName, "DATA", sidecarBase + "_chaos_expectations.json");
                         var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(sidecar))!;
-                        json["invariants"]!["expectedDataRecords"] = 99;
+                        if (malformedName)
+                            json["loadFile"] = 42;
+                        else
+                            json["invariants"]!["expectedDataRecords"] = 99;
                         File.WriteAllText(sidecar, json.ToJsonString());
                     }
                 },
@@ -138,6 +150,11 @@ public class ProductionSetOrchestratorTests
                 ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer()));
             using var failedReport = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(output, setName, "_validation_report.json")));
             Assert.Equal("failed", failedReport.RootElement.GetProperty("status").GetString());
+            Assert.Contains(failedReport.RootElement.GetProperty("findings").EnumerateArray(),
+                finding => finding.GetProperty("code").GetString() == "ChaosExpectation"
+                    && finding.GetProperty("path").GetString() == Path.Combine(output, setName, "DATA", malformedName
+                        ? sidecarBase + "_chaos_expectations.json" : sidecarBase == "loadfile" ? "loadfile.dat" : "loadfile.opt")
+                    && finding.GetProperty("message").GetString()!.Contains(malformedName ? "unexpected JSON type" : "Produced record count", StringComparison.Ordinal));
             Assert.False(File.Exists(Path.Combine(output, setName + ".zip")));
         }
         finally
