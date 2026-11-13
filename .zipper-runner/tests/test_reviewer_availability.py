@@ -308,7 +308,8 @@ class ReviewGateEndToEndTests(unittest.TestCase):
             "    print('[]')\n"
             "elif args[0] == 'api':\n"
             "    print(json.dumps({'data': {'repository': {'pullRequest':\n"
-            "        {'reviewThreads': {'nodes': []}}}}}))\n"
+            "        {'reviewThreads': {'nodes': []},\n"
+            "         'comments': {'pageInfo': {'hasNextPage': False, 'endCursor': None}, 'nodes': []}}}}}))\n"
             "else:\n"
             "    raise SystemExit('unexpected: ' + ' '.join(args))\n"
         )
