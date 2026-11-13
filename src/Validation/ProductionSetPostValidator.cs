@@ -186,46 +186,6 @@ internal sealed class ProductionSetPostValidator
         public List<OptDocumentInfo> OptDocuments { get; } = [];
     }
 
-    /// <summary>Resolved DAT header column positions (-1 when the column is absent).</summary>
-    private sealed record DatColumnIndexes(
-        int DocId,
-        int Bates,
-        int Volume,
-        int Native,
-        int Text,
-        int Image,
-        int ParentId,
-        int RedactedImage,
-        int RedactedText,
-        int NativeWithheld,
-        int PageCount);
-
-    private static readonly HashSet<string> PageCountHeaderNames = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "PAGECOUNT",
-        "PAGE_COUNT",
-        "PAGE COUNT",
-        "PAGECNT",
-        "PAGES",
-        "PAGE_CNT",
-    };
-
-    private static DatColumnIndexes ResolveDatColumnIndexes(List<string> headers)
-    {
-        return new DatColumnIndexes(
-            headers.FindIndex(h => string.Equals(h, "DOCID", StringComparison.OrdinalIgnoreCase)),
-            headers.FindIndex(h => string.Equals(h, "BATES_NUMBER", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "BATES", StringComparison.OrdinalIgnoreCase)),
-            headers.FindIndex(h => string.Equals(h, "VOLUME", StringComparison.OrdinalIgnoreCase)),
-            headers.FindIndex(h => string.Equals(h, "NATIVE_PATH", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "PATH", StringComparison.OrdinalIgnoreCase)),
-            headers.FindIndex(h => string.Equals(h, "TEXT_PATH", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "TEXT", StringComparison.OrdinalIgnoreCase)),
-            headers.FindIndex(h => string.Equals(h, "IMAGE_PATH", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "IMAGE", StringComparison.OrdinalIgnoreCase)),
-            headers.FindIndex(h => string.Equals(h, "PARENTDOCID", StringComparison.OrdinalIgnoreCase)),
-            headers.FindIndex(h => string.Equals(h, "REDACTED_IMAGE_PATH", StringComparison.OrdinalIgnoreCase)),
-            headers.FindIndex(h => string.Equals(h, "REDACTED_TEXT_PATH", StringComparison.OrdinalIgnoreCase)),
-            headers.FindIndex(h => string.Equals(h, "NATIVE_WITHHELD", StringComparison.OrdinalIgnoreCase)),
-            headers.FindIndex(h => PageCountHeaderNames.Contains(h)));
-    }
-
     /// <summary>
     /// A reference from one Load File record to a file on disk: which Load File and line
     /// the reference appears on, what kind of file it names, and the path as the Load File
@@ -282,7 +242,7 @@ internal sealed class ProductionSetPostValidator
                     var quoteDelimChar = state.Request.Delimiters?.GetQuoteChar() ?? '\xfe';
 
                     var headers = ParseDatLine(headerLine, colDelimChar, quoteDelimChar);
-                    var columns = ResolveDatColumnIndexes(headers);
+                    var columns = DatOptDocumentMatcher.ResolveDatHeaderSchema(headers);
 
                     int i = 0;
                     while (enumerator.MoveNext())
@@ -301,7 +261,7 @@ internal sealed class ProductionSetPostValidator
         }
     }
 
-    private static void ValidateDatRow(ValidationState state, DatColumnIndexes columns, int headerCount, List<string> fields, long lineNumber)
+    private static void ValidateDatRow(ValidationState state, DatHeaderSchema columns, int headerCount, List<string> fields, long lineNumber)
     {
         if (fields.Count != headerCount)
         {
@@ -312,11 +272,11 @@ internal sealed class ProductionSetPostValidator
                 lineNumber));
         }
 
-        string docId = columns.DocId >= 0 && columns.DocId < fields.Count ? fields[columns.DocId] : string.Empty;
-        string? bates = columns.Bates >= 0 && columns.Bates < fields.Count ? fields[columns.Bates] : null;
-        string? volume = columns.Volume >= 0 && columns.Volume < fields.Count ? fields[columns.Volume] : null;
-        string? imagePath = columns.Image >= 0 && columns.Image < fields.Count ? fields[columns.Image] : null;
-        string? pageCountRaw = columns.PageCount >= 0 && columns.PageCount < fields.Count ? fields[columns.PageCount] : null;
+        string docId = columns.DocIdIndex >= 0 && columns.DocIdIndex < fields.Count ? fields[columns.DocIdIndex] : string.Empty;
+        string? bates = columns.BatesColumnIndex >= 0 && columns.BatesColumnIndex < fields.Count ? fields[columns.BatesColumnIndex] : null;
+        string? volume = columns.VolumeIndex >= 0 && columns.VolumeIndex < fields.Count ? fields[columns.VolumeIndex] : null;
+        string? imagePath = columns.ImagePathIndex >= 0 && columns.ImagePathIndex < fields.Count ? fields[columns.ImagePathIndex] : null;
+        string? pageCountRaw = columns.PageCountIndex >= 0 && columns.PageCountIndex < fields.Count ? fields[columns.PageCountIndex] : null;
 
         if (string.IsNullOrEmpty(docId) && !string.IsNullOrEmpty(bates))
         {
@@ -325,14 +285,14 @@ internal sealed class ProductionSetPostValidator
 
         state.DatRecords.Add(new DatRecordInfo(docId, bates, volume, imagePath, pageCountRaw, lineNumber));
 
-        ValidateDatDocId(state, columns.DocId, fields, lineNumber);
+        ValidateDatDocId(state, columns.DocIdIndex, fields, lineNumber);
         ValidateDatBates(state, columns, fields, lineNumber);
-        ValidateDatNativePath(state, columns.Native, fields, lineNumber);
-        ValidateDatTextPath(state, columns.Text, fields, lineNumber);
-        ValidateDatImagePath(state, columns.Image, fields, lineNumber);
-        ValidateDatRedactedPath(state, columns.RedactedImage, fields, lineNumber, "redacted image");
-        ValidateDatRedactedPath(state, columns.RedactedText, fields, lineNumber, "redacted text");
-        ValidateDatNativeWithheld(state, columns.NativeWithheld, fields, lineNumber);
+        ValidateDatNativePath(state, columns.NativePathIndex, fields, lineNumber);
+        ValidateDatTextPath(state, columns.TextPathIndex, fields, lineNumber);
+        ValidateDatImagePath(state, columns.ImagePathIndex, fields, lineNumber);
+        ValidateDatRedactedPath(state, columns.RedactedImagePathIndex, fields, lineNumber, "redacted image");
+        ValidateDatRedactedPath(state, columns.RedactedTextPathIndex, fields, lineNumber, "redacted text");
+        ValidateDatNativeWithheld(state, columns.NativeWithheldIndex, fields, lineNumber);
     }
 
     private static void ValidateDatDocId(ValidationState state, int docIdIdx, List<string> fields, long lineNumber)
@@ -355,13 +315,13 @@ internal sealed class ProductionSetPostValidator
         }
     }
 
-    private static void ValidateDatBates(ValidationState state, DatColumnIndexes columns, List<string> fields, long lineNumber)
+    private static void ValidateDatBates(ValidationState state, DatHeaderSchema columns, List<string> fields, long lineNumber)
     {
         // BATES_NUMBER uniqueness and consistency
         string batesVal = string.Empty;
-        if (columns.Bates >= 0 && columns.Bates < fields.Count)
+        if (columns.BatesColumnIndex >= 0 && columns.BatesColumnIndex < fields.Count)
         {
-            batesVal = fields[columns.Bates];
+            batesVal = fields[columns.BatesColumnIndex];
             if (!string.IsNullOrEmpty(batesVal))
             {
                 if (!state.SeenBatesNumbers.Add(batesVal))
@@ -378,14 +338,14 @@ internal sealed class ProductionSetPostValidator
         // Parent/Child Bates range consistency check
         if (!string.IsNullOrEmpty(batesVal))
         {
-            bool isParent = columns.ParentId == -1 || columns.ParentId >= fields.Count || string.IsNullOrEmpty(fields[columns.ParentId]);
+            bool isParent = columns.ParentDocIdIndex == -1 || columns.ParentDocIdIndex >= fields.Count || string.IsNullOrEmpty(fields[columns.ParentDocIdIndex]);
             if (isParent)
             {
                 state.ParentBatesList.Add(batesVal);
             }
             else
             {
-                var parentDocId = fields[columns.ParentId];
+                var parentDocId = fields[columns.ParentDocIdIndex];
                 if (!batesVal.StartsWith(parentDocId, StringComparison.Ordinal))
                 {
                     state.Findings.Add(ValidationReportFinding.Error(
@@ -681,8 +641,7 @@ internal sealed class ProductionSetPostValidator
                 if (string.IsNullOrEmpty(line))
                     continue;
 
-                var columns = line.Split(',');
-                ValidateOptRow(state, columns, i + 1, ref firstOptBates, ref lastOptBates);
+                ValidateOptRow(state, DatOptDocumentMatcher.ParseOptPageRow(line), i + 1, ref firstOptBates, ref lastOptBates);
             }
 
             ProductionSetDatOptReconciliationValidator.ValidateOptPageCounts(
@@ -708,8 +667,9 @@ internal sealed class ProductionSetPostValidator
         }
     }
 
-    private static void ValidateOptRow(ValidationState state, string[] columns, long lineNumber, ref string? firstOptBates, ref string? lastOptBates)
+    private static void ValidateOptRow(ValidationState state, OptPageRow row, long lineNumber, ref string? firstOptBates, ref string? lastOptBates)
     {
+        var columns = row.Columns;
         if (columns.Length != 7)
         {
             state.Findings.Add(ValidationReportFinding.Error(
@@ -722,25 +682,20 @@ internal sealed class ProductionSetPostValidator
         var optBatesVal = columns.Length > 0 ? columns[0] : string.Empty;
         var volumeVal = columns.Length > 1 ? columns[1] : string.Empty;
         var imagePathVal = columns.Length > 2 ? columns[2] : string.Empty;
-        var isDocBreak = columns.Length > 3 && (string.Equals(columns[3].Trim(), "Y", StringComparison.OrdinalIgnoreCase) || columns[3].Trim() == "1");
         var pageCountRaw = columns.Length > 6 ? columns[6].Trim() : string.Empty;
 
         // OPT Bates uniqueness
-        if (columns.Length > 0)
+        if (!string.IsNullOrEmpty(optBatesVal))
         {
-            var optBates = columns[0];
-            if (!string.IsNullOrEmpty(optBates))
+            firstOptBates ??= optBatesVal;
+            lastOptBates = optBatesVal;
+            if (!state.SeenOptBates.Add(optBatesVal))
             {
-                firstOptBates ??= optBates;
-                lastOptBates = optBates;
-                if (!state.SeenOptBates.Add(optBates))
-                {
-                    state.Findings.Add(ValidationReportFinding.Error(
-                        "UniqueId",
-                        state.OptRelPath,
-                        $"Duplicate Bates Number in OPT: '{optBates}'",
-                        lineNumber));
-                }
+                state.Findings.Add(ValidationReportFinding.Error(
+                    "UniqueId",
+                    state.OptRelPath,
+                    $"Duplicate Bates Number in OPT: '{optBatesVal}'",
+                    lineNumber));
             }
         }
 
@@ -758,48 +713,57 @@ internal sealed class ProductionSetPostValidator
             lineNumber,
             state.Findings);
 
+        TrackOptDocumentRow(state, row.IsDocumentBreak, optBatesVal, imagePathVal, pageCountRaw, lineNumber);
+    }
+
+    private static void TrackOptDocumentRow(
+        ValidationState state,
+        bool isDocBreak,
+        string optBatesVal,
+        string imagePathVal,
+        string pageCountRaw,
+        long lineNumber)
+    {
         if (isDocBreak)
         {
-            var doc = new OptDocumentInfo
+            state.OptDocuments.Add(new OptDocumentInfo
             {
                 DocKey = optBatesVal,
                 BreakLineNumber = lineNumber,
                 DeclaredPageCountRaw = string.IsNullOrEmpty(pageCountRaw) ? null : pageCountRaw,
                 FirstImagePath = imagePathVal,
-            };
-            state.OptDocuments.Add(doc);
+            });
+            return;
+        }
+
+        if (state.OptDocuments.Count > 0)
+        {
+            var currentOptDoc = state.OptDocuments[^1];
+            currentOptDoc.PageCount++;
+            ProductionSetDatOptReconciliationValidator.ValidateContinuationPage(
+                state.OptRelPath,
+                currentOptDoc,
+                optBatesVal,
+                imagePathVal,
+                lineNumber,
+                state.Findings);
         }
         else
         {
-            if (state.OptDocuments.Count > 0)
-            {
-                var currentOptDoc = state.OptDocuments[^1];
-                currentOptDoc.PageCount++;
-                ProductionSetDatOptReconciliationValidator.ValidateContinuationPage(
-                    state.OptRelPath,
-                    currentOptDoc,
-                    optBatesVal,
-                    imagePathVal,
-                    lineNumber,
-                    state.Findings);
-            }
-            else
-            {
-                state.Findings.Add(ValidationReportFinding.Error(
-                    "OptBoundary",
-                    state.OptRelPath,
-                    $"OPT line {lineNumber} is a page without a preceding document break.",
-                    lineNumber));
-            }
+            state.Findings.Add(ValidationReportFinding.Error(
+                "OptBoundary",
+                state.OptRelPath,
+                $"OPT line {lineNumber} is a page without a preceding document break.",
+                lineNumber));
+        }
 
-            if (!string.IsNullOrEmpty(pageCountRaw))
-            {
-                state.Findings.Add(ValidationReportFinding.Error(
-                    "OptBoundary",
-                    state.OptRelPath,
-                    $"OPT page '{optBatesVal}' on line {lineNumber} is not a document break but specifies page count '{pageCountRaw}'.",
-                    lineNumber));
-            }
+        if (!string.IsNullOrEmpty(pageCountRaw))
+        {
+            state.Findings.Add(ValidationReportFinding.Error(
+                "OptBoundary",
+                state.OptRelPath,
+                $"OPT page '{optBatesVal}' on line {lineNumber} is not a document break but specifies page count '{pageCountRaw}'.",
+                lineNumber));
         }
     }
 

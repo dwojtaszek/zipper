@@ -43,8 +43,6 @@ internal sealed record CrossFormatAnomalyResult
 /// </summary>
 internal static class CrossFormatAnomalyApplier
 {
-    private const string FirstPageSuffix = "_001";
-
     private sealed record DatRecordEntry(
         long LineNumber,
         List<string> Fields,
@@ -183,23 +181,17 @@ internal static class CrossFormatAnomalyApplier
         var quoteDelimChar = string.IsNullOrEmpty(quoteDelimiter) ? '\0' : quoteDelimiter[0];
 
         var headerLine = datLines[0];
-        var headers = ProductionSetPostValidator.ParseDatLine(headerLine, colDelimChar, quoteDelimChar);
+        var headers = DatLineParser.Parse(headerLine, colDelimChar, quoteDelimChar);
         int originalHeaderCount = headers.Count;
 
-        int docIdIdx = headers.FindIndex(h => string.Equals(h, "DOCID", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "Control Number", StringComparison.OrdinalIgnoreCase));
-        int batesIdx = headers.FindIndex(h => string.Equals(h, "BATES_NUMBER", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "BATES", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "Bates Number", StringComparison.OrdinalIgnoreCase));
-        // A record's Bates identity reads BEGBATES, which the standard profile writes, when no other Bates column
-        // exists. batesIdx stays the Bates column alone because it also names the desync-order audit column.
-        int batesIdentityIdx = batesIdx >= 0 ? batesIdx : headers.FindIndex(h => string.Equals(h, "BEGBATES", StringComparison.OrdinalIgnoreCase));
-        int imageIdx = headers.FindIndex(h => string.Equals(h, "IMAGE_PATH", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "IMAGE", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "Image Path", StringComparison.OrdinalIgnoreCase));
-        int pageCountIdx = headers.FindIndex(h => string.Equals(h, "PAGECOUNT", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(h, "PAGE_COUNT", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(h, "PAGE COUNT", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(h, "PAGECNT", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(h, "PAGES", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(h, "PAGE_CNT", StringComparison.OrdinalIgnoreCase));
-        int parentIdIdx = FindParentIdColumn(headers);
-        int endAttachIdx = FindEndAttachColumn(headers);
+        var schema = DatOptDocumentMatcher.ResolveDatHeaderSchema(headers);
+        int docIdIdx = schema.DocIdIndex;
+        int batesIdx = schema.BatesColumnIndex;
+        int batesIdentityIdx = schema.BatesIdentityIndex;
+        int imageIdx = schema.ImagePathIndex;
+        int pageCountIdx = schema.PageCountIndex;
+        int parentIdIdx = schema.ParentDocIdIndex;
+        int endAttachIdx = schema.EndAttachIndex;
 
         var parsedDatRecords = new List<DatRecordEntry>(datLines.Count - 1);
         for (int i = 1; i < datLines.Count; i++)
@@ -210,7 +202,7 @@ internal static class CrossFormatAnomalyApplier
                 continue;
             }
 
-            var fields = ProductionSetPostValidator.ParseDatLine(line, colDelimChar, quoteDelimChar);
+            var fields = DatLineParser.Parse(line, colDelimChar, quoteDelimChar);
             string docId = docIdIdx >= 0 && docIdIdx < fields.Count ? fields[docIdIdx] : string.Empty;
             string bates = batesIdentityIdx >= 0 && batesIdentityIdx < fields.Count ? fields[batesIdentityIdx] : string.Empty;
             string img = imageIdx >= 0 && imageIdx < fields.Count ? fields[imageIdx] : string.Empty;
@@ -235,11 +227,12 @@ internal static class CrossFormatAnomalyApplier
                 continue;
             }
 
-            var cols = line.Split(',');
+            var row = DatOptDocumentMatcher.ParseOptPageRow(line);
+            var cols = row.Columns;
             string key = cols.Length > 0 ? cols[0].Trim() : string.Empty;
             string vol = cols.Length > 1 ? cols[1].Trim() : string.Empty;
             string img = cols.Length > 2 ? cols[2].Trim() : string.Empty;
-            bool isBreak = cols.Length > 3 && (string.Equals(cols[3].Trim(), "Y", StringComparison.OrdinalIgnoreCase) || cols[3].Trim() == "1");
+            bool isBreak = row.IsDocumentBreak;
 
             if (isBreak || currentOptDoc is null)
             {
@@ -256,12 +249,12 @@ internal static class CrossFormatAnomalyApplier
             currentOptDoc.PageRows.Add((j + 1, line, cols));
         }
 
-        var datRecordsByKey = BuildDatRecordIndex(datRecords.OriginalOrder, includeBates: true);
-        var datRecordsByDocId = BuildDatRecordIndex(datRecords.OriginalOrder, includeBates: false);
+        var datRecordsByKey = DatOptDocumentMatcher.BuildDatIndex(datRecords.OriginalOrder, record => record.DocId, record => record.Bates, includeBates: true);
+        var datRecordsByDocId = DatOptDocumentMatcher.BuildDatIndex(datRecords.OriginalOrder, record => record.DocId, record => record.Bates, includeBates: false);
         var datDocumentKeys = new HashSet<string>(
             datRecords.OriginalOrder.Select(record => string.IsNullOrEmpty(record.Bates) ? record.DocId : record.Bates),
             StringComparer.OrdinalIgnoreCase);
-        var optDocsByKey = BuildOptDocumentIndex(optDocs);
+        var optDocsByKey = DatOptDocumentMatcher.BuildOptIndex(optDocs, document => document.DocKey);
         var familyCandidates = datRecords.OriginalOrder
             .Where(record => record.IsFamilyCandidate)
             .ToList();
@@ -631,7 +624,7 @@ internal static class CrossFormatAnomalyApplier
             }
 
             DatRecordEntry? datDoc;
-            if (FindMatchingDatRecord(datRecordsByKey, optDoc.DocKey) is { } mappedRecord)
+            if (DatOptDocumentMatcher.FindMatchingDatByOptKey(datRecordsByKey, optDoc.DocKey) is { } mappedRecord)
             {
                 if (!datRecords.IsActive(mappedRecord))
                 {
@@ -687,7 +680,7 @@ internal static class CrossFormatAnomalyApplier
         IReadOnlyDictionary<string, DatRecordEntry> datRecordsByKey,
         ActiveDatRecords datRecords)
     {
-        if (FindMatchingDatRecord(datRecordsByKey, optDoc.DocKey) is { } mappedRecord)
+        if (DatOptDocumentMatcher.FindMatchingDatByOptKey(datRecordsByKey, optDoc.DocKey) is { } mappedRecord)
         {
             return datRecords.IsActive(mappedRecord) ? mappedRecord : null;
         }
@@ -776,9 +769,9 @@ internal static class CrossFormatAnomalyApplier
             string firstImg = optDoc.FirstImagePath;
             var ext = Path.GetExtension(firstImg);
             var imageStem = firstImg[..^ext.Length];
-            if (documentKey != optDoc.DocKey && imageStem.EndsWith(FirstPageSuffix, StringComparison.OrdinalIgnoreCase))
+            if (documentKey != optDoc.DocKey && imageStem.EndsWith(DatOptDocumentMatcher.FirstPageSuffix, StringComparison.OrdinalIgnoreCase))
             {
-                imageStem = imageStem[..^FirstPageSuffix.Length];
+                imageStem = imageStem[..^DatOptDocumentMatcher.FirstPageSuffix.Length];
             }
 
             string extraImg = $"{imageStem}_{pageNumber:D3}{ext}";
@@ -1466,96 +1459,10 @@ internal static class CrossFormatAnomalyApplier
         EnsureColumn(columnIndex, FindEndAttachColumn, "ENDATTACH", headers, records);
 
     private static int FindParentIdColumn(IReadOnlyList<string> headers) =>
-        IndexOfAny(headers, "PARENTDOCID", "Parent Doc ID");
+        DatOptDocumentMatcher.FindColumnIndex(headers, "PARENTDOCID", "Parent Doc ID");
 
     private static int FindEndAttachColumn(IReadOnlyList<string> headers) =>
-        IndexOfAny(headers, "ENDATTACH", "END_ATTACH", "END ATTACH");
-
-    private static int IndexOfAny(IReadOnlyList<string> values, params string[] names)
-    {
-        for (int i = 0; i < values.Count; i++)
-        {
-            if (names.Any(name => string.Equals(values[i], name, StringComparison.OrdinalIgnoreCase)))
-            {
-                return i;
-            }
-        }
-
-        return -1;
-    }
-
-    private static Dictionary<string, DatRecordEntry> BuildDatRecordIndex(IReadOnlyList<DatRecordEntry> records, bool includeBates)
-    {
-        var index = new Dictionary<string, DatRecordEntry>(StringComparer.OrdinalIgnoreCase);
-        if (includeBates)
-        {
-            // OPT keys are Bates numbers, so a Bates match takes precedence over a DocId that repeats it.
-            foreach (var record in records)
-            {
-                if (!string.IsNullOrEmpty(record.Bates))
-                {
-                    index.TryAdd(record.Bates, record);
-                }
-            }
-        }
-
-        foreach (var record in records)
-        {
-            if (!string.IsNullOrEmpty(record.DocId))
-            {
-                index.TryAdd(record.DocId, record);
-            }
-        }
-
-        return index;
-    }
-
-    private static Dictionary<string, OptDocEntry> BuildOptDocumentIndex(IReadOnlyList<OptDocEntry> documents)
-    {
-        var index = new Dictionary<string, OptDocEntry>(StringComparer.OrdinalIgnoreCase);
-        foreach (var document in documents)
-        {
-            index.TryAdd(document.DocKey, document);
-        }
-
-        return index;
-    }
-
-    private static OptDocEntry? FindMatchingOpt(IReadOnlyDictionary<string, OptDocEntry> documentsByKey, string datKey)
-    {
-        if (string.IsNullOrEmpty(datKey))
-        {
-            return null;
-        }
-
-        if (documentsByKey.TryGetValue(datKey, out var document))
-        {
-            return document;
-        }
-
-        return documentsByKey.TryGetValue($"{datKey}{FirstPageSuffix}", out document) ? document : null;
-    }
-
-    private static DatRecordEntry? FindMatchingDatRecord(
-        IReadOnlyDictionary<string, DatRecordEntry> datRecordsByKey,
-        string optDocKey)
-    {
-        if (string.IsNullOrEmpty(optDocKey))
-        {
-            return null;
-        }
-
-        if (datRecordsByKey.TryGetValue(optDocKey, out var datDocument))
-        {
-            return datDocument;
-        }
-
-        return optDocKey.EndsWith(FirstPageSuffix, StringComparison.OrdinalIgnoreCase)
-            && optDocKey.Length > FirstPageSuffix.Length
-            && datRecordsByKey.TryGetValue(optDocKey[..^FirstPageSuffix.Length], out datDocument)
-                ? datDocument
-                : null;
-    }
+        DatOptDocumentMatcher.FindColumnIndex(headers, "ENDATTACH", "END_ATTACH", "END ATTACH");
 
     // Page-suffix mode keys a one-page document's first page as {Bates}_001 (REQ-239). A key that is a DAT
     // record's document identity, its Bates number or its DocId when the record has no Bates, is that
@@ -1563,20 +1470,20 @@ internal static class CrossFormatAnomalyApplier
     // identity, so it still names the first page of ABC.
     private static string DocumentKeyOf(string optDocKey, IReadOnlySet<string> datDocumentKeys)
     {
-        if (!optDocKey.EndsWith(FirstPageSuffix, StringComparison.OrdinalIgnoreCase) || datDocumentKeys.Contains(optDocKey))
+        if (!optDocKey.EndsWith(DatOptDocumentMatcher.FirstPageSuffix, StringComparison.OrdinalIgnoreCase) || datDocumentKeys.Contains(optDocKey))
         {
             return optDocKey;
         }
 
-        return optDocKey[..^FirstPageSuffix.Length];
+        return optDocKey[..^DatOptDocumentMatcher.FirstPageSuffix.Length];
     }
 
     private static OptDocEntry? FindMatchingOptForDat(
         IReadOnlyDictionary<string, OptDocEntry> documentsByKey,
         DatRecordEntry datRecord)
     {
-        return FindMatchingOpt(documentsByKey, datRecord.Bates)
-            ?? FindMatchingOpt(documentsByKey, datRecord.DocId);
+        return DatOptDocumentMatcher.FindMatchingOptByKey(documentsByKey, datRecord.Bates)
+            ?? DatOptDocumentMatcher.FindMatchingOptByKey(documentsByKey, datRecord.DocId);
     }
 
     private static string ReplaceVolumeInPath(string path, string newVolume)

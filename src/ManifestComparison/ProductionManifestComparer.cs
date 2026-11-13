@@ -254,7 +254,7 @@ public static class ProductionManifestComparer
         }
 
         var headerLine = enumerator.Current;
-        var headers = ParseDatLine(headerLine, colDelim, quoteDelim);
+        var headers = DatLineParser.Parse(headerLine, colDelim, quoteDelim);
 
         int batesIdx = headers.FindIndex(h => string.Equals(h, "BATES_NUMBER", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "BATES", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "BEGDOC", StringComparison.OrdinalIgnoreCase));
         if (batesIdx < 0)
@@ -280,7 +280,7 @@ public static class ProductionManifestComparer
                 continue;
             }
 
-            var fields = ParseDatLine(line, colDelim, quoteDelim);
+            var fields = DatLineParser.Parse(line, colDelim, quoteDelim);
             if (fields.Count == 0)
             {
                 continue;
@@ -342,6 +342,4 @@ public static class ProductionManifestComparer
         return fallback;
     }
 
-    private static List<string> ParseDatLine(string line, char colDelim, char quoteDelim)
-        => DatLineParser.Parse(line, colDelim, quoteDelim);
 }

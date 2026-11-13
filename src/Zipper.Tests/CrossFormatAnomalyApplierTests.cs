@@ -715,6 +715,59 @@ public sealed class CrossFormatAnomalyApplierTests : IDisposable
     }
 
     [Fact]
+    public void Apply_OptLineWithoutDocBreakColumn_IsGroupedWithoutThrowing()
+    {
+        var (datLines, _) = CreateNoFamilyLines();
+        var optLines = new List<string>
+        {
+            @"TEST00000001,VOL001,IMAGES\VOL001\DOC00000001.tif",
+            @"TEST00000002,VOL001,IMAGES\VOL001\DOC00000002.tif",
+            @"TEST00000003,VOL001,IMAGES\VOL001\DOC00000003.tif",
+        };
+
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.DesyncPagecount,
+            chaosAmount: "1",
+            seed: 42);
+
+        Assert.Equal(datLines.Count, result.DatLines.Count);
+    }
+
+    [Fact]
+    public void Apply_OrphanAttachment_WhenDocIdRepeatsAnotherRecordsBates_DropsTrueDocIdParent()
+    {
+        // PARENTDOCID values name DocIds, so the DocId-only lookup must not resolve a DocId that
+        // repeats another record's Bates number to that Bates-bearing record.
+        var datLines = new List<string>
+        {
+            JoinDat("DOCID", "BATES_NUMBER", "PARENTDOCID", "IMAGE_PATH", "PAGECOUNT", "VOLUME"),
+            JoinDat("D1", "B1", "", @"IMAGES\VOL001\D1.tif", "1", "VOL001"),
+            JoinDat("B1", "B2", "", @"IMAGES\VOL001\B1.tif", "1", "VOL001"),
+            JoinDat("D3", "B3", "B1", @"IMAGES\VOL001\D3.tif", "1", "VOL001"),
+        };
+        var optLines = new List<string>
+        {
+            @"B1,VOL001,IMAGES\VOL001\D1.tif,Y,,,1",
+            @"B2,VOL001,IMAGES\VOL001\B1.tif,Y,,,1",
+            @"B3,VOL001,IMAGES\VOL001\D3.tif,Y,,,1",
+        };
+
+        var result = CrossFormatAnomalyApplier.Apply(
+            datLines,
+            optLines,
+            scenarioOrTypes: ChaosAnomalyTypes.CrossFormat.OrphanAttachment,
+            chaosAmount: "1",
+            seed: 42);
+
+        var datAnomaly = Assert.Single(result.Anomalies, a => a.File == "loadfile.dat");
+        Assert.Contains("parent 'B1' dropped", datAnomaly.Description, StringComparison.Ordinal);
+        Assert.DoesNotContain(result.DatLines, l => l.StartsWith($"\u00feB1\u00fe", StringComparison.Ordinal));
+        Assert.Contains(result.DatLines, l => l.StartsWith($"\u00feD1\u00fe", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Apply_MissingChild_RemovesAttachmentFromDatAndProducesReciprocalAudit()
     {
         var (datLines, optLines) = CreateSampleLines();

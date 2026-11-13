@@ -797,6 +797,67 @@ public sealed class ProductionSetPostValidatorTests : IDisposable
     }
 
     [Fact]
+    public void Validate_OptKeyedByDocIdOfRecordWithBates_ReportsOptDocumentNotInDat()
+    {
+        var prodDir = Path.Combine(this.testOutputPath, "xref_opt_docid_with_bates");
+        var request = this.CreateRequest(1);
+
+        var datRows = new List<string>
+        {
+            JoinDat("DOCID", "BATES_NUMBER", "IMAGE_PATH"),
+            JoinDat("DOC00000001", "TEST00000001", "IMAGES\\VOL001\\DOC00000001.tif"),
+        };
+
+        // OPT names the record by its DocId, but Bates takes precedence: the record is keyed
+        // only by its Bates Number, so this OPT document must report as unmatched.
+        var optRows = new List<string>
+        {
+            "DOC00000001,VOL001,IMAGES\\VOL001\\DOC00000001.tif,Y,,,1",
+        };
+
+        this.SetupProductionSet(
+            prodDir,
+            datRows,
+            optRows,
+            ["IMAGES/VOL001/DOC00000001.tif"]);
+
+        var report = ProductionSetPostValidator.Validate(prodDir, request);
+
+        Assert.Equal("failed", report.Status);
+        var finding = Assert.Single(report.Findings, f => f.Code == "OptBoundary" && f.Message.Contains("does not exist in DAT", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("DOC00000001", finding.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validate_AliasHeaders_ResolveThroughUnifiedSchema()
+    {
+        var prodDir = Path.Combine(this.testOutputPath, "alias_headers");
+        var request = this.CreateRequest(1);
+
+        // The unified header schema also recognizes the long-form header names. The DAT image
+        // is deliberately absent while the OPT image exists: "Image Path" must resolve for the
+        // missing DAT-referenced file to be reported.
+        var datRows = new List<string>
+        {
+            JoinDat("Control Number", "Bates Number", "Image Path"),
+            JoinDat("DOC00000001", "TEST00000001", "IMAGES\\VOL001\\DAT_ONLY.tif"),
+        };
+
+        var optRows = new List<string>
+        {
+            "TEST00000001,VOL001,IMAGES\\VOL001\\DOC00000001.tif,Y,,,1",
+        };
+
+        this.SetupProductionSet(prodDir, datRows, optRows, ["IMAGES/VOL001/DOC00000001.tif"]);
+
+        var report = ProductionSetPostValidator.Validate(prodDir, request);
+
+        Assert.Equal("failed", report.Status);
+        Assert.Contains(report.Findings, f => f.Code == "PathExistence"
+            && f.Message.Contains("DAT_ONLY.tif", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Validate_CrossReferenceDesync_OrphanAttachmentInOpt_FailsWithActionableMessage()
     {
         var prodDir = Path.Combine(this.testOutputPath, "xref_orphan_attachment");
