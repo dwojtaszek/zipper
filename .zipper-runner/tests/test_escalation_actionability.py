@@ -155,7 +155,7 @@ class EscalationDedupeTests(_EscalationFixture):
     def test_changedRefusalReasonAtTheSameHead_isStillMailed(self):
         """Same for the authorization path: the refusal reason is part of the key, so
         a PR that stops being a draft and is then retargeted off main reports both."""
-        pr = self.pr(head=HEAD_A)
+        self.pr(head=HEAD_A)
         with patch.object(self.runner, "_query_review_thread_count", return_value=0):
             self.runner._send_pr_escalation(99, HEAD_A, "S", "draft body", detail="the PR is a draft")
             self.runner._send_pr_escalation(99, HEAD_A, "S", "base body", detail="its base branch is 'other', not 'main'")

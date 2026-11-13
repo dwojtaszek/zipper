@@ -55,6 +55,14 @@ jobs:
           persist-credentials: false
           ref: ${{ inputs.source_sha || github.sha }}
       - uses: eifinger/actionlint-action@1fc89649be682d16ec5cf65ea16e269eb88d3982 # v1.10.2
+      - name: Lint Python scripts and runner
+        uses: astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89 # v4.1.0
+        with:
+          version: "0.17.5"
+          args: check
+      - name: Lint shell scripts
+        shell: bash
+        run: shellcheck -S warning tests/wait-for-reviews.sh dev.sh setup-hook.sh .github/hooks/pre-commit .github/hooks/pre-push .github/hooks/post-commit
       - if: ${{ !inputs.runner_only }}
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:

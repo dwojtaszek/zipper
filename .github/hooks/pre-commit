@@ -49,7 +49,7 @@ UNSTAGED_EXISTS=false
 STASH_FLAGS=(--keep-index --quiet)
 # Scope untracked isolation to product, runner, and gate sources; unrelated notes do not
 # trigger an unnecessary git stash push/pop cycle.
-UNTRACKED_SRC=$(git ls-files --others --exclude-standard -- src/ .zipper-runner/ .github/scripts/)
+UNTRACKED_SRC=$(git ls-files --others --exclude-standard -- src/ .zipper-runner/ .github/scripts/ tests/ci/)
 if [[ -n "$UNTRACKED_SRC" ]]; then
     UNSTAGED_EXISTS=true
     STASH_FLAGS+=(--include-untracked)
@@ -134,6 +134,30 @@ if [[ "$DOCS_ONLY" == "true" || "$RUNNER_ONLY" == "true" ]]; then
         record_verified_scope runner
     fi
     echo "✓ Pre-commit: documentation/runner gates passed; unchanged product unit suite skipped."
+    exit 0
+fi
+
+CI_SCRIPTS_ONLY=false
+if [[ -d tests/ci ]]; then
+    RUNNER_PREF_MATCH=$(printf '%s\n' "$STAGED" | grep -c -E '^\.zipper-runner/' || true)
+    CI_MATCHED=$(printf '%s\n' "$STAGED" | grep -c -E '^(\.github/(workflows|scripts)/|tests/ci/|tests/wait-for-reviews\.sh$|tests/test-unified-workflow\.(sh|bat)$|\.pi-lens\.json$|ruff\.toml$|docs/|CHANGELOG(\.md)?$|.*\.(md|markdown)$)' || true)
+    if [[ "$TOTAL" -gt 0 && "$RUNNER_PREF_MATCH" -eq 0 && "$CI_MATCHED" -eq "$TOTAL" ]]; then
+        CI_SCRIPTS_ONLY=true
+    fi
+fi
+if [[ "$CI_SCRIPTS_ONLY" == "true" ]]; then
+    echo "▶ Pre-commit (CI/workflow/script-only): running tests/ci..."
+    (
+        while IFS= read -r git_env; do unset "$git_env"; done < <(git rev-parse --local-env-vars)
+        python3 .github/scripts/run-check.py --log "$(mktemp -t zipper-ci-check.XXXXXX)" -- \
+            python3 -m unittest discover -s tests/ci -p 'test_*.py'
+    ) || exit 1
+    if [[ -f "src/Zipper.Tests/Zipper.Tests.csproj" ]]; then
+        echo "▶ Running DocsDriftTests..."
+        dotnet test src/Zipper.Tests/Zipper.Tests.csproj --filter "FullyQualifiedName~DocsDriftTests" --logger "console;verbosity=quiet" || exit 1
+    fi
+    record_verified_scope ci
+    echo "✓ Pre-commit: CI/workflow gates passed; unchanged product unit suite skipped."
     exit 0
 fi
 

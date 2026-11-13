@@ -63,6 +63,7 @@ jobs:
       assurance_executed: ${{ steps.assurance-result.outputs.executed }}
       assurance_reason: ${{ steps.assurance-result.outputs.reason }}
       assurance_json: ${{ steps.assurance-result.outputs.json }}
+      droid_error: ${{ steps.assurance-result.outputs.droid_error }}
     environment: QA
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -320,7 +321,7 @@ jobs:
           if [[ "$VIDEO_EVIDENCE" == true && "$COMPOSE" == true ]]; then
             prompt+=" Read the Compose setting from config.yaml and run droid-control Compose for each captured flow before upload."
           fi
-          droid exec --model gpt-5.6-sol --reasoning-effort medium --auto high --tag "qa-run-$QA_RUN_ID" "$prompt"
+          droid exec --model gpt-5.6-sol --reasoning-effort medium --auto high --tag "qa-run-$QA_RUN_ID" "$prompt" 2>&1 | tee "$RUNNER_TEMP/droid-exec.log"
 
       - name: Write no-app report
         if: steps.qa-scope.outputs.cli_affected == 'false'
@@ -530,6 +531,9 @@ jobs:
           QA_OUTCOME: ${{ steps.qa.outcome }}
           VALIDATE_OUTCOME: ${{ steps.validate-report.outcome }}
           COMMIT_SHA: ${{ github.sha }}
+          DROID_LOG: ${{ runner.temp }}/droid-exec.log
+          FACTORY_API_KEY: ${{ secrets.FACTORY_API_KEY }}
+          QA_EVIDENCE_TOKEN: ${{ steps.qa-config.outputs.video_evidence == 'true' && secrets.QA_EVIDENCE_TOKEN || '' }}
         run: |
           set -euo pipefail
           mkdir -p qa-results
@@ -585,10 +589,6 @@ jobs:
               executed = True
               status = "failed"
               reason = "droid_qa_execution_failed"
-          elif validate_outcome == "failure":
-              executed = True
-              status = "failed"
-              reason = "qa_report_validation_failed"
           elif qa_outcome == "success" and validate_outcome == "success":
               executed = True
               status = "executed"
@@ -616,6 +616,19 @@ jobs:
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
               f.write("### Scheduled Assurance Result\n\n```json\n" + json.dumps(result, indent=2) + "\n```\n\n")
 
+          droid_error = ""
+          log_path = os.environ.get("DROID_LOG", "")
+          if qa_outcome == "failure" and log_path and os.path.isfile(log_path):
+              with open(log_path, encoding="utf-8", errors="replace") as log_file:
+                  lines = [ln.strip() for ln in log_file if ln.strip()]
+              error_lines = [ln for ln in lines if any(k in ln.lower() for k in ("error", "402", "401", "429", "failed", "payment"))]
+              chosen = error_lines[-1] if error_lines else (lines[-1] if lines else "")
+              for secret_var in ("FACTORY_API_KEY", "QA_EVIDENCE_TOKEN"):
+                  secret_val = os.environ.get(secret_var, "")
+                  if secret_val:
+                      chosen = chosen.replace(secret_val, "***")
+              droid_error = " ".join(chosen.split())[:240]
+
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
               f.write(f"status={status}\n")
               f.write(f"executed={'true' if executed else 'false'}\n")
@@ -623,6 +636,7 @@ jobs:
               f.write("scope=cli\n")
               f.write(f"sha={sha}\n")
               f.write(f"json={json.dumps(result)}\n")
+              f.write(f"droid_error={droid_error}\n")
           PY
 
       - name: Preserve run evidence and remove generated data
@@ -679,6 +693,7 @@ jobs:
           ASSURANCE_STATUS: ${{ needs.qa.outputs.assurance_status }}
           ASSURANCE_EXECUTED: ${{ needs.qa.outputs.assurance_executed }}
           ASSURANCE_REASON: ${{ needs.qa.outputs.assurance_reason }}
+          DROID_ERROR: ${{ needs.qa.outputs.droid_error }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
@@ -701,6 +716,9 @@ jobs:
             elif [ "${ASSURANCE_STATUS:-}" = "failed" ] || [ "$DROID_RESULT" = "failure" ]; then
               if [ "${ASSURANCE_EXECUTED:-}" = "true" ]; then
                 echo "Droid QA check EXECUTED AND FAILED (${ASSURANCE_REASON:-failure})."
+                if [ -n "${DROID_ERROR:-}" ]; then
+                  echo "- Droid error summary: ${DROID_ERROR}"
+                fi
                 echo "Investigate the failure log and evidence snapshots before claiming a Zipper defect."
               else
                 echo "Droid QA check failed during setup/prerequisites (${ASSURANCE_REASON:-prerequisite failure}; executed: false)."

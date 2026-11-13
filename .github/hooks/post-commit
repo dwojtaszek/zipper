@@ -57,11 +57,11 @@ fi
 
 PENDING_SCOPE=$(grep '^scope=' "$PENDING" 2>/dev/null | cut -d= -f2 || true)
 PENDING_SCOPE="${PENDING_SCOPE:-full}"
-if [[ "$PENDING_SCOPE" != "full" && "$PENDING_SCOPE" != "runner" ]]; then
+if [[ "$PENDING_SCOPE" != "full" && "$PENDING_SCOPE" != "runner" && "$PENDING_SCOPE" != "ci" ]]; then
     rm -f "$PENDING"
     exit 0
 fi
-if [[ "$PENDING_SCOPE" == "runner" && ( -z "$PENDING_TREE" || "$PENDING_TREE" != "$HEAD_TREE" ) ]]; then
+if [[ ( "$PENDING_SCOPE" == "runner" || "$PENDING_SCOPE" == "ci" ) && ( -z "$PENDING_TREE" || "$PENDING_TREE" != "$HEAD_TREE" ) ]]; then
     rm -f "$PENDING"
     exit 0
 fi

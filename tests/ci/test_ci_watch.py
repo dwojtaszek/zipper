@@ -113,3 +113,34 @@ class CiWatchTests(unittest.TestCase):
             result = self.run_watch(directory, other_pr=True, timeout=2)
             self.assertEqual(result.returncode, 124, result.stdout + result.stderr)
             self.assertIsNone(json.loads((Path(directory) / 'snapshot.json').read_text())['run_id'])
+
+    def test_status_reads_existing_snapshot_without_calling_gh(self):
+        with tempfile.TemporaryDirectory() as directory:
+            snap = Path(directory) / 'snapshot.json'
+            for status, conclusion, expected_rc in (
+                ('completed', 'success', 0),
+                ('completed', 'failure', 1),
+                ('in_progress', '', 4),
+                ('timeout', '', 124),
+            ):
+                snap.write_text(json.dumps({'pr': 1421, 'status': status, 'conclusion': conclusion}))
+                res = subprocess.run(
+                    [sys.executable, str(ROOT / '.github/scripts/watch-pr.py'), '1421',
+                     '--snapshot', str(snap), '--status'],
+                    cwd=ROOT, capture_output=True, text=True, timeout=10,
+                )
+                self.assertEqual(res.returncode, expected_rc, res.stdout + res.stderr)
+            snap.write_text(json.dumps({'pr': 9999, 'status': 'completed', 'conclusion': 'success'}))
+            mismatch = subprocess.run(
+                [sys.executable, str(ROOT / '.github/scripts/watch-pr.py'), '1421',
+                 '--snapshot', str(snap), '--status'],
+                cwd=ROOT, capture_output=True, text=True, timeout=10,
+            )
+            self.assertEqual(mismatch.returncode, 3, mismatch.stdout + mismatch.stderr)
+            snap.write_text(json.dumps([]))
+            bad_type = subprocess.run(
+                [sys.executable, str(ROOT / '.github/scripts/watch-pr.py'), '1421',
+                 '--snapshot', str(snap), '--status'],
+                cwd=ROOT, capture_output=True, text=True, timeout=10,
+            )
+            self.assertEqual(bad_type.returncode, 3, bad_type.stdout + bad_type.stderr)

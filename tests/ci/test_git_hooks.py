@@ -404,6 +404,47 @@ class GitHooksBehavioralTests(unittest.TestCase):
         self.assertEqual(res.returncode, 0)
         self.assertIn("MOCK_E2E_CALLED", res.stdout)
 
+    def test_pre_commit_ci_scripts_only_runs_tests_ci_and_skips_full_dotnet_suite(self):
+        """Staged CI/gate script changes run tests/ci instead of the full C# unit suite."""
+        self._commit_readme(msg="initial")
+        tests_ci_dir = self.repo_dir / "tests/ci"
+        tests_ci_dir.mkdir(parents=True, exist_ok=True)
+        (tests_ci_dir / "test_sample.py").write_text(
+            "import unittest\nclass Sample(unittest.TestCase):\n    def test_ok(self):\n        self.assertTrue(True)\n",
+            encoding="utf-8",
+        )
+        gh_scripts = self.repo_dir / ".github/scripts"
+        gh_scripts.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / ".github/scripts/run-check.py", gh_scripts / "run-check.py")
+        shutil.copy2(ROOT / ".github/scripts/change-scope.py", gh_scripts / "change-scope.py")
+        self._git("add", "tests/ci/test_sample.py", ".github/scripts/run-check.py", ".github/scripts/change-scope.py")
+        self._git("commit", "-m", "add ci test fixture")
+        (self.repo_dir / "tests/wait-for-reviews.sh").write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
+        self._git("add", "tests/wait-for-reviews.sh")
+        env = self._env_with_logging_dotnet()
+        res = subprocess.run(
+            ["bash", str(self.hooks_dir / "pre-commit")],
+            cwd=self.repo_dir,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        self.assertIn("Pre-commit (CI/workflow/script-only): running tests/ci", res.stdout)
+        self.assertNotIn("Running unit tests", res.stdout)
+
+        # Verify pre-push also skips full unit tests when a CI-script-only commit is verified.
+        self._git("commit", "-m", "ci script change", "--no-verify")
+        subprocess.run(["bash", str(self.hooks_dir / "post-commit")], cwd=self.repo_dir, env=env, check=True)
+        head = self._git("rev-parse", "HEAD")
+        self._git("update-ref", "refs/remotes/origin/main", f"{head}~1")
+        self._mock_mutation_smoke()
+        push_res = self._run_pre_push(f"refs/heads/main {head} refs/heads/main 0000000000000000000000000000000000000000\n", env=env)
+        self.assertEqual(push_res.returncode, 0, push_res.stdout + push_res.stderr)
+        self.assertIn("Scoped tests already passed for this clean HEAD", push_res.stdout)
+        self.assertNotIn("MOCK_DOTNET_CALLED: test src/Zipper.Tests/Zipper.Tests.csproj --logger", push_res.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

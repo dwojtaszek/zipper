@@ -1026,7 +1026,7 @@ class WorktreeReconciliationTests(unittest.TestCase):
                 ["git", "-C", str(repo), "branch", "--list", "runner-backup-*"], text=True
             ).strip()
             self.assertEqual(backups, "")
-            rebased_head = subprocess.check_output(["git", "-C", str(wt_path), "rev-parse", "HEAD"], text=True).strip()
+            subprocess.check_output(["git", "-C", str(wt_path), "rev-parse", "HEAD"], text=True).strip()
             ancestor = subprocess.run(
                 ["git", "-C", str(wt_path), "merge-base", "--is-ancestor", advanced_sha, "HEAD"], capture_output=True
             )

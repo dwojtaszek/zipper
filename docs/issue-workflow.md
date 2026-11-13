@@ -1,146 +1,11 @@
 # GitHub issue & PR workflow
 
-Disclosed from [agent-workflow.md](agent-workflow.md). Read when triaging, selecting, implementing, reviewing, or merging GitHub issues.
+Disclosed from [agent-workflow.md](agent-workflow.md). Read when implementing, reviewing, or merging GitHub issues. For queue ranking and wave-labeling rules, see [issue-selection.md](issue-selection.md).
 
 ## Workflow for github issues
 
-### Issue selection (mandatory for autonomous / "next issue" work)
-
-Agents must **not** pick or classify issues by gut feel, recency, or title interest. Follow this algorithm every time when selecting the next issue to implement **or** when classifying/labeling issues in the backlog.
-
-#### 1. Load the living roadmap (if any)
-
-```bash
-gh issue list --state open --limit 200 --json number,title,labels \
-  --jq '.[] | select(.title | test("^Roadmap:"; "i")) | "#\(.number) \(.title)"'
-```
-
-- If a **Roadmap:** issue is open:
-  - Read it **and all comments** (`gh issue view NNN --comments`).
-  - Treat its **phase order and exit criteria** as the sequencing contract for leaf issues it lists.
-  - **Never implement the roadmap issue itself** (it is a tracker only).
-- If none is open, continue with label ranking and wave classification below.
-
-#### 2. Rank by priority labels (`P0`–`P3`) and `.zipper-runner` execution tiers
-
-Every work issue should carry exactly one priority label (**`P0`**, **`P1`**, **`P2`**, **`P3`**) plus type/domain labels that place it in the correct autonomous execution tier.
-
-| Label | Meaning | When to take |
-|-------|---------|--------------|
-| `P0` | Blocker / production broken / data loss | Immediately; only open work until cleared |
-| `P1` | High — must fix soon (security, correctness, CI/hook/coverage gates) | After all open `P0` |
-| `P2` | Medium — this iteration (tests, fixtures, refactors, product features, oracles) | After all open `P0`/`P1` |
-| `P3` | Low — nice to have (docs, traceability, non-urgent cleanup) | Only when no open `P0`–`P2`, or user names the issue |
-
-**How `.zipper-runner` (`select_next_issue()`) orders the queue:**
-Unassigned open issues from `TRUSTED_AUTHORS` (`dwojtaszek`) without an active PR/branch/worktree or prompt-injection marker are bucketed into **six first-match label tiers** (case-insensitive) and sorted by **ascending issue number** within each tier:
-
-| Runner Tier | Matching Labels (first match wins) | Branch Prefix | Intended Work Category |
-|-------------|------------------------------------|---------------|------------------------|
-| **Tier 1** (`p1_issues`) | `P0`, `P1`, `critical`, `high`, `blocker`, `bug` | `fix/ISSUE-...` (when `bug`, `P1`, or `critical`) | Security, correctness bugs, hot-path regressions, CI/CD & git-hook reliability, coverage/mutation gates |
-| **Tier 2** (`p2_issues`) | `testing`, `e2e` | `feat/ISSUE-...` | Unit/property/E2E tests, Archive Test Fixture mutations, differential reader matrices, load-file Chaos Engine cases |
-| **Tier 3** (`p3_issues`) | `refactor` | `feat/ISSUE-...` | Structural decompositions and seam extractions (with byte-identical output parity) |
-| **Tier 4** (`p4_issues`) | `enhancement` | `feat/ISSUE-...` | Cross-format validators, opt-in artifact realism/fidelity features, and artifact-level Chaos Engine corruptions |
-| **Tier 5** (`p5_issues`) | `investigation`, `quality` | `feat/ISSUE-...` | Capstone expectation oracles, audit sidecar verification, and repository-wide quality sweeps |
-| **Tier 6** (`p6_issues`) | *(all other open issues)* | `feat/ISSUE-...` | Documentation sync, ADR/architecture diagrams, requirement traceability (`documentation`, `docs`, `requirements`, `P3`) |
-
-> **`P0` precedence note:** Manual/interactive agent selection **must** always take `P0` before any `P1` work (`sort_by` below puts `P0` first). Because `.zipper-runner` pools `P0` and `P1`/`bug`/`critical`/`high`/`blocker` together into Tier 1 and sorts Tier 1 by issue number ascending, if a `P0` ticket is filed with a higher issue number than open `P1`/`bug` tickets, triage must temporarily downgrade or assign the lower-numbered `P1`/`bug` tickets until the `P0` blocker is cleared so the runner picks `P0` first.
-
-```bash
-# List unassigned trusted-author leaf issues in .zipper-runner tier order (with P0 always first for manual selection).
-# Note: .zipper-runner additionally skips issues with an open PR, active remote/worktree branch (issue-NNN or slug), or state/issue-NNN-injection.json marker.
-gh issue list --state open --limit 500 --json number,title,labels,assignees,author \
-  --jq 'def has_any($arr): ([.labels[].name | ascii_downcase] | any(. as $l | $arr | index($l)));
-    def tier: (if has_any(["p1","p0","critical","high","blocker","bug"]) then 1
-      elif has_any(["testing","e2e"]) then 2
-      elif has_any(["refactor"]) then 3
-      elif has_any(["enhancement"]) then 4
-      elif has_any(["investigation","quality"]) then 5
-      else 6 end);
-    def p: (if any(.labels[].name; .=="P0") then 0 elif any(.labels[].name; .=="P1") then 1 elif any(.labels[].name; .=="P2") then 2 elif any(.labels[].name; .=="P3") then 3 else 9 end);
-    map(select((.assignees | length) == 0 and (.author.login == "dwojtaszek") and (.title | test("^Roadmap:"; "i") | not)))
-    | sort_by((if p == 0 then 0 else tier end), .number)[]
-    | "T\(tier) P\(p) #\(.number) [\([.labels[].name] | join(","))] \(.title)"'
-```
-
-Issues **without** a `P0`–`P3` label rank last when sorting manually (priority 9). Prefer labeling them before implementing. If an issue carries multiple `Pn` labels, the highest priority (lowest number) wins.
-
-#### 3. Backlog classification & wave prioritization rules (mandatory when triaging or labeling)
-
-Because `.zipper-runner` uses **first-match tier bucketing** and sorts within each tier strictly by **ascending issue number**:
-- **Cross-wave rule (avoid label bleed):** Adding a higher-tier secondary label (for example, adding `testing` to an `enhancement` or `quality` ticket, or `quality` to a `documentation` ticket) pulls that issue into an earlier execution wave ahead of its prerequisites.
-- **Intra-wave prerequisite rule:** Keeping a prerequisite and its dependent in the same tier works automatically only when the prerequisite has a **lower issue number** (`#prereq < #dependent`). If a prerequisite was filed *after* its dependent (`#prereq > #dependent`), same-tier labels cannot order them for `.zipper-runner`: you must either **promote the prerequisite to an earlier tier** or **defer the dependent to a later tier** until the prerequisite merges (in addition to recording `blocked by #N` in the issue body/comments for manual selection).
-
-When classifying or re-labeling issues, enforce this **5-wave dependency order**:
-
-1. **Wave 1 — CI/CD, Git Hooks, Security, Perf & Coverage Gates (Tier 1: `P0`/`P1`, `bug`, `ci-cd`, `security`, `perf`)**
-   - Includes silent-correctness bugs, security hardening, hot-path regressions, local hook reliability (`pre-commit` / `pre-push`), CI workflow fixes, and test/coverage/mutation gate enforcement.
-   - **Intra-wave ordering:** CI/test-runner fixes that repair broken checks or unblock accurate coverage/mutation measurement must run **before** tickets that ratchet coverage or mutation thresholds upward. If the threshold-ratchet ticket has a lower issue number than the CI/measurement fix, defer the ratchet ticket to Tier 2/Tier 5 until the Tier 1 fix merges.
-2. **Wave 2 — Test Coverage, Archive Test Fixtures, Differential Matrices & Load-File Chaos (Tier 2: `P2` + `testing` / `e2e`)**
-   - Includes missing unit/property/E2E tests, individual Archive Test Fixture mutations, cross-reader differential test matrices, and Chaos Engine anomalies injected through the existing load-file pipeline.
-   - **Intra-wave ordering:** Individual fixture and mutation cases must run **before** aggregate differential-matrix or suite-wide verification tickets that test across the full fixture catalog. When the aggregate matrix ticket has a higher issue number than the individual fixture tickets, keep both in Tier 2 (`P2, testing`, omitting `enhancement` so it does not drop to Tier 4, and omitting `P1`/`bug` so it does not jump to Tier 1); if an individual fixture ticket has a higher issue number than the aggregate matrix ticket, defer the aggregate matrix ticket to a later tier (e.g., Tier 4 `enhancement` or Tier 5 `quality`) until the fixture lands.
-3. **Wave 3 — Structural Refactors (Tier 3: `P2` + `refactor`, omit `testing` and `bug`)**
-   - Includes module decompositions and internal seam extractions guarded by Wave 2 tests and Critical Rule 6 golden parity.
-   - **Label rule:** Do **not** attach `testing` to a refactor ticket, or it will be promoted into Tier 2 ahead of the tests meant to guard the refactor.
-4. **Wave 4 — Cross-Format Validators, Opt-In Artifact Realism & Artifact Chaos (Tier 4: `P2` + `enhancement`, omit `testing` and `bug`)**
-   - Includes new CLI/product capabilities, cross-format post-generation validators, opt-in format realism upgrades (e.g., realistic container structure, headers, metadata, attachments), and artifact-level Chaos Engine corruptions that mutate those realistic structures.
-   - **Intra-wave ordering:** Prerequisite capabilities and realistic artifact generators must run **before** the validators, load-file columns, or chaos corruptions that depend on them (e.g., base validator/generator structure → richer metadata/headers → opt-in chaos corruption of that structure).
-   - **Label rule:** Do **not** attach `testing` to artifact-chaos or validator-enhancement tickets that depend on another `enhancement` ticket. When prerequisites have lower issue numbers than their dependents, keep the chain in Tier 4 (`P2, enhancement`, using `chaos` or `quality` as secondary tags); if a dependent ticket has a lower issue number than its prerequisite, defer the dependent to Tier 5 (`quality`, omitting `enhancement`) until the prerequisite merges.
-5. **Wave 5 — Capstone Oracles & Documentation/Traceability Sweep (Tiers 5 & 6)**
-   - **Tier 5 (`P2` + `quality` / `investigation`, omit `testing` and `enhancement`):** End-to-end expectation oracles, sidecar/audit anomaly verifiers, and repository-wide quality sweeps that must observe the complete catalog of Wave 2 and Wave 4 features/anomalies.
-   - **Tier 6 (`P3` + `documentation` / `docs` / `requirements`, omit `quality`, `testing`, and `enhancement`):** Documentation sync, ADR/architecture diagram reconciliation, `tests/req-traceability.tsv` updates, and contributor/CI guides that should land last after code behavior has settled.
-
-**Manual tie-break within the same `Pn` (when selecting manually outside `.zipper-runner`):**
-`1: security` → `2: bug` → `3: ci-cd` → `4: testing, e2e` → `5: performance, perf` → `6: refactor, architecture, quality` → `7: enhancement, design` → `8: documentation, docs, requirements` → `9: other`, then **issue number ascending**.
-
-#### 4. Honor blockers and roadmap phase order
-
-Before selecting an issue, load body + comments:
-
-```bash
-gh issue view NNN --json title,body,labels,comments
-```
-
-Check for blocking relationships via the GitHub API:
-
-```bash
-gh api graphql -f query='query { repository(owner: "OWNER", name: "REPO") { issue(number: NNN) { trackedIssues(first: 10) { nodes { number state title } } } } }'
-```
-
-Or search body/comments for `blocked by #N`, `depends on #N`, `prerequisite: #N`. Verify each referenced `#N` is **closed** before proceeding.
-
-For roadmap phase ordering: read the Roadmap issue's current phase section, identify which phase lists the candidate issue, and confirm all earlier phases have no open leaf issues (or their exit criteria are met).
-
-**Skip** (try next candidate) if any of:
-
-- Body or comments contain `blocked by #N`, `depends on #N`, `prerequisite: #N` (or GitHub "blocked by" relationship) and that `#N` is still **open**.
-- The open **Roadmap:** issue's current phase says this issue is **later** (e.g. Phase 4 product while Phase 0/1 leaves are still open).
-- Title is a **Roadmap:** tracker.
-- Issue is clearly **stale** (see step 5 in per-issue workflow) — comment and stop; do not implement.
-
-**Special sequencing (when a roadmap lists phases):** prefer explicit phase lists on the Roadmap issue over pure number order:
-
-1. Security / silent-correctness and CI/hook gate blockers (`security`, `bug`, `ci-cd` under `P1`)
-2. Tests, fixtures, differential matrices, and load-file chaos (`testing`, `e2e` under `P2`)
-3. Decompose / refactor guarded modules (`refactor` under `P2`)
-4. Product enhancements, cross-format validators, opt-in artifact realism, and dependent artifact chaos (`enhancement` under `P2`)
-5. Capstone expectation oracles and quality sweeps (`quality`, `investigation` under `P2`)
-6. Documentation and requirement-traceability sweeps (`documentation`, `requirements` under `P3`)
-
-#### 5. Select exactly one leaf issue
-
-- Announce: issue number, Pn label, type labels, and one-line why it ranked first.
-- One issue per branch/PR (except when the issue itself defines PR slices — e.g. "PR1 DTOs only").
-- Read **implementation plan comments** on the issue; newest substantive comment supersedes the body.
-
-#### 6. User override
-
-If the user names an issue number or says "skip roadmap," follow the user. Still read that issue's comments and skip if blocked unless the user overrides the blocker too.
-
----
-
 **Per-issue workflow:**
-1. **Select issue** via [Issue selection](#issue-selection-mandatory-for-autonomous--next-issue-work) (or user-named issue).
+1. **Select issue** via [issue-selection.md](issue-selection.md) (or user-named issue).
 2. Follow the shared Git policy: create branches or worktrees as needed for authorized work, including a PR required by branch protection. Base new work on current main. Preserve any completed local commits when moving existing work to a PR branch. Respect the runner's main-checkout mutation lock when it is active.
 3. Runner-dispatched work uses the issue branch and worktree supplied by the parent runner. Do not switch that checkout to main. For a user-requested PR, use `fix/`, `feat/`, `refactor/`, `test/`, or `docs/` per issue type.
 4. Use Conventional Commits for commit messages (`fix:`, `feat:`, `refactor:`, `test:`, `docs:`, `chore:`, `deps:`)
@@ -153,7 +18,7 @@ If the user names an issue number or says "skip roadmap," follow the user. Still
 8. Run autoreview before creating PR (see Adversarial Review section below). *Required for any change touching logic, error handling, or public contracts. For docs-only, version-bump, or single-line fixes, a self-review suffices — note the exemption in the PR.* Then run the local CodeRabbit CLI pre-PR gate (see CodeRabbit Local Pre-PR Review below) and fix or skip-with-reason every finding before submitting the PR.
 9. For requested PR delivery or a runner dispatch, commit and create the PR — include `## Release Notes` per the [Release Notes Mandate](#release-notes-mandate) below. Reference `Fixes #NNN`. If the work advances a Roadmap phase, mention the roadmap issue in the PR body (do not auto-close it).
 10. Runner-dispatched implementation missions return after step 9; the parent runner owns steps 10–14, including CI and reviewer waits. For interactive PR work within the authorized delivery scope, monitor CI until all checks pass; fix failures before requesting review. Reproduce each gate locally first — see the [docs/cicd.md](cicd.md#quick-reference-for-agents) gate-to-command table so you fail fast instead of waiting on CI minutes. If a CI failure appears flaky (same test passes locally, or failure is in an unrelated component), re-run once. If it fails again, document the flake in the PR and proceed to request review. Before pushing any update to a PR, amend or commit your staged fixes first (`git commit --amend --no-edit`), run the local CodeRabbit CLI review gate (`coderabbit review --committed --base main --agent --fresh`) against that commit, address all findings, and only then push via `git push --force-with-lease`.
-11. Check SonarCloud on the PR after CI completes (see [CI.md](../CI.md#sonarcloud)). Fix all BLOCKER and MAJOR issues before merge. The quality **gate** can also fail on new-code *conditions* (duplication ≥3%, coverage) with **zero** BLOCKER/MAJOR issues — query the gate conditions, not just the issue list. When adding parallel per-format modules (e.g. a composer/serializer per format), extract a shared base/builder to stay under the duplication threshold.
+11. Check SonarCloud on the PR after CI completes via `./dev.sh sonar <PR-number>` (see [CI.md](../CI.md#sonarcloud)). Fix all BLOCKER, CRITICAL, and MAJOR issues before merge. The quality **gate** can also fail on new-code *conditions* (duplication ≥3%, coverage) — `check-sonar.py` reports non-coverage gate failures. When adding parallel per-format modules (e.g. a composer/serializer per format), extract a shared base/builder to stay under the duplication threshold.
 12. **Run `bash tests/wait-for-reviews.sh <PR-number>` after creating the PR and again after every push.** It accounts for CodeRabbit, then checks unresolved threads from every author. Follow [CI.md's review-gate contract](../CI.md#robot-reviews) for exits, current-head freshness, bounded waits, and unavailable-reviewer handling. Codex PR review is retired; do not request it. A bot's green/skipped check is not approval, and skipping a wait never waives unresolved threads.
 
     For each finding it reports: verify it against current code, fix if still valid, or reply on the thread with a brief skip reason (e.g. conflicts with an explicit design decision), then resolve the thread via GraphQL (`gh api graphql -f query='mutation { resolveReviewThread(input: {threadId: "PRRT_..."}) { thread { isResolved } } }'`) and re-run the script. Before re-running, check `manage_task` (`list`) and kill any prior `wait-for-reviews` background tasks to prevent task clutter. Blocking/major issues must be fixed; nitpicks may be skipped-with-reason but never silently ignored. **A review-driven fix that changes behavior can stale the architecture diagram, ADRs, glossary, or code comments — re-verify those (Critical Rules 1, 4, and 5) before pushing the fix.**
@@ -180,7 +45,7 @@ If the user names an issue number or says "skip roadmap," follow the user. Still
 
 **Test location:** `src/Zipper.Tests/`.
 
-**Pre-commit hook:** Runs format + unit tests on every `git commit` (short-circuits for docs-only changes — `*.md` and `docs/` — running only `DocsDriftTests`). Bypass: `git commit --no-verify`.
+**Pre-commit hook:** Runs format + unit tests on every `git commit` (short-circuits for docs-only, runner-only, or CI-script-only changes, running only the affected `DocsDriftTests` / `.zipper-runner/tests` / `tests/ci` checks). Bypass: `git commit --no-verify`.
 
 ---
 
@@ -208,7 +73,7 @@ Run the autoreview skill before creating a PR. This is mandatory for any change 
 
 The autoreview skill runs entirely inside the current coding agent (Claude Code or Cursor): it produces the diff with git, then dispatches parallel review subagents via the `Agent` tool. No external reviewer CLI. Default target is local/uncommitted work; point it at a branch or commit diff for pushed/PR work.
 
-See `.agents/skills/autoreview/SKILL.md` for full methodology (target selection, two-pass review, specialist dispatch, confidence calibration, adversarial patterns).
+See `.agents/skills/autoreview/SKILL.md` for full methodology (target selection, two-pass review, specialist dispatch, confidence calibration, adversarial patterns). Pass an explicit bounded timeout (`options.timeoutMs`, e.g., `300000`–`480000`) when dispatching review subagents so a stalled reviewer never consumes the default 30-minute window.
 
 For lightweight subagent review without the full skill:
 
@@ -255,4 +120,4 @@ Handling findings (the `--agent` output embeds these rules in `codegenInstructio
 
 All reported issues/findings must be addressed (fixed or documented skip reason) before submitting or updating a PR.
 
-Costs review credits; skip only for docs-only changes where a self-review already sufficed (same exemption as autoreview).
+Costs review credits; skip only for docs-only changes where a self-review already sufficed (same exemption as autoreview). If `coderabbit` CLI hits its hourly rate limit, fall back to a read-only `reviewer` subagent (with `options.timeoutMs` set to `300000`–`480000`) against `git diff main...HEAD` and `docs/agent-review-standards.md` / `docs/code-review-guidelines.md`.

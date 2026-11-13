@@ -2233,7 +2233,7 @@ def _auto_commit_wip_checkpoint(wt_path: str, issue_number: int | str, agent_nam
     run_cmd(["git", "add", "-A"], cwd=wt_path)
     wip_msg = f"wip: progress on issue #{issue_number} by {agent_name}"
     if _wip_checkpoint_should_skip_hooks(wt_path):
-        print(f"WIP checkpoint is runner-internal only; skipping the pre-commit suite to keep dispatch off the critical path.")
+        print("WIP checkpoint is runner-internal only; skipping the pre-commit suite to keep dispatch off the critical path.")
         wip_code, _, _ = run_cmd(["git", "commit", "--no-verify", "-m", wip_msg], cwd=wt_path)
     else:
         wip_code, _, _ = run_cmd(["git", "commit", "-m", wip_msg], cwd=wt_path)
@@ -4850,7 +4850,7 @@ def babysit_active_worktrees():
                 shutil.rmtree(wt_path, ignore_errors=True)
             run_cmd(["git", "worktree", "prune"], cwd=REPO_PATH)
             send_email(
-                f"[Runner] Safety: Removed worktree on main branch",
+                "[Runner] Safety: Removed worktree on main branch",
                 f"<h3>Worktree at {wt_path} was incorrectly on the 'main' branch. It has been removed.</h3>"
             )
             continue
@@ -4871,7 +4871,6 @@ def babysit_active_worktrees():
             if saved_state and saved_state.get("pr_number"):
                 # Verify the persisted PR still exists and matches our branch
                 state_pr = str(saved_state["pr_number"])
-                state_branch = saved_state.get("branch", "")
                 verify_code, verify_out, _ = run_cmd(["gh", "pr", "view", state_pr, "--json", "number,headRefName,state,headRefOid"], cwd=REPO_PATH)
                 if verify_code == 0:
                     try:
@@ -7276,8 +7275,8 @@ def main():
                 f"When creating the pull request, you MUST include the text 'Closes #{num}' in the PR body/description so that GitHub automatically closes the issue when the PR is merged.\n"
                 f"DO NOT pause or exit with an intermediate summary until you have verified all tests pass with 'dotnet test', committed the changes to git, and created the pull request with 'gh pr create'. If any compiler errors or test failures remain, resolve them immediately in this session.\n"
                 + _LONG_COMMAND_INSTRUCTION +
-                f"You must run completely autonomously, do not ask any questions or wait for interactive input, "
-                f"and make all technical decisions yourself using your best engineering judgment."
+                "You must run completely autonomously, do not ask any questions or wait for interactive input, "
+                "and make all technical decisions yourself using your best engineering judgment."
             )
             # The mission below writes this worktree, and a concurrent babysit can
             # pick the same worktree up. Hold it for the whole mission so the two
@@ -7462,8 +7461,8 @@ def main():
                                 f"When creating the pull request, you MUST include the text 'Closes #{num}' in the PR body/description so that GitHub automatically closes the issue when the PR is merged.\n"
                                 f"DO NOT pause or exit with an intermediate summary until you have verified all tests pass with 'dotnet test', committed the changes to git, and created the pull request with 'gh pr create'. If any compiler errors or test failures remain, resolve them immediately in this session.\n"
                                 + _LONG_COMMAND_INSTRUCTION +
-                                f"You must run completely autonomously, do not ask any questions or wait for interactive input, "
-                                f"and make all technical decisions yourself using your best engineering judgment."
+                                "You must run completely autonomously, do not ask any questions or wait for interactive input, "
+                                "and make all technical decisions yourself using your best engineering judgment."
                             )
                             continue
         else:

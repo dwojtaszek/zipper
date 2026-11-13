@@ -68,7 +68,7 @@ For interactive local verification before committing, `./dev.sh` (`dev.bat` on W
 
 | Hook | Trigger | Does |
 |------|---------|------|
-| `pre-commit` | `git commit` | Short-circuits full build/test if every staged file is docs (`*.md`, `docs/`), running only `DocsDriftTests`. Runner-only changes run runner tests and DocsDriftTests instead of the product unit suite. Else stashes unstaged changes (and untracked files under `src/`), runs `dotnet format` on staged `*.cs`, runs all unit tests, and records the staged tree hash in `pre-commit.pending`. Fails (exit 1) if `dotnet` is missing. |
+| `pre-commit` | `git commit` | Short-circuits full build/test for docs-only (`*.md`, `docs/` → `DocsDriftTests`), runner-only (`.zipper-runner/` → runner tests + `DocsDriftTests`), or CI-script-only (`.github/workflows/`, `.github/scripts/`, `tests/ci/`, `tests/wait-for-reviews.sh` → `tests/ci` + `DocsDriftTests`). Else stashes unstaged changes (and untracked files under `src/`), runs `dotnet format` on staged `*.cs`, runs all unit tests, and records the staged tree hash in `pre-commit.pending`. Fails (exit 1) if `dotnet` is missing. |
 | `post-commit` | after commit object exists | Verifies `HEAD^{tree}` matches `pre-commit.pending` and writes `pre-commit.ok` marker (timestamp + new HEAD) so pre-push can skip redundant unit tests. |
 | `pre-push` | `git push` | Ref verification (stdin refs must match working tree) + unit tests (skipped if marker is <10 min old on outgoing commits) + mutation smoke on changed `.cs` source files (`tests/run-mutation-smoke.sh` with `MUTATION_SMOKE_SKIP_BASELINE=1`, targeted `*Tests` fast-path, and SHA-256 content-hash mutant result caching under `.git/zipper-hooks/mutation-cache/`; hard gate: all mutants must be killed) + basic E2E smoke (`tests/run-e2e-basic.sh` / `.bat` via `cmd.exe`, skipped when no CLI source or basic E2E script files changed). Fails (exit 1) if `dotnet` is missing. |
 
@@ -178,7 +178,7 @@ Reproduce each CI gate locally **before** pushing — CI minutes are slow feedba
 
 | CI gate | Local equivalent |
 |---------|------------------|
-| lint (format) | `dotnet format --verify-no-changes src/` |
+| lint (format) | `dotnet format --verify-no-changes zipper.sln` |
 | requirement traceability | `bash tests/validate-req-traceability.sh --strict` |
 | build | `dotnet build zipper.sln -c Release` |
 | property-based tests | `dotnet test src/Zipper.Tests/Zipper.Tests.csproj -c Release --filter "Category=Property"` |

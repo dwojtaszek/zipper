@@ -138,7 +138,6 @@ class CiRollupTests(unittest.TestCase):
 
 
 import time
-from unittest.mock import patch
 
 
 class InjectionMarkerTests(unittest.TestCase):

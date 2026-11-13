@@ -137,6 +137,17 @@ class ScheduledAssuranceWorkflowTests(unittest.TestCase):
             ),
             (
                 {
+                    "ASSURANCE_STATUS": "failed",
+                    "ASSURANCE_EXECUTED": "true",
+                    "ASSURANCE_REASON": "droid_qa_execution_failed",
+                    "DROID_ERROR": "HTTP 402 Payment Required",
+                    "DROID_RESULT": "failure",
+                    "SMOKE_RESULT": "success",
+                },
+                "- Droid error summary: HTTP 402 Payment Required",
+            ),
+            (
+                {
                     "ASSURANCE_STATUS": "executed",
                     "ASSURANCE_EXECUTED": "true",
                     "ASSURANCE_REASON": "completed",

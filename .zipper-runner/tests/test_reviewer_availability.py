@@ -17,7 +17,6 @@ Run from the .zipper-runner directory:
     python3 -m unittest discover -s tests
 """
 import os
-import subprocess
 import sys
 import tempfile
 import unittest

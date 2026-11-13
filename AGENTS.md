@@ -25,8 +25,8 @@ Lower-numbered principles take precedence. Critical rules below remain ordered b
 - Task workflow: [workflow selection](docs/agent-workflow.md#workflow-selection). Choose one primary workflow; retain required domain checks and review gates.
 - Product behavior: [Requirements.md](Requirements.md). Domain language: [UBIQUITOUS_LANGUAGE.md](UBIQUITOUS_LANGUAGE.md). Usage: [README.md](README.md).
 - Any implementation or test change: [testing and debugging](docs/agent-workflow.md#testing--debugging). Use real outcomes; preserve behavioral coverage. Parser/planner/sanitizer/comparison changes also require [property-based tests](docs/property-based-testing.md).
-- Working an issue or preparing a PR: [per-issue workflow](docs/issue-workflow.md#workflow-for-github-issues), [release notes](docs/issue-workflow.md#release-notes-mandate), and [review gates](docs/issue-workflow.md#adversarial-review).
-- Autonomous issue selection or triage: [queue ranking, roadmap, and blockers](docs/issue-workflow.md#issue-selection-mandatory-for-autonomous--next-issue-work).
+- Working an issue or preparing a PR: [per-issue workflow](docs/issue-workflow.md), [release notes](docs/issue-workflow.md#release-notes-mandate), and [review gates](docs/issue-workflow.md#adversarial-review).
+- Autonomous issue selection or triage: [queue ranking, roadmap, and blockers](docs/issue-selection.md).
 - Reviewing a diff: [review standards](docs/agent-review-standards.md) and [deliberate project patterns](docs/code-review-guidelines.md).
 - CI/hook changes: [pipeline map](docs/cicd.md). Operating external checks: [CI.md](CI.md).
 - Runner operations, preflight, and controlled trials: [runner operations](docs/runner-operations.md). Runner design: [.zipper-runner/README.md](.zipper-runner/README.md).

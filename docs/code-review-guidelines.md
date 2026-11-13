@@ -63,3 +63,12 @@ See [docs/property-based-testing.md](property-based-testing.md) for the full gui
 - In `StandardMode`, `LoadFileOrchestrator` writes `--include-load-file` entries at the ZIP root and always populates `result.LoadFilePath`, while `StandardMode` leaves `IsChaosMode = false` and sets `ValidateChaosExpectations = request.Chaos.ChaosMode` so normal Load File validation runs alongside Chaos Expectation Sidecar verification.
 - In cross-format chaos Production Sets, `_validation_report.json` intentionally records the raw `ProductionSetPostValidator` structural findings while `PostGenerationValidator` exempts structural DAT/OPT findings (preserving artifact `PathExistence`, `ManifestSyntax`, `MetadataAzureConstraint`, and `InvalidValue`) and `ChaosExpectationValidator` verifies non-audited rows.
 
+## 8. Automation & CI scripts (`.github/scripts/`, `.zipper-runner/`, `tests/*.sh`)
+
+When reviewing Python or Bash automation scripts:
+
+- **`urllib` exception handling:** Catch `http.client.HTTPException` alongside `OSError` / `urllib.error.URLError` — `HTTPException` (such as `IncompleteRead` or `RemoteDisconnected`) does not inherit from `OSError`.
+- **Single-line directive regexes:** Use `[ \t]` rather than `\s` when matching parameters after a line-anchored directive (e.g., `qodo-ack:`) so optional whitespace cannot cross a newline into unrelated lines.
+- **Dry-run isolation:** Verify every failure, hand-back, and fallback branch checks `dry_run` / `DRY_RUN` before mutating worktrees, locks, or GitHub state.
+- **Fail-closed GraphQL pagination:** Require `isinstance(hasNextPage, bool)` and a strict cursor advance check so malformed or stalled pages cannot drop comments or pass silently.
+

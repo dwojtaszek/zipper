@@ -4,34 +4,22 @@ This file supplements [AGENTS.md](AGENTS.md). The Principles hierarchy in AGENTS
 
 ## SonarCloud
 
-SonarCloud issues are NOT surfaced as GitHub check failures — fetch manually after CI completes on your PR (see [AGENTS.md workflow step 10](AGENTS.md)):
+SonarCloud issues are NOT surfaced as GitHub check failures — query them after CI completes on your PR (see [docs/issue-workflow.md](docs/issue-workflow.md)):
 
 ```bash
-curl -s "https://sonarcloud.io/api/issues/search?componentKeys=dwojtaszek_zipper&pullRequest=NNN&statuses=OPEN,CONFIRMED&ps=50" | python3 -c "
-import json,sys
-data = json.load(sys.stdin)
-for i in data['issues']:
-    f = i['component'].split(':')[1]
-    print(f'{i[\"severity\"]:10s} {i[\"rule\"]:25s} L{i[\"line\"]:4d}  {f}')
-    print(f'  {i[\"message\"]}')
-    print()
-"
+./dev.sh sonar <PR-number>
+# Or directly (JSON mode available via --json):
+python3 .github/scripts/check-sonar.py <PR-number>
 ```
 
-Issues ordered: `BLOCKER` → `MAJOR` → `MINOR` → `INFO`. MINOR and INFO are optional. Fix all BLOCKER and MAJOR issues before merge. *When this conflicts with Surgical Changes (e.g., a SonarCloud MAJOR in adjacent untouched code), Surgical Changes wins — add a `/* TODO: SONAR */` comment and file a follow-up issue.*
+Issues ordered: `BLOCKER` → `CRITICAL` → `MAJOR` → `MINOR` → `INFO` (checks `OPEN`, `CONFIRMED`, and `REOPENED` statuses). MINOR and INFO are optional. Fix all BLOCKER, CRITICAL, and MAJOR issues before merge. *When this conflicts with Surgical Changes (e.g., a SonarCloud MAJOR in adjacent untouched code), Surgical Changes wins — add a `/* TODO: SONAR */` comment and file a follow-up issue.*
 
 ### Quality gate vs. code issues
 
 The SonarCloud check can fail even with zero code issues. Common non-issue causes:
 
 - **Security hotspots** (e.g., unpinned GitHub Actions) — fix by pinning to full commit SHA: `uses: owner/action@<full-sha> # vN`
-- **SonarCloud coverage gate** — SonarCloud's advisory coverage gate status may flag test-only or infra PRs; not a merge blocker if no code issues exist. Note: The CI coverage gate in `ci.yml` (Linux `build-and-test` step) strictly enforces 80% total line coverage, 85% total branch coverage, and 50% per-file line coverage (≥20 lines), and a failure there blocks `ci-gate`.
-
-Check quality gate details if the check fails but no issues are found:
-
-```bash
-curl -s "https://sonarcloud.io/api/qualitygates/project_status?projectKey=dwojtaszek_zipper&pullRequest=NNN" | python3 -m json.tool
-```
+- **SonarCloud coverage gate** — SonarCloud's advisory coverage gate status may flag test-only or infra PRs; not a merge blocker if no code issues exist (`check-sonar.py` ignores coverage-only conditions when zero blocking code issues exist). Note: The CI coverage gate in `ci.yml` (Linux `build-and-test` step) strictly enforces 80% total line coverage, 85% total branch coverage, and 50% per-file line coverage (≥20 lines), and a failure there blocks `ci-gate`.
 
 ### Fix cycle
 

@@ -1,0 +1,9 @@
+# Pinned scope for repository Python gates (ruff 0.17.5).
+include = [
+  ".zipper-runner/**/*.py",
+  ".github/scripts/**/*.py",
+  "tests/ci/**/*.py",
+]
+
+[lint]
+select = ["B014", "E9", "F"]

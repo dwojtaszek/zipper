@@ -23,7 +23,8 @@ fi
 
 if [[ -z "${DOTNET_ROOT:-}" ]]; then
     _DOTNET_BIN=$(readlink -f "$(command -v dotnet)" 2>/dev/null || command -v dotnet)
-    export DOTNET_ROOT="$(dirname "$_DOTNET_BIN")"
+    DOTNET_ROOT="$(dirname "$_DOTNET_BIN")"
+    export DOTNET_ROOT
 fi
 
 # ──────────────────────────────────────────────────
@@ -34,6 +35,7 @@ REFS_TO_CHECK=()
 TOTAL_REFS_READ=0
 DELETIONS_COUNT=0
 if [[ ! -t 0 ]]; then
+    # shellcheck disable=SC2034  # contract-tested read signature; only local_ref/local_sha are used
     while read -r local_ref local_sha remote_ref remote_sha; do
         [[ -z "$local_ref" ]] && continue
         ((TOTAL_REFS_READ++)) || true
@@ -125,6 +127,7 @@ RUN_UNIT_TESTS=true
 MARKER=$(git rev-parse --git-path zipper-hooks/pre-commit.ok 2>/dev/null || echo "")
 MARKER_VALID=false
 RUNNER_MARKER_VALID=false
+CI_MARKER_VALID=false
 MARKER_SCOPE=full
 MARKER_HEAD=""
 AGE=0
@@ -137,7 +140,7 @@ if [[ -n "$MARKER" && -f "$MARKER" ]] && git diff --quiet 2>/dev/null && git dif
         NOW=$(date +%s)
         AGE=$((NOW - MARKER_TS))
         if [[ "$AGE" -ge 0 && "$AGE" -lt "$SKIP_WINDOW_SECONDS" ]]; then
-            if [[ "$MARKER_SCOPE" == "full" || "$MARKER_SCOPE" == "runner" ]]; then
+            if [[ "$MARKER_SCOPE" == "full" || "$MARKER_SCOPE" == "runner" || "$MARKER_SCOPE" == "ci" ]]; then
                 MARKER_VALID=true
             fi
         fi
@@ -160,6 +163,8 @@ if [[ "$MARKER_VALID" == "true" && ${#REFS_TO_CHECK[@]} -gt 0 ]]; then
     if [[ "$ALL_MATCH" == "true" ]]; then
         if [[ "$MARKER_SCOPE" == "runner" ]]; then
             RUNNER_MARKER_VALID=true
+        elif [[ "$MARKER_SCOPE" == "ci" ]]; then
+            CI_MARKER_VALID=true
         else
             RUN_UNIT_TESTS=false
         fi
@@ -173,6 +178,7 @@ fi
 if [[ "$RUN_UNIT_TESTS" == "true" ]]; then
     ALL_REFS_DOCS_ONLY=true
     ANY_RUNNER_ONLY=false
+    ANY_CI_ONLY=false
     for entry in "${REFS_TO_CHECK[@]}"; do
         local_ref="${entry%% *}"
         local_sha="${entry##* }"
@@ -187,35 +193,49 @@ if [[ "$RUN_UNIT_TESTS" == "true" ]]; then
             SCOPE=$(printf '%s\n' "$ALL_BRANCH_CHANGES" | python3 .github/scripts/change-scope.py --lines) || exit 1
             if [[ "$SCOPE" == *"only_runner=true"* ]]; then
                 ANY_RUNNER_ONLY=true
-            elif [[ "$SCOPE" != *"only_docs=true"* ]]; then
-                ALL_REFS_DOCS_ONLY=false
-                break
+                continue
+            elif [[ "$SCOPE" == *"only_docs=true"* ]]; then
+                continue
             fi
-        elif [[ "$TOTAL_CHANGED" -eq 0 || "$DOCS_CHANGED" -ne "$TOTAL_CHANGED" ]]; then
+        elif [[ "$TOTAL_CHANGED" -gt 0 && "$DOCS_CHANGED" -eq "$TOTAL_CHANGED" ]]; then
+            continue
+        fi
+        RUNNER_PREF_MATCH=$(printf '%s\n' "$ALL_BRANCH_CHANGES" | grep -c -E '^\.zipper-runner/' || true)
+        CI_MATCHED=$(printf '%s\n' "$ALL_BRANCH_CHANGES" | grep -c -E '^(\.github/(workflows|scripts)/|tests/ci/|tests/wait-for-reviews\.sh$|tests/test-unified-workflow\.(sh|bat)$|\.pi-lens\.json$|ruff\.toml$|docs/|CHANGELOG(\.md)?$|.*\.(md|markdown)$)' || true)
+        if [[ -d tests/ci && "$TOTAL_CHANGED" -gt 0 && "$RUNNER_PREF_MATCH" -eq 0 && "$CI_MATCHED" -eq "$TOTAL_CHANGED" ]]; then
+            ANY_CI_ONLY=true
+        else
             ALL_REFS_DOCS_ONLY=false
             break
         fi
     done
 
     if [[ "$ALL_REFS_DOCS_ONLY" == "true" ]]; then
-        if [[ "$RUNNER_MARKER_VALID" == "true" ]]; then
-            echo "✓ Runner and DocsDrift tests already passed for this clean HEAD; skipping duplicate checks."
+        if [[ "$ANY_RUNNER_ONLY" == "true" && "$RUNNER_MARKER_VALID" == "true" && "$ANY_CI_ONLY" == "false" ]] || [[ "$ANY_CI_ONLY" == "true" && "$CI_MARKER_VALID" == "true" && "$ANY_RUNNER_ONLY" == "false" ]]; then
+            echo "✓ Scoped tests already passed for this clean HEAD; skipping duplicate checks."
         else
             echo ""
-            echo "▶ Documentation/runner-only branch diff detected; running DocsDriftTests..."
+            echo "▶ Documentation/runner/CI-only branch diff detected; running DocsDriftTests..."
             DRIFT_ARGS=(dotnet test src/Zipper.Tests/Zipper.Tests.csproj --filter "FullyQualifiedName~DocsDriftTests" --logger "console;verbosity=quiet" --nologo)
             if ! "${DRIFT_ARGS[@]}"; then
                 echo ""
                 echo "❌ DocsDriftTests failed. Push aborted."
                 exit 1
             fi
-            echo "✓ DocsDriftTests passed (skipping full unit suite for docs-only branch)"
+            echo "✓ DocsDriftTests passed (skipping full unit suite for scoped branch)"
             if [[ "$ANY_RUNNER_ONLY" == "true" ]]; then
                 (
                     # Fixtures create other repositories; hook-local Git variables must stay here.
                     while IFS= read -r git_env; do unset "$git_env"; done < <(git rev-parse --local-env-vars)
                     python3 .github/scripts/run-check.py --log "$(mktemp -t zipper-runner-check.XXXXXX)" -- \
                         python3 -m unittest discover -s .zipper-runner/tests -p 'test_*.py'
+                ) || exit 1
+            fi
+            if [[ "$ANY_CI_ONLY" == "true" ]]; then
+                (
+                    while IFS= read -r git_env; do unset "$git_env"; done < <(git rev-parse --local-env-vars)
+                    python3 .github/scripts/run-check.py --log "$(mktemp -t zipper-ci-check.XXXXXX)" -- \
+                        python3 -m unittest discover -s tests/ci -p 'test_*.py'
                 ) || exit 1
             fi
         fi

@@ -12,7 +12,6 @@ runner loads .zipper-runner/.env before importing this module).
 """
 
 import importlib.util
-import json
 import math
 import os
 from pathlib import Path
