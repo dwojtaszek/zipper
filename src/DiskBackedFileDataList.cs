@@ -204,7 +204,26 @@ internal static class FileDataSerializer
         {
             writer.Write(false);
         }
+
+        WriteNullableString(writer, data.RedactedImageRelPath);
+        WriteNullableString(writer, data.RedactedTextRelPath);
+        WriteNullableString(writer, data.TextRelPath);
+        WriteNullableString(writer, data.ImageRelPath);
+        WriteNullableString(writer, data.NativePathOverride);
+        WriteNullableString(writer, data.RedactionReason);
     }
+
+    private static void WriteNullableString(BinaryWriter writer, string? value)
+    {
+        writer.Write(value is not null);
+        if (value is not null)
+        {
+            writer.Write(value);
+        }
+    }
+
+    private static string? ReadNullableString(BinaryReader reader)
+        => reader.ReadBoolean() ? reader.ReadString() : null;
 
     public static FileData Deserialize(BinaryReader reader)
     {
@@ -342,6 +361,13 @@ internal static class FileDataSerializer
             sourceMetadata = metadata;
         }
 
+        var redactedImageRelPath = ReadNullableString(reader);
+        var redactedTextRelPath = ReadNullableString(reader);
+        var textRelPath = ReadNullableString(reader);
+        var imageRelPath = ReadNullableString(reader);
+        var nativePathOverride = ReadNullableString(reader);
+        var redactionReason = ReadNullableString(reader);
+
         return new FileData
         {
             WorkItem = new FileWorkItem
@@ -363,7 +389,13 @@ internal static class FileDataSerializer
             Attachment = attachment,
             AttachmentLength = attachmentMetadata.Length > 0 ? attachmentMetadata[0].Length : 0,
             AttachmentMetadata = attachmentMetadata,
-            Email = email
+            Email = email,
+            RedactedImageRelPath = redactedImageRelPath,
+            RedactedTextRelPath = redactedTextRelPath,
+            TextRelPath = textRelPath,
+            ImageRelPath = imageRelPath,
+            NativePathOverride = nativePathOverride,
+            RedactionReason = redactionReason,
         };
     }
 }

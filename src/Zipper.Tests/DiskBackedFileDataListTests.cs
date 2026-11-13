@@ -392,6 +392,57 @@ public class DiskBackedFileDataListTests
     }
 
     [Fact]
+    public void RoundTrip_PreservesProductionSetFields_DistinguishingNullAndEmpty()
+    {
+        using var list = new DiskBackedFileDataList();
+
+        var withValues = new FileData
+        {
+            WorkItem = new FileWorkItem { Index = 1 },
+            RedactedImageRelPath = "REDACTED/VOL001/BATES001.tif",
+            RedactedTextRelPath = "REDACTED_TEXT/VOL001/BATES001.txt",
+            TextRelPath = "TEXT/VOL001/BATES001.txt",
+            ImageRelPath = "IMAGES/VOL001/BATES001.tif",
+            NativePathOverride = "PLACEHOLDER/VOL001/BATES001.pdf",
+            RedactionReason = "PII",
+        };
+        var withEmptyNativeOverride = new FileData
+        {
+            WorkItem = new FileWorkItem { Index = 2 },
+            NativePathOverride = string.Empty,
+        };
+        var withNulls = new FileData
+        {
+            WorkItem = new FileWorkItem { Index = 3 },
+        };
+
+        list.Add(withValues);
+        list.Add(withEmptyNativeOverride);
+        list.Add(withNulls);
+
+        var items = list.ToList();
+        Assert.Equal(3, items.Count);
+
+        Assert.Equal("REDACTED/VOL001/BATES001.tif", items[0].RedactedImageRelPath);
+        Assert.Equal("REDACTED_TEXT/VOL001/BATES001.txt", items[0].RedactedTextRelPath);
+        Assert.Equal("TEXT/VOL001/BATES001.txt", items[0].TextRelPath);
+        Assert.Equal("IMAGES/VOL001/BATES001.tif", items[0].ImageRelPath);
+        Assert.Equal("PLACEHOLDER/VOL001/BATES001.pdf", items[0].NativePathOverride);
+        Assert.Equal("PII", items[0].RedactionReason);
+
+        Assert.Equal(string.Empty, items[1].NativePathOverride);
+        Assert.Null(items[1].RedactedImageRelPath);
+        Assert.Null(items[1].RedactionReason);
+
+        Assert.Null(items[2].RedactedImageRelPath);
+        Assert.Null(items[2].RedactedTextRelPath);
+        Assert.Null(items[2].TextRelPath);
+        Assert.Null(items[2].ImageRelPath);
+        Assert.Null(items[2].NativePathOverride);
+        Assert.Null(items[2].RedactionReason);
+    }
+
+    [Fact]
     public void Operations_AfterDispose_ThrowObjectDisposedException()
     {
         var list = new DiskBackedFileDataList();
