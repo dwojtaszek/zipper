@@ -1,4 +1,3 @@
-using Zipper.Emails;
 using Zipper.Profiles;
 using Zipper.Profiles.Generation;
 
@@ -173,7 +172,6 @@ internal sealed class DatStandardComposer
 #pragma warning restore S2245
 
         var fileTypeLower = this.request.Output.FileTypeLower;
-        var hashConfig = this.request.Hash;
 
         for (long i = 1; i <= this.request.Output.FileCount; i++)
         {
@@ -194,7 +192,7 @@ internal sealed class DatStandardComposer
                 PageCount = this.request.Tiff.ShouldIncludePageCount(this.request.Output)
                     ? TiffMultiPageGenerator.GetPageCount(this.request.Tiff.PageRange, this.request.Metadata.Seed, i)
                     : rowRandom.Next(1, 11),
-                Hashes = hashConfig.Mode == Config.HashMode.Simulated ? GenerateSimulatedHashes(workItem) : null,
+                Hashes = HashComputer.ComputeSimulatedHashesIfEnabled(workItem, this.request),
             };
 
             bool hasAttachment = FamilyPlan.HasAttachment(this.request, i);
@@ -294,22 +292,7 @@ internal sealed class DatStandardComposer
         var recordType = wi.EffectiveFileType(this.request);
         var recordIsEml = string.Equals(recordType, "eml", StringComparison.Ordinal);
         var recordIsTiff = string.Equals(recordType, "tiff", StringComparison.Ordinal);
-        EmailThreadNode? threadNode = null;
-        if (this.request.Metadata.WithThreading && recordIsEml && !ctx.IsChild)
-        {
-            if (fileData.Email?.ThreadId is null)
-            {
-                threadNode = Emails.EmailThreadPlan.GetOrCreate(this.request).GetNode(wi.Index);
-            }
-            else if (fileData.Email.IsInclusive is null || fileData.Email.ThreadParentId is null)
-            {
-                var candidate = Emails.EmailThreadPlan.GetOrCreate(this.request).GetNode(wi.Index);
-                if (string.Equals(fileData.Email.ThreadId, candidate.ThreadDocId, StringComparison.Ordinal))
-                {
-                    threadNode = candidate;
-                }
-            }
-        }
+        var threadNode = Emails.EmailThreadPlan.ResolveFallbackNode(this.request, wi, fileData.Email, recordIsEml && !ctx.IsChild);
 
         var v = new List<string>(this.headerColumns.Count)
         {
@@ -445,21 +428,5 @@ internal sealed class DatStandardComposer
         }
 
         return TextPathHelper.GetTextPath(wi.FilePathInZip);
-    }
-
-    private IReadOnlyDictionary<Config.HashAlgorithm, string>? GenerateSimulatedHashes(FileWorkItem workItem)
-    {
-        var hashConfig = this.request.Hash;
-        if (!hashConfig.IsEnabled)
-        {
-            return null;
-        }
-
-        var dict = new Dictionary<Config.HashAlgorithm, string>(hashConfig.Algorithms.Count);
-        var rng = Config.HashUtility.CreateSeededRandom(this.request, workItem.Index);
-        foreach (var algo in hashConfig.Algorithms)
-            dict[algo] = Config.HashUtility.GenerateSimulatedHash(algo, rng);
-
-        return dict;
     }
 }

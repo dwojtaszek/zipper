@@ -64,6 +64,26 @@ internal class HashComputer : IHashComputer
     }
 
     /// <summary>
+    /// Computes deterministic simulated hashes when hashing is enabled in <see cref="HashMode.Simulated"/> mode;
+    /// returns <see langword="null"/> otherwise.
+    /// </summary>
+    public static IReadOnlyDictionary<HashAlgorithm, string>? ComputeSimulatedHashesIfEnabled(
+        FileWorkItem workItem,
+        FileGenerationRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(workItem);
+        ArgumentNullException.ThrowIfNull(request);
+
+        var hashConfig = request.Hash;
+        if (!hashConfig.IsEnabled || hashConfig.Mode != HashMode.Simulated)
+        {
+            return null;
+        }
+
+        return ComputeSimulatedHashes(workItem, hashConfig, request);
+    }
+
+    /// <summary>
     /// Computes deterministic simulated hashes for the given work item.
     /// </summary>
     public static IReadOnlyDictionary<HashAlgorithm, string> ComputeSimulatedHashes(

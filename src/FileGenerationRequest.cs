@@ -27,12 +27,18 @@ public class FileGenerationRequest
     /// <summary>Cached synthetic Document Family child count shared by DAT composition and Audit File generation.</summary>
     internal long? SimulatedFamilyChildCount { get; set; }
 
+    private IReadOnlyList<SourceInput.SourceRecord>? sourceRecords;
+
     /// <summary>
     /// Source-Driven Generation rows (from --input-csv or --directory-template), or null for
     /// synthetic generation. When set, Output.FileCount equals the row count and row values
     /// drive record identity, paths, and File Types.
     /// </summary>
-    internal IReadOnlyList<SourceInput.SourceRecord>? SourceRecords { get; set; }
+    internal IReadOnlyList<SourceInput.SourceRecord>? SourceRecords
+    {
+        get => this.sourceRecords;
+        set => this.sourceRecords = value is null ? null : Array.AsReadOnly(value.ToArray());
+    }
 
     /// <summary>Gets the selected DAT value column for the adversarial-values scenario.</summary>
     internal string? AdversarialValueColumnName { get; set; }
@@ -66,8 +72,9 @@ public class FileGenerationRequest
             LoadfileOnly = this.LoadfileOnly,
             SimulatedFamilyChildCount = this.SimulatedFamilyChildCount,
             AdversarialValueColumnName = this.AdversarialValueColumnName,
-            SourceRecords = this.SourceRecords,
+            sourceRecords = this.sourceRecords,
             SourcePaths = this.SourcePaths,
+            ThreadPlan = this.ThreadPlan,
         };
     }
 }
