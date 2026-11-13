@@ -462,8 +462,10 @@ internal static class ProductionSetOrchestrator
         {
             WorkItem = workItem,
             DataLength = nativeContent.Length,
-            Attachment = generated.Attachment,
-            AttachmentPayloads = attachments,
+            Attachment = generated.Attachment.HasValue
+                ? (generated.Attachment.Value.filename, Array.Empty<byte>())
+                : null,
+            AttachmentLength = generated.Attachment?.content.Length ?? 0,
             AttachmentMetadata = attachmentMetadata,
             PageCount = generated.PageCount,
             Email = generated.Email,

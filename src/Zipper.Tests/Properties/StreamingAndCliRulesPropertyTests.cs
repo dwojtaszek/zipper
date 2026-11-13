@@ -268,6 +268,13 @@ public sealed class StreamingAndCliRulesPropertyTests
                 Assert.Equal(kvp.Value, restoredValue);
             }
         }
+
+        Assert.Equal(original.RedactedImageRelPath, restored.RedactedImageRelPath);
+        Assert.Equal(original.RedactedTextRelPath, restored.RedactedTextRelPath);
+        Assert.Equal(original.TextRelPath, restored.TextRelPath);
+        Assert.Equal(original.ImageRelPath, restored.ImageRelPath);
+        Assert.Equal(original.NativePathOverride, restored.NativePathOverride);
+        Assert.Equal(original.RedactionReason, restored.RedactionReason);
     }
 
     /// <summary>
@@ -649,6 +656,12 @@ public sealed class StreamingAndCliRulesPropertyTests
             AttachmentMetadata = attachmentMetadata,
             AttachmentLength = input.HasAttachment ? input.AttachmentLength : 0,
             Email = email,
+            RedactedImageRelPath = input.RedactedImageRelPath,
+            RedactedTextRelPath = input.RedactedTextRelPath,
+            TextRelPath = input.TextRelPath,
+            ImageRelPath = input.ImageRelPath,
+            NativePathOverride = input.NativePathOverride,
+            RedactionReason = input.RedactionReason,
         };
     }
 

@@ -338,7 +338,10 @@ public class ProductionSetOrchestratorTests
         int attachmentCount = fileData.GetAttachmentMetadata().Count;
         Assert.True(attachmentCount > 1);
         Assert.Equal(attachmentCount, materializer.Attachments.Count);
-        Assert.Equal(attachmentCount, fileData.GetAttachmentPayloads().Count);
+        Assert.All(materializer.Attachments, a => Assert.NotEmpty(a.content));
+        Assert.Empty(fileData.AttachmentPayloads);
+        Assert.Empty(fileData.Attachment!.Value.content);
+        Assert.Equal(materializer.Attachments[0].content.Length, fileData.AttachmentLength);
         Assert.Contains(materializer.WrittenTexts, w => w.path.Contains("_A001.txt", StringComparison.Ordinal));
         Assert.Contains(materializer.WrittenTexts, w => w.path.Contains("_A002.txt", StringComparison.Ordinal));
         Assert.Contains(materializer.WrittenBytes, w => w.path.Contains("_A001.tif", StringComparison.Ordinal));

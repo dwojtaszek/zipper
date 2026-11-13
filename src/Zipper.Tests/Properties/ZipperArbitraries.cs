@@ -287,7 +287,13 @@ public readonly record struct FileDataPropertyInput(
     bool HasSourceMetadata,
     string[] MetadataKeys,
     string[] MetadataValues,
-    int ItemCount);
+    int ItemCount,
+    string? RedactedImageRelPath,
+    string? RedactedTextRelPath,
+    string? TextRelPath,
+    string? ImageRelPath,
+    string? NativePathOverride,
+    string? RedactionReason);
 
 /// <summary>
 /// Bounded hash algorithm, payload, and seed for the HashUtility property tests.
@@ -818,6 +824,12 @@ public static class ZipperArbitraries
             let metadataKeys = metadataKeyDraw.Distinct(StringComparer.Ordinal).OrderBy(key => key, StringComparer.Ordinal).ToArray()
             from metadataValues in Gen.ArrayOf(textGen, metadataKeys.Length)
             from itemCount in Gen.Choose(1, 4)
+            from redactedImageRelPath in Gen.Elements((string?)null, string.Empty, "REDACTED/VOL001/BATES001.tif")
+            from redactedTextRelPath in Gen.Elements((string?)null, string.Empty, "REDACTED_TEXT/VOL001/BATES001.txt")
+            from textRelPath in Gen.Elements((string?)null, string.Empty, "TEXT/VOL001/BATES001.txt")
+            from imageRelPath in Gen.Elements((string?)null, string.Empty, "IMAGES/VOL001/BATES001.tif")
+            from nativePathOverride in Gen.Elements((string?)null, string.Empty, "PLACEHOLDER/VOL001/BATES001.pdf")
+            from redactionReason in Gen.Elements((string?)null, string.Empty, "PII")
             select new FileDataPropertyInput(
                 index,
                 folderNumber,
@@ -854,7 +866,13 @@ public static class ZipperArbitraries
                 hasSourceMetadata,
                 metadataKeys,
                 metadataValues,
-                itemCount);
+                itemCount,
+                redactedImageRelPath,
+                redactedTextRelPath,
+                textRelPath,
+                imageRelPath,
+                nativePathOverride,
+                redactionReason);
 
         return Arb.From(gen, ShrinkFileDataInput);
     }
