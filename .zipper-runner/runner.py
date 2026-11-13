@@ -5,6 +5,7 @@ import argparse
 import gzip
 import html
 import hashlib
+import http.client
 import importlib.util
 import io
 import itertools
@@ -2685,6 +2686,8 @@ def _run_review_gate(pr_number, cwd: str, wait_minutes: int | None = None,
     env = {"STATE_DIR": os.path.abspath(STATE_DIR)}
     if DRY_RUN:
         env["WAIT_FOR_REVIEWS_DRY_RUN"] = "1"
+    # Automated runner cycles must never let an agent-authored comment dismiss Qodo findings.
+    env["WAIT_FOR_REVIEWS_ALLOW_QODO_ACK"] = "0"
     if unavailable:
         print(f"[reviewers] Not waiting on {', '.join(unavailable)} "
               f"(recorded unavailable).")
@@ -2707,6 +2710,106 @@ def _run_review_gate(pr_number, cwd: str, wait_minutes: int | None = None,
     if code == 1:
         return ReviewGate(False, False, (out + "\n" + err).strip())
     return ReviewGate(True, False, out.strip())
+
+
+SONARCLOUD_PROJECT_KEY = "dwojtaszek_zipper"
+SONARCLOUD_TIMEOUT_SECONDS = 20
+
+
+def _sonarcloud_get_json(url: str) -> dict:
+    req = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "zipper-runner"})
+    with urllib.request.urlopen(req, timeout=SONARCLOUD_TIMEOUT_SECONDS) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def _is_completed_sonarcloud_check(check: dict) -> bool:
+    typename = check.get("__typename")
+    if typename == "CheckRun":
+        name = (check.get("name") or "").lower()
+        return (
+            "sonarcloud" in name
+            and check.get("status") == "COMPLETED"
+            and check.get("conclusion") in ("SUCCESS", "NEUTRAL")
+        )
+    if typename == "StatusContext":
+        context = (check.get("context") or "").lower()
+        return "sonarcloud" in context and check.get("state") == "SUCCESS"
+    return False
+
+
+def _rollup_has_completed_sonarcloud(rollup: list | None) -> bool:
+    if rollup is None:
+        return True
+    return any(isinstance(check, dict) and _is_completed_sonarcloud_check(check) for check in rollup)
+
+
+def _sonarcloud_quality_gate_findings(project_status: dict, has_blocking_issues: bool) -> list[str]:
+    if project_status.get("status") != "ERROR":
+        return []
+    raw_conditions = project_status.get("conditions")
+    conditions = [c for c in raw_conditions if isinstance(c, dict) and c.get("status") == "ERROR"] if isinstance(raw_conditions, list) else []
+    # Per CI.md, SonarCloud's advisory coverage gate does not block merge when no blocking code issues exist.
+    if not has_blocking_issues and conditions and all(c.get("metricKey") in ("new_coverage", "coverage") for c in conditions):
+        return []
+    failed_conditions = [
+        f"{c.get('metricKey')}={c.get('actualValue')} (threshold {c.get('errorThreshold')})"
+        for c in conditions
+    ]
+    cond_summary = ", ".join(failed_conditions) if failed_conditions else "status=ERROR"
+    return [f"SonarCloud quality gate failed: {cond_summary}"]
+
+
+def _sonarcloud_issue_findings(issues: list, pr_number: int) -> tuple[list[str] | None, str | None]:
+    findings = []
+    for issue in issues:
+        if not isinstance(issue, dict):
+            return None, f"Unexpected SonarCloud issue entry for PR #{pr_number}."
+        severity = issue.get("severity", "MAJOR")
+        rule = issue.get("rule", "?")
+        comp = (issue.get("component") or "").split(":")[-1] or "?"
+        line = issue.get("line", 0)
+        msg = issue.get("message", "")
+        findings.append(f"{severity} {rule} {comp}:{line} — {msg}")
+    return findings, None
+
+
+def _check_sonarcloud_pr_gate(pr_number: int, rollup: list | None = None) -> ReviewGate:
+    """Verify SonarCloud has no open BLOCKER/CRITICAL/MAJOR issues and its quality gate is not ERROR."""
+    # Absent/skipped SonarCloud in rollup (e.g., docs-only PRs and unit-test fixtures) skips the
+    # API query because _ci_status_from_rollup already caught any pending or failed SonarCloud check.
+    if not _rollup_has_completed_sonarcloud(rollup):
+        return ReviewGate(True, False, f"SonarCloud check not present in rollup for PR #{pr_number}; skipped.")
+    project_q = urllib.parse.quote(SONARCLOUD_PROJECT_KEY, safe="")
+    issues_url = (
+        f"https://sonarcloud.io/api/issues/search?componentKeys={project_q}"
+        f"&pullRequest={pr_number}&statuses=OPEN,CONFIRMED,REOPENED&severities=BLOCKER,CRITICAL,MAJOR&ps=50"
+    )
+    gate_url = (
+        f"https://sonarcloud.io/api/qualitygates/project_status"
+        f"?projectKey={project_q}&pullRequest={pr_number}"
+    )
+    try:
+        issues_data = _sonarcloud_get_json(issues_url)
+        gate_data = _sonarcloud_get_json(gate_url)
+    except (http.client.HTTPException, ValueError, OSError) as exc:
+        return ReviewGate(False, True, f"Could not query SonarCloud API for PR #{pr_number}: {exc}")
+
+    if not isinstance(issues_data, dict) or not isinstance(gate_data, dict):
+        return ReviewGate(False, True, f"Unexpected SonarCloud API payload for PR #{pr_number}.")
+
+    issues = issues_data.get("issues")
+    project_status = gate_data.get("projectStatus")
+    if not isinstance(issues, list) or not isinstance(project_status, dict) or not isinstance(project_status.get("status"), str):
+        return ReviewGate(False, True, f"Unexpected SonarCloud API payload for PR #{pr_number}.")
+
+    issue_findings, parse_err = _sonarcloud_issue_findings(issues, pr_number)
+    if parse_err is not None or issue_findings is None:
+        return ReviewGate(False, True, parse_err or f"Unexpected SonarCloud issue entry for PR #{pr_number}.")
+
+    findings = _sonarcloud_quality_gate_findings(project_status, bool(issue_findings)) + issue_findings
+    if findings:
+        return ReviewGate(False, False, "\n".join(findings))
+    return ReviewGate(True, False, "SonarCloud passed (0 BLOCKER/CRITICAL/MAJOR issues).")
 
 
 def _load_coderabbit_gate_state(pr_number: int) -> dict:
@@ -3212,6 +3315,7 @@ def _escalate_automated_pr(pr_number, branch, *, head: str, reason: str) -> None
 
 
 CODERABBIT_GATE_BLOCKED = "Local CodeRabbit/publication gate remains blocked"
+SONARCLOUD_GATE_BLOCKED = "SonarCloud reported blocking findings"
 REVIEWED_HEAD_MOVED = "the reviewed head moved before the merge"
 
 
@@ -3257,6 +3361,11 @@ def _merge_authorized_pr(pr_number, issue_number, reviewed_head, delete_branch=F
         rollup = current.get("statusCheckRollup") or []
         if _ci_status_from_rollup(rollup)[0] != "SUCCESS":
             return 1, "", "CI is not successful on the authorized reviewed head", rollup
+        sonar = _check_sonarcloud_pr_gate(pr_number, rollup)
+        if sonar.environmental:
+            return 1, "", "Cannot verify SonarCloud gate right now", None
+        if not sonar.ok:
+            return 1, "", f"{SONARCLOUD_GATE_BLOCKED}: {sonar.detail}", rollup
     except (ValueError, AttributeError):
         return 1, "", "Cannot verify current CI/head", None
     command = ["gh", "pr", "merge", str(pr_number), "--squash", "--match-head-commit", reviewed_head]
@@ -3312,6 +3421,8 @@ def _merge_refusal_blocker(pr_number, merge_err: str, merge_rollup) -> str:
     """
     if merge_err == CODERABBIT_GATE_BLOCKED:
         return "the local CodeRabbit review gate is blocked"
+    if merge_err.startswith(SONARCLOUD_GATE_BLOCKED):
+        return merge_err
     if merge_rollup is None:
         return ""
     code, out, _ = run_cmd(["gh", "pr", "view", str(pr_number), "--json", "mergeable"], cwd=REPO_PATH)
@@ -4052,13 +4163,14 @@ def _build_babysit_prompt(issue_number: str, issue_title: str, safe_body: str, b
         f"{pr_feedback}"
         f"Start by assessing the current state:\n"
         f"  1. Run 'git log --oneline -10' and 'git status' to see what is already committed.\n"
-        f"  2. Check GitHub for an open PR on this branch and any unresolved review comments, CI failures, or bot feedback.\n"
+        f"  2. Check GitHub for an open PR on this branch and any unresolved CodeRabbit threads, Qodo review comments, SonarCloud BLOCKER/CRITICAL/MAJOR issues (CI.md), or CI failures.\n"
         f"Act on what you find:\n"
         f"  - If implementation is incomplete: finish it (write failing tests first if missing, then implement), commit.\n"
         f"  - Before pushing or marking complete: ensure 'bash tests/run-mutation-smoke.sh' passes locally. Pre-push enforces a hard gate on mutation smoke.\n"
         f"  - If implementation is complete but no PR exists: run local CodeRabbit review ('coderabbit review --committed --base main --agent --fresh'), address all issues/findings first, then open PR now.\n"
-        f"  - If a PR is already open: your primary job is to resolve every unresolved comment, CI failure, "
-        f"and bot finding — before pushing any update, run local CodeRabbit review ('coderabbit review --committed --base main --agent --fresh'), address all issues first, and push fixes until the PR is fully green.\n"
+        f"  - If a PR is already open: your primary job is to resolve every unresolved CodeRabbit thread, Qodo finding, SonarCloud BLOCKER/CRITICAL/MAJOR issue, and CI failure "
+        f"(never post qodo-ack/qodo-skip comments to bypass Qodo findings) "
+        f"— before pushing any update, run local CodeRabbit review ('coderabbit review --committed --base main --agent --fresh'), address all issues first, and push fixes until the PR is fully green.\n"
         f"When opening a PR, you MUST include 'Closes #{issue_number}' in the PR body.\n"
         f"Run completely autonomously. Do not ask questions or wait for input. Make all technical decisions yourself."
     )
@@ -5201,70 +5313,83 @@ def babysit_active_worktrees():
                         )
                     else:
                         _clear_coderabbit_gate_failure(pr_number)
-                        if gate.skipped:
-                            print(f"Local CodeRabbit review skipped for PR #{pr_number} ({gate.detail}); "
-                                  f"merging on the robot review gate alone.")
-                        print(f"Robot review gate passed for PR #{pr_number}. Attempting to auto-merge...")
-                        merge_code, merge_out, merge_err, merge_rollup = _merge_authorized_pr(
-                            pr_number, issue_number, reviewed_head)
-                        is_merged = (merge_code == 0)
-                        if not is_merged:
-                            st_code, st_out, _ = run_cmd(["gh", "pr", "view", str(pr_number), "--json", "state", "--jq", ".state"], cwd=REPO_PATH)
-                            if st_code == 0 and st_out.strip() == "MERGED":
-                                is_merged = True
-
-                        if is_merged:
-                            if _remove_worktree(wt_path, branch, is_merged=True, merged_head=reviewed_head):
-                                _clear_pr_state(issue_number)
-                                _clear_rerun_count(pr_number)
-                                _clear_rearm_count(pr_number)
-                                _clear_coderabbit_gate_failure(pr_number)
-                                run_cmd(["git", "push", "origin", "--delete", branch], cwd=REPO_PATH, timeout=NETWORK_GIT_TIMEOUT)
-                                _sync_main_after_merge()
-                                send_email(
-                                    f"[Runner] Success: PR #{pr_number} Merged Automatically for Issue #{issue_number}",
-                                    f"<h3>PR <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">#{pr_number}</a> has been successfully merged for Issue <a href=\"https://github.com/dwojtaszek/zipper/issues/{issue_number}\">#{issue_number}</a>!</h3>"
-                                    f"<p><b>PR Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">https://github.com/dwojtaszek/zipper/pull/{pr_number}</a></p>"
-                                    f"<p><b>Issue Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/issues/{issue_number}\">https://github.com/dwojtaszek/zipper/issues/{issue_number}</a></p>"
-                                    f"<p><b>Branch:</b> {branch}</p>"
-                                    f"<p>All CI workflows and robot review gates passed. The PR has been automatically merged into <code>main</code> and the remote branch deleted.</p>"
-                                )
-                                continue
-                            else:
-                                print(f"Worktree {wt_path} or branch '{branch}' could not be safely removed after merge. Preserving.")
-                                continue
+                        sonar = _check_sonarcloud_pr_gate(pr_number, rollup)
+                        if sonar.environmental:
+                            print(f"Could not verify SonarCloud gate for PR #{pr_number}; retrying next cycle.\n{sonar.detail}")
+                            continue
+                        if not sonar.ok:
+                            print(f"SonarCloud gate reported blocking findings for PR #{pr_number}. Triggering babysit.\n{sonar.detail}")
+                            prompt = _build_coderabbit_babysit_prompt(
+                                issue_number,
+                                pr_number,
+                                sonar.detail,
+                                "CI and robot reviews passed, but SonarCloud reported blocking findings (fix all BLOCKER/CRITICAL/MAJOR issues per CI.md)",
+                            )
                         else:
-                            if _handle_absent_required_check(
-                                    pr_number, branch, reviewed_head, wt_path, merge_rollup,
-                                    issue_number):
-                                continue
-                            blocked_by = _merge_refusal_blocker(pr_number, merge_err, merge_rollup)
-                            if not blocked_by:
-                                # Nothing here is a code problem: the PR could not be
-                                # read, its provenance refused it, its head moved past
-                                # the one CI and the reviews covered, or the refusal
-                                # was transient. The next cycle re-gates the current
-                                # head, so dispatch no mission -- on PR #1380 that
-                                # mission had nothing to change, died on quota, and
-                                # kept the green PR open until a human merged it.
+                            if gate.skipped:
+                                print(f"Local CodeRabbit review skipped for PR #{pr_number} ({gate.detail}); "
+                                      f"merging on the robot review gate alone.")
+                            print(f"Robot review gate and SonarCloud passed for PR #{pr_number}. Attempting to auto-merge...")
+                            merge_code, merge_out, merge_err, merge_rollup = _merge_authorized_pr(
+                                pr_number, issue_number, reviewed_head)
+                            is_merged = (merge_code == 0)
+                            if not is_merged:
+                                st_code, st_out, _ = run_cmd(["gh", "pr", "view", str(pr_number), "--json", "state", "--jq", ".state"], cwd=REPO_PATH)
+                                if st_code == 0 and st_out.strip() == "MERGED":
+                                    is_merged = True
+
+                            if is_merged:
+                                if _remove_worktree(wt_path, branch, is_merged=True, merged_head=reviewed_head):
+                                    _clear_pr_state(issue_number)
+                                    _clear_rerun_count(pr_number)
+                                    _clear_rearm_count(pr_number)
+                                    _clear_coderabbit_gate_failure(pr_number)
+                                    run_cmd(["git", "push", "origin", "--delete", branch], cwd=REPO_PATH, timeout=NETWORK_GIT_TIMEOUT)
+                                    _sync_main_after_merge()
+                                    send_email(
+                                        f"[Runner] Success: PR #{pr_number} Merged Automatically for Issue #{issue_number}",
+                                        f"<h3>PR <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">#{pr_number}</a> has been successfully merged for Issue <a href=\"https://github.com/dwojtaszek/zipper/issues/{issue_number}\">#{issue_number}</a>!</h3>"
+                                        f"<p><b>PR Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_number}\">https://github.com/dwojtaszek/zipper/pull/{pr_number}</a></p>"
+                                        f"<p><b>Issue Link:</b> <a href=\"https://github.com/dwojtaszek/zipper/issues/{issue_number}\">https://github.com/dwojtaszek/zipper/issues/{issue_number}</a></p>"
+                                        f"<p><b>Branch:</b> {branch}</p>"
+                                        f"<p>All CI workflows and robot review gates passed. The PR has been automatically merged into <code>main</code> and the remote branch deleted.</p>"
+                                    )
+                                    continue
+                                else:
+                                    print(f"Worktree {wt_path} or branch '{branch}' could not be safely removed after merge. Preserving.")
+                                    continue
+                            else:
+                                if _handle_absent_required_check(
+                                        pr_number, branch, reviewed_head, wt_path, merge_rollup,
+                                        issue_number):
+                                    continue
+                                blocked_by = _merge_refusal_blocker(pr_number, merge_err, merge_rollup)
+                                if not blocked_by:
+                                    # Nothing here is a code problem: the PR could not be
+                                    # read, its provenance refused it, its head moved past
+                                    # the one CI and the reviews covered, or the refusal
+                                    # was transient. The next cycle re-gates the current
+                                    # head, so dispatch no mission -- on PR #1380 that
+                                    # mission had nothing to change, died on quota, and
+                                    # kept the green PR open until a human merged it.
+                                    print(
+                                        f"Merge refused for PR #{pr_number} with no code-fixable blocker "
+                                        f"({merge_err}). Retrying next cycle without a mission.\n"
+                                        f"stdout:\n{merge_out}"
+                                    )
+                                    continue
                                 print(
-                                    f"Merge refused for PR #{pr_number} with no code-fixable blocker "
-                                    f"({merge_err}). Retrying next cycle without a mission.\n"
-                                    f"stdout:\n{merge_out}"
+                                    f"Merge failed: {blocked_by}. Triggering babysit.\n"
+                                    f"stdout:\n{merge_out}\n"
+                                    f"stderr:\n{merge_err}"
                                 )
-                                continue
-                            print(
-                                f"Merge failed: {blocked_by}. Triggering babysit.\n"
-                                f"stdout:\n{merge_out}\n"
-                                f"stderr:\n{merge_err}"
-                            )
-                            prompt = (
-                                f"babysit. CI and robot reviews are passing, but the PR cannot be merged yet: "
-                                f"{blocked_by}.\n"
-                                f"The merge command failed with:\n{merge_err or merge_out}\n"
-                                f"Fix the blocker and push updates.\n\n"
-                                f"Branch is: '{branch}'. Do NOT checkout any other branch."
-                            )
+                                prompt = (
+                                    f"babysit. CI and robot reviews are passing, but the PR cannot be merged yet: "
+                                    f"{blocked_by}.\n"
+                                    f"The merge command failed with:\n{merge_err or merge_out}\n"
+                                    f"Fix the blocker and push updates.\n\n"
+                                    f"Branch is: '{branch}'. Do NOT checkout any other branch."
+                                )
         elif ci_status == "PENDING":
             updated_at = pr_data.get("updatedAt", "")
             is_hanging = False
@@ -5562,11 +5687,27 @@ def babysit_orphaned_issue_prs():
                 continue
             if not review.ok:
                 print(f"[orphan-pr] Review gate not yet satisfied for PR #{pr_num}; handing back for babysitting.\n{review.detail}")
-                _hand_orphan_pr_back(pr_num, linked_issue, head_branch, reviewed_head,
-                                     "the robot review gate is not satisfied")
+                if DRY_RUN:
+                    print(f"[DRY RUN] Would hand orphan PR #{pr_num} back for babysitting.")
+                else:
+                    _hand_orphan_pr_back(pr_num, linked_issue, head_branch, reviewed_head,
+                                         "the robot review gate is not satisfied")
                 continue
 
-            print(f"[orphan-pr] Robot review gate passed for PR #{pr_num}. Auto-merging...")
+            sonar = _check_sonarcloud_pr_gate(pr_num, rollup)
+            if sonar.environmental:
+                print(f"[orphan-pr] Could not verify SonarCloud gate for PR #{pr_num}; retrying next cycle.\n{sonar.detail}")
+                continue
+            if not sonar.ok:
+                print(f"[orphan-pr] SonarCloud gate failed for PR #{pr_num}; handing back for babysitting.\n{sonar.detail}")
+                if DRY_RUN:
+                    print(f"[DRY RUN] Would hand orphan PR #{pr_num} back for SonarCloud remediation.")
+                else:
+                    _hand_orphan_pr_back(pr_num, linked_issue, head_branch, reviewed_head,
+                                         "SonarCloud reported open BLOCKER/CRITICAL/MAJOR issues or failed quality gate")
+                continue
+
+            print(f"[orphan-pr] Robot review gate and SonarCloud passed for PR #{pr_num}. Auto-merging...")
             if not DRY_RUN:
                 merge_code, merge_out, merge_err, merge_rollup = _merge_authorized_pr(
                     pr_num, linked_issue, reviewed_head)
@@ -6087,7 +6228,12 @@ def babysit_dependabot_prs():
                 print(f"[dependabot] Review gate not yet satisfied for PR #{pr_num}. Waiting.\n{review.detail}")
                 continue
 
-            print(f"[dependabot] Robot review gate passed for PR #{pr_num}. Auto-merging...")
+            sonar = _check_sonarcloud_pr_gate(pr_num, rollup)
+            if not sonar.ok:
+                print(f"[dependabot] SonarCloud gate not satisfied for PR #{pr_num}. Waiting.\n{sonar.detail}")
+                continue
+
+            print(f"[dependabot] Robot review gate and SonarCloud passed for PR #{pr_num}. Auto-merging...")
             if not DRY_RUN:
                 merge_code, merge_out, merge_err, merge_rollup = _merge_authorized_pr(
                     pr_num, None, reviewed_head, delete_branch=True)

@@ -23,18 +23,35 @@ CODERABBIT_SKIP = "This repository does not receive automatic reviews because it
 
 class _StubGh:
     def __init__(self, root, reviews=None, comments=None, fail=None, threads=None,
-                 threads_shape=None, final_head=None):
+                 threads_shape=None, final_head=None, issue_comments=None, issue_comment_pages=None):
         self.root = root
         bin_dir = root / "bin"
         bin_dir.mkdir()
         for review in reviews or []:
             review.setdefault("commit_id", HEAD_SHA)
             review.setdefault("state", "COMMENTED")
+        pages = issue_comment_pages or [issue_comments or []]
+        has_more = len(pages) > 1
+        pr_data = {
+            "reviewThreads": {"nodes": threads or []},
+            "comments": {
+                "pageInfo": {"hasNextPage": has_more, "endCursor": "cursor-1" if has_more else None},
+                "nodes": pages[0],
+            },
+        }
         payloads = {
             "reviews": reviews or [], "comments": comments or [],
             "threads": threads_shape if threads_shape is not None else {
-                "data": {"repository": {"pullRequest": {"reviewThreads": {"nodes": threads or []}}}}},
+                "data": {"repository": {"pullRequest": pr_data}}},
         }
+        for idx, page in enumerate(pages[1:], start=1):
+            next_more = idx + 1 < len(pages)
+            payloads[f"threads-page-{idx}"] = {
+                "data": {"repository": {"pullRequest": {"comments": {
+                    "pageInfo": {"hasNextPage": next_more, "endCursor": f"cursor-{idx + 1}" if next_more else None},
+                    "nodes": page,
+                }}}}
+            }
         for name, payload in payloads.items():
             (root / f"{name}.json").write_text(json.dumps(payload))
         gh = bin_dir / "gh"
@@ -63,7 +80,14 @@ class _StubGh:
             elif args[:2] == ['api', 'graphql']:
                 if {fail!r} == 'threads':
                     raise SystemExit(1)
-                print((root / 'threads.json').read_text())
+                after = [a.split('=', 1)[1] for a in args if a.startswith('after=')]
+                if after:
+                    if {fail!r} == 'comments_page':
+                        raise SystemExit(1)
+                    idx = after[0].split('-', 1)[1]
+                    print((root / f'threads-page-{{idx}}.json').read_text())
+                else:
+                    print((root / 'threads.json').read_text())
             else:
                 raise SystemExit('unexpected gh call: ' + ' '.join(args))
             """))
@@ -199,9 +223,36 @@ class ReviewWaitGateTests(unittest.TestCase):
         self.assertIn("REVIEW-GATE-RESULT unresolved=0", result.stdout)
 
     def test_failed_or_malformed_responses_fail_closed(self):
-        for fail in ("head", "reviews", "comments", "threads", "shape"):
+        partial_null_comments = {
+            "data": {"repository": {"pullRequest": {
+                "reviewThreads": {"nodes": []},
+                "comments": None,
+            }}},
+            "errors": [{"message": "comments timed out"}],
+        }
+        omitted_comments = {
+            "data": {"repository": {"pullRequest": {
+                "reviewThreads": {"nodes": []},
+            }}},
+        }
+        missing_has_next = {
+            "data": {"repository": {"pullRequest": {
+                "reviewThreads": {"nodes": []},
+                "comments": {"pageInfo": {}, "nodes": []},
+            }}},
+        }
+        for fail, shape in (
+            ("head", None),
+            ("reviews", None),
+            ("comments", None),
+            ("threads", None),
+            ("shape", {"errors": []}),
+            ("partial_comments", partial_null_comments),
+            ("omitted_comments", omitted_comments),
+            ("missing_has_next", missing_has_next),
+        ):
             with self.subTest(fail=fail), tempfile.TemporaryDirectory() as directory:
-                stub = _StubGh(Path(directory), fail=fail, threads_shape={"errors": []} if fail == "shape" else None,
+                stub = _StubGh(Path(directory), fail=fail, threads_shape=shape,
                                reviews=[{"user": {"login": CODERABBIT}}])
                 result = stub.run_gate()
                 self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
@@ -209,6 +260,187 @@ class ReviewWaitGateTests(unittest.TestCase):
     def test_head_change_invalidates_result_even_when_wait_is_skipped(self):
         stub = self._gate(final_head="f" * 40)
         self.assertEqual(stub.run_gate(skip=CODERABBIT).returncode, 3)
+
+    def test_qodo_current_head_findings_block_even_when_coderabbit_skipped(self):
+        qodo_body = (
+            "<h3>Code Review by Qodo</h3>\n"
+            "<img alt='Action required'>\n"
+            "<details><summary>  1.  Null guard missing <code>Bug</code></summary></details>\n"
+            "<details><summary>  2.  Edge test missing <code>Gap</code></summary></details>\n"
+            f"<!-- https://github.com/dwojtaszek/zipper/commit/{HEAD_SHA} -->"
+        )
+        stub = self._gate(issue_comments=[{
+            "author": {"login": "qodo-code-review"},
+            "authorAssociation": "NONE",
+            "body": qodo_body,
+        }])
+        result = stub.run_gate(skip=CODERABBIT)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("REVIEW-GATE-RESULT unresolved=2", result.stdout)
+        self.assertIn("1.  Null guard missing Bug", result.stdout)
+
+    def test_qodo_clean_or_stale_or_acknowledged_findings_pass(self):
+        clean_body = (
+            "<h3>Code Review by Qodo</h3>\n"
+            "<h3>Great, no issues found!</h3>\n"
+            f"<!-- https://github.com/dwojtaszek/zipper/commit/{HEAD_SHA} -->"
+        )
+        stale_body = (
+            "<h3>Code Review by Qodo</h3>\n"
+            "<img alt='Action required'>\n"
+            "<details><summary>  1.  Old issue</summary></details>\n"
+            "<!-- https://github.com/dwojtaszek/zipper/commit/" + ("f" * 40) + " -->"
+        )
+        current_findings = (
+            "<h3>Code Review by Qodo</h3>\n"
+            "<img alt='Remediation recommended'>\n"
+            "<details><summary>  1.  Medium note</summary></details>\n"
+            "<details><summary>  2.  Second note</summary></details>\n"
+            f"<!-- https://github.com/dwojtaszek/zipper/commit/{HEAD_SHA} -->"
+        )
+        ack_all = {
+            "author": {"login": "dwojtaszek"},
+            "authorAssociation": "OWNER",
+            "body": f"qodo-ack: {HEAD_SHA[:7]} all — covered in existing tests.",
+        }
+        ack_partial = {
+            "author": {"login": "dwojtaszek"},
+            "authorAssociation": "OWNER",
+            "body": f"qodo-ack: {HEAD_SHA[:7]} #1 — covered; fixing #2 next.",
+        }
+        contributor_ack = {
+            "author": {"login": "someone-else"},
+            "authorAssociation": "CONTRIBUTOR",
+            "body": f"qodo-ack: {HEAD_SHA[:7]} all",
+        }
+        prose_only = {
+            "author": {"login": "dwojtaszek"},
+            "authorAssociation": "OWNER",
+            "body": f"Qodo on {HEAD_SHA[:7]} still needs fixes.",
+        }
+        fenced_example = {
+            "author": {"login": "dwojtaszek"},
+            "authorAssociation": "OWNER",
+            "body": (
+                f"Do NOT run:\n```\nqodo-ack: {HEAD_SHA[:7]} all\n```\n"
+                f"~~~\nqodo-ack: {HEAD_SHA[:7]} all\n~~~\n"
+                f"    qodo-ack: {HEAD_SHA[:7]} all\n"
+                f"> qodo-ack: {HEAD_SHA[:7]} all"
+            ),
+        }
+        updated_earlier_qodo_beats_clean = [
+            {
+                "author": {"login": "qodo-code-review"},
+                "authorAssociation": "NONE",
+                "createdAt": "2026-11-13T08:00:00Z",
+                "updatedAt": "2026-11-13T08:10:00Z",
+                "body": current_findings,
+            },
+            {
+                "author": {"login": "qodo-code-review"},
+                "authorAssociation": "NONE",
+                "createdAt": "2026-11-13T08:05:00Z",
+                "updatedAt": "2026-11-13T08:05:00Z",
+                "body": clean_body,
+            },
+        ]
+        updated_qodo_after_ack = [
+            {
+                "author": {"login": "qodo-code-review"},
+                "authorAssociation": "NONE",
+                "createdAt": "2026-11-13T08:00:00Z",
+                "updatedAt": "2026-11-13T08:10:00Z",
+                "body": current_findings,
+            },
+            {
+                "author": {"login": "dwojtaszek"},
+                "authorAssociation": "OWNER",
+                "createdAt": "2026-11-13T08:05:00Z",
+                "updatedAt": "2026-11-13T08:05:00Z",
+                "body": f"qodo-ack: {HEAD_SHA[:7]} all",
+            },
+        ]
+        for name, comments, expected_code, expected_unresolved in (
+            ("clean", [{"author": {"login": "qodo-code-review"}, "authorAssociation": "NONE", "body": clean_body}], 0, 0),
+            ("stale", [{"author": {"login": "qodo-code-review"}, "authorAssociation": "NONE", "body": stale_body}], 0, 0),
+            ("acked_all", [
+                {"author": {"login": "qodo-code-review"}, "authorAssociation": "NONE", "body": current_findings},
+                ack_all,
+            ], 0, 0),
+            ("acked_partial_keeps_remaining", [
+                {"author": {"login": "qodo-code-review"}, "authorAssociation": "NONE", "body": current_findings},
+                ack_partial,
+            ], 1, 1),
+            ("contributor_cannot_ack", [
+                {"author": {"login": "qodo-code-review"}, "authorAssociation": "NONE", "body": current_findings},
+                contributor_ack,
+            ], 1, 2),
+            ("prose_cannot_ack", [
+                {"author": {"login": "qodo-code-review"}, "authorAssociation": "NONE", "body": current_findings},
+                prose_only,
+            ], 1, 2),
+            ("fenced_or_quoted_cannot_ack", [
+                {"author": {"login": "qodo-code-review"}, "authorAssociation": "NONE", "body": current_findings},
+                fenced_example,
+            ], 1, 2),
+            ("qodo_updated_after_ack_stays_blocked", updated_qodo_after_ack, 1, 2),
+            ("updated_earlier_qodo_beats_later_clean", updated_earlier_qodo_beats_clean, 1, 2),
+        ):
+            with self.subTest(case=name), tempfile.TemporaryDirectory() as directory:
+                stub = _StubGh(Path(directory), issue_comments=comments)
+                result = stub.run_gate(skip=CODERABBIT)
+                self.assertEqual(result.returncode, expected_code, result.stdout + result.stderr)
+                self.assertIn(f"REVIEW-GATE-RESULT unresolved={expected_unresolved}", result.stdout)
+
+    def test_qodo_paginated_comments_reads_all_pages(self):
+        page1 = [{"author": {"login": "qodo-code-review"}, "authorAssociation": "NONE", "body": (
+            "<h3>Code Review by Qodo</h3>\n"
+            "<img alt='Action required'>\n"
+            "<details><summary>  1.  Page one finding</summary></details>\n"
+            f"<!-- https://github.com/dwojtaszek/zipper/commit/{HEAD_SHA} -->"
+        )}]
+        page2_noise = [{"author": {"login": "github-actions"}, "authorAssociation": "CONTRIBUTOR", "body": "noise"}]
+        page2_ack = [{"author": {"login": "dwojtaszek"}, "authorAssociation": "OWNER", "body": f"qodo-ack: {HEAD_SHA[:7]} #1"}]
+
+        with tempfile.TemporaryDirectory() as directory:
+            stub = _StubGh(Path(directory), issue_comment_pages=[page1, page2_noise])
+            result = stub.run_gate(skip=CODERABBIT)
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertIn("REVIEW-GATE-RESULT unresolved=1", result.stdout)
+
+        with tempfile.TemporaryDirectory() as directory:
+            stub = _StubGh(Path(directory), issue_comment_pages=[page1, page2_ack])
+            result = stub.run_gate(skip=CODERABBIT)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("REVIEW-GATE-RESULT unresolved=0", result.stdout)
+
+        with tempfile.TemporaryDirectory() as directory:
+            stub = _StubGh(Path(directory), issue_comment_pages=[page1, page2_noise], fail="comments_page")
+            result = stub.run_gate(skip=CODERABBIT)
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+
+        # Prefix length between 8 and 39 chars works, while a number on the next line is not matched.
+        prefix12 = HEAD_SHA[:12].upper()
+        multiline_ack = [{"author": {"login": "dwojtaszek"}, "authorAssociation": "OWNER",
+                          "body": f"qodo-ack: {prefix12} #1\n2 remaining items"}]
+        page1_two = [{"author": {"login": "qodo-code-review"}, "authorAssociation": "NONE", "body": (
+            "<h3>Code Review by Qodo</h3>\n<img alt='Action required'>\n"
+            "<details><summary>  1.  One</summary></details>\n"
+            "<details><summary>  2.  Two</summary></details>\n"
+            f"<!-- https://github.com/dwojtaszek/zipper/commit/{HEAD_SHA} -->"
+        )}]
+        with tempfile.TemporaryDirectory() as directory:
+            stub = _StubGh(Path(directory), issue_comments=page1_two + multiline_ack)
+            result = stub.run_gate(skip=CODERABBIT)
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertIn("REVIEW-GATE-RESULT unresolved=1", result.stdout)
+
+        with tempfile.TemporaryDirectory() as directory:
+            stub = _StubGh(Path(directory), issue_comments=page1_two + [{"author": {"login": "dwojtaszek"}, "authorAssociation": "OWNER", "body": f"qodo-ack: {HEAD_SHA[:7]} all"}])
+            stub.env["WAIT_FOR_REVIEWS_ALLOW_QODO_ACK"] = "0"
+            result = stub.run_gate(skip=CODERABBIT)
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertIn("REVIEW-GATE-RESULT unresolved=2", result.stdout)
 
 
 if __name__ == "__main__":

@@ -310,11 +310,13 @@ for bot in "${EXPECTED_BOTS[@]}"; do
     echo "REVIEWER-OUTCOME $bot=$(get_outcome "$bot")"
 done
 
+UNKNOWN_RESULT_LINE="REVIEW-GATE-RESULT unresolved=unknown"
+ALLOW_QODO_ACK="${WAIT_FOR_REVIEWS_ALLOW_QODO_ACK:-1}"
 # Never fetched state at all: the reviewers were not asked, so this says nothing
 # about the code. Reported as environmental (exit 3) rather than as a review
 # result, so the runner retries instead of recording the reviewers as silent.
 if [[ $NEEDED_STATE -gt 0 && $FETCH_OK -eq 0 ]]; then
-    echo "REVIEW-GATE-RESULT unresolved=unknown"
+    echo "$UNKNOWN_RESULT_LINE"
     print_error "Could not read review state for PR #$PR (gh api failed every attempt)."
     exit 3
 fi
@@ -335,24 +337,86 @@ if ! threads_json=$(with_timeout gh api graphql \
               }
             }
           }
+          comments(first: 100) {
+            pageInfo { hasNextPage endCursor }
+            nodes {
+              author { login }
+              authorAssociation
+              createdAt
+              updatedAt
+              body
+            }
+          }
         }
       }
     }'); then
-    echo "REVIEW-GATE-RESULT unresolved=unknown"
+    echo "$UNKNOWN_RESULT_LINE"
     print_error "Could not read review threads for PR #$PR (gh api graphql failed)."
     exit 3
 fi
 
-# An unreadable or unexpected response must not be read as "no threads". The
-# query is the only thing that proves the threads are resolved, so a response
-# that does not actually contain the thread list is an environmental failure:
-# without this, a transient API error would report zero unresolved threads and
-# let the PR merge unverified.
-if ! jq -e '.data.repository.pullRequest.reviewThreads.nodes' <<<"$threads_json" >/dev/null 2>&1; then
-    echo "REVIEW-GATE-RESULT unresolved=unknown"
-    print_error "Review-thread response for PR #$PR was not readable (unexpected GraphQL shape)."
+# An unreadable, partial-error, or unexpected response must not be read as
+# "no threads / no comments". Without rejecting `.errors` and verifying both
+# arrays and pagination metadata, a partial GraphQL failure could drop Qodo
+# comments and let a PR merge unverified.
+if ! jq -e '((.errors // []) | length == 0)
+  and (.data.repository.pullRequest.reviewThreads.nodes | type == "array")
+  and (.data.repository.pullRequest.comments.nodes | type == "array")
+  and (.data.repository.pullRequest.comments.pageInfo.hasNextPage | type == "boolean")' <<<"$threads_json" >/dev/null 2>&1; then
+    echo "$UNKNOWN_RESULT_LINE"
+    print_error "Review-thread response for PR #$PR was not readable (unexpected GraphQL shape or errors)."
     exit 3
 fi
+
+all_comments_json=$(jq '.data.repository.pullRequest.comments.nodes' <<<"$threads_json")
+has_next_comments=$(jq -r '.data.repository.pullRequest.comments.pageInfo.hasNextPage' <<<"$threads_json")
+comments_cursor=$(jq -r '(.data.repository.pullRequest.comments.pageInfo.endCursor // "")' <<<"$threads_json")
+while [[ "$has_next_comments" == "true" ]]; do
+    if [[ -z "$comments_cursor" ]]; then
+        echo "$UNKNOWN_RESULT_LINE"
+        print_error "Incomplete comment pagination cursor for PR #$PR."
+        exit 3
+    fi
+    # shellcheck disable=SC2016
+    if ! comments_page=$(with_timeout gh api graphql \
+        -f owner="$OWNER" -f name="$NAME" -F pr="$PR" -f after="$comments_cursor" -f query='
+        query($owner: String!, $name: String!, $pr: Int!, $after: String!) {
+          repository(owner: $owner, name: $name) {
+            pullRequest(number: $pr) {
+              comments(first: 100, after: $after) {
+                pageInfo { hasNextPage endCursor }
+                nodes {
+                  author { login }
+                  authorAssociation
+                  createdAt
+                  updatedAt
+                  body
+                }
+              }
+            }
+          }
+        }'); then
+        echo "$UNKNOWN_RESULT_LINE"
+        print_error "Could not paginate PR #$PR comments (gh api graphql failed)."
+        exit 3
+    fi
+    if ! jq -e '((.errors // []) | length == 0)
+      and (.data.repository.pullRequest.comments.nodes | type == "array")
+      and (.data.repository.pullRequest.comments.pageInfo.hasNextPage | type == "boolean")' <<<"$comments_page" >/dev/null 2>&1; then
+        echo "$UNKNOWN_RESULT_LINE"
+        print_error "Comment pagination response for PR #$PR was unreadable."
+        exit 3
+    fi
+    next_comments_cursor=$(jq -r '(.data.repository.pullRequest.comments.pageInfo.endCursor // "")' <<<"$comments_page")
+    has_next_comments=$(jq -r '.data.repository.pullRequest.comments.pageInfo.hasNextPage' <<<"$comments_page")
+    if [[ "$has_next_comments" == "true" && ( -z "$next_comments_cursor" || "$next_comments_cursor" == "$comments_cursor" ) ]]; then
+        echo "$UNKNOWN_RESULT_LINE"
+        print_error "Comment pagination did not advance for PR #$PR."
+        exit 3
+    fi
+    all_comments_json=$(jq -s '.[0] + .[1]' <(printf '%s\n' "$all_comments_json") <(jq '.data.repository.pullRequest.comments.nodes' <<<"$comments_page"))
+    comments_cursor="$next_comments_cursor"
+done
 
 if ! FINAL_HEAD=$(read_head) || [[ "$FINAL_HEAD" != "$REVIEW_HEAD" ]]; then
     print_error "PR head changed or could not be verified; retry the review gate."
@@ -360,7 +424,70 @@ if ! FINAL_HEAD=$(read_head) || [[ "$FINAL_HEAD" != "$REVIEW_HEAD" ]]; then
 fi
 
 unresolved=$(jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)]' <<<"$threads_json")
-unresolved_count=$(jq 'length' <<<"$unresolved")
+unresolved_threads_count=$(jq 'length' <<<"$unresolved")
+
+# Qodo posts its Code Review as an issue-level PR comment (not a GraphQL
+# reviewThread). Flag unacknowledged current-head Qodo findings so they block
+# merge alongside CodeRabbit / human review threads.
+# Only repository OWNER acknowledgements with explicit finding directives
+# (`qodo-ack: <sha> #1, #2` or `qodo-ack: <sha> all`) can dismiss findings,
+# and only when WAIT_FOR_REVIEWS_ALLOW_QODO_ACK=1 (runner cycles set it to 0).
+# Intentional: Qodo is checked opportunistically when present (not in EXPECTED_BOTS)
+# because it skips some force-pushes and would otherwise stall every repair cycle.
+short_head="${REVIEW_HEAD:0:7}"
+qodo_unresolved_json=$(jq --arg head "$REVIEW_HEAD" --arg owner "$OWNER" --arg allow_ack "$ALLOW_QODO_ACK" '
+  . as $comments
+  | [range(0; $comments | length) as $idx
+      | ($comments[$idx]) as $c
+      | select((($c.author.login // "") | test("^qodo-code-review(\\[bot\\])?$"))
+          and (($c.body // "") | contains("<h3>Code Review by Qodo</h3>"))
+          and (($c.body // "") | contains($head)))
+      | {index: $idx, comment: $c}] as $qodo_matches
+  | if ($qodo_matches | length) == 0 then {count: 0, summaries: []}
+    else
+      ($qodo_matches | max_by([(.comment.updatedAt // .comment.createdAt // ""), .index])) as $latest
+      | ($latest.comment.body // "") as $body
+      | if ($body | test("Great, no issues found!"; "i"))
+           or (($body | test("Action required|Remediation recommended|Agent prompt"; "i")) | not)
+        then {count: 0, summaries: []}
+        else
+          ([$body | scan("<summary>\\s*\\d+\\.[^<]*(?:<code>[^<]*</code>[^<]*)*</summary>")]
+            | map(gsub("<[^>]+>"; "") | gsub("^\\s+|\\s+$"; ""))) as $summaries
+          | [range(0; $summaries | length) as $i
+              | {
+                  num: (($summaries[$i] | capture("^(?<n>\\d+)\\.") | .n) // (($i + 1) | tostring)),
+                  text: $summaries[$i]
+                }] as $items
+          | (if ($items | length) > 0 then $items else [{num: "1", text: "Qodo reported current-head findings"}] end) as $findings
+          | ($latest.comment.updatedAt // $latest.comment.createdAt // "") as $qodo_ts
+          | (if $allow_ack == "1" then
+              [range(0; $comments | length) as $j
+                | ($comments[$j]) as $ack
+                | ($ack.updatedAt // $ack.createdAt // "") as $ack_ts
+                | select((($ack.author.login // "") == $owner or ($ack.authorAssociation // "") == "OWNER")
+                    and (if ($qodo_ts != "" and $ack_ts != "" and $ack_ts != $qodo_ts)
+                         then ($ack_ts > $qodo_ts)
+                         else ($j > $latest.index) end))
+                | (($ack.body // "")
+                    | gsub("```[\\s\\S]*?```"; "")
+                    | gsub("~~~[\\s\\S]*?~~~"; "")
+                    | split("\n")
+                    | map(select(test("^\\s*>") | not))
+                    | join("\n"))
+                | scan("(?im)^ {0,3}qodo-(?:ack|skip)[ \\t]*:[ \\t]*([0-9a-f]{7,40})[ \\t]+(all\\b|#?\\d+(?:(?:[ \\t]*,[ \\t]*|[ \\t]+)#?\\d+)*)")
+                | (.[0] | ascii_downcase) as $ack_sha
+                | select($head | startswith($ack_sha))
+                | .[1]]
+             else [] end) as $ack_specs
+          | ($ack_specs | any(test("\\ball\\b"; "i"))) as $ack_all
+          | ([$ack_specs[] | scan("#?(\\d+)")] | flatten) as $acked_nums
+          | (if $ack_all then [] else [$findings[] | select(.num as $n | ($acked_nums | index($n)) | not)] end) as $remaining
+          | {count: ($remaining | length), summaries: [$remaining[].text]}
+        end
+    end
+' <<<"$all_comments_json")
+qodo_count=$(jq '.count' <<<"$qodo_unresolved_json")
+unresolved_count=$((unresolved_threads_count + qodo_count))
 echo "REVIEW-GATE-RESULT unresolved=$unresolved_count"
 
 # Non-empty review summary bodies (verdicts, overviews) — informational.
@@ -376,7 +503,14 @@ if [[ "$unresolved_count" -eq 0 ]]; then
     exit 0
 fi
 
-print_error "$unresolved_count unresolved review thread(s) on PR #$PR:"
-jq -r '.[] | (.comments.nodes[0] // {}) | "  \(.author.login // "unknown") \(.path // "?"):\(.line // "?")\n    \([(.body // "") | split("\n")[] | select((. != "") and (startswith("![") | not))][0] // "")"' <<<"$unresolved"
-print_info "Fix each finding, or reply with a skip reason and resolve the thread, then re-run."
+if [[ "$unresolved_threads_count" -gt 0 ]]; then
+    print_error "$unresolved_threads_count unresolved review thread(s) on PR #$PR:"
+    jq -r '.[] | (.comments.nodes[0] // {}) | "  \(.author.login // "unknown") \(.path // "?"):\(.line // "?")\n    \([(.body // "") | split("\n")[] | select((. != "") and (startswith("![") | not))][0] // "")"' <<<"$unresolved"
+    print_info "Fix each finding, or reply with a skip reason and resolve the thread, then re-run."
+fi
+if [[ "$qodo_count" -gt 0 ]]; then
+    print_error "$qodo_count unaddressed Qodo finding(s) on PR #$PR ($short_head):"
+    jq -r '.summaries[] | "  qodo-code-review: \(.)"' <<<"$qodo_unresolved_json"
+    print_info "Address each valid Qodo finding and push an updated commit."
+fi
 exit 1
