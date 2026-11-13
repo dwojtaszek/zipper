@@ -342,7 +342,8 @@ We welcome contributions! Please see our [Contributing Guide](docs/contributing.
 
 - [Contributing Guide](docs/contributing.md) — Build, test, and developer workflow (Windows, macOS, Linux)
 - [Agent Workflow](docs/agent-workflow.md) — Testing, runtime commands, stuck protocol, and project structure
-- [Issue Workflow](docs/issue-workflow.md) — Issue selection, per-issue PR flow, release notes, and review gates
+- [Issue Workflow](docs/issue-workflow.md) — Per-issue PR flow, release notes, and review gates
+- [Issue Selection & Triage](docs/issue-selection.md) — Queue ranking, wave prioritization, and blocker checks
 - [Agent Review Standards](docs/agent-review-standards.md) — Code style, test naming, and review responsibilities
 - [Code Review Guidelines](docs/code-review-guidelines.md) — Deliberate project patterns and review guardrails
 - [Property-Based Testing](docs/property-based-testing.md) — FsCheck properties, generators, and behavioral coverage

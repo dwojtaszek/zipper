@@ -43,10 +43,12 @@ A request to prepare a PR ends with the branch, review result, checks, and any p
 
 ## CI monitoring
 
-Start one watcher after publishing each PR head:
+Start one watcher after publishing each PR head, sized to the full Windows + goldens leg (~13–15 min, so use `--timeout 1000` with a ≥1050s shell budget instead of short 8-minute retries):
 
 ```bash
-python3 .github/scripts/watch-pr.py 1421 --snapshot /tmp/zipper-pr-1421.json
+python3 .github/scripts/watch-pr.py 1421 --snapshot /tmp/zipper-pr-1421.json --timeout 1000
+# Inspect an existing snapshot without starting another polling loop:
+python3 .github/scripts/watch-pr.py 1421 --snapshot /tmp/zipper-pr-1421.json --status
 ```
 
-The watcher pins the current head and its `pr.yml` workflow run, polls that run once per interval, and prints only changed job or run states. Read the local snapshot for progress updates instead of starting additional PR-check or workflow polls. Exit 0 means that pinned run succeeded and the PR still has the same head; a push during the watch returns 3. Failed runs return 1, API failures return 3, and a bounded wait that expires returns 124. Start a new watcher after every push. Review and SonarCloud verdicts remain separate gates. On failure, fetch the failed job's log once.
+The watcher pins the current head and its `pr.yml` workflow run, polls that run once per interval, and prints only changed job or run states. Read the local snapshot (or pass `--status`) for progress updates instead of starting additional PR-check or workflow polls (`--status` reads the local snapshot offline and does not re-verify whether a newer head was pushed remotely). Exit 0 means that pinned run succeeded and the PR still has the same head; a push during the watch returns 3. Failed runs return 1, API failures return 3, and a bounded wait that expires returns 124 (or 4 for `--status` while still in progress). Start a new watcher after every push. Review and SonarCloud verdicts remain separate gates. On failure, fetch the failed job's log once.

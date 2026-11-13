@@ -4,7 +4,6 @@ import importlib.util
 import json
 import os
 import tempfile
-import subprocess
 import time
 from pathlib import Path
 from unittest.mock import patch

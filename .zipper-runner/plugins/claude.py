@@ -16,9 +16,7 @@ stdin. All commands that produce output MUST redirect stdout/stderr to a
 temporary file rather than reading them via pipes — failure to do so results
 in an indefinite hang.
 """
-import json
 import os
-import shlex
 import subprocess
 import shutil
 import tempfile
@@ -63,7 +61,7 @@ def check_token_health(model: str | None = None) -> bool:
         with open(tmp_path, "r") as f:
             output = f.read().strip()
         if result.returncode == 0 and output:
-            print(f"[claude] API health check: SUCCESS (live token verified)")
+            print("[claude] API health check: SUCCESS (live token verified)")
             return True
         if "401" in output or "authentication" in output.lower():
             print("[claude] API health check: token rejected (401) — re-login required")

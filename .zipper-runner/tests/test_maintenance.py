@@ -132,13 +132,12 @@ class MaintenanceTests(unittest.TestCase):
         leader = f'import subprocess,sys,time; subprocess.Popen([sys.executable,"-c",{grandchild!r}]); time.sleep(60)'
         process = subprocess.Popen([*self.command, leader], env=self.env,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        group = None
         try:
             deadline = time.monotonic() + 5
             while not heartbeat.exists() and time.monotonic() < deadline:
                 time.sleep(0.02)
             self.assertTrue(ready.exists())
-            group = os.getpgid(int(ready.read_text()))
+            os.getpgid(int(ready.read_text()))
             process.terminate()
             output, error = process.communicate(timeout=8)
             self.assertEqual(process.returncode, 143, output + error)

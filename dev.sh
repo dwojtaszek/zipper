@@ -29,7 +29,8 @@ Commands:
   test        Build Release once and run unit + property tests (--all includes analyzers)
   e2e         Run E2E smoke suite (--full runs full tests/run-tests.sh suite)
   mutation    Run Roslyn incremental mutation smoke (tests/run-mutation-smoke.sh)
-  lint        Run dotnet format verification and E2E script parity validation
+  lint        Run dotnet format verification, shell/Python lint, and E2E script parity validation
+  sonar       Query SonarCloud quality gate and open issues for a PR (./dev.sh sonar <PR>)
   hooks       Install/sync local Git hooks (setup-hook.sh)
   all         Run all required pre-PR gates (build once, lint, unit/analyzer tests, mutation, E2E smoke)
   help        Show this help message
@@ -45,7 +46,7 @@ EOF
 
 if [[ $# -gt 0 ]]; then
     case "$1" in
-        check|test|e2e|mutation|lint|hooks|all|help|-h|--help)
+        check|test|e2e|mutation|lint|sonar|hooks|all|help|-h|--help)
             COMMAND="$1"
             shift
             ;;
@@ -198,6 +199,9 @@ run_check() {
     local need_parity=0
     local need_ci_tests=0
     local need_runner_tests=0
+    local need_python_lint=0
+    local need_shell_lint=0
+    local need_complexity=0
     local specific_e2e_scripts=()
 
     local scope
@@ -205,6 +209,8 @@ run_check() {
     if [[ "$scope" == *"only_runner=true"* ]]; then
         need_runner_tests=1
         need_docs_drift=1
+        need_python_lint=1
+        need_complexity=1
     else
     for file in "${changed_files[@]}"; do
         scope=$(printf '%s\0' "$file" | python3 .github/scripts/change-scope.py)
@@ -218,6 +224,9 @@ run_check() {
                 need_build=1
                 need_format=1
                 need_analyzer_tests=1
+                if [[ "$file" == src/Zipper.Analyzers/*.cs || "$file" == src/Zipper.Analyzers/*/*.cs ]]; then
+                    need_complexity=1
+                fi
                 ;;
             src/Zipper.Tests/*)
                 need_build=1
@@ -231,6 +240,7 @@ run_check() {
                 if [[ "$file" == *.cs ]]; then
                     need_mutation=1
                     need_e2e_smoke=1
+                    need_complexity=1
                 fi
                 ;;
             Directory.Build.props|zipper.sln|BannedSymbols.txt|global.json)
@@ -243,15 +253,42 @@ run_check() {
             .github/workflows/*|.github/scripts/*|.github/actions/*|tools/*|tests/ci/*|tests/perf/*)
                 need_ci_tests=1
                 need_docs_drift=1
+                if [[ "$file" == *.py ]]; then
+                    need_python_lint=1
+                    need_complexity=1
+                fi
                 ;;
             .github/hooks/*|setup-hook.sh|setup-hook.bat|dev.sh|dev.bat)
                 need_parity=1
                 need_ci_tests=1
                 need_docs_drift=1
+                if [[ "$file" != *.bat ]]; then
+                    need_shell_lint=1
+                fi
                 ;;
             .zipper-runner/*)
                 need_runner_tests=1
                 need_docs_drift=1
+                if [[ "$file" == *.py ]]; then
+                    need_python_lint=1
+                    need_complexity=1
+                fi
+                ;;
+            .pi-lens.json)
+                ;;
+            ruff.toml)
+                need_python_lint=1
+                ;;
+            tests/wait-for-reviews.sh|tests/test-unified-workflow.sh|tests/test-unified-workflow.bat|tests/test-artifact-handling.sh|tests/test-ci-build-props.sh|tests/validate-*.sh|tests/validate-*.bat)
+                need_ci_tests=1
+                need_parity=1
+                need_docs_drift=1
+                if [[ "$file" == tests/wait-for-reviews.sh ]]; then
+                    need_shell_lint=1
+                fi
+                if [[ "$file" =~ ^tests/(test-[a-zA-Z0-9._-]+|run-e2e-[a-zA-Z0-9._-]+)\.sh$ ]]; then
+                    specific_e2e_scripts+=("$file")
+                fi
                 ;;
             tests/*)
                 need_parity=1
@@ -293,7 +330,31 @@ run_check() {
     fi
 
     if [[ "$need_format" -eq 1 ]]; then
-        run_step "Verify code formatting" dotnet format --verify-no-changes src/
+        run_step "Verify code formatting" dotnet format --verify-no-changes zipper.sln
+    fi
+
+    if [[ "$need_python_lint" -eq 1 ]]; then
+        if command -v ruff >/dev/null 2>&1; then
+            run_step "Run Python lint (ruff)" ruff check
+        else
+            echo "Warning: ruff not found on PATH; skipping local Python lint." >&2
+        fi
+    fi
+
+    if [[ "$need_shell_lint" -eq 1 ]]; then
+        if command -v shellcheck >/dev/null 2>&1; then
+            run_step "Run shell lint (shellcheck)" shellcheck -S warning tests/wait-for-reviews.sh dev.sh setup-hook.sh .github/hooks/pre-commit .github/hooks/pre-push .github/hooks/post-commit
+        else
+            echo "Warning: shellcheck not found on PATH; skipping local shell lint." >&2
+        fi
+    fi
+
+    if [[ "$need_complexity" -eq 1 && -f .github/scripts/check-complexity.py ]]; then
+        if [[ -n "$FILES_OVERRIDE" ]]; then
+            run_step "Check diff complexity" python3 .github/scripts/check-complexity.py --files "$FILES_OVERRIDE"
+        else
+            run_step "Check diff complexity" python3 .github/scripts/check-complexity.py --base "$BASE_REF"
+        fi
     fi
 
 
@@ -356,8 +417,21 @@ case "$COMMAND" in
         run_step "Run incremental mutation smoke" bash tests/run-mutation-smoke.sh ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}
         ;;
     lint)
-        run_step "Verify code formatting" dotnet format --verify-no-changes src/
+        run_step "Verify code formatting" dotnet format --verify-no-changes zipper.sln
         run_step "Validate E2E .sh/.bat parity" bash tests/validate-e2e-parity.sh
+        if command -v ruff >/dev/null 2>&1; then
+            run_step "Run Python lint (ruff)" ruff check
+        else
+            echo "Warning: ruff not found on PATH; skipping local Python lint." >&2
+        fi
+        if command -v shellcheck >/dev/null 2>&1; then
+            run_step "Run shell lint (shellcheck)" shellcheck -S warning tests/wait-for-reviews.sh dev.sh setup-hook.sh .github/hooks/pre-commit .github/hooks/pre-push .github/hooks/post-commit
+        else
+            echo "Warning: shellcheck not found on PATH; skipping local shell lint." >&2
+        fi
+        ;;
+    sonar)
+        python3 .github/scripts/check-sonar.py ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}
         ;;
     hooks)
         run_step "Sync local Git hooks" bash setup-hook.sh
@@ -369,9 +443,22 @@ case "$COMMAND" in
         run_step "Run zipper-runner tests" python3 -m unittest discover -s .zipper-runner/tests -p "test_*.py"
         run_step "Run workflow artifact handling check" bash tests/test-artifact-handling.sh
         run_step "Run coverage gate action tests" bash .github/actions/coverage-gate/test-coverage-gate.sh
+        if command -v ruff >/dev/null 2>&1; then
+            run_step "Run Python lint (ruff)" ruff check
+        else
+            echo "Warning: ruff not found on PATH; skipping local Python lint." >&2
+        fi
+        if command -v shellcheck >/dev/null 2>&1; then
+            run_step "Run shell lint (shellcheck)" shellcheck -S warning tests/wait-for-reviews.sh dev.sh setup-hook.sh .github/hooks/pre-commit .github/hooks/pre-push .github/hooks/post-commit
+        else
+            echo "Warning: shellcheck not found on PATH; skipping local shell lint." >&2
+        fi
+        if [[ -f .github/scripts/check-complexity.py ]]; then
+            run_step "Check diff complexity" python3 .github/scripts/check-complexity.py --base "$BASE_REF"
+        fi
         ensure_release_build
         run_step "Verify SDK hook synchronization" env PYTHONPATH=tests/ci python3 -m unittest test_dev_cli.DevCliAndLocalWorkflowTests.test_directory_build_props_msbuild_sync_git_hooks_targets_succeed
-        run_step "Verify code formatting" dotnet format --verify-no-changes src/
+        run_step "Verify code formatting" dotnet format --verify-no-changes zipper.sln
         run_step "Run unit + property tests" dotnet test src/Zipper.Tests/Zipper.Tests.csproj --no-build -c Release
         run_step "Run Roslyn analyzer tests" dotnet test src/Zipper.Analyzers.Tests/Zipper.Analyzers.Tests.csproj --no-build -c Release
         run_step "Run incremental mutation smoke" bash tests/run-mutation-smoke.sh

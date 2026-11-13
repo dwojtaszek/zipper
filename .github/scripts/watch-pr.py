@@ -52,7 +52,7 @@ def find_run(gh, repo, head, pr):
 def summarize_job(job):
     return {'id': job['databaseId'], 'name': job['name'], 'status': job['status'],
             'conclusion': job['conclusion'] or '',
-            'step': next((step['name'] for step in job.get('steps', [])
+            'step': next((step['name'] for step in (job.get('steps') or [])
                           if step['status'] == 'in_progress'), None)}
 
 
@@ -61,20 +61,49 @@ def poll_pr(gh, repo, pr, state):
         state['run_id'] = find_run(gh, repo, state['head'], pr)
     if gh('pr', 'view', str(pr), '--json', 'headRefOid')['headRefOid'] != state['head']:
         state['status'] = 'superseded'
+        state['conclusion'] = ''
         return 3
     if state['run_id'] is None:
         state['status'] = 'waiting-for-run'
     else:
         run = gh('run', 'view', str(state['run_id']), '--json', 'status,conclusion,jobs')
         state.update(status=run['status'], conclusion=run['conclusion'] or '',
-                     jobs=[summarize_job(job) for job in run['jobs']])
+                     jobs=[summarize_job(job) for job in (run.get('jobs') or [])])
     if state['status'] == 'completed':
         head = gh('pr', 'view', str(pr), '--json', 'headRefOid')['headRefOid']
         if head != state['head']:
             state['status'] = 'superseded'
+            state['conclusion'] = ''
             return 3
         return 0 if state['conclusion'] == 'success' else 1
     return None
+
+
+def read_snapshot(snapshot: Path, pr: int) -> int:
+    try:
+        data = json.loads(snapshot.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError) as error:
+        print(f'Cannot read snapshot {snapshot}: {error}', file=sys.stderr)
+        return 3
+    if not isinstance(data, dict):
+        print(f'Invalid snapshot {snapshot}: expected JSON object', file=sys.stderr)
+        return 3
+    if data.get('pr') != pr:
+        print(f'Snapshot {snapshot} is for PR #{data.get("pr")}, not PR #{pr}', file=sys.stderr)
+        return 3
+    checked_at = data.get('checked_at')
+    if isinstance(checked_at, (int, float)):
+        age_s = max(0, int(time.time() - checked_at))
+        print(f"# offline snapshot age={age_s}s head={data.get('head', 'unknown')}", file=sys.stderr)
+    print(json.dumps(data, indent=2))
+    status = data.get('status')
+    if status == 'completed':
+        return 0 if data.get('conclusion') == 'success' else 1
+    if status in ('superseded', 'unavailable'):
+        return 3
+    if status == 'timeout':
+        return 124
+    return 4
 
 
 def main():
@@ -83,9 +112,12 @@ def main():
     parser.add_argument('--snapshot', type=Path, required=True)
     parser.add_argument('--interval', type=int, default=30)
     parser.add_argument('--timeout', type=int, default=3600)
+    parser.add_argument('--status', action='store_true', help='Print existing snapshot state and exit without polling')
     args = parser.parse_args()
     if args.pr < 1 or args.interval < 1 or args.timeout < 1:
         parser.error('PR, interval, and timeout must be positive')
+    if args.status:
+        return read_snapshot(args.snapshot, args.pr)
     state = {'pr': args.pr, 'head': None, 'run_id': None, 'status': 'starting', 'conclusion': '', 'jobs': []}
     previous = {}
     deadline = time.monotonic() + args.timeout

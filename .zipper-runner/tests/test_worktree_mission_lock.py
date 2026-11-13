@@ -263,7 +263,7 @@ class MissionLockStateTests(unittest.TestCase):
         forever. Deleting it does not release the lock (the inode lives on), but the
         next acquire creates a new inode that a second process can lock, leaving two
         runs convinced they own the worktree."""
-        name = os.path.basename(runner._worktree_mission_lock_path(self.wt_path))
+        os.path.basename(runner._worktree_mission_lock_path(self.wt_path))
         with runner._worktree_mission_lock(self.wt_path) as may_drive:
             self.assertTrue(may_drive)
             lock_path = runner._worktree_mission_lock_path(self.wt_path)

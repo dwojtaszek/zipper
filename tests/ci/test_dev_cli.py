@@ -77,6 +77,7 @@ class DevCliAndLocalWorkflowTests(unittest.TestCase):
         self.assertIn("Build solution (Release)", res.stdout)
         self.assertIn("Verify code formatting", res.stdout)
         self.assertIn("Run Roslyn analyzer tests", res.stdout)
+        self.assertIn("Check diff complexity", res.stdout)
         self.assertNotIn("Run incremental mutation smoke", res.stdout)
         self.assertNotIn("Run basic E2E smoke", res.stdout)
 
@@ -220,7 +221,34 @@ class DevCliAndLocalWorkflowTests(unittest.TestCase):
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertIn("Run zipper-runner tests", res.stdout)
         self.assertIn("Run DocsDriftTests", res.stdout)
+        self.assertIn("Check diff complexity", res.stdout)
         self.assertNotIn("Run unit + property tests", res.stdout)
+
+    def test_dev_cli_wait_for_reviews_triggers_ci_tests_and_shell_lint(self):
+        res = self._run_dev("check", "--dry-run", "--files", "tests/wait-for-reviews.sh")
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("Run CI workflow contract tests", res.stdout)
+        self.assertIn("Validate E2E .sh/.bat parity", res.stdout)
+        if shutil.which("shellcheck"):
+            self.assertIn("Run shell lint (shellcheck)", res.stdout)
+
+    def test_dev_cli_test_unified_workflow_retains_script_and_ci_tests(self):
+        res = self._run_dev("check", "--dry-run", "--files", "tests/test-unified-workflow.sh")
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("Run CI workflow contract tests", res.stdout)
+        self.assertIn("Run modified E2E script (tests/test-unified-workflow.sh)", res.stdout)
+
+    def test_dev_cli_pi_lens_config_does_not_force_dotnet_build(self):
+        res = self._run_dev("check", "--dry-run", "--files", ".pi-lens.json")
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertNotIn("Build solution (Release)", res.stdout)
+
+    def test_dev_cli_ruff_toml_triggers_python_lint(self):
+        res = self._run_dev("check", "--dry-run", "--files", "ruff.toml")
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertNotIn("Build solution (Release)", res.stdout)
+        if shutil.which("ruff"):
+            self.assertIn("Run Python lint (ruff)", res.stdout)
 
 
 if __name__ == "__main__":
