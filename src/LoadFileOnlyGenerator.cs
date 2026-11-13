@@ -264,7 +264,7 @@ internal static class LoadFileOnlyGenerator
                 WorkItem = workItem,
                 DataLength = random.Next(1024, 10_485_760),
                 PageCount = pageCount,
-                Hashes = request.Hash.Mode == Config.HashMode.Simulated ? GenerateSimulatedHashes(request, workItem) : null,
+                Hashes = HashComputer.ComputeSimulatedHashesIfEnabled(workItem, request),
             });
         }
 
@@ -312,29 +312,11 @@ internal static class LoadFileOnlyGenerator
                 DataLength = random.Next(1024, 10_485_760),
                 PageCount = pageCount,
                 Attachment = hasAttachment ? ("attachment.pdf", Array.Empty<byte>()) : null,
-                Hashes = request.Hash.Mode == Config.HashMode.Simulated ? GenerateSimulatedHashes(request, workItem) : null,
+                Hashes = HashComputer.ComputeSimulatedHashesIfEnabled(workItem, request),
             });
         }
 
         return shells;
-    }
-
-    private static IReadOnlyDictionary<Config.HashAlgorithm, string>? GenerateSimulatedHashes(FileGenerationRequest request, FileWorkItem workItem)
-    {
-        var hashConfig = request.Hash;
-        if (!hashConfig.IsEnabled)
-        {
-            return null;
-        }
-
-        var dict = new Dictionary<Config.HashAlgorithm, string>(hashConfig.Algorithms.Count);
-        var rng = Config.HashUtility.CreateSeededRandom(request, workItem.Index);
-        foreach (var algo in hashConfig.Algorithms)
-        {
-            dict[algo] = Config.HashUtility.GenerateSimulatedHash(algo, rng);
-        }
-
-        return dict;
     }
 
     private static FileGenerationRequest EnsureStableOptPageCounts(FileGenerationRequest request, LoadFileFormat format)

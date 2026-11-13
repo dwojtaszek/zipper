@@ -155,12 +155,15 @@ public class EmailThreadPlanTests
             Output = new OutputConfig { FileType = "eml", FileCount = 2 },
             Metadata = new MetadataConfig { WithThreading = true, Seed = 42 },
         };
-        var originalMessageId = EmailThreadPlan.GetOrCreate(request).GetNode(1).MessageId;
+        var originalPlan = EmailThreadPlan.GetOrCreate(request);
+        var originalMessageId = originalPlan.GetNode(1).MessageId;
         var clone = request.Clone();
         clone.Metadata = clone.Metadata with { Seed = 123 };
 
-        var clonedMessageId = EmailThreadPlan.GetOrCreate(clone).GetNode(1).MessageId;
+        var clonedPlan = EmailThreadPlan.GetOrCreate(clone);
+        var clonedMessageId = clonedPlan.GetNode(1).MessageId;
 
+        Assert.NotSame(originalPlan, clonedPlan);
         Assert.NotEqual(originalMessageId, clonedMessageId);
     }
 
@@ -343,6 +346,163 @@ public class EmailThreadPlanTests
         Assert.Equal("CUSTOM-ROOT", node2.ThreadDocId);
         Assert.Equal(1, node2.ParentIndex);
         Assert.Equal("CUSTOM-ROOT", node2.ThreadParentDocId);
+    }
+
+    [Fact]
+    public void GetOrCreate_UnmodifiedClone_ReusesCachedPlan()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 5 },
+            Metadata = new MetadataConfig { WithThreading = true, Seed = 42 },
+            Bates = new BatesNumberConfig { Prefix = "ABC", Start = 1 },
+        };
+
+        var originalPlan = EmailThreadPlan.GetOrCreate(request);
+        var clone = request.Clone();
+        var clonedPlan = EmailThreadPlan.GetOrCreate(clone);
+
+        Assert.Same(originalPlan, clonedPlan);
+    }
+
+    [Fact]
+    public void GetOrCreate_ClonedRequestWithNewFileCountOrBates_CreatesIndependentPlan()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 2 },
+            Metadata = new MetadataConfig { WithThreading = true, Seed = 42 },
+            Bates = new BatesNumberConfig { Prefix = "AAA", Start = 1 },
+        };
+
+        var originalPlan = EmailThreadPlan.GetOrCreate(request);
+
+        var countClone = request.Clone();
+        countClone.Output = countClone.Output with { FileCount = 5 };
+        var countPlan = EmailThreadPlan.GetOrCreate(countClone);
+        Assert.NotSame(originalPlan, countPlan);
+
+        var batesClone = request.Clone();
+        batesClone.Bates = batesClone.Bates! with { Prefix = "BBB", Start = 10 };
+        var batesPlan = EmailThreadPlan.GetOrCreate(batesClone);
+        Assert.NotSame(originalPlan, batesPlan);
+        Assert.Equal("BBB00000010", batesPlan.GetNode(1).ThreadDocId);
+
+        var typePlanClone = request.Clone();
+        typePlanClone.Output = typePlanClone.Output with
+        {
+            FileCount = 4,
+            FileTypePlan = new FileTypePlan(
+                [new FileTypeRatio { Type = "pdf", Weight = 50 }, new FileTypeRatio { Type = "eml", Weight = 50 }],
+                4),
+        };
+        var typePlan = EmailThreadPlan.GetOrCreate(typePlanClone);
+        Assert.NotSame(originalPlan, typePlan);
+    }
+
+    [Fact]
+    public void GetOrCreate_MutatingCallerSourceListAfterClone_DoesNotCorruptSharedPlan()
+    {
+        var sourceList = new List<Zipper.SourceInput.SourceRecord>
+        {
+            new() { RelativePath = "a.eml", FileType = "eml", ControlNumber = "ORIG-1" },
+            new() { RelativePath = "b.eml", FileType = "eml", ControlNumber = "ORIG-2" },
+        };
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 2 },
+            Metadata = new MetadataConfig { WithThreading = true, Seed = 42 },
+            SourceRecords = sourceList,
+        };
+
+        var originalPlan = EmailThreadPlan.GetOrCreate(request);
+        var clone = request.Clone();
+
+        // Mutating the caller's list after assignment must not change the request or clone plan.
+        sourceList[0] = new Zipper.SourceInput.SourceRecord { RelativePath = "a.pdf", FileType = "pdf", ControlNumber = "MUTATED-1" };
+        sourceList.Add(new Zipper.SourceInput.SourceRecord { RelativePath = "c.eml", FileType = "eml", ControlNumber = "MUTATED-3" });
+
+        var clonedPlan = EmailThreadPlan.GetOrCreate(clone);
+        Assert.Same(originalPlan, clonedPlan);
+        Assert.Equal("ORIG-1", clonedPlan.GetNode(1).ThreadDocId);
+    }
+
+    [Fact]
+    public void ResolveFallbackNode_HandlesNonThreadedChildNullAndPartialEmails()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 3 },
+            Metadata = new MetadataConfig { WithThreading = true, Seed = 42 },
+        };
+        var workItem = new FileWorkItem { Index = 2 };
+        var expectedNode = EmailThreadPlan.GetOrCreate(request).GetNode(2);
+
+        var nonThreaded = request.Clone();
+        nonThreaded.Metadata = nonThreaded.Metadata with { WithThreading = false };
+        Assert.Null(EmailThreadPlan.ResolveFallbackNode(nonThreaded, workItem, email: null, isEmlRecord: true));
+        Assert.Null(EmailThreadPlan.ResolveFallbackNode(request, workItem, email: null, isEmlRecord: false));
+
+        var resolvedForNullEmail = EmailThreadPlan.ResolveFallbackNode(request, workItem, email: null, isEmlRecord: true);
+        Assert.Same(expectedNode, resolvedForNullEmail);
+
+        var partialMatch = new Email
+        {
+            To = "a@b.com",
+            From = "c@d.com",
+            Subject = "S",
+            Body = "B",
+            SentDate = DateTime.UtcNow,
+            ThreadId = expectedNode.ThreadDocId,
+            IsInclusive = null,
+            ThreadParentId = null,
+        };
+        Assert.Same(expectedNode, EmailThreadPlan.ResolveFallbackNode(request, workItem, partialMatch, isEmlRecord: true));
+
+        var partialMismatch = partialMatch with { ThreadId = "OTHER-THREAD" };
+        Assert.Null(EmailThreadPlan.ResolveFallbackNode(request, workItem, partialMismatch, isEmlRecord: true));
+
+        var complete = partialMatch with { IsInclusive = true, ThreadParentId = string.Empty };
+        Assert.Null(EmailThreadPlan.ResolveFallbackNode(request, workItem, complete, isEmlRecord: true));
+    }
+
+    [Fact]
+    public void GetOrCreate_SharedPlanAfterOriginalSourceRecordsReplaced_UsesCapturedSourceRecords()
+    {
+        var originalRecords = Enumerable.Range(1, 7)
+            .Select(i => new Zipper.SourceInput.SourceRecord
+            {
+                RelativePath = $"eml{i}.eml",
+                FileType = "eml",
+                ControlNumber = $"ORIG-{i:D3}",
+            })
+            .ToList();
+
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = originalRecords.Count },
+            Metadata = new MetadataConfig { WithThreading = true, Seed = 42 },
+            SourceRecords = originalRecords,
+        };
+
+        // Plan only the first batch (indices 1..5), then clone before mutating the original.
+        var originalPlan = EmailThreadPlan.GetOrCreate(request);
+        _ = originalPlan.GetNode(1);
+
+        var clone = request.Clone();
+        request.SourceRecords = Enumerable.Range(1, 7)
+            .Select(i => new Zipper.SourceInput.SourceRecord
+            {
+                RelativePath = $"other{i}.eml",
+                FileType = "eml",
+                ControlNumber = $"REPLACED-{i:D3}",
+            })
+            .ToList();
+
+        // Batch 2 (indices 6..7) was not yet planned; the clone's shared plan must still use
+        // originalRecords, while the mutated original request must receive a fresh plan.
+        Assert.Equal("ORIG-006", EmailThreadPlan.GetOrCreate(clone).GetNode(6).ThreadDocId);
+        Assert.Equal("REPLACED-006", EmailThreadPlan.GetOrCreate(request).GetNode(6).ThreadDocId);
     }
 
     [Fact]

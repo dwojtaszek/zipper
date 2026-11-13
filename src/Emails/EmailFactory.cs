@@ -205,6 +205,54 @@ internal static class EmailFactory
 
     internal static string GetDomainForIndex(int index) => EmailDomains[index % EmailDomains.Length];
 
+    // Keep in sync with BuildReplacements() random draws below (called twice per Email: Subject + Body).
+    private const int BuildReplacementsDrawCount = 27;
+
+    internal static int GetTemplatesCountForCategory(EmailCategory category) => GetTemplatesForCategory(category).Count;
+
+    /// <summary>
+    /// Advances <paramref name="random"/> by the exact number of draws consumed by
+    /// <see cref="Create(int, int, EmailCategory?, Random, DateTime)"/> so Loadfile-Only
+    /// attachment planning stays aligned with EML generation.
+    /// </summary>
+    internal static void SimulateEmailRandomConsumption(Random random)
+    {
+        ArgumentNullException.ThrowIfNull(random);
+
+        // 1. GetRandomCategory
+        var selectedCategory = GetRandomCategory(random);
+
+        // 2. template selection
+        var templateCount = GetTemplatesCountForCategory(selectedCategory);
+        _ = random.Next(templateCount);
+
+        // 3 & 4. BuildReplacements (called twice: once for Subject, once for Body)
+        for (int i = 0; i < BuildReplacementsDrawCount * 2; i++)
+        {
+            _ = random.Next();
+        }
+
+        // 5. GenerateSentDate
+        _ = random.Next(); // baseDaysAgo
+        _ = random.Next(); // AddHours
+        _ = random.Next(); // AddMinutes
+
+        // 6. GenerateCcAddresses
+        if (random.NextDouble() <= GetCcProbability(selectedCategory))
+        {
+            _ = random.Next(1, 4);
+        }
+
+        // 7. ShouldBeHighPriority
+        _ = random.NextDouble();
+
+        // 8. ShouldRequestReadReceipt
+        _ = random.NextDouble();
+
+        // 9. GenerateReplyToAddress
+        _ = random.NextDouble();
+    }
+
     internal static EmailCategory GetRandomCategory(Random random)
     {
         var categories = Enum.GetValues<EmailCategory>();

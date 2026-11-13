@@ -53,7 +53,11 @@ internal sealed class EmailThreadPlan
     private const int ThreadBatchLength = 5;
     private const int MaxCachedBatches = 32;
 
-    private readonly FileGenerationRequest request;
+    private readonly long? cachedSeed;
+    private readonly long cachedFileCount;
+    private readonly Config.BatesNumberConfig? cachedBates;
+    private readonly IReadOnlyList<SourceInput.SourceRecord>? cachedSourceRecords;
+    private readonly Config.FileTypePlan? cachedFileTypePlan;
     private readonly long seedVal;
     private readonly BatesSequence? batesSequence;
     private readonly long emailCount;
@@ -66,7 +70,11 @@ internal sealed class EmailThreadPlan
     public EmailThreadPlan(FileGenerationRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        this.request = request;
+        this.cachedSeed = request.Metadata.Seed;
+        this.cachedFileCount = request.Output.FileCount;
+        this.cachedBates = request.Bates;
+        this.cachedSourceRecords = request.SourceRecords;
+        this.cachedFileTypePlan = request.Output.FileTypePlan;
         this.seedVal = request.Metadata.Seed ?? 42L;
         this.batesSequence = request.Bates != null ? BatesSequence.FromConfig(request.Bates) : null;
         this.referenceDate = request.Metadata.Seed.HasValue
@@ -129,10 +137,59 @@ internal sealed class EmailThreadPlan
     public static EmailThreadPlan GetOrCreate(FileGenerationRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        return System.Threading.LazyInitializer.EnsureInitialized(
-            ref request.ThreadPlan,
-            () => new EmailThreadPlan(request));
+        var existing = Volatile.Read(ref request.ThreadPlan);
+        if (existing is not null && existing.Matches(request))
+        {
+            return existing;
+        }
+
+        var created = new EmailThreadPlan(request);
+        var previous = Interlocked.CompareExchange(ref request.ThreadPlan, created, existing);
+        if (ReferenceEquals(previous, existing))
+        {
+            return created;
+        }
+
+        return previous is not null && previous.Matches(request) ? previous : created;
     }
+
+    public static EmailThreadNode? ResolveFallbackNode(
+        FileGenerationRequest request,
+        FileWorkItem workItem,
+        Email? email,
+        bool isEmlRecord)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(workItem);
+
+        if (!request.Metadata.WithThreading || !isEmlRecord)
+        {
+            return null;
+        }
+
+        if (email?.ThreadId is null)
+        {
+            return GetOrCreate(request).GetNode(workItem.Index);
+        }
+
+        if (email.IsInclusive is null || email.ThreadParentId is null)
+        {
+            var candidate = GetOrCreate(request).GetNode(workItem.Index);
+            if (string.Equals(email.ThreadId, candidate.ThreadDocId, StringComparison.Ordinal))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private bool Matches(FileGenerationRequest candidate)
+        => this.cachedSeed == candidate.Metadata.Seed
+            && this.cachedFileCount == candidate.Output.FileCount
+            && Equals(this.cachedBates, candidate.Bates)
+            && ReferenceEquals(this.cachedSourceRecords, candidate.SourceRecords)
+            && ReferenceEquals(this.cachedFileTypePlan, candidate.Output.FileTypePlan);
 
     public EmailThreadNode GetNode(long index)
     {
@@ -339,9 +396,9 @@ internal sealed class EmailThreadPlan
 
     private string FormatDocId(long index)
     {
-        if (this.request.SourceRecords is not null && index >= 1 && index <= this.request.SourceRecords.Count)
+        if (this.cachedSourceRecords is not null && index >= 1 && index <= this.cachedSourceRecords.Count)
         {
-            var record = this.request.SourceRecords[(int)(index - 1)];
+            var record = this.cachedSourceRecords[(int)(index - 1)];
             if (!string.IsNullOrEmpty(record.BatesNumber))
             {
                 return record.BatesNumber;

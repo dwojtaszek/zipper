@@ -109,6 +109,56 @@ public class ThreadMetadataColumnTests
         Assert.Equal(string.Empty, childRecord.Values[threadParentIdx]);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DatComposer_WithThreadingFamiliesAndNullEmail_LeavesChildThreadFieldsEmpty(bool isProductionSet)
+    {
+        var mode = isProductionSet ? WriterMode.ProductionSet : WriterMode.Standard;
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig { FileType = "eml", FileCount = 1 },
+            Metadata = new MetadataConfig { Seed = 42, WithThreading = true, WithFamilies = true },
+            Bates = isProductionSet ? new BatesNumberConfig { Prefix = "PROD", Start = 1 } : null,
+            LoadFile = new LoadFileConfig { AttachmentRate = 100 },
+        };
+
+        var composer = new DatComposer(request, mode);
+        var headers = composer.HeaderColumns.ToList();
+        int threadIdIdx = headers.IndexOf("Thread ID");
+        int inclusiveIdx = headers.IndexOf("Inclusive");
+        int threadParentIdx = headers.IndexOf("Thread Parent");
+
+        var files = new List<FileData>
+        {
+            new FileData
+            {
+                WorkItem = new FileWorkItem
+                {
+                    Index = 1,
+                    FileName = "00000001.eml",
+                    FilePathInZip = "NATIVES/00000001.eml",
+                    BatesNumberOverride = isProductionSet ? "PROD00000001" : null,
+                },
+                Attachment = ("attachment.pdf", new byte[] { 1, 2, 3 }),
+                AttachmentLength = 3,
+                Email = null,
+            },
+        };
+
+        var records = composer.Compose(files).ToList();
+        Assert.Equal(2, records.Count);
+
+        var parentRecord = records[0];
+        var expectedThreadId = isProductionSet ? "PROD00000001" : "DOC00000001";
+        Assert.Equal(expectedThreadId, parentRecord.Values[threadIdIdx]);
+
+        var childRecord = records[1];
+        Assert.Equal(string.Empty, childRecord.Values[threadIdIdx]);
+        Assert.Equal(string.Empty, childRecord.Values[inclusiveIdx]);
+        Assert.Equal(string.Empty, childRecord.Values[threadParentIdx]);
+    }
+
     [Fact]
     public void CsvComposer_WithThreading_EmitsUppercaseHeaders()
     {

@@ -65,6 +65,52 @@ public class FamilyPlanTests
     }
 
     [Fact]
+    public void SimulateEmailRandomConsumption_AtExactCcProbabilityBoundary_ConsumesSameDrawsAsCreate()
+    {
+        // Business (ordinal 0) has CC probability 0.6; NextDouble() == 0.6 must enter the CC branch
+        // in both EmailFactory.Create and EmailFactory.SimulateEmailRandomConsumption.
+        var simRandom = new BoundaryCcRandom(0.6);
+        EmailFactory.SimulateEmailRandomConsumption(simRandom);
+
+        var createRandom = new BoundaryCcRandom(0.6);
+        _ = EmailFactory.Create(1, 1, category: null, createRandom, DateTime.UnixEpoch);
+
+        Assert.Equal(createRandom.IntDraws, simRandom.IntDraws);
+        Assert.Equal(createRandom.DoubleDraws, simRandom.DoubleDraws);
+    }
+
+    private sealed class BoundaryCcRandom(double fixedDouble) : Random
+    {
+        public int IntDraws { get; private set; }
+
+        public int DoubleDraws { get; private set; }
+
+        public override int Next()
+        {
+            this.IntDraws++;
+            return 0;
+        }
+
+        public override int Next(int maxValue)
+        {
+            this.IntDraws++;
+            return 0;
+        }
+
+        public override int Next(int minValue, int maxValue)
+        {
+            this.IntDraws++;
+            return minValue;
+        }
+
+        public override double NextDouble()
+        {
+            this.DoubleDraws++;
+            return fixedDouble;
+        }
+    }
+
+    [Fact]
     public void GetTemplatesCountForCategory_MatchesEmailTemplatesJson()
     {
         var assembly = typeof(EmailFactory).Assembly;
