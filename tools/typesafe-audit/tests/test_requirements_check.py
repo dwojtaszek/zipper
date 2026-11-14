@@ -209,11 +209,6 @@ class CorpusEvaluationTests(unittest.TestCase):
 
 
 class WorkflowWiringTests(unittest.TestCase):
-    def test_workflow_runs_requirements_check(self):
-        workflow = (REPO_ROOT / ".github/workflows/typesafe-audit.yml").read_text(encoding="utf-8")
-        self.assertIn("run_check.py", workflow)
-        self.assertIn("--full", workflow)
-
     def test_missing_base_outside_corpus_is_input_error(self):
         code = run_check_main([
             "--json-out", str(Path(tempfile.mkdtemp()) / "o.json"),

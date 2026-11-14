@@ -58,7 +58,12 @@ def prepare(issue: dict, corpus: list[dict], policy: dict, req_ids: list[str]) -
         excerpt = collect.strip_markup(comment.get("body", ""), budget)
         text += "\n" + excerpt
         budget -= len(excerpt)
-    candidates = collect.search_candidates(issue, corpus, policy["max_candidates"])
+    candidates = collect.search_candidates(
+        issue,
+        corpus,
+        policy["max_candidates"],
+        min_score=policy.get("min_candidate_score", 3),
+    )
     reqs = sorted(set(collect.extract_keywords(text)) & set(req_ids))[: policy["max_req_ids"]]
     return {
         "issue_number": issue.get("number"),
@@ -248,9 +253,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         for case in cases:
             prepared = prepare(case, corpus, policy, req_ids)
-            if not prepared["candidates"] and not prepared["mentioned_req_ids"]:
-                # Neutral result: nothing to judge (no candidates, no REQ ties).
-                results.append({"issue": case.get("number"), "judgments": {}, "neutral": "no-candidates"})
+            if not prepared["text"].strip():
+                # Neutral result: empty issue text has nothing to judge.
+                results.append({"issue": case.get("number"), "judgments": {}, "neutral": "empty-issue"})
                 continue
             judgments = judge(prepared, questions, policy, config, args, api_key, secrets)
             results.append({"issue": case.get("number"), "judgments": judgments})

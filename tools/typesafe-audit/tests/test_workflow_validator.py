@@ -16,52 +16,76 @@ from workflow_validator import (
 )
 
 
-WORKFLOW_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "..", "..", ".github", "workflows", "typesafe-audit.yml"
-)
+SAMPLE_AUDIT_WORKFLOW = """name: sample-audit
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - id: secret
+        run: echo "available=true"
+      - name: Run runner
+        if: steps.secret.outputs.available == 'true'
+        run: |
+          python3 tools/typesafe-audit/runner.py \\
+            --mode live \\
+            --json-out out.json
+  pr-spec-review:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
+    steps:
+      - run: echo ok
+"""
 
 
 class TestWorkflowValidator(unittest.TestCase):
     def setUp(self):
-        with open(WORKFLOW_PATH, "r", encoding="utf-8") as f:
-            self.workflow_text = f.read()
+        self.workflow_text = SAMPLE_AUDIT_WORKFLOW
         self.workflow = parse_workflow_yaml(self.workflow_text)
 
-    def test_actual_workflow_passes_all_validations(self):
-        errors = validate_workflow(WORKFLOW_PATH)
-        self.assertEqual(errors, [])
+    def test_sample_audit_workflow_passes_all_validations(self):
+        validate_permissions(self.workflow)
+        validate_advisory_mode(self.workflow)
+        validate_secret_guards(self.workflow)
 
-    def test_audit_matrix_routes_each_check_once_with_bounded_concurrency(self):
-        audit = self.workflow["jobs"]["audit"]
-        strategy = audit["strategy"]
-        checks = strategy["matrix"]["check"]
-        self.assertEqual(
-            checks,
-            ["foundation", "requirements", "traceability", "architecture", "domain-language"],
-        )
-        self.assertEqual(int(strategy["max-parallel"]), 2)
-        self.assertEqual(str(strategy["fail-fast"]).lower(), "false")
-        commands = [
-            step for step in audit["steps"]
-            if "run" in step and workflow_validator._step_executes_runner(step["run"])
-        ]
-        self.assertEqual(len(commands), len(checks))
-        for check in checks:
-            matching = [
-                step for step in commands
-                if f"matrix.check == '{check}'" in step.get("if", "")
-            ]
-            self.assertEqual(len(matching), 1, check)
-            self.assertIn("steps.secret.outputs.available == 'true'", matching[0]["if"])
-        upload = next(step for step in audit["steps"] if step.get("name") == "Upload audit artifacts")
-        self.assertIn("${{ matrix.check }}", upload["with"]["name"])
-
-    def test_all_three_actual_workflows_pass_validations(self):
+    def test_all_remaining_typesafe_workflows_pass_validations(self):
         workflows_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", ".github", "workflows")
-        for fname in ("typesafe-audit.yml", "typesafe-issue-triage.yml", "typesafe-quality-audit.yml"):
+        self.assertFalse(os.path.exists(os.path.join(workflows_dir, "typesafe-audit.yml")))
+        for fname in ("typesafe-issue-triage.yml", "typesafe-quality-audit.yml"):
             wpath = os.path.join(workflows_dir, fname)
             errors = validate_workflow(wpath)
             self.assertEqual(errors, [], f"Workflow {fname} failed validation: {errors}")
+
+    def test_job_level_issues_write_allowed_only_with_contents_read(self):
+        allowed = parse_workflow_yaml(
+            self.workflow_text.replace(
+                "  pr-spec-review:\n    runs-on: ubuntu-latest",
+                "  pr-spec-review:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: read\n      issues: write",
+            )
+        )
+        validate_permissions(allowed)
+
+        rejected_pr_write = parse_workflow_yaml(
+            self.workflow_text.replace(
+                "  pr-spec-review:\n    runs-on: ubuntu-latest",
+                "  pr-spec-review:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: read\n      pull-requests: write",
+            )
+        )
+        with self.assertRaises(WorkflowValidationError):
+            validate_permissions(rejected_pr_write)
+
+        rejected_runner_write = parse_workflow_yaml(
+            self.workflow_text.replace(
+                "  audit:\n    runs-on: ubuntu-latest",
+                "  audit:\n    runs-on: ubuntu-latest\n    permissions:\n      contents: read\n      issues: write",
+            )
+        )
+        with self.assertRaises(WorkflowValidationError):
+            validate_permissions(rejected_runner_write)
 
     def test_triage_job_missing_secret_condition_fails(self):
         workflows_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", ".github", "workflows")

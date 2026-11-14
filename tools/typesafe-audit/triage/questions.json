@@ -35,12 +35,12 @@
     },
     "priority": {
       "type": "choice",
-      "instructions": "Choose P0 (blocker/production broken/data loss), P1 (high: security, correctness, coverage holes on critical code), P2 (medium: this iteration), P3 (low: nice to have) using the repository priority definitions supplied, or 'insufficient-evidence' when the supplied text cannot support a priority.",
+      "instructions": "Choose P0 (blocker/production broken/data loss), P1 (urgent bug, security vulnerability, hot-path regression, or broken CI/gate), P2 (planned tests, refactoring, feature/enhancement, or quality work), P3 (low: docs, traceability, or non-urgent cleanup) using the repository priority definitions supplied, or 'insufficient-evidence' when the supplied text cannot support a priority.",
       "criteria": {
         "P0": "Blocker: production broken or data loss",
-        "P1": "High: security, correctness, or coverage holes on critical code",
-        "P2": "Medium: planned for this iteration",
-        "P3": "Low: nice to have",
+        "P1": "High: urgent bug, security vulnerability, hot-path regression, or broken CI/gate",
+        "P2": "Medium: planned tests, refactoring, enhancement, or quality work",
+        "P3": "Low: documentation sync, traceability, or non-urgent cleanup",
         "insufficient-evidence": "The supplied text cannot support a priority"
       }
     },

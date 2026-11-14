@@ -1,7 +1,7 @@
-# TypeSafe issue triage (#960) — DRY-RUN ONLY.
-# Advisory: suggests subsystem, requirement IDs, issue type, priority evidence,
-# and duplicate candidates in a report. Never labels, comments, closes,
-# assigns, or creates issues; write-mode promotion is a separate reviewed PR.
+# TypeSafe issue triage (#960): classifies issue type, subsystem, priority,
+# missing info, and duplicate candidates, and applies high-confidence (>= 0.85)
+# type / mapped-subsystem labels on repository issues without overwriting human
+# labels or adding priority/comment noise.
 name: typesafe-issue-triage
 
 on:
@@ -10,9 +10,14 @@ on:
   workflow_dispatch:
     inputs:
       issue_number:
-        description: "Triage a single issue number (dry run)"
+        description: "Triage a single issue number"
         required: false
         default: ""
+      apply_labels:
+        description: "Apply high-confidence labels on manual dispatch"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -175,8 +180,42 @@ jobs:
         with:
           name: typesafe-triage-report
           path: |
+            results/typesafe-triage/issue-input.json
             results/typesafe-triage/triage.json
             results/typesafe-triage/triage.md
             results/typesafe-triage/assurance-result.json
           retention-days: 7
           if-no-files-found: warn
+
+  apply-labels:
+    needs: triage
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: >-
+      always() &&
+      needs.triage.outputs.assurance_status == 'executed' &&
+      (github.event_name == 'issues' ||
+       (github.event_name == 'workflow_dispatch' && inputs.apply_labels == true))
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout (trusted default-branch code only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+
+      - name: Download triage artifacts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: typesafe-triage-report
+          path: results/typesafe-triage
+
+      - name: Apply high-confidence triage labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 tools/typesafe-audit/triage/apply_labels.py \
+            --triage-json results/typesafe-triage/triage.json \
+            --issue-json results/typesafe-triage/issue-input.json \
+            --summary-out "$GITHUB_STEP_SUMMARY"

@@ -33,7 +33,7 @@ def main() -> None:
     issue_number = sys.argv[1]
     out_path = Path(sys.argv[2])
 
-    issue = gh("issue", "view", issue_number, "--json", "number,title,body,labels,comments")
+    issue = gh("issue", "view", issue_number, "--json", "number,title,body,labels,comments,author")
     comments = [
         {"order": index, "author": c.get("author", {}).get("login", "unknown"), "body": c.get("body", "")}
         for index, c in enumerate(issue.get("comments", []))
@@ -47,6 +47,7 @@ def main() -> None:
 
     payload = {
         "number": issue.get("number", int(issue_number)),
+        "author": (issue.get("author") or {}).get("login", ""),
         "title": issue.get("title", ""),
         "body": issue.get("body", ""),
         "labels": [l.get("name", "") for l in issue.get("labels", [])],

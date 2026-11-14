@@ -47,14 +47,28 @@ class CollectorTests(unittest.TestCase):
         self.assertIn("REQ-171", keywords)
         self.assertIn("src/LoadFiles/DatComposer.cs", keywords)
 
+    def test_keywords_filter_generic_stopwords(self):
+        keywords = self.collect.extract_keywords("This issue should work with files from output test")
+        self.assertEqual(keywords, [])
+
     def test_duplicate_candidate_search_ranks_keyword_overlap(self):
         corpus = [
             {"number": 1, "title": "Archive extraction ignores directory entries", "body": "zip directory paths"},
             {"number": 2, "title": "Docs drift on compression table", "body": "readme compression"},
+            {"number": 3, "title": "Weekly CLI QA improvement review", "body": "This issue should check files"},
         ]
         issue = {"number": 9, "title": "Archive extraction ignores directory entries", "body": "zip directory paths lost"}
         candidates = self.collect.search_candidates(issue, corpus, max_candidates=2)
-        self.assertEqual(candidates[0]["number"], 1)
+        self.assertEqual([c["number"] for c in candidates], [1])
+
+    def test_duplicate_candidate_search_weights_req_and_path_matches(self):
+        corpus = [
+            {"number": 10, "title": "Fix REQ-171", "body": "unrelated prose"},
+            {"number": 11, "title": "Archive tweak", "body": "archive"},
+        ]
+        issue = {"number": 12, "title": "REQ-171 regression in archive", "body": ""}
+        candidates = self.collect.search_candidates(issue, corpus, max_candidates=5, min_score=3)
+        self.assertEqual([c["number"] for c in candidates], [10])
 
     def test_allowed_sets_come_from_policy_and_requirements(self):
         allowed = self.collect.allowed_sets(
@@ -201,17 +215,107 @@ class RunCheckTests(unittest.TestCase):
             self.assertEqual(judgments["type"]["status"], "needs-human-review")
 
     def test_no_candidate_neutral_result_renders_markdown(self):
-        # Regression: a case with no candidates and no REQ ties produces a
-        # neutral result with empty judgments; rendering must not KeyError.
+        # Regression: an empty issue produces a neutral result with empty
+        # judgments; rendering must not KeyError.
         report = {"mode": "fixture", "runner_version": "x", "dry_run": True,
-                  "results": [{"issue": 42, "judgments": {}, "neutral": "no-candidates"}]}
+                  "results": [{"issue": 42, "judgments": {}, "neutral": "empty-issue"}]}
         markdown = self.run_check.render_markdown(report)
-        self.assertIn("Neutral: no-candidates", markdown)
+        self.assertIn("Neutral: empty-issue", markdown)
         self.assertIn("Issue #42", markdown)
+
+    def test_novel_issue_without_candidates_or_reqs_is_still_classified(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            issue_json = tmp / "issue.json"
+            issue_json.write_text(json.dumps({
+                "number": 500,
+                "title": "Refactor LoadFileOrchestrator memory stream buffer",
+                "body": "Avoid retaining temporary buffers across batches.",
+                "labels": [],
+                "comments": [],
+                "open_issues": [],
+            }), encoding="utf-8")
+            with mock.patch.object(
+                self.run_check.runner, "run_fixture",
+                return_value={"answers": {
+                    self.run_check.question_key("type"): {"type": "choice", "choice": "refactor", "confidence": 0.92},
+                    self.run_check.question_key("subsystem"): {"type": "choice", "choice": "load-files", "confidence": 0.95},
+                    self.run_check.question_key("priority"): {"type": "choice", "choice": "P2", "confidence": 0.8},
+                    self.run_check.question_key("missing_info"): {"type": "noul", "noul": 0.9, "confidence": 0.9},
+                }},
+            ):
+                rc = self.run_check.main([
+                    "--issue-json", str(issue_json),
+                    "--mode", "fixture",
+                    "--json-out", str(tmp / "out.json"),
+                    "--md-out", str(tmp / "out.md"),
+                ])
+            self.assertEqual(rc, 0)
+            report = json.loads((tmp / "out.json").read_text(encoding="utf-8"))
+            self.assertEqual(report["results"][0]["judgments"]["type"]["value"], "refactor")
+            self.assertEqual(report["results"][0]["judgments"]["subsystem"]["value"], "load-files")
+
+
+class ApplyLabelsTests(unittest.TestCase):
+    """High-confidence label selection respects wave rules and existing labels."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.apply_labels = load_module("triage_apply_labels", TRIAGE_DIR / "apply_labels.py")
+        cls.policy = json.loads((TRIAGE_DIR / "policy.json").read_text(encoding="utf-8"))
+
+    def test_applies_high_confidence_type_and_mapped_subsystem(self):
+        issue = {"number": 100, "author": "dwojtaszek", "title": "Fix CI workflow", "labels": []}
+        report = {"results": [{"issue": 100, "judgments": {
+            "type": {"value": "bug", "confidence": 0.91, "status": "judged"},
+            "subsystem": {"value": "ci-infra", "confidence": 0.94, "status": "judged"},
+            "priority": {"value": "P1", "confidence": 0.95, "status": "judged"},
+        }}]}
+        labels, status = self.apply_labels.select_labels_to_add(
+            issue, report, self.policy, available_labels={"bug", "ci-cd", "P1"}
+        )
+        self.assertEqual(status, "ok")
+        self.assertEqual(labels, ["bug", "ci-cd"])  # never applies priority P1
+
+    def test_skips_low_confidence_and_existing_type_labels(self):
+        issue_existing = {"number": 101, "author": "dwojtaszek", "title": "Refactor", "labels": ["refactor"]}
+        report = {"results": [{"issue": 101, "judgments": {
+            "type": {"value": "testing", "confidence": 0.95, "status": "judged"},
+            "subsystem": {"value": "ci-infra", "confidence": 0.80, "status": "judged"},
+        }}]}
+        labels, status = self.apply_labels.select_labels_to_add(
+            issue_existing, report, self.policy, available_labels={"testing", "ci-cd", "refactor"}
+        )
+        self.assertEqual(labels, [])
+        self.assertEqual(status, "skipped:no-qualifying-labels")
+
+    def test_skips_tier_promoting_type_when_p2_or_p3_present(self):
+        p2_issue = {"number": 104, "author": "dwojtaszek", "title": "Cleanup", "labels": ["P2"]}
+        p3_issue = {"number": 105, "author": "dwojtaszek", "title": "Refactor", "labels": ["P3"]}
+        docs_issue = {"number": 106, "author": "dwojtaszek", "title": "Docs", "labels": ["docs"]}
+        report = {"results": [
+            {"issue": 104, "judgments": {"type": {"value": "bug", "confidence": 0.95, "status": "judged"}}},
+            {"issue": 105, "judgments": {"type": {"value": "refactor", "confidence": 0.95, "status": "judged"}}},
+            {"issue": 106, "judgments": {"type": {"value": "testing", "confidence": 0.95, "status": "judged"}}},
+        ]}
+        avail = {"bug", "refactor", "testing", "docs", "P2", "P3"}
+        self.assertEqual(self.apply_labels.select_labels_to_add(p2_issue, report, self.policy, avail)[0], [])
+        self.assertEqual(self.apply_labels.select_labels_to_add(p3_issue, report, self.policy, avail)[0], [])
+        self.assertEqual(self.apply_labels.select_labels_to_add(docs_issue, report, self.policy, avail)[0], [])
+
+    def test_skips_bots_and_tracker_titles(self):
+        bot_issue = {"number": 102, "author": "github-actions[bot]", "title": "Weekly", "labels": []}
+        tracker_issue = {"number": 103, "author": "dwojtaszek", "title": "[Quality Backlog] Top gaps", "labels": []}
+        report = {"results": [
+            {"issue": 102, "judgments": {"type": {"value": "bug", "confidence": 0.99, "status": "judged"}}},
+            {"issue": 103, "judgments": {"type": {"value": "quality", "confidence": 0.99, "status": "judged"}}},
+        ]}
+        self.assertEqual(self.apply_labels.select_labels_to_add(bot_issue, report, self.policy)[1], "skipped:bot-author")
+        self.assertEqual(self.apply_labels.select_labels_to_add(tracker_issue, report, self.policy)[1], "skipped:tracker-issue")
 
 
 class WorkflowSecurityTests(unittest.TestCase):
-    """Dry-run workflow cannot write and never interpolates untrusted text."""
+    """Triage workflow isolates write permission to apply-labels and never interpolates untrusted text."""
 
     @classmethod
     def setUpClass(cls):
@@ -221,17 +325,19 @@ class WorkflowSecurityTests(unittest.TestCase):
         self.assertIn("issues:", self.wf)
         self.assertIn("opened", self.wf)
         self.assertIn("workflow_dispatch:", self.wf)
-        self.assertIn("issues: read", self.wf)
-        self.assertNotIn("issues: write", self.wf)
+        triage_section = self.wf.split("  apply-labels:", 1)[0]
+        self.assertIn("issues: read", triage_section)
+        self.assertNotIn("issues: write", triage_section)
+        apply_section = self.wf.split("  apply-labels:", 1)[1]
+        self.assertIn("issues: write", apply_section)
+        self.assertIn("contents: read", apply_section)
+        self.assertIn("apply_labels.py", apply_section)
 
     def test_no_untrusted_interpolation_into_shell(self):
         # Issue content must reach the collector as data (env/args), never as
         # unquoted shell interpolation of body/title fields.
         self.assertNotIn("github.event.issue.body", self.wf)
         self.assertNotIn("github.event.issue.title", self.wf)
-
-    def test_dry_run_marker(self):
-        self.assertIn("dry-run", self.wf.lower())
 
     def test_workflow_guards_run_check_under_bash_e(self):
         # Under bash -e, run_check.py must be guarded so rc=$? handler executes (#1224).
