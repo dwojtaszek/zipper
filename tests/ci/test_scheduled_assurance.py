@@ -16,12 +16,10 @@ ROOT = Path(__file__).resolve().parents[2]
 class ScheduledAssuranceWorkflowTests(unittest.TestCase):
     def setUp(self):
         self.qa_wf_path = ROOT / ".github" / "workflows" / "qa.yml"
-        self.typesafe_audit_path = ROOT / ".github" / "workflows" / "typesafe-audit.yml"
         self.typesafe_quality_path = ROOT / ".github" / "workflows" / "typesafe-quality-audit.yml"
         self.typesafe_triage_path = ROOT / ".github" / "workflows" / "typesafe-issue-triage.yml"
 
         self.qa_wf_text = self.qa_wf_path.read_text(encoding="utf-8")
-        self.typesafe_audit_text = self.typesafe_audit_path.read_text(encoding="utf-8")
         self.typesafe_quality_text = self.typesafe_quality_path.read_text(encoding="utf-8")
         self.typesafe_triage_text = self.typesafe_triage_path.read_text(encoding="utf-8")
 
@@ -56,7 +54,6 @@ class ScheduledAssuranceWorkflowTests(unittest.TestCase):
     def test_no_if_no_files_found_ignore_in_typesafe_workflows(self):
         """TypeSafe workflows must not silently ignore missing artifacts with if-no-files-found: ignore."""
         for name, text in [
-            ("typesafe-audit.yml", self.typesafe_audit_text),
             ("typesafe-quality-audit.yml", self.typesafe_quality_text),
             ("typesafe-issue-triage.yml", self.typesafe_triage_text),
         ]:
@@ -219,7 +216,6 @@ class ScheduledAssuranceWorkflowTests(unittest.TestCase):
     def test_neutral_skip_summary_schema_and_outputs(self):
         """Neutral skip summary in TypeSafe workflows must produce valid assurance-result.json and step outputs."""
         for name, wf_text, scope in [
-            ("typesafe-audit.yml", self.typesafe_audit_text, "requirements"),
             ("typesafe-quality-audit.yml", self.typesafe_quality_text, "quality"),
             ("typesafe-issue-triage.yml", self.typesafe_triage_text, "triage"),
         ]:
@@ -420,19 +416,6 @@ class ScheduledAssuranceWorkflowTests(unittest.TestCase):
             data = self._run_assurance_script(script, "results/typesafe-quality", setup, env_vars)
             self.assertEqual((data["status"], data["executed"], data["reason"]), (exp_status, exp_exec, exp_reason))
 
-    def test_typesafe_audit_assurance_script_logic(self):
-        """Verify the audit assurance result emission logic across outcomes."""
-        script = self._extract_python_inline_script(self.typesafe_audit_text, "Emit audit assurance result")
-
-        cases = [
-            ({"traceability.json": "{}"}, {"COMMIT_SHA": "sha456", "CHECK": "traceability"}, "executed", True, "completed", "traceability"),
-            ({"report.json": "{}"}, {"COMMIT_SHA": "sha456", "CHECK": "foundation"}, "executed", True, "completed", "foundation"),
-            ({}, {"COMMIT_SHA": "sha456", "CHECK": "requirements"}, "unavailable", False, "remote_failure_or_unmet_preconditions", "requirements"),
-        ]
-        for setup, env_vars, exp_status, exp_exec, exp_reason, exp_scope in cases:
-            data = self._run_assurance_script(script, "results/typesafe-audit", setup, env_vars)
-            self.assertEqual((data["status"], data["executed"], data["reason"], data["scope"]), (exp_status, exp_exec, exp_reason, exp_scope))
-
     def test_typesafe_triage_assurance_script_logic(self):
         """Verify the triage assurance result emission logic across outcomes."""
         script = self._extract_python_inline_script(self.typesafe_triage_text, "Emit triage assurance result")
@@ -444,18 +427,6 @@ class ScheduledAssuranceWorkflowTests(unittest.TestCase):
         ]
         for setup, env_vars, exp_status, exp_exec, exp_reason in cases:
             data = self._run_assurance_script(script, "results/typesafe-triage", setup, env_vars)
-            self.assertEqual((data["status"], data["executed"], data["reason"]), (exp_status, exp_exec, exp_reason))
-
-    def test_typesafe_pr_spec_assurance_script_logic(self):
-        """Verify the pr-spec assurance result emission logic across outcomes."""
-        script = self._extract_python_inline_script(self.typesafe_audit_text, "Emit PR spec assurance result")
-
-        cases = [
-            ({"pr-spec.json": "{}"}, {"COMMIT_SHA": "sha999"}, "executed", True, "completed"),
-            ({}, {"COMMIT_SHA": "sha999"}, "unavailable", False, "remote_failure_or_missing_spec"),
-        ]
-        for setup, env_vars, exp_status, exp_exec, exp_reason in cases:
-            data = self._run_assurance_script(script, "results/typesafe-audit", setup, env_vars)
             self.assertEqual((data["status"], data["executed"], data["reason"]), (exp_status, exp_exec, exp_reason))
 
 

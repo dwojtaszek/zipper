@@ -196,7 +196,7 @@ In contrast, Archive Test Fixture generation (`src/ArchiveTests/`, ADR-0008) is 
 
 ## Semantic Architecture Seam Lint (Critical Rule 5)
 
-An advisory Jev architecture seam lint (`tools/typesafe-audit/checks/architecture/run_check.py`, invoked via `typesafe-audit.yml`) semantically guards Critical Rule 5 on PRs touching `src/LoadFiles/**`, `src/ProductionSet*.cs`, `src/Validation/**`, `src/Cli/Modules/**`, or `docs/architecture.md`. It evaluates diffs for `seam_bypass` (verifying all delimited formats remain within `composer → serializer → emitter` with format dispatch in `LoadFileOrchestrator`, production sets route through `ProductionSetOrchestrator`, validation remains decoupled in `ValidationOrchestrator`, and CLI modules adhere to `CliModule`) and `diagram_stale` (verifying architecture diagrams remain accurate after changes). Findings are advisory and surface for human review.
+An advisory Jev architecture seam lint (`tools/typesafe-audit/checks/architecture/run_check.py`, standalone local/corpus tool) semantically guards Critical Rule 5 on diffs touching `src/LoadFiles/**`, `src/ProductionSet*.cs`, `src/Validation/**`, `src/Cli/Modules/**`, or `docs/architecture.md`. It evaluates diffs for `seam_bypass` (verifying all delimited formats remain within `composer → serializer → emitter` with format dispatch in `LoadFileOrchestrator`, production sets route through `ProductionSetOrchestrator`, validation remains decoupled in `ValidationOrchestrator`, and CLI modules adhere to `CliModule`) and `diagram_stale` (verifying architecture diagrams remain accurate after changes). Findings are advisory and surface for human review.
 
 ## Load File Composition Seam
 

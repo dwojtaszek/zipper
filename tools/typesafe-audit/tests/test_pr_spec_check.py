@@ -448,31 +448,5 @@ class RunCheckTests(unittest.TestCase):
         self.assertIn("src/Cli/Program.cs", serialized_paths)
 
 
-class WorkflowWiringTests(unittest.TestCase):
-    """The workflow carries the independent pr-spec-review job with least privilege."""
-
-    @classmethod
-    def setUpClass(cls):
-        cls.wf = (REPO_ROOT / ".github" / "workflows" / "typesafe-audit.yml").read_text()
-
-    def test_pr_spec_review_job_declared(self):
-        self.assertIn("pr-spec-review:", self.wf)
-
-    def test_least_privilege_permissions(self):
-        job = self.wf.split("pr-spec-review:", 1)[1]
-        self.assertIn("contents: read", job)
-        self.assertIn("pull-requests: read", job)
-        self.assertIn("issues: read", job)
-        self.assertNotIn("pull-requests: write", job)
-
-    def test_fork_prs_skip(self):
-        job = self.wf.split("pr-spec-review:", 1)[1]
-        self.assertIn("github.event.pull_request.head.repo.fork", job)
-
-    def test_uses_recorded_fixture_corpus_offline(self):
-        job = self.wf.split("pr-spec-review:", 1)[1]
-        self.assertIn("--corpus", job)
-
-
 if __name__ == "__main__":
     unittest.main()

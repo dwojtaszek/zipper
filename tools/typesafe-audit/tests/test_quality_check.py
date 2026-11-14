@@ -11,6 +11,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 TOOL_DIR = REPO_ROOT / "tools" / "typesafe-audit"
@@ -1204,6 +1205,94 @@ class WorkflowWiringTests(unittest.TestCase):
         # Under bash -e, commands must be guarded so rc=$? / STRYKER_RC=$? handlers execute (#1224).
         self.assertRegex(self.wf, r"(?s)dotnet stryker.*?\|\|\s*STRYKER_RC=\$\?")
         self.assertRegex(self.wf, r"(?s)run_check\.py.*?\|\|\s*rc=\$\?")
+
+    def test_workflow_wires_quality_backlog_issue_sync_job(self):
+        self.assertIn("quality-backlog-issue:", self.wf)
+        self.assertIn("sync_backlog_issue.py", self.wf)
+        self.assertIn("--expected-shards 2", self.wf)
+        backlog_section = self.wf.split("  quality-backlog-issue:", 1)[1]
+        self.assertIn("needs.quality-audit.result == 'success'", backlog_section)
+        self.assertIn("issues: write", backlog_section)
+        self.assertIn("contents: read", backlog_section)
+
+
+class SyncBacklogIssueTests(unittest.TestCase):
+    """Merging quality shard rankings and syncing the pinned backlog issue."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.sync = load_module("quality_sync_backlog", QUALITY_DIR / "sync_backlog_issue.py")
+
+    def test_merge_deduplicates_identical_coverage_gaps_across_shards(self):
+        gap = {
+            "origin": "coverage",
+            "category": "coverage_gap",
+            "file": "src/PathValidator.cs",
+            "method": "ResolveSecurePath",
+            "lines": "19-24",
+            "req_ids": ["REQ-106"],
+            "components": {"correctness": 0.9, "data_loss": 0.5, "security": 0.9, "regression": 0.7},
+            "priority": 0.75,
+        }
+        mutant = {
+            "origin": "mutation",
+            "category": "survived",
+            "file": "src/PathValidator.cs",
+            "method": "ResolveSecurePath",
+            "lines": "19-19",
+            "req_ids": ["REQ-106"],
+            "components": {"correctness": 0.8, "data_loss": 0.4, "security": 0.8, "regression": 0.5},
+            "priority": 0.61,
+        }
+        merged = self.sync.merge_ranked_candidates([{"ranked": [gap]}, {"ranked": [gap, mutant]}], top_n=10)
+        self.assertEqual(len(merged), 2)
+        self.assertEqual(merged[0]["priority"], 0.75)
+        self.assertEqual(merged[1]["priority"], 0.61)
+
+    def test_main_skips_cleanly_when_no_ranking_reports_exist(self):
+        with tempfile.TemporaryDirectory() as td:
+            summary = Path(td) / "summary.md"
+            rc = self.sync.main(["--reports-dir", td, "--summary-out", str(summary), "--dry-run"])
+            self.assertEqual(rc, 0)
+            self.assertIn("expected 1", summary.read_text(encoding="utf-8"))
+
+    def test_main_skips_when_fewer_than_expected_shards_present(self):
+        with tempfile.TemporaryDirectory() as td:
+            shard1 = Path(td) / "shard-1"
+            shard1.mkdir()
+            (shard1 / "ranking.json").write_text(json.dumps({"ranked": [{"priority": 0.9, "origin": "mutation", "category": "survived", "file": "src/A.cs", "method": "M", "lines": "1-1"}]}), encoding="utf-8")
+            summary = Path(td) / "summary.md"
+            rc = self.sync.main(["--reports-dir", td, "--expected-shards", "2", "--summary-out", str(summary), "--dry-run"])
+            self.assertEqual(rc, 0)
+            self.assertIn("found 1 ranking.json report(s), expected 2", summary.read_text(encoding="utf-8"))
+
+    def test_find_existing_backlog_issue_requires_exact_title_and_leading_marker(self):
+        fake_issues = [
+            {"number": 99, "title": "Discussion quoting marker", "body": f"See {self.sync.BACKLOG_MARKER}"},
+            {"number": 100, "title": self.sync.BACKLOG_TITLE, "body": "no marker"},
+            {"number": 101, "title": self.sync.BACKLOG_TITLE, "body": f"{self.sync.BACKLOG_MARKER}\n## Backlog"},
+        ]
+        with mock.patch.object(self.sync, "_gh_json", return_value=fake_issues):
+            self.assertEqual(self.sync.find_existing_backlog_issue(), 101)
+
+    def test_sync_issue_updates_existing_marker_issue(self):
+        with mock.patch.object(self.sync, "find_existing_backlog_issue", return_value=1420), \
+             mock.patch.object(self.sync.subprocess, "run") as mock_run:
+            outcome = self.sync.sync_issue(f"{self.sync.BACKLOG_MARKER}\nbody", dry_run=False)
+        self.assertEqual(outcome, "updated #1420")
+        args = mock_run.call_args[0][0]
+        self.assertEqual(args[:4], ["gh", "issue", "edit", "1420"])
+
+    def test_sync_issue_creates_marker_issue_with_tier5_labels_when_absent(self):
+        with mock.patch.object(self.sync, "find_existing_backlog_issue", return_value=None), \
+             mock.patch.object(self.sync, "resolve_existing_labels", return_value=["quality", "P2"]), \
+             mock.patch.object(self.sync.subprocess, "run", return_value=mock.Mock(stdout="https://example/issues/1500\n")) as mock_run:
+            outcome = self.sync.sync_issue(f"{self.sync.BACKLOG_MARKER}\nbody", dry_run=False)
+        self.assertIn("created", outcome)
+        args = mock_run.call_args[0][0]
+        self.assertEqual(args[:3], ["gh", "issue", "create"])
+        self.assertIn("quality", args)
+        self.assertIn("P2", args)
 
 
 class MutationNormalizeTests(unittest.TestCase):
