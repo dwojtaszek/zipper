@@ -263,6 +263,43 @@ class SquashMergeCleanupTests(unittest.TestCase):
         self.assertTrue(removed)
         self.assertEqual([], fixture.backup_branches())
 
+    def test_babysit_mergedPrWithDivergedUnpushedLocalBranch_pinsAndFreesSlot(self):
+        """A merged PR whose local branch diverged off main and is absent from origin
+        must still free the slot after pinning the unpushed commits."""
+        fixture = self.fixture()
+        # Reset local branch back to pre-merge main and create a diverged local-only commit
+        # (e.g. another checkout pushed & merged PR #1419 while this worktree held an old WIP commit).
+        fixture.git("reset", "--hard", "main~1", cwd=fixture.worktree)
+        diverged = fixture.commit_in_worktree("local-wip.txt", "wip: diverged local work")
+        self.assertTrue(fixture.git_fails("merge-base", "--is-ancestor", fixture.merged_head, diverged))
+
+        fixture.babysit()
+
+        self.assertFalse(fixture.worktree.exists(),
+                         "a merged PR's diverged unpushed worktree must not keep the runner's only slot")
+        self.assertNotIn(BRANCH, fixture.git("branch", "--list", BRANCH))
+        backups = fixture.backup_branches()
+        self.assertEqual(1, len(backups), f"expected exactly one pinned backup, got {backups}")
+        self.assertEqual(diverged, fixture.git("rev-parse", backups[0]))
+        self.assertFalse(fixture.git_fails("cat-file", "-e", f"refs/heads/{backups[0]}:local-wip.txt"))
+        bodies = " ".join(str(body) for _, body in fixture.emails)
+        self.assertIn(f"git log main..{backups[0]}", bodies)
+        self.assertIn("wip: diverged local work", bodies)
+
+    def test_removeWorktree_divergedUnpushedMergedBranchPinFails_preservesWorktree(self):
+        """Pinning is the promise that no unpushed commit is lost; failing it fails closed."""
+        fixture = self.fixture()
+        fixture.git("reset", "--hard", "main~1", cwd=fixture.worktree)
+        fixture.commit_in_worktree("local-wip.txt", "wip: diverged local work")
+        fixture.runner._pin_backup_branch = lambda *args, **kwargs: (None, False)
+
+        removed = fixture.runner._remove_worktree(
+            str(fixture.worktree), BRANCH, is_merged=True, merged_head=fixture.merged_head)
+
+        self.assertFalse(removed)
+        self.assertTrue(fixture.worktree.exists())
+        self.assertIn(BRANCH, fixture.git("branch", "--list", BRANCH))
+
     def test_babysit_dryRun_squashMergedWithPostMergeCommit_createsNoBackupRef(self):
         """A dry run's whole contract is "nothing is changed", and a ref is a change.
 
