@@ -133,6 +133,30 @@ class CheckComplexityTests(unittest.TestCase):
         )
         self.assertEqual(len(self.mod.check_csharp_source("Allman.cs", allman_nested, None, 15)), 1)
 
+        nested_py = "def choose(a, b):\n    return (\n        1 if a\n        else (2 if b else 3)\n    )\n"
+        self.assertEqual(len(self.mod.check_python_source("nested.py", nested_py, None, 15)), 1)
+        self.assertEqual(len(self.mod.check_python_source("nested.py", nested_py, {4}, 15)), 1)
+        self.assertEqual(self.mod.check_python_source("nested.py", nested_py, {1}, 15), [])
+        self.assertEqual(self.mod.check_python_source("nested.py", nested_py, None, 15, base_source=nested_py), [])
+        outer_with_inner = (
+            "def outer(a, b):\n"
+            "    def inner(x, y):\n"
+            "        return 1 if x else (2 if y else 3)\n"
+            "    return 1 if a else (2 if b else 3)\n"
+        )
+        base_only_inner = (
+            "def outer(a, b):\n"
+            "    def inner(x, y):\n"
+            "        return 1 if x else (2 if y else 3)\n"
+            "    return 1 if a else 2\n"
+        )
+        self.assertEqual(len(self.mod.check_python_source("oi.py", outer_with_inner, {4}, 15, base_source=base_only_inner)), 1)
+        module_nested = "X = 1 if True else (2 if False else 3)\n"
+        self.assertEqual(len(self.mod.check_python_source("mod.py", module_nested, {1}, 15)), 1)
+        two_nested = "def dup(a, b):\n    x = 1 if a else (2 if b else 3)\n    y = 4 if a else (5 if b else 6)\n    return x + y\n"
+        one_nested = "def dup(a, b):\n    x = 1 if a else (2 if b else 3)\n    return x\n"
+        self.assertEqual(len(self.mod.check_python_source("dup.py", two_nested, {3}, 15, base_source=one_nested)), 1)
+
     def test_python_nested_helper_does_not_inflate_enclosing_score(self):
         branches = "\n".join(f"            elif y == {i}:\n                return {i}" for i in range(18))
         source = (

@@ -129,10 +129,11 @@ class PrWorkflowTraceabilityTests(unittest.TestCase):
 
         trace = condition_for(self.workflow_text, "run: bash tests/validate-req-traceability.sh --strict")
         self.assertEqual("True", condition_for(ci_text, "run: bash tests/validate-req-traceability.sh --strict"))
-        for docs, runner in ((True, False), (False, True), (False, False)):
-            with self.subTest(docs=docs, runner=runner):
+        for docs, runner, scripts in ((True, False, False), (False, True, False), (False, False, True), (False, False, False)):
+            with self.subTest(docs=docs, runner=runner, scripts=scripts):
                 condition = trace.replace("steps.check.outputs.only_docs", repr(str(docs).lower()))
                 condition = condition.replace("steps.check.outputs.only_runner", repr(str(runner).lower()))
+                condition = condition.replace("steps.check.outputs.only_ci_scripts", repr(str(scripts).lower()))
                 classifier_runs = eval(condition.replace("||", " or ").replace("&&", " and "), {"__builtins__": {}})
                 self.assertEqual(1, int(classifier_runs) + int(not docs))
 
@@ -142,10 +143,16 @@ class PrWorkflowTraceabilityTests(unittest.TestCase):
         self.assertIn("needs: [docs-only, ci]", goldens)
         self.assertIn("tests/goldens/run-goldens.sh", goldens)
         downstream = re.search(r"(?m)^    if: (.*)$", goldens).group(1)
-        for docs, runner, expected in ((True, False, 0), (False, True, 0), (False, False, 1)):
-            with self.subTest(docs=docs, runner=runner):
+        for docs, runner, scripts, expected in (
+            (True, False, False, 0),
+            (False, True, False, 0),
+            (False, False, True, 0),
+            (False, False, False, 1),
+        ):
+            with self.subTest(docs=docs, runner=runner, scripts=scripts):
                 condition = downstream.replace("needs.docs-only.outputs.only_docs", repr(str(docs).lower()))
                 condition = condition.replace("needs.docs-only.outputs.only_runner", repr(str(runner).lower()))
+                condition = condition.replace("needs.docs-only.outputs.only_ci_scripts", repr(str(scripts).lower()))
                 downstream_runs = eval(condition.replace("&&", " and ").replace("false", "False"), {"__builtins__": {}})
                 self.assertEqual(int(downstream_runs), expected)
                 condition = embedded.replace("inputs.publish_mode", repr(pr_mode)).replace("matrix.coverage", "True")
@@ -306,6 +313,13 @@ class CiGateContractTests(unittest.TestCase):
     def test_runner_only_allows_only_golden_skip(self):
         payload = self._needs({"docs-only": "success", "ci": "success", "goldens": "skipped"}, only_docs="false")
         payload["docs-only"]["outputs"]["only_runner"] = "true"
+        self._assert_passes(payload)
+        payload["ci"]["result"] = "skipped"
+        self._assert_blocks(payload, names=("ci",))
+
+    def test_ci_scripts_only_allows_only_golden_skip(self):
+        payload = self._needs({"docs-only": "success", "ci": "success", "goldens": "skipped"}, only_docs="false")
+        payload["docs-only"]["outputs"]["only_ci_scripts"] = "true"
         self._assert_passes(payload)
         payload["ci"]["result"] = "skipped"
         self._assert_blocks(payload, names=("ci",))

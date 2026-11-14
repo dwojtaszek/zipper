@@ -2,7 +2,9 @@
 include = [
   ".zipper-runner/**/*.py",
   ".github/scripts/**/*.py",
+  ".github/actions/**/*.py",
   "tests/ci/**/*.py",
+  "tests/perf/**/*.py",
 ]
 
 [lint]
