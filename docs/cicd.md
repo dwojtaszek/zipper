@@ -135,16 +135,6 @@ This declaration lists GitHub-required check contexts, not every job aggregated 
 block their own runs, not PR merges. External review policies are distinguished
 from required status checks.
 
-[Protection drift](../.github/workflows/protection-drift.yml) compares this declaration
-with live branch protection and effective branch rules on every push to `main`,
-daily, and on manual dispatch. Any mismatch or API failure fails the workflow;
-it never changes repository settings. It is a monitoring check, not a required PR
-check. Configure repository secret `PROTECTION_READ_TOKEN` with a fine-grained
-repository token granting **Administration: read** (and automatic Metadata read).
-The default Actions token may not read protection; without suitable access this
-check fails visibly, rather than claiming protection was verified. Review the
-failed workflow, reconcile settings and this declaration, then rerun it.
-
 | Gate | Where | Blocking? |
 |------|-------|-----------|
 | Format (`dotnet format`) | pre-commit, lint | Yes |

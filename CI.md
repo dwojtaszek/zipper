@@ -157,9 +157,8 @@ Verified on 2026-11-11 using GitHub's REST API for `dwojtaszek/zipper`:
   in the repository Security → Code scanning tab; do not describe a CodeQL failure
   as automatically blocking merge.
 
-See [protection drift monitoring](docs/cicd.md#gates-summary) for the automated
-read-only comparison and its token requirements. This records GitHub evidence;
-no separate external CodeQL enforcement path was identified.
+This records GitHub evidence; no separate external CodeQL enforcement path was
+identified.
 
 ## TypeSafe Audit
 
