@@ -74,10 +74,12 @@ def render_issue_body(
         lines.append(f"- **Commit:** `{sha[:12]}`")
     if run_url:
         lines.append(f"- **Workflow run:** {run_url}")
-    lines.append(f"- **Showing:** top {len(top_items)} of {total_merged} unique candidates")
-    lines.append("")
-    lines.append("| Priority | Origin | Category | Target | REQ IDs | Scores (`C/D/S/R`) |")
-    lines.append("| --- | --- | --- | --- | --- | --- |")
+    lines.extend([
+        f"- **Showing:** top {len(top_items)} of {total_merged} unique candidates",
+        "",
+        "| Priority | Origin | Category | Target | REQ IDs | Scores (`C/D/S/R`) |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ])
     for item in top_items:
         reqs = ", ".join(item.get("req_ids") or []) or "-"
         target = f"`{item.get('file', '')}:{item.get('lines', '')} {item.get('method', '')}`"
@@ -86,9 +88,11 @@ def render_issue_body(
             f"| {float(item.get('priority', 0.0)):.4f} | {item.get('origin', '')} | {item.get('category', '')} | "
             f"{target} | {reqs} | {scores} |"
         )
-    lines.append("")
-    lines.append("_Deterministic tools (Coverlet & Stryker) own coverage and mutant status; TypeSafe only prioritizes risk._")
-    lines.append("")
+    lines.extend([
+        "",
+        "_Deterministic tools (Coverlet & Stryker) own coverage and mutant status; TypeSafe only prioritizes risk._",
+        "",
+    ])
     return "\n".join(lines)
 
 
@@ -126,6 +130,21 @@ def resolve_existing_labels(desired: tuple[str, ...]) -> list[str]:
     return [label for label in desired if label in available]
 
 
+def _pin_issue_best_effort(issue_ref: str) -> None:
+    issue_num = issue_ref.rstrip("/").rsplit("/", 1)[-1]
+    if not issue_num.isdigit():
+        return
+    try:
+        subprocess.run(
+            ["gh", "issue", "pin", issue_num],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        print(f"quality-backlog-sync: warning: failed to pin issue #{issue_num}: {exc.stderr.strip()}", file=sys.stderr)
+
+
 def sync_issue(body: str, dry_run: bool = False) -> str:
     if dry_run:
         return "dry-run"
@@ -142,13 +161,16 @@ def sync_issue(body: str, dry_run: bool = False) -> str:
                 text=True,
                 check=True,
             )
+            _pin_issue_best_effort(str(existing_number))
             return f"updated #{existing_number}"
 
         cmd = ["gh", "issue", "create", "--title", BACKLOG_TITLE, "--body-file", str(body_path)]
         for label in resolve_existing_labels(DEFAULT_LABELS):
             cmd.extend(["--label", label])
         proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        return f"created ({proc.stdout.strip()})"
+        created_ref = proc.stdout.strip()
+        _pin_issue_best_effort(created_ref)
+        return f"created ({created_ref})"
     finally:
         body_path.unlink(missing_ok=True)
 
@@ -164,6 +186,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--summary-out", type=Path, default=None)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
+
+    if args.reports_dir is not None and not args.reports_dir.exists():
+        print(f"quality-backlog-sync: reports directory not found: {args.reports_dir}", file=sys.stderr)
+        return 1
 
     reports = load_shard_reports(args.reports_dir, args.report)
     if len(reports) < args.expected_shards:

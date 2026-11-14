@@ -21,7 +21,6 @@ on:
 
 permissions:
   contents: read
-  issues: read
 
 concurrency:
   group: typesafe-issue-triage-${{ github.event.issue.number || github.ref }}
@@ -31,6 +30,9 @@ jobs:
   triage:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: read
     outputs:
       assurance_status: ${{ steps.assurance-result.outputs.status || steps.secret-assurance.outputs.status }}
       assurance_executed: ${{ steps.assurance-result.outputs.executed || steps.secret-assurance.outputs.executed }}

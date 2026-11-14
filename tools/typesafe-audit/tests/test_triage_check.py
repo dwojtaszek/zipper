@@ -313,6 +313,22 @@ class ApplyLabelsTests(unittest.TestCase):
         self.assertEqual(self.apply_labels.select_labels_to_add(bot_issue, report, self.policy)[1], "skipped:bot-author")
         self.assertEqual(self.apply_labels.select_labels_to_add(tracker_issue, report, self.policy)[1], "skipped:tracker-issue")
 
+    def test_live_main_uses_fresh_issue_labels_to_avoid_race(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            issue_json = tmp / "issue.json"
+            triage_json = tmp / "triage.json"
+            issue_json.write_text(json.dumps({"number": 200, "author": "dwojtaszek", "title": "T", "labels": []}), encoding="utf-8")
+            triage_json.write_text(json.dumps({"results": [{"issue": 200, "judgments": {
+                "type": {"value": "bug", "confidence": 0.95, "status": "judged"},
+            }}]}), encoding="utf-8")
+            with mock.patch.object(self.apply_labels, "fetch_repo_labels", return_value={"bug", "refactor"}), \
+                 mock.patch.object(self.apply_labels, "fetch_issue_labels", return_value=["refactor"]), \
+                 mock.patch.object(self.apply_labels, "apply_labels_gh") as mock_apply:
+                rc = self.apply_labels.main(["--triage-json", str(triage_json), "--issue-json", str(issue_json)])
+            self.assertEqual(rc, 0)
+            mock_apply.assert_not_called()
+
 
 class WorkflowSecurityTests(unittest.TestCase):
     """Triage workflow isolates write permission to apply-labels and never interpolates untrusted text."""
@@ -328,6 +344,8 @@ class WorkflowSecurityTests(unittest.TestCase):
         triage_section = self.wf.split("  apply-labels:", 1)[0]
         self.assertIn("issues: read", triage_section)
         self.assertNotIn("issues: write", triage_section)
+        top_perms = self.wf.split("permissions:", 1)[1].split("concurrency:", 1)[0]
+        self.assertNotIn("issues:", top_perms)
         apply_section = self.wf.split("  apply-labels:", 1)[1]
         self.assertIn("issues: write", apply_section)
         self.assertIn("contents: read", apply_section)

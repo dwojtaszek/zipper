@@ -61,6 +61,55 @@ SUBSYSTEM_LABEL_MAP = {
 TRACKER_TITLE_PREFIXES = ("roadmap:", "[quality backlog]")
 
 
+def _select_type_label(judgments: dict, existing_lower: set[str], threshold: float) -> str | None:
+    if existing_lower & EXISTING_TYPE_LABELS:
+        return None
+    type_j = judgments.get("type") or {}
+    type_val = type_j.get("value")
+    type_conf = type_j.get("confidence")
+    if (
+        type_j.get("status") != "judged"
+        or not isinstance(type_conf, (int, float))
+        or float(type_conf) < threshold
+        or type_val not in APPLICABLE_TYPE_LABELS
+    ):
+        return None
+    if type_val in TIER1_TYPE_LABELS and bool(existing_lower & {"p2", "p3"}):
+        return None
+    if type_val in NON_TIER6_TYPE_LABELS and "p3" in existing_lower:
+        return None
+    return str(type_val)
+
+
+def _select_subsystem_label(judgments: dict, threshold: float) -> str | None:
+    sub_j = judgments.get("subsystem") or {}
+    sub_conf = sub_j.get("confidence")
+    mapped_sub = SUBSYSTEM_LABEL_MAP.get(str(sub_j.get("value")))
+    if (
+        not mapped_sub
+        or sub_j.get("status") != "judged"
+        or not isinstance(sub_conf, (int, float))
+        or float(sub_conf) < threshold
+    ):
+        return None
+    return mapped_sub
+
+
+def _filter_desired_labels(
+    desired: list[str], existing_lower: set[str], available_labels: set[str] | None
+) -> list[str]:
+    filtered: list[str] = []
+    for label in desired:
+        allowed = (
+            label.lower() not in existing_lower
+            and (available_labels is None or label in available_labels)
+            and label not in filtered
+        )
+        if allowed:
+            filtered.append(label)
+    return filtered
+
+
 def select_labels_to_add(
     issue_input: dict,
     triage_report: dict,
@@ -85,47 +134,20 @@ def select_labels_to_add(
 
     judgments = match["judgments"]
     threshold = float(policy.get("label_confidence_threshold", 0.85))
-    raw_existing = [str(label) for label in issue_input.get("labels", [])]
-    existing_lower = {label.lower() for label in raw_existing}
+    existing_lower = {str(label).lower() for label in issue_input.get("labels", [])}
 
-    desired: list[str] = []
-
-    type_j = judgments.get("type") or {}
-    type_val = type_j.get("value")
-    type_conf = type_j.get("confidence")
-    if (
-        not (existing_lower & EXISTING_TYPE_LABELS)
-        and type_j.get("status") == "judged"
-        and isinstance(type_conf, (int, float))
-        and float(type_conf) >= threshold
-        and type_val in APPLICABLE_TYPE_LABELS
-        and not (type_val in TIER1_TYPE_LABELS and bool(existing_lower & {"p2", "p3"}))
-        and not (type_val in NON_TIER6_TYPE_LABELS and "p3" in existing_lower)
-    ):
-        desired.append(str(type_val))
-
-    sub_j = judgments.get("subsystem") or {}
-    sub_val = sub_j.get("value")
-    sub_conf = sub_j.get("confidence")
-    mapped_sub = SUBSYSTEM_LABEL_MAP.get(str(sub_val))
-    if (
-        mapped_sub
-        and sub_j.get("status") == "judged"
-        and isinstance(sub_conf, (int, float))
-        and float(sub_conf) >= threshold
-    ):
-        desired.append(mapped_sub)
-
-    filtered: list[str] = []
-    for label in desired:
-        if label.lower() in existing_lower:
-            continue
-        if available_labels is not None and label not in available_labels:
-            continue
-        if label not in filtered:
-            filtered.append(label)
-
-    return filtered, "ok" if filtered else "skipped:no-qualifying-labels"
+    desired = [
+        label
+        for label in (
+            _select_type_label(judgments, existing_lower, threshold),
+            _select_subsystem_label(judgments, threshold),
+        )
+        if label is not None
+    ]
+    filtered = _filter_desired_labels(desired, existing_lower, available_labels)
+    if not filtered:
+        return [], "skipped:no-qualifying-labels"
+    return filtered, "ok"
 
 
 def fetch_repo_labels() -> set[str]:
@@ -137,6 +159,17 @@ def fetch_repo_labels() -> set[str]:
     )
     data = json.loads(proc.stdout)
     return {str(entry.get("name", "")) for entry in data if entry.get("name")}
+
+
+def fetch_issue_labels(issue_number: int) -> list[str]:
+    proc = subprocess.run(
+        ["gh", "issue", "view", str(issue_number), "--json", "labels"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    data = json.loads(proc.stdout)
+    return [str(entry.get("name", "")) for entry in data.get("labels", []) if entry.get("name")]
 
 
 def apply_labels_gh(issue_number: int, labels: list[str]) -> None:
@@ -156,17 +189,21 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if not args.triage_json.exists() or not args.issue_json.exists():
-        msg = "triage-apply-labels: missing triage.json or issue-input.json; skipping."
-        print(msg)
-        return 0
+        print("triage-apply-labels: missing triage.json or issue-input.json.", file=sys.stderr)
+        return 1
 
     triage_report = json.loads(args.triage_json.read_text(encoding="utf-8"))
     issue_input = json.loads(args.issue_json.read_text(encoding="utf-8"))
     policy = json.loads(args.policy.read_text(encoding="utf-8"))
 
-    available = None if args.dry_run else fetch_repo_labels()
-    labels_to_add, status = select_labels_to_add(issue_input, triage_report, policy, available)
     issue_number = int(issue_input["number"])
+    if args.dry_run:
+        available = None
+    else:
+        available = fetch_repo_labels()
+        issue_input = {**issue_input, "labels": fetch_issue_labels(issue_number)}
+
+    labels_to_add, status = select_labels_to_add(issue_input, triage_report, policy, available)
 
     if labels_to_add and not args.dry_run:
         apply_labels_gh(issue_number, labels_to_add)

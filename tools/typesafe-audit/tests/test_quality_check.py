@@ -1280,8 +1280,10 @@ class SyncBacklogIssueTests(unittest.TestCase):
              mock.patch.object(self.sync.subprocess, "run") as mock_run:
             outcome = self.sync.sync_issue(f"{self.sync.BACKLOG_MARKER}\nbody", dry_run=False)
         self.assertEqual(outcome, "updated #1420")
-        args = mock_run.call_args[0][0]
-        self.assertEqual(args[:4], ["gh", "issue", "edit", "1420"])
+        first_call = mock_run.call_args_list[0][0][0]
+        self.assertEqual(first_call[:4], ["gh", "issue", "edit", "1420"])
+        second_call = mock_run.call_args_list[1][0][0]
+        self.assertEqual(second_call, ["gh", "issue", "pin", "1420"])
 
     def test_sync_issue_creates_marker_issue_with_tier5_labels_when_absent(self):
         with mock.patch.object(self.sync, "find_existing_backlog_issue", return_value=None), \
@@ -1289,10 +1291,12 @@ class SyncBacklogIssueTests(unittest.TestCase):
              mock.patch.object(self.sync.subprocess, "run", return_value=mock.Mock(stdout="https://example/issues/1500\n")) as mock_run:
             outcome = self.sync.sync_issue(f"{self.sync.BACKLOG_MARKER}\nbody", dry_run=False)
         self.assertIn("created", outcome)
-        args = mock_run.call_args[0][0]
-        self.assertEqual(args[:3], ["gh", "issue", "create"])
-        self.assertIn("quality", args)
-        self.assertIn("P2", args)
+        first_call = mock_run.call_args_list[0][0][0]
+        self.assertEqual(first_call[:3], ["gh", "issue", "create"])
+        self.assertIn("quality", first_call)
+        self.assertIn("P2", first_call)
+        second_call = mock_run.call_args_list[1][0][0]
+        self.assertEqual(second_call, ["gh", "issue", "pin", "1500"])
 
 
 class MutationNormalizeTests(unittest.TestCase):
