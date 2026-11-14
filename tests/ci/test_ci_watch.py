@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 @unittest.skipIf(os.name == 'nt', 'executable GitHub fixture is POSIX-only')
 class CiWatchTests(unittest.TestCase):
-    def run_watch(self, directory, failure=False, changed=False, no_run=False, api_failure=False, timeout=10, slow=False, other_pr=False):
+    def run_watch(self, directory, failure=False, changed=False, no_run=False, api_failure=False, timeout=10, slow=False, other_pr=False, quiet=False):
         root = Path(directory)
         gh = root / 'gh'
         gh.write_text(
@@ -54,9 +54,18 @@ class CiWatchTests(unittest.TestCase):
             env['FAILURE'] = '1'
         if changed:
             env['CHANGED'] = '1'
-        return subprocess.run([sys.executable, str(ROOT / '.github/scripts/watch-pr.py'), '1421',
-                               '--snapshot', str(root / 'snapshot.json'), '--interval', '1', '--timeout', str(timeout)],
-                              cwd=ROOT, env=env, capture_output=True, text=True, timeout=15)
+        cmd = [sys.executable, str(ROOT / '.github/scripts/watch-pr.py'), '1421',
+               '--snapshot', str(root / 'snapshot.json'), '--interval', '1', '--timeout', str(timeout)]
+        if quiet:
+            cmd.append('--quiet')
+        return subprocess.run(cmd, cwd=ROOT, env=env, capture_output=True, text=True, timeout=15)
+
+    def test_quiet_suppresses_in_progress_job_lines(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.run_watch(directory, quiet=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(result.stdout.count('"job":'), 1, result.stdout)
+            self.assertIn('"conclusion": "success"', result.stdout)
 
     def test_success_uses_one_watcher_and_suppresses_unchanged_jobs(self):
         with tempfile.TemporaryDirectory() as directory:

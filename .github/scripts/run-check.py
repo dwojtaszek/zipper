@@ -34,7 +34,13 @@ def main():
                 capturing = True
             if capturing and len(failure) < 12:
                 failure.append(line)
-    for line in failure + list(tail)[-8:] if failure else tail:
+    if failure:
+        shown = failure + list(tail)[-8:]
+    elif status:
+        shown = tail
+    else:
+        shown = list(tail)[-3:]
+    for line in shown:
         print(line)
     print(f'exit_status={status} log={args.log.resolve()}')
     return status

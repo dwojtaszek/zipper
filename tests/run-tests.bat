@@ -534,6 +534,15 @@ REM --- Standalone Feature Test Suites ---
 REM Run all standalone test scripts to ensure comprehensive coverage
 
 call :print_info "Running standalone feature test suites..."
+if not defined RUN_TESTS_JOBS set "RUN_TESTS_JOBS=0"
+if not "%RUN_TESTS_JOBS%"=="1" (
+    where powershell >nul 2>&1
+    if not errorlevel 1 (
+        powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0run-bat-parallel.ps1" -RunnerBat "%~f0" -Jobs %RUN_TESTS_JOBS%
+        if errorlevel 1 exit /b 1
+        goto :end_of_tests
+    )
+)
 
 REM Test 1: EML comprehensive tests
 call :print_info "Running EML comprehensive tests..."

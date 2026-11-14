@@ -26,7 +26,7 @@ def github(deadline, *arguments):
     return json.loads(result.stdout)
 
 
-def publish_snapshot(snapshot, state, previous):
+def publish_snapshot(snapshot, state, previous, quiet=False):
     snapshot.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(mode='w', dir=snapshot.parent, delete=False) as output:
         json.dump({**state, 'checked_at': time.time()}, output)
@@ -34,7 +34,7 @@ def publish_snapshot(snapshot, state, previous):
     temporary.replace(snapshot)
     old_jobs = {job['id']: job for job in previous.get('jobs', [])}
     for job in state['jobs']:
-        if old_jobs.get(job['id']) != job:
+        if old_jobs.get(job['id']) != job and (not quiet or job['status'] == 'completed'):
             print(json.dumps({'run': state['run_id'], 'job': job['name'],
                               'status': job['status'], 'conclusion': job['conclusion'],
                               'step': job['step']}), flush=True)
@@ -113,6 +113,7 @@ def main():
     parser.add_argument('--interval', type=int, default=30)
     parser.add_argument('--timeout', type=int, default=3600)
     parser.add_argument('--status', action='store_true', help='Print existing snapshot state and exit without polling')
+    parser.add_argument('--quiet', action='store_true', help='Print only completed jobs and workflow state transitions')
     args = parser.parse_args()
     if args.pr < 1 or args.interval < 1 or args.timeout < 1:
         parser.error('PR, interval, and timeout must be positive')
@@ -127,7 +128,7 @@ def main():
 
     def publish():
         nonlocal previous
-        previous = publish_snapshot(args.snapshot, state, previous)
+        previous = publish_snapshot(args.snapshot, state, previous, quiet=args.quiet)
 
     try:
         state['head'] = gh('pr', 'view', str(args.pr), '--json', 'headRefOid')['headRefOid']

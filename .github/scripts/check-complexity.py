@@ -24,12 +24,15 @@ CS_BOOL_RE = re.compile(r"&&|\|\|")
 
 def _changed_lines_from_git(diff_target: str) -> dict[str, set[int]]:
     changed: dict[str, set[int]] = {}
-    res = subprocess.run(["git", "diff", "-U0", "--no-renames", diff_target], cwd=ROOT, capture_output=True, text=True, check=False)
+    res = subprocess.run(
+        ["git", "diff", "-U0", "--no-renames", diff_target],
+        cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
+    )
     if res.returncode == 0:
         _parse_unified_diff(res.stdout, changed)
     untracked = subprocess.run(
         ["git", "ls-files", "--others", "--exclude-standard", "--", *CS_UNTRACKED_PREFIXES],
-        cwd=ROOT, capture_output=True, text=True, check=False,
+        cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
     )
     if untracked.returncode == 0:
         for rel in untracked.stdout.splitlines():
@@ -115,6 +118,66 @@ def _py_scores_by_name(source: str) -> dict[str, int]:
     return scores
 
 
+class _PyNestedIfExpVisitor(ast.NodeVisitor):
+    def __init__(self) -> None:
+        self.count = 0
+        self.lines: set[int] = set()
+
+    def _stop(self, _node: ast.AST) -> None:
+        return None
+
+    visit_FunctionDef = _stop
+    visit_AsyncFunctionDef = _stop
+    visit_ClassDef = _stop
+
+    def visit_IfExp(self, node: ast.IfExp) -> None:
+        for child in (node.test, node.body, node.orelse):
+            if _contains_ifexp(child):
+                self.count += 1
+                end_ln = getattr(node, "end_lineno", node.lineno) or node.lineno
+                self.lines.update(range(node.lineno, end_ln + 1))
+                break
+        self.generic_visit(node)
+
+
+def _contains_ifexp(node: ast.AST) -> bool:
+    if isinstance(node, ast.IfExp):
+        return True
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return False
+    return any(_contains_ifexp(child) for child in ast.iter_child_nodes(node))
+
+
+def _py_nested_ifexp_info(node: ast.AST) -> tuple[int, set[int]]:
+    visitor = _PyNestedIfExpVisitor()
+    for child in ast.iter_child_nodes(node):
+        if not isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            visitor.visit(child)
+    return visitor.count, visitor.lines
+
+
+def _py_nested_counts(tree: ast.AST) -> dict[str, int]:
+    counts: dict[str, int] = {"<module>": _py_nested_ifexp_info(tree)[0]}
+    for qname, node in _collect_py_functions(tree):
+        counts[qname] = counts.get(qname, 0) + _py_nested_ifexp_info(node)[0]
+    return counts
+
+
+def _check_nested_ternary(
+    label: str,
+    scope: str,
+    node: ast.AST,
+    touched_lines: set[int] | None,
+    base_counts: dict[str, int],
+) -> list[str]:
+    count, lines = _py_nested_ifexp_info(node)
+    if count <= base_counts.get(scope, 0):
+        return []
+    if touched_lines is not None and not (lines & touched_lines):
+        return []
+    return [f"{label}:{min(lines)}: Nested ternary expression (S3358) in '{scope}'"]
+
+
 def check_python_source(
     label: str,
     source: str,
@@ -124,7 +187,8 @@ def check_python_source(
 ) -> list[str]:
     tree = ast.parse(source, filename=label)
     base_scores = _py_scores_by_name(base_source) if base_source is not None else {}
-    findings: list[str] = []
+    base_nested = _py_nested_counts(ast.parse(base_source)) if base_source is not None else {}
+    findings = _check_nested_ternary(label, "<module>", tree, touched_lines, base_nested)
     for qualname, node in _collect_py_functions(tree):
         end_line = getattr(node, "end_lineno", node.lineno) or node.lineno
         if touched_lines is not None and not any(node.lineno <= ln <= end_line for ln in touched_lines):
@@ -133,6 +197,7 @@ def check_python_source(
         prior = base_scores.get(qualname)
         if score > max_complexity and (prior is None or score > prior):
             findings.append(f"{label}:{node.lineno}: Python function '{qualname}' complexity {score} > {max_complexity}")
+        findings.extend(_check_nested_ternary(label, qualname, node, touched_lines, base_nested))
     return findings
 
 
@@ -341,16 +406,24 @@ def check_csharp_file(path: Path, touched_lines: set[int] | None, max_complexity
 
 
 def _read_git_blob(base_ref: str, rel: str) -> str | None:
-    res = subprocess.run(["git", "show", f"{base_ref}:{rel}"], cwd=ROOT, capture_output=True, text=True, check=False)
+    res = subprocess.run(
+        ["git", "show", f"{base_ref}:{rel}"],
+        cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
+    )
     return res.stdout if res.returncode == 0 else None
 
 
 def _resolve_base(base: str) -> str | None:
     for candidate in (base, f"origin/{base}", "HEAD~1", "HEAD"):
-        res = subprocess.run(["git", "rev-parse", "--verify", f"{candidate}^{{commit}}"],
-                             cwd=ROOT, capture_output=True, text=True, check=False)
+        res = subprocess.run(
+            ["git", "rev-parse", "--verify", f"{candidate}^{{commit}}"],
+            cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
+        )
         if res.returncode == 0:
-            mb = subprocess.run(["git", "merge-base", candidate, "HEAD"], cwd=ROOT, capture_output=True, text=True, check=False)
+            mb = subprocess.run(
+                ["git", "merge-base", candidate, "HEAD"],
+                cwd=ROOT, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
+            )
             return mb.stdout.strip() if mb.returncode == 0 and mb.stdout.strip() else candidate
     return None
 

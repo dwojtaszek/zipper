@@ -23,6 +23,7 @@ jobs:
     outputs:
       only_docs: ${{ steps.check.outputs.only_docs }}
       only_runner: ${{ steps.check.outputs.only_runner }}
+      only_ci_scripts: ${{ steps.check.outputs.only_ci_scripts }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -41,14 +42,14 @@ jobs:
         shell: bash
         run: bash tests/validate-req-traceability.sh --strict
       - name: Setup .NET for DocsDriftTests
-        if: steps.check.outputs.only_docs == 'true' || steps.check.outputs.only_runner == 'true'
+        if: steps.check.outputs.only_docs == 'true' || steps.check.outputs.only_runner == 'true' || steps.check.outputs.only_ci_scripts == 'true'
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           global-json-file: global.json
           cache: true
           cache-dependency-path: '**/packages.lock.json'
       - name: Run DocsDriftTests
-        if: steps.check.outputs.only_docs == 'true' || steps.check.outputs.only_runner == 'true'
+        if: steps.check.outputs.only_docs == 'true' || steps.check.outputs.only_runner == 'true' || steps.check.outputs.only_ci_scripts == 'true'
         shell: bash
         run: dotnet test src/Zipper.Tests/Zipper.Tests.csproj --filter "FullyQualifiedName~DocsDriftTests" --logger "console;verbosity=normal"
 
@@ -64,10 +65,11 @@ jobs:
     with:
       publish_mode: goldens
       runner_only: ${{ needs.docs-only.outputs.only_runner == 'true' }}
+      scripts_only: ${{ needs.docs-only.outputs.only_ci_scripts == 'true' }}
 
   goldens:
     needs: [docs-only, ci]
-    if: needs.docs-only.outputs.only_docs != 'true' && needs.docs-only.outputs.only_runner != 'true'
+    if: needs.docs-only.outputs.only_docs != 'true' && needs.docs-only.outputs.only_runner != 'true' && needs.docs-only.outputs.only_ci_scripts != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -164,6 +166,7 @@ jobs:
 
           only_docs = outputs_of("docs-only").get("only_docs")
           only_runner = outputs_of("docs-only").get("only_runner")
+          only_ci_scripts = outputs_of("docs-only").get("only_ci_scripts")
 
           failed = []
           # A job absent from the payload yields a None result here and is
@@ -173,7 +176,9 @@ jobs:
               result = result_of(name)
               if result not in allowed:
                   failed.append((name, result, "allowed here: " + "/".join(sorted(allowed))))
-              elif result == "skipped" and only_docs != "true" and not (name == "goldens" and only_runner == "true"):
+              elif result == "skipped" and only_docs != "true" and not (
+                  name == "goldens" and (only_runner == "true" or only_ci_scripts == "true")
+              ):
                   failed.append((name, result, "skipped without a docs-only fast path"))
           for name in sorted(set(needs) - set(ALLOWED)):
               failed.append((name, result_of(name), "not a job this gate knows how to judge"))

@@ -420,7 +420,8 @@ class GitHooksBehavioralTests(unittest.TestCase):
         self._git("add", "tests/ci/test_sample.py", ".github/scripts/run-check.py", ".github/scripts/change-scope.py")
         self._git("commit", "-m", "add ci test fixture")
         (self.repo_dir / "tests/wait-for-reviews.sh").write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
-        self._git("add", "tests/wait-for-reviews.sh")
+        (self.repo_dir / "dev.sh").write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
+        self._git("add", "tests/wait-for-reviews.sh", "dev.sh")
         env = self._env_with_logging_dotnet()
         res = subprocess.run(
             ["bash", str(self.hooks_dir / "pre-commit")],

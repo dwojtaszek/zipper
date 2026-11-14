@@ -62,6 +62,24 @@ class ChangeScopeTests(unittest.TestCase):
             shim.chmod(0o755)
             self.assertEqual(git_bash(shim), str(bash))
 
+        for paths, expected in [
+            ([], False),
+            (['.github/scripts/check-sonar.py'], True),
+            (['tests/ci/test_dev_cli.py', 'README.md'], True),
+            (['ruff.toml', '.pi-lens.json'], True),
+            (['.zipper-runner/runner.py'], False),
+            (['README.md'], False),
+            (['.github/scripts/check-sonar.py', 'src/Program.cs'], False),
+            (['.github/scripts/check-sonar.py', '.github/workflows/pr.yml'], False),
+            (['.github/scripts/validate-hooks.py'], False),
+            (['.github/scripts/check-sonar.py', 'dev.sh'], False),
+            (['.github/scripts/check-sonar.py', 'tests/run-tests.sh'], False),
+        ]:
+            with self.subTest(paths=paths):
+                result = subprocess.run([sys.executable, str(SCOPE)], input='\0'.join(paths),
+                                        text=True, capture_output=True, check=True)
+                self.assertIn('only_ci_scripts=' + str(expected).lower(), result.stdout)
+
     def test_runner_only_never_admits_product_or_gate_changes(self):
         for paths, expected in [
             ([], False),
@@ -117,6 +135,16 @@ class BoundedCheckTests(unittest.TestCase):
             self.assertLess(len(result.stdout), 12000)
             self.assertIn('FAIL: actual failure', result.stdout)
             self.assertIn('exit_status=7', result.stdout)
+
+    def test_nonzero_without_marker_still_shows_full_20_line_tail(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / 'check.log'
+            result = subprocess.run([sys.executable, str(CHECK), '--log', str(log), '--', sys.executable,
+                                     '-c', '[print(f"line-{i}") for i in range(25)]; raise SystemExit(2)'],
+                                    text=True, capture_output=True)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn('line-5', result.stdout)
+            self.assertIn('line-24', result.stdout)
 
     def test_reports_early_failure_even_when_cleanup_fills_tail(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -383,19 +411,21 @@ class RunnerWorkflowGraphTests(unittest.TestCase):
         for name in ('lint', 'runner-tests', 'golden-tests'):
             self.assertNotRegex(job(name), r'(?m)^    if:', name)
         for name in ('version-metadata', 'build-and-test'):
-            self.assertIn('if: ${{ !inputs.runner_only }}', job(name))
+            self.assertIn('if: ${{ !inputs.runner_only && !inputs.scripts_only }}', job(name))
         for name, command in [('lint', 'actionlint-action@'),
                               ('runner-tests', 'python3 -m unittest discover -s .zipper-runner/tests')]:
             steps = re.split(r'(?m)(?=^      - )', job(name))
             selected = [step for step in steps if command in step]
             self.assertEqual(len(selected), 1)
             self.assertNotRegex(selected[0], r'(?m)^(?:      - |        )if:')
-        option = re.search(r'(?ms)^      runner_only:\n(.*?)(?=^      [a-z_]+:)', text)
-        self.assertIsNotNone(option)
-        self.assertIn('type: boolean', option.group(1))
-        self.assertIn('default: false', option.group(1))
+        for option_name in ('runner_only', 'scripts_only'):
+            option = re.search(rf'(?ms)^      {option_name}:\n(.*?)(?=^      [a-z_]+:)', text)
+            self.assertIsNotNone(option, option_name)
+            self.assertIn('type: boolean', option.group(1))
+            self.assertIn('default: false', option.group(1))
         pr = (ROOT / '.github/workflows/pr.yml').read_text()
         self.assertIn("runner_only: ${{ needs.docs-only.outputs.only_runner == 'true' }}", pr)
+        self.assertIn("scripts_only: ${{ needs.docs-only.outputs.only_ci_scripts == 'true' }}", pr)
 
 
 @unittest.skipIf(BASH is None, "requires Git Bash")

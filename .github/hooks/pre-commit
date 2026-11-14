@@ -140,7 +140,7 @@ fi
 CI_SCRIPTS_ONLY=false
 if [[ -d tests/ci ]]; then
     RUNNER_PREF_MATCH=$(printf '%s\n' "$STAGED" | grep -c -E '^\.zipper-runner/' || true)
-    CI_MATCHED=$(printf '%s\n' "$STAGED" | grep -c -E '^(\.github/(workflows|scripts)/|tests/ci/|tests/wait-for-reviews\.sh$|tests/test-unified-workflow\.(sh|bat)$|\.pi-lens\.json$|ruff\.toml$|docs/|CHANGELOG(\.md)?$|.*\.(md|markdown)$)' || true)
+    CI_MATCHED=$(printf '%s\n' "$STAGED" | grep -c -E '^(\.github/(workflows|scripts)/|tests/ci/|tests/wait-for-reviews\.sh$|tests/test-unified-workflow\.(sh|bat)$|dev\.(sh|bat)$|\.pi-lens\.json$|ruff\.toml$|docs/|CHANGELOG(\.md)?$|.*\.(md|markdown)$)' || true)
     if [[ "$TOTAL" -gt 0 && "$RUNNER_PREF_MATCH" -eq 0 && "$CI_MATCHED" -eq "$TOTAL" ]]; then
         CI_SCRIPTS_ONLY=true
     fi

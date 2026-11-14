@@ -201,7 +201,7 @@ if [[ "$RUN_UNIT_TESTS" == "true" ]]; then
             continue
         fi
         RUNNER_PREF_MATCH=$(printf '%s\n' "$ALL_BRANCH_CHANGES" | grep -c -E '^\.zipper-runner/' || true)
-        CI_MATCHED=$(printf '%s\n' "$ALL_BRANCH_CHANGES" | grep -c -E '^(\.github/(workflows|scripts)/|tests/ci/|tests/wait-for-reviews\.sh$|tests/test-unified-workflow\.(sh|bat)$|\.pi-lens\.json$|ruff\.toml$|docs/|CHANGELOG(\.md)?$|.*\.(md|markdown)$)' || true)
+        CI_MATCHED=$(printf '%s\n' "$ALL_BRANCH_CHANGES" | grep -c -E '^(\.github/(workflows|scripts)/|tests/ci/|tests/wait-for-reviews\.sh$|tests/test-unified-workflow\.(sh|bat)$|dev\.(sh|bat)$|\.pi-lens\.json$|ruff\.toml$|docs/|CHANGELOG(\.md)?$|.*\.(md|markdown)$)' || true)
         if [[ -d tests/ci && "$TOTAL_CHANGED" -gt 0 && "$RUNNER_PREF_MATCH" -eq 0 && "$CI_MATCHED" -eq "$TOTAL_CHANGED" ]]; then
             ANY_CI_ONLY=true
         else
