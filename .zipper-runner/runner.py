@@ -3060,13 +3060,24 @@ def _authorized_pr(pr_number, issue_number=None, expected_head=None):
         # structural checks above still bind the PR to this repository's main, the
         # author check keeps it to the maintainer's own PRs, and CI and the robot
         # review gate are re-run before the merge as they are for every other PR.
-        if user.get("login") in TRUSTED_AUTHORS and _has_automated_label(pr):
+        if user.get("login") in TRUSTED_AUTHORS and _has_automated_label(pr) and not _has_manual_label(pr):
             return pr
         # Unknown/legacy origins need a maintainer's explicit approval of this SHA.
-        code, out, _ = run_cmd(
-            ["gh", "api", f"repos/{GITHUB_REPOSITORY}/pulls/{pr_number}/reviews", "--paginate", "--slurp"],
-            cwd=REPO_PATH,
-        )
+        if _pr_has_maintainer_approval(pr_number, sha):
+            return pr
+    except (ValueError, TypeError, AttributeError):
+        pass
+    print(f"[authorization] PR #{pr_number} is not authorized for automated action.")
+    return None
+
+
+def _pr_has_maintainer_approval(pr_number, sha: str) -> bool:
+    """True when a merge maintainer's latest non-comment review approves `sha`."""
+    code, out, _ = run_cmd(
+        ["gh", "api", f"repos/{GITHUB_REPOSITORY}/pulls/{pr_number}/reviews", "--paginate", "--slurp"],
+        cwd=REPO_PATH,
+    )
+    try:
         pages = json.loads(out) if code == 0 else []
         reviews = [review for page in pages for review in (page if isinstance(page, list) else [page])]
         latest = {}
@@ -3074,12 +3085,9 @@ def _authorized_pr(pr_number, issue_number=None, expected_head=None):
             login = (review.get("user") or {}).get("login")
             if login in MERGE_MAINTAINERS and review.get("state") != "COMMENTED":
                 latest[login] = review
-        if any(r.get("state") == "APPROVED" and r.get("commit_id") == sha for r in latest.values()):
-            return pr
+        return any(r.get("state") == "APPROVED" and r.get("commit_id") == sha for r in latest.values())
     except (ValueError, TypeError, AttributeError):
-        pass
-    print(f"[authorization] PR #{pr_number} is not authorized for automated action.")
-    return None
+        return False
 
 
 def _pr_state_matches(state, pr_number, branch) -> bool:
@@ -3150,10 +3158,11 @@ def _pr_head_sha(pr: dict) -> str:
 
 
 AUTOMATED_LABEL = "automated"
+MANUAL_LABEL = "manual"
 
 
-def _has_automated_label(pr: dict) -> bool:
-    """True when the PR carries the maintainer-applied 'automated' label.
+def _pr_has_label(pr: dict, target: str) -> bool:
+    """True when the PR carries the maintainer-applied `target` label.
 
     Labels are repository state, not contributor input: only a user with write
     access can apply one, so a fork PR cannot carry one. A bare string is accepted
@@ -3165,9 +3174,19 @@ def _has_automated_label(pr: dict) -> bool:
         return False
     for label in labels:
         name = label.get("name") if isinstance(label, dict) else label
-        if isinstance(name, str) and name.strip().lower() == AUTOMATED_LABEL:
+        if isinstance(name, str) and name.strip().lower() == target:
             return True
     return False
+
+
+def _has_automated_label(pr: dict) -> bool:
+    """True when the PR carries the maintainer-applied 'automated' label."""
+    return _pr_has_label(pr, AUTOMATED_LABEL)
+
+
+def _has_manual_label(pr: dict) -> bool:
+    """True when the PR carries the maintainer-applied 'manual' opt-out label."""
+    return _pr_has_label(pr, MANUAL_LABEL)
 
 
 # GitHub refuses a review on your own pull request ("Can not approve your own
@@ -3312,6 +3331,34 @@ def _escalate_unrecoverable_pr(pr_number, issue_number, branch, *, head: str = "
     )
 
 
+def _fetch_pr_rest(pr_number) -> dict | None:
+    code, out, _ = run_cmd(["gh", "api", f"repos/{GITHUB_REPOSITORY}/pulls/{pr_number}"], cwd=REPO_PATH)
+    if code != 0 or not out.strip():
+        return None
+    try:
+        pr = json.loads(out)
+        return pr if isinstance(pr, dict) else None
+    except (ValueError, TypeError):
+        return None
+
+
+def _adopted_pr_still_mergeable(pr_number, issue_number, authorized: dict, reviewed_head: str) -> tuple[bool, str]:
+    branch = (authorized.get("head") or {}).get("ref", "")
+    state = _load_pr_state(str(issue_number)) if issue_number is not None else None
+    if _pr_state_matches(state, pr_number, branch) or not _has_automated_label(authorized):
+        return True, ""
+    live_pr = _fetch_pr_rest(pr_number)
+    if live_pr is None:
+        return False, "Cannot verify live PR labels before automated merge"
+    if _has_manual_label(live_pr):
+        return False, f"PR now carries the '{MANUAL_LABEL}' opt-out label"
+    if not _has_automated_label(live_pr) and not _pr_has_maintainer_approval(pr_number, reviewed_head):
+        return False, f"PR no longer carries the '{AUTOMATED_LABEL}' label"
+    if (live_pr.get("head") or {}).get("sha") != reviewed_head:
+        return False, REVIEWED_HEAD_MOVED
+    return True, ""
+
+
 def _escalate_automated_pr(pr_number, branch, *, head: str, reason: str) -> None:
     """Tell a human that a labeled-automated PR cannot be merged unattended.
 
@@ -3321,6 +3368,13 @@ def _escalate_automated_pr(pr_number, branch, *, head: str, reason: str) -> None
     because a worktree is named by issue and this PR has none — inventing one
     would occupy the single runner slot for work no issue asked for.
     """
+    live_pr = _fetch_pr_rest(pr_number)
+    if live_pr is None:
+        print(f"[authorization] Could not confirm labels for PR #{pr_number}; deferring automated-PR escalation.")
+        return
+    if _has_manual_label(live_pr):
+        print(f"[authorization] PR #{pr_number} carries '{MANUAL_LABEL}'; suppressing automated-PR escalation.")
+        return
     subject = f"[Runner] PR #{pr_number} Cannot Be Merged"
     _send_pr_escalation(
         pr_number, head, subject,
@@ -3389,6 +3443,9 @@ def _merge_authorized_pr(pr_number, issue_number, reviewed_head, delete_branch=F
             return 1, "", f"{SONARCLOUD_GATE_BLOCKED}: {sonar.detail}", rollup
     except (ValueError, AttributeError):
         return 1, "", "Cannot verify current CI/head", None
+    still_ok, adopt_err = _adopted_pr_still_mergeable(pr_number, issue_number, authorized, reviewed_head)
+    if not still_ok:
+        return 1, "", adopt_err, None
     command = ["gh", "pr", "merge", str(pr_number), "--squash", "--match-head-commit", reviewed_head]
     if delete_branch:
         command.append("--delete-branch")
@@ -5540,6 +5597,38 @@ def _recreate_worktree_for_pr(issue_number: str, branch: str, pr_number, expecte
     return False
 
 
+def _pr_supports_automated_adoption(pr: dict) -> bool:
+    """True unless the PR payload visibly violates same-repo/main requirements."""
+    if pr.get("isCrossRepository") is True:
+        return False
+    head_repo = ((pr.get("head") or {}).get("repo") or {}).get("full_name")
+    if head_repo and head_repo != GITHUB_REPOSITORY:
+        return False
+    base_ref = pr.get("baseRefName") or ((pr.get("base") or {}).get("ref"))
+    if base_ref and base_ref != "main":
+        return False
+    base_repo = ((pr.get("base") or {}).get("repo") or {}).get("full_name")
+    return not (base_repo and base_repo != GITHUB_REPOSITORY)
+
+
+def _unrecorded_pr_remediation(pr: dict, has_reference: bool) -> str:
+    can_adopt = _pr_supports_automated_adoption(pr)
+    if has_reference:
+        if can_adopt:
+            return (f"merge this PR manually, apply the '{AUTOMATED_LABEL}' label for runner auto-merge, "
+                    f"or apply the '{MANUAL_LABEL}' label to silence these alerts "
+                    f"(or verify its origin and restore its provenance record if runner-created)")
+        return (f"merge this PR manually or apply the '{MANUAL_LABEL}' label to silence these alerts "
+                f"(push the branch to this repository targeting 'main' for runner auto-merge, "
+                f"or verify its origin and restore its provenance record if runner-created)")
+    if can_adopt:
+        return (f"name the issue the PR serves in its body or branch if it does not already, "
+                f"merge manually, apply '{AUTOMATED_LABEL}' for auto-merge, or apply '{MANUAL_LABEL}' to silence alerts")
+    return (f"name the issue the PR serves in its body or branch if it does not already, "
+            f"merge manually, or apply '{MANUAL_LABEL}' to silence alerts "
+            f"(runner auto-merge requires a same-repository branch targeting 'main')")
+
+
 def _escalate_unrecorded_pr(pr: dict, *, require_green_and_stale: bool = True, expected_branch: str | None = None) -> None:
     """Surface a PR the runner cannot authorize because it holds no record for it.
 
@@ -5570,7 +5659,7 @@ def _escalate_unrecorded_pr(pr: dict, *, require_green_and_stale: bool = True, e
                 return
     if _pr_author_login(pr) not in TRUSTED_AUTHORS:
         return
-    if _pr_is_draft(pr):
+    if _pr_is_draft(pr) or _has_manual_label(pr):
         return
     if require_green_and_stale:
         ci_status, _ = _ci_status_from_rollup(pr.get("statusCheckRollup") or [])
@@ -5582,9 +5671,8 @@ def _escalate_unrecorded_pr(pr: dict, *, require_green_and_stale: bool = True, e
     pr_num = pr.get("number")
     subject = f"[Runner] PR #{pr_num} Cannot Be Authorized"
     waited = f" It has been waiting longer than {STALLED_PR_HOURS:g}h." if require_green_and_stale else ""
-    has_reference = re.search(r"(?i)issue-\d+|#\d+", branch + " " + str(pr.get("body") or ""))
-    remediation = ("verify this PR origin and restore its runner provenance record" if has_reference
-                   else "name the issue the PR serves in its body or branch if it does not already")
+    has_reference = bool(re.search(r"(?i)issue-\d+|#\d+", f"{branch} {pr.get('title') or ''} {pr.get('body') or ''}"))
+    remediation = _unrecorded_pr_remediation(pr, has_reference)
     _send_pr_escalation(
         pr_num, _pr_head_sha(pr), subject,
         f"<h3>PR <a href=\"https://github.com/dwojtaszek/zipper/pull/{pr_num}\">#{pr_num}</a> "
@@ -5616,7 +5704,7 @@ def _hand_orphan_pr_back(pr_num, issue_num_str, head_branch, reviewed_head, reas
 def babysit_orphaned_issue_prs():
     """Scans open issue PRs on GitHub without local worktrees, checking CI and review gates, and auto-merging or recreating worktrees."""
     print("Scanning for open issue PRs without local worktrees...")
-    code, out, _ = run_cmd(["gh", "pr", "list", "--state", "open", "--json", "number,title,author,headRefName,headRefOid,statusCheckRollup,url,updatedAt,body,isDraft,labels"], cwd=REPO_PATH)
+    code, out, _ = run_cmd(["gh", "pr", "list", "--state", "open", "--json", "number,title,author,headRefName,headRefOid,statusCheckRollup,url,updatedAt,body,isDraft,labels,isCrossRepository,baseRefName"], cwd=REPO_PATH)
     if code != 0 or not out.strip():
         return
 
@@ -5663,7 +5751,7 @@ def babysit_orphaned_issue_prs():
         # against. The maintainer-applied label is what identifies it; the author
         # check keeps it to the maintainer's own PRs.
         automated_pr = (not record_matches and _pr_author_login(pr) in TRUSTED_AUTHORS
-                        and _has_automated_label(pr))
+                        and _has_automated_label(pr) and not _has_manual_label(pr))
         # The issue this PR is genuinely the runner's work for, or None when it is
         # not issue-linked. Every action below that names an issue uses this, so an
         # adopted PR can never be driven against an unrelated issue.
