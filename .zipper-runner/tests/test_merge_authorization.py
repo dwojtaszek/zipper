@@ -77,6 +77,13 @@ class MergeAuthorizationTests(unittest.TestCase):
         ever authorize its PR. The maintainer-applied 'automated' label substitutes."""
         self._exercise("automated", expected=True)
 
+    def test_merge_automatedLabelAlongsideManualLabel_refuses(self):
+        """An explicit 'manual' label overrides 'automated' so human-managed PRs stay safe."""
+        self._exercise("automated-and-manual", expected=False)
+
+    def test_scanners_automatedLabelAlongsideManualLabel_neitherMergesNorEscalates(self):
+        self._exercise("automated-and-manual", expected=False, scanner="orphan")
+
     def test_scanners_adoptedAutomatedPr_mergesOnItsGatesAlone(self):
         """Adoption has to work from the scanner, not only from a direct merge."""
         self._exercise("automated", expected=True, scanner="orphan")
@@ -197,7 +204,8 @@ class MergeAuthorizationTests(unittest.TestCase):
                           "automated-unlabeled": [],
                           # The real refresh PR carries perf alongside automated, so a
                           # label that merely exists must not stand in for the marker.
-                          "automated-other-label": [{"name": "perf"}]}
+                          "automated-other-label": [{"name": "perf"}],
+                          "automated-and-manual": [{"name": "automated"}, {"name": "manual"}]}
                 pr["labels"] = labels.get(scenario, [{"name": "automated"}])
             if scenario == "automated-renamed":
                 # The list entry was read before the branch moved, so it still names
@@ -272,7 +280,7 @@ class MergeAuthorizationTests(unittest.TestCase):
                 "    pr=json.loads((root/'pr.json').read_text())\n"
                 "    override=root/'list-branch.txt'\n"
                 "    branch=override.read_text().strip() if override.exists() else pr.get('head',{}).get('ref','fix/ISSUE-42-proof')\n"
-                "    print(json.dumps([{'number':99,'title':pr.get('title','Fix #42'),'body':pr.get('body','Closes #42'),'author':{'login':pr['user']['login']},'headRefName':branch,'headRefOid':pr.get('head',{}).get('sha'),'labels':pr.get('labels',[]),'statusCheckRollup':[{'__typename':'CheckRun','name':'ci-gate','status':'COMPLETED','conclusion':'SUCCESS'}]}]))\n"
+                "    print(json.dumps([{'number':99,'title':pr.get('title','Fix #42'),'body':pr.get('body','Closes #42'),'author':{'login':pr['user']['login']},'headRefName':branch,'headRefOid':pr.get('head',{}).get('sha'),'updatedAt':pr.get('updated_at','2000-01-01T00:00:00Z'),'labels':pr.get('labels',[]),'statusCheckRollup':[{'__typename':'CheckRun','name':'ci-gate','status':'COMPLETED','conclusion':'SUCCESS'}]}]))\n"
                 "else: raise AssertionError(args)\n"
             )
             gh.chmod(0o755)
@@ -338,9 +346,9 @@ class MergeAuthorizationTests(unittest.TestCase):
                         # runner must never treat this PR as work for issue #77.
                         self.assertEqual([s for s, _ in emails], ["[Runner] PR #99 Cannot Be Merged"])
                         self.assertNotIn("#77", emails[0][1])
-                    if scenario == "automated-untrusted":
-                        # The label alone must not adopt a stranger's PR, and the
-                        # runner must not mail the maintainer about it either.
+                    if scenario in ("automated-untrusted", "automated-and-manual"):
+                        # The label alone must not adopt a stranger's PR, and a
+                        # maintainer-applied 'manual' label must neither adopt nor alert.
                         self.assertEqual(emails, [])
                     if scenario == "orphan-merge-refused":
                         # Recreating a worktree for a PR nothing can repair spends
@@ -1085,6 +1093,132 @@ class WorktreeReconciliationTests(unittest.TestCase):
             self.assertEqual(backups, "")
             local_head = subprocess.check_output(["git", "-C", str(wt_path), "rev-parse", "HEAD"], text=True).strip()
             self.assertEqual(local_head, head)
+
+
+class ManualLabelRaceTests(unittest.TestCase):
+    def _load_runner(self, tmp_dir: str):
+        spec = importlib.util.spec_from_file_location("manual_race_runner", BASE / "runner.py")
+        runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner)
+        runner.REPO_PATH = tmp_dir
+        runner.STATE_DIR = tmp_dir
+        runner.WORKTREES_BASE = str(Path(tmp_dir) / "worktrees")
+        runner.TRUSTED_AUTHORS = {"dwojtaszek"}
+        runner.DRY_RUN = False
+        return runner
+
+    @staticmethod
+    def _adopted_pr(runner, head: str, labels: list[dict]) -> dict:
+        return {
+            "state": "open", "draft": False,
+            "base": {"ref": "main", "repo": {"full_name": runner.GITHUB_REPOSITORY}},
+            "head": {"ref": "perf/baseline-refresh-1", "sha": head, "repo": {"full_name": runner.GITHUB_REPOSITORY}},
+            "user": {"login": "dwojtaszek"},
+            "labels": labels,
+        }
+
+    def _run_adopted_merge_race(self, head: str, second_rest_response, reviews=None) -> tuple[int, str, list]:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            runner = self._load_runner(tmp_dir)
+            rest_calls = 0
+            merge_calls = []
+
+            def fake_run_cmd(args, cwd=None, timeout=None):
+                nonlocal rest_calls
+                if args[:2] == ["gh", "api"] and args[2].endswith("/pulls/99/reviews"):
+                    return 0, json.dumps([reviews or []]), ""
+                if args[:2] == ["gh", "api"] and args[2].endswith("/pulls/99"):
+                    rest_calls += 1
+                    if rest_calls == 1:
+                        return 0, json.dumps(self._adopted_pr(runner, head, [{"name": "automated"}])), ""
+                    return second_rest_response(runner)
+                if args[:3] == ["gh", "pr", "view"]:
+                    rollup = [{"__typename": "CheckRun", "name": "ci-gate", "status": "COMPLETED", "conclusion": "SUCCESS"}]
+                    return 0, json.dumps({"headRefOid": head, "statusCheckRollup": rollup}), ""
+                if args[:3] == ["gh", "pr", "merge"]:
+                    merge_calls.append(args)
+                    return 0, "", ""
+                raise AssertionError(f"unexpected command: {args}")
+
+            with patch.object(runner, "run_cmd", side_effect=fake_run_cmd), \
+                    patch.object(runner, "_is_coderabbit_gate_failed", return_value=False):
+                code, _, err, _ = runner._merge_authorized_pr(99, None, head)
+            return code, err, merge_calls
+
+    def test_merge_manualLabelAppliedAfterAuthorization_refusesAdoptedMerge(self):
+        head = "a" * 40
+        code, err, merge_calls = self._run_adopted_merge_race(
+            head,
+            lambda r: (0, json.dumps(self._adopted_pr(r, head, [{"name": "automated"}, {"name": "manual"}])), ""),
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("manual", err)
+        self.assertEqual(merge_calls, [])
+
+    def test_merge_automatedLabelRemovedAfterAuthorization_refusesAdoptedMerge(self):
+        head = "d" * 40
+        code, err, merge_calls = self._run_adopted_merge_race(
+            head,
+            lambda r: (0, json.dumps(self._adopted_pr(r, head, [])), ""),
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("automated", err)
+        self.assertEqual(merge_calls, [])
+
+    def test_merge_automatedLabelRemovedOnApprovedPr_stillMerges(self):
+        head = "e" * 40
+        approval = [{"user": {"login": "dwojtaszek"}, "state": "APPROVED", "commit_id": head}]
+        code, err, merge_calls = self._run_adopted_merge_race(
+            head,
+            lambda r: (0, json.dumps(self._adopted_pr(r, head, [])), ""),
+            reviews=approval,
+        )
+        self.assertEqual(code, 0, err)
+        self.assertEqual(len(merge_calls), 1)
+
+    def test_merge_adoptedPrWhenFinalLabelReadFails_refusesFailClosed(self):
+        code, err, merge_calls = self._run_adopted_merge_race(
+            "b" * 40,
+            lambda _r: (1, "", "api timeout"),
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("labels", err.lower())
+        self.assertEqual(merge_calls, [])
+
+    def test_scanners_manualLabelAppliedBetweenListAndAuth_neitherMergesNorEscalates(self):
+        head = "c" * 40
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            runner = self._load_runner(tmp_dir)
+            emails = []
+            merge_calls = []
+
+            def fake_run_cmd(args, cwd=None, timeout=None):
+                if args[:3] == ["gh", "pr", "list"]:
+                    entry = [{
+                        "number": 99, "title": "chore: refresh perf baselines",
+                        "body": "No issue reference.", "author": {"login": "dwojtaszek"},
+                        "headRefName": "perf/baseline-refresh-1", "headRefOid": head,
+                        "url": "https://github.com/dwojtaszek/zipper/pull/99",
+                        "updatedAt": "2000-01-01T00:00:00Z", "isDraft": False,
+                        "labels": [{"name": "automated"}],
+                        "statusCheckRollup": [{"__typename": "CheckRun", "name": "ci-gate", "status": "COMPLETED", "conclusion": "SUCCESS"}],
+                    }]
+                    return 0, json.dumps(entry), ""
+                if args[:2] == ["gh", "api"] and args[2].endswith("/pulls/99"):
+                    return 0, json.dumps(self._adopted_pr(runner, head, [{"name": "automated"}, {"name": "manual"}])), ""
+                if args[:2] == ["gh", "api"] and args[2].endswith("/pulls/99/reviews"):
+                    return 0, "[]", ""
+                if args[:3] == ["gh", "pr", "merge"]:
+                    merge_calls.append(args)
+                    return 0, "", ""
+                raise AssertionError(f"unexpected command: {args}")
+
+            with patch.object(runner, "run_cmd", side_effect=fake_run_cmd), \
+                    patch.object(runner, "send_email", side_effect=lambda s, b: emails.append((s, b)) or True):
+                runner.babysit_orphaned_issue_prs()
+
+            self.assertEqual(emails, [])
+            self.assertEqual(merge_calls, [])
 
 
 if __name__ == "__main__":

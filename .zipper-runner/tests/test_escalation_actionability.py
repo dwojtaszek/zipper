@@ -50,6 +50,10 @@ class _EscalationFixture(unittest.TestCase):
         threads = patch.object(self.runner, "_query_review_thread_count", return_value=0)
         threads.start()
         self.addCleanup(threads.stop)
+        live_pr = patch.object(self.runner, "_fetch_pr_rest",
+                               return_value={"labels": [{"name": "automated"}]})
+        live_pr.start()
+        self.addCleanup(live_pr.stop)
 
     def tearDown(self):
         self._temp.cleanup()
@@ -108,6 +112,50 @@ class EscalationTextTests(_EscalationFixture):
                 # A distinct head per case, because the guard dedupes by head.
                 self.escalate(self.pr(head=f"{index:040d}"), threads=threads, require_green_and_stale=False)
                 self.assertNotIn("APPROVED review", self.sent[0][1])
+
+    def test_unrecordedPr_withIssueReference_offersManualAndLabelActionsInsteadOfProvenanceOnly(self):
+        pr = self.pr(number=1447)
+        pr["headRefName"] = "fix/runner-diverged-merged-cleanup"
+        pr["body"] = "Follow-up from #1206."
+        self.escalate(pr, threads=0, require_green_and_stale=False)
+        self.assertEqual(len(self.sent), 1)
+        body = self.sent[0][1]
+        self.assertIn("merge this PR manually", body)
+        self.assertIn("automated", body)
+        self.assertIn("manual", body)
+        self.assertNotIn("name the issue", body)
+
+    def test_unrecordedPr_withManualLabel_staysQuiet(self):
+        self.escalate(self.pr(labels=[{"name": "manual"}]), threads=0, require_green_and_stale=False)
+        self.assertEqual(self.sent, [])
+
+    def test_unrecordedPr_withStringManualLabelCaseInsensitive_staysQuiet(self):
+        self.escalate(self.pr(labels=[" Manual "]), threads=0, require_green_and_stale=False)
+        self.assertEqual(self.sent, [])
+
+    def test_unrecordedPr_fromFork_doesNotAdvertiseAutomatedAdoption(self):
+        import html
+        pr = self.pr()
+        pr["isCrossRepository"] = True
+        self.escalate(pr, threads=0, require_green_and_stale=False)
+        self.assertEqual(len(self.sent), 1)
+        body = html.unescape(self.sent[0][1])
+        self.assertNotIn("apply 'automated'", body)
+        self.assertIn("merge manually", body)
+        self.assertIn("same-repository branch targeting 'main'", body)
+
+    def test_unrecordedPr_nonMainBaseWithReference_doesNotAdvertiseAutomatedAdoption(self):
+        import html
+        pr = self.pr(number=1448)
+        pr["headRefName"] = "fix/topic"
+        pr["body"] = "Follow-up to #1206."
+        pr["baseRefName"] = "release"
+        self.escalate(pr, threads=0, require_green_and_stale=False)
+        self.assertEqual(len(self.sent), 1)
+        body = html.unescape(self.sent[0][1])
+        self.assertNotIn("apply the 'automated' label", body)
+        self.assertIn("merge this PR manually", body)
+        self.assertIn("targeting 'main'", body)
 
 
 class EscalationDedupeTests(_EscalationFixture):
@@ -221,8 +269,10 @@ class EscalationDedupeTests(_EscalationFixture):
 
 class AutomatedAdoptionEscalationTests(_EscalationFixture):
     def test_adoptedAutomatedPr_namesTheBlockerAndTheAbsentIssue(self):
-        self.runner._escalate_automated_pr(
-            1362, "perf/baseline-refresh-40302990823", head=HEAD_A, reason="the robot review gate is not satisfied")
+        with patch.object(self.runner, "_fetch_pr_rest",
+                          return_value=self.pr(labels=[{"name": "automated"}])):
+            self.runner._escalate_automated_pr(
+                1362, "perf/baseline-refresh-40302990823", head=HEAD_A, reason="the robot review gate is not satisfied")
         self.assertEqual(len(self.sent), 1)
         subject, body = self.sent[0]
         self.assertIn("Cannot Be Merged", subject)
@@ -233,9 +283,22 @@ class AutomatedAdoptionEscalationTests(_EscalationFixture):
         self.assertIn("review the PR by hand", body)
 
     def test_adoptedAutomatedPr_isDedupedByHeadToo(self):
-        self.runner._escalate_automated_pr(1362, "b", head=HEAD_A, reason="r")
-        self.runner._escalate_automated_pr(1362, "b", head=HEAD_A, reason="r")
+        with patch.object(self.runner, "_fetch_pr_rest",
+                          return_value=self.pr(labels=[{"name": "automated"}])):
+            self.runner._escalate_automated_pr(1362, "b", head=HEAD_A, reason="r")
+            self.runner._escalate_automated_pr(1362, "b", head=HEAD_A, reason="r")
         self.assertEqual(len(self.sent), 1)
+
+    def test_adoptedAutomatedPr_withLiveManualLabel_suppressesAlert(self):
+        with patch.object(self.runner, "_fetch_pr_rest",
+                          return_value=self.pr(labels=[{"name": "automated"}, {"name": "manual"}])):
+            self.runner._escalate_automated_pr(1362, "b", head=HEAD_A, reason="r")
+        self.assertEqual(self.sent, [])
+
+    def test_adoptedAutomatedPr_whenLiveLabelReadFails_defersAlertFailClosed(self):
+        with patch.object(self.runner, "_fetch_pr_rest", return_value=None):
+            self.runner._escalate_automated_pr(1362, "b", head=HEAD_A, reason="r")
+        self.assertEqual(self.sent, [])
 
 
 class SendEmailOutcomeTests(_EscalationFixture):

@@ -918,6 +918,13 @@ class UnreferencedPrEscalationTests(unittest.TestCase):
         fixture = self._scan([self._green_pr("not-a-timestamp")])
         self.assertEqual(fixture.emails.messages, [])
 
+    def test_orphanScan_staleUnreferencedGreenPrWithManualLabel_staysQuiet(self):
+        pr = self._green_pr(self._stale())
+        pr["labels"] = [{"name": "manual"}]
+        fixture = self._scan([pr])
+        self.assertFalse((self.root / "merged").exists())
+        self.assertEqual(fixture.emails.messages, [])
+
     def test_orphanScan_repeatedCycles_mailsOncePerHead(self):
         """A persistent stall must not mail on every cycle."""
         fixture = _RunnerFixture(self.root, pr_list=[self._green_pr(self._stale())])
