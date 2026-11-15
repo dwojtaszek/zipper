@@ -5,7 +5,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import workflow_validator  # noqa: E402
 from workflow_validator import (
     parse_workflow_yaml,
     validate_workflow,
@@ -287,6 +286,15 @@ class TestWorkflowValidator(unittest.TestCase):
         }
         with self.assertRaises(WorkflowValidationError):
             validate_permissions(wf)
+
+    def test_top_level_extra_read_scope_fails_s8264(self):
+        wf = {
+            "permissions": {"contents": "read", "issues": "read"},
+            "jobs": {"triage": {"steps": [{"run": "echo ok"}]}},
+        }
+        with self.assertRaises(WorkflowValidationError) as ctx:
+            validate_permissions(wf)
+        self.assertIn("S8264", str(ctx.exception))
 
 
 if __name__ == "__main__":

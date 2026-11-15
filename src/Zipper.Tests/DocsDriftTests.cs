@@ -496,6 +496,19 @@ public class DocsDriftTests
         };
         markdownFiles.AddRange(Directory.GetFiles(Path.Combine(RepoRoot, "docs"), "*.md"));
         markdownFiles.AddRange(Directory.GetFiles(Path.Combine(RepoRoot, "docs", "adr"), "*.md"));
+        foreach (var skillsRel in new[]
+        {
+            Path.Combine(".factory", "skills"),
+            Path.Combine(".agents", "skills"),
+            Path.Combine(".claude", "skills"),
+        })
+        {
+            var skillsRoot = Path.Combine(RepoRoot, skillsRel);
+            if (Directory.Exists(skillsRoot))
+            {
+                markdownFiles.AddRange(Directory.GetFiles(skillsRoot, "SKILL.md", SearchOption.AllDirectories));
+            }
+        }
 
         var anchorsByFile = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
         HashSet<string> GetAnchors(string path)
@@ -623,6 +636,81 @@ public class DocsDriftTests
         }
 
         Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
+    }
+
+    [Fact]
+    public void MarkdownAndSkills_WorkflowAndScriptReferences_AllExistOnDisk()
+    {
+        var files = new List<string>
+        {
+            Path.Combine(RepoRoot, "AGENTS.md"),
+            Path.Combine(RepoRoot, "CLAUDE.md"),
+            Path.Combine(RepoRoot, "README.md"),
+            Path.Combine(RepoRoot, "CI.md"),
+        };
+        files.AddRange(Directory.GetFiles(Path.Combine(RepoRoot, "docs"), "*.md", SearchOption.AllDirectories));
+        foreach (var skillsRel in new[]
+        {
+            Path.Combine(".factory", "skills"),
+            Path.Combine(".agents", "skills"),
+            Path.Combine(".claude", "skills"),
+        })
+        {
+            var skillsRoot = Path.Combine(RepoRoot, skillsRel);
+            if (Directory.Exists(skillsRoot))
+            {
+                files.AddRange(Directory.GetFiles(skillsRoot, "SKILL.md", SearchOption.AllDirectories));
+            }
+        }
+
+        var failures = FindMissingWorkflowAndScriptReferences(RepoRoot, files);
+        Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
+    }
+
+    [Fact]
+    public void FindMissingWorkflowAndScriptReferences_MissingScriptInNestedDoc_ReportsFailure()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), $"zipper-doc-ref-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(tempRoot, "docs", "nested"));
+        try
+        {
+            var nestedDoc = Path.Combine(tempRoot, "docs", "nested", "guide.md");
+            File.WriteAllText(nestedDoc, "Run `tests/missing-script.sh` and `.github/workflows/missing.yml`.");
+            var docsFiles = Directory.GetFiles(Path.Combine(tempRoot, "docs"), "*.md", SearchOption.AllDirectories);
+            var failures = FindMissingWorkflowAndScriptReferences(tempRoot, docsFiles);
+            Assert.Equal(2, failures.Count);
+            Assert.Contains(failures, f => f.Contains("docs/nested/guide.md") && f.Contains("tests/missing-script.sh"));
+            Assert.Contains(failures, f => f.Contains("docs/nested/guide.md") && f.Contains(".github/workflows/missing.yml"));
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    private static List<string> FindMissingWorkflowAndScriptReferences(string repoRoot, IEnumerable<string> files)
+    {
+        var failures = new List<string>();
+        var refPattern = new System.Text.RegularExpressions.Regex(
+            @"(?<![A-Za-z0-9_./-])(\.github/workflows/[A-Za-z0-9_.-]+\.yml|tests/[A-Za-z0-9_./-]+\.(?:sh|bat|py)|tools/typesafe-audit/[A-Za-z0-9_./-]+\.py)\b",
+            System.Text.RegularExpressions.RegexOptions.None,
+            TimeSpan.FromSeconds(1));
+
+        foreach (var file in files)
+        {
+            var relSource = Path.GetRelativePath(repoRoot, file).Replace('\\', '/');
+            var text = File.ReadAllText(file);
+            foreach (System.Text.RegularExpressions.Match match in refPattern.Matches(text))
+            {
+                var relTarget = match.Groups[1].Value;
+                if (!File.Exists(Path.Combine(repoRoot, relTarget)))
+                {
+                    failures.Add($"{relSource}: missing referenced workflow/script '{relTarget}'");
+                }
+            }
+        }
+
+        return failures;
     }
 }
 

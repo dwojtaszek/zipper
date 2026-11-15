@@ -14,7 +14,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from coverage_gaps import (
-    _REQ_ID,
     _GENERATED_MARKERS,
     method_for_line,
     traceability_rows,

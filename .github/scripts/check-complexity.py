@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Diff-scoped complexity guard matching SonarCloud S3776 / ruff C901 limits."""
+"""Diff-scoped cognitive complexity guard matching SonarCloud S3776 limits."""
 import argparse
 import ast
 import os
@@ -16,7 +16,7 @@ CS_SIG_START_RE = re.compile(
     r"(?![^(\n]*\b(?:class|struct|record|interface|namespace)\s+[A-Za-z_]\w*\s*(?:<[^>]+>)?\s*\()"
     r"(?:\([^)]*\)\s+|[\w<>\[\]?.,\s]+?\s+)([A-Za-z_]\w*)\s*(?:<[^>]+>)?\s*\("
 )
-CS_UNTRACKED_PREFIXES = ("src/", ".github/", ".zipper-runner/", "tests/")
+CS_UNTRACKED_PREFIXES = ("src/", ".github/", ".zipper-runner/", "tests/", "tools/")
 CS_NEST_RE = re.compile(r"\b(if|for|foreach|while|do|switch|catch)\b")
 CS_FLAT_RE = re.compile(r"\belse\b|(?<=\s)\?(?=\s|$)|(?<=\))\?(?=[^:]*:)")
 CS_BOOL_RE = re.compile(r"&&|\|\|")
@@ -57,39 +57,130 @@ def _parse_unified_diff(diff_text: str, changed: dict[str, set[int]]) -> None:
                     changed.setdefault(current, set()).update(range(start, start + count))
 
 
-class _PyComplexityVisitor(ast.NodeVisitor):
-    def __init__(self) -> None:
-        self.score = 1
+_BOOLOP_CONTAINER = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+_TRY_NODES = (ast.Try, getattr(ast, "TryStar", ast.Try))
 
-    def _bump(self, node: ast.AST) -> None:
-        self.score += 1
-        self.generic_visit(node)
 
-    def _stop(self, _node: ast.AST) -> None:
-        return None
+def _iter_boolop_terms(node: ast.BoolOp):
+    op_type = type(node.op)
+    for idx, val in enumerate(node.values):
+        if idx > 0:
+            yield op_type, None
+        if isinstance(val, ast.BoolOp):
+            yield from _iter_boolop_terms(val)
+        else:
+            yield None, val
 
-    visit_FunctionDef = _stop
-    visit_AsyncFunctionDef = _stop
-    visit_ClassDef = _stop
-    visit_If = _bump
-    visit_For = _bump
-    visit_AsyncFor = _bump
-    visit_While = _bump
-    visit_ExceptHandler = _bump
-    visit_IfExp = _bump
-    visit_match_case = _bump
 
-    def visit_comprehension(self, node: ast.comprehension) -> None:
-        self.score += 1 + len(node.ifs)
-        self.generic_visit(node)
+def _py_boolop_score(node: ast.BoolOp, nesting: int) -> int:
+    score = 0
+    prev_op: type | None = None
+    for op_type, expr in _iter_boolop_terms(node):
+        if op_type is not None and op_type is not prev_op:
+            score += 1
+            prev_op = op_type
+        elif expr is not None:
+            score += _py_expr_score(expr, nesting)
+    return score
+
+
+def _py_comp_score(node: ast.AST, nesting: int) -> int:
+    generators = getattr(node, "generators", ())
+    inner_nesting = nesting + (1 if generators else 0)
+    score = 0
+    for gen in generators:
+        score += 1 + nesting
+        score += _py_expr_score(gen.iter, nesting)
+        for cond in gen.ifs:
+            score += (1 + nesting) + _py_expr_score(cond, inner_nesting)
+    for field in ("elt", "key", "value"):
+        child = getattr(node, field, None)
+        if isinstance(child, ast.AST):
+            score += _py_expr_score(child, inner_nesting)
+    return score
+
+
+def _py_expr_score(node: ast.AST | None, nesting: int) -> int:
+    if node is None or isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return 0
+    if isinstance(node, ast.IfExp):
+        return (
+            1
+            + nesting
+            + _py_expr_score(node.test, nesting + 1)
+            + _py_expr_score(node.body, nesting + 1)
+            + _py_expr_score(node.orelse, nesting + 1)
+        )
+    if isinstance(node, ast.BoolOp):
+        return _py_boolop_score(node, nesting)
+    if isinstance(node, ast.Lambda):
+        return _py_expr_score(node.body, nesting + 1)
+    if isinstance(node, _BOOLOP_CONTAINER):
+        return _py_comp_score(node, nesting)
+    return sum(_py_expr_score(child, nesting) for child in ast.iter_child_nodes(node))
+
+
+def _py_if_score(node: ast.If, nesting: int, is_elif: bool = False) -> int:
+    score = 0 if is_elif else (1 + nesting)
+    score += _py_expr_score(node.test, nesting)
+    score += _py_stmts_score(node.body, nesting + 1)
+    if len(node.orelse) == 1 and isinstance(node.orelse[0], ast.If):
+        score += 1 + _py_if_score(node.orelse[0], nesting, is_elif=True)
+    elif node.orelse:
+        score += 1 + _py_stmts_score(node.orelse, nesting + 1)
+    return score
+
+
+def _py_try_score(node: ast.AST, nesting: int) -> int:
+    score = _py_stmts_score(getattr(node, "body", ()), nesting)
+    for handler in getattr(node, "handlers", ()):
+        score += 1 + nesting + _py_stmts_score(handler.body, nesting + 1)
+    orelse = getattr(node, "orelse", ())
+    if orelse:
+        score += 1 + _py_stmts_score(orelse, nesting + 1)
+    return score + _py_stmts_score(getattr(node, "finalbody", ()), nesting)
+
+
+def _py_with_score(stmt: ast.With | ast.AsyncWith, nesting: int) -> int:
+    items_score = sum(_py_expr_score(item.context_expr, nesting) for item in stmt.items)
+    return items_score + _py_stmts_score(stmt.body, nesting)
+
+
+def _py_match_score(stmt: ast.Match, nesting: int) -> int:
+    # SonarCloud S3776 charges a single (1 + nesting) for the match statement itself,
+    # not per case label, while case guards and bodies are scored at nesting + 1.
+    score = 1 + nesting + _py_expr_score(stmt.subject, nesting)
+    for case in stmt.cases:
+        score += _py_expr_score(case.guard, nesting + 1) + _py_stmts_score(case.body, nesting + 1)
+    return score
+
+
+def _py_stmt_score(stmt: ast.AST, nesting: int) -> int:
+    if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return 0
+    if isinstance(stmt, ast.If):
+        return _py_if_score(stmt, nesting)
+    if isinstance(stmt, (ast.For, ast.AsyncFor)):
+        orelse = (1 + _py_stmts_score(stmt.orelse, nesting + 1)) if stmt.orelse else 0
+        return 1 + nesting + _py_expr_score(stmt.iter, nesting) + _py_stmts_score(stmt.body, nesting + 1) + orelse
+    if isinstance(stmt, ast.While):
+        orelse = (1 + _py_stmts_score(stmt.orelse, nesting + 1)) if stmt.orelse else 0
+        return 1 + nesting + _py_expr_score(stmt.test, nesting) + _py_stmts_score(stmt.body, nesting + 1) + orelse
+    if isinstance(stmt, _TRY_NODES):
+        return _py_try_score(stmt, nesting)
+    if isinstance(stmt, (ast.With, ast.AsyncWith)):
+        return _py_with_score(stmt, nesting)
+    if isinstance(stmt, ast.Match):
+        return _py_match_score(stmt, nesting)
+    return sum(_py_expr_score(child, nesting) for child in ast.iter_child_nodes(stmt))
+
+
+def _py_stmts_score(stmts: list[ast.stmt] | tuple[ast.stmt, ...], nesting: int) -> int:
+    return sum(_py_stmt_score(stmt, nesting) for stmt in stmts)
 
 
 def _py_function_complexity(node: ast.AST) -> int:
-    visitor = _PyComplexityVisitor()
-    for child in ast.iter_child_nodes(node):
-        if not isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            visitor.visit(child)
-    return visitor.score
+    return _py_stmts_score(getattr(node, "body", ()), 0)
 
 
 def _collect_py_functions(tree: ast.AST) -> list[tuple[str, ast.AST]]:

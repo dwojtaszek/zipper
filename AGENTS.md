@@ -16,7 +16,7 @@ Lower-numbered principles take precedence. Critical rules below remain ordered b
 - Create branches/worktrees as needed for authorized work and use PRs when branch protection requires them. Retain approvals within their stated scope (a PR-only request ends with a reviewed PR; merge/deploy requests include rollout verification). State delivery scope once when unclear.
 - Keep one automation owner per issue/PR (scheduled or event-driven agents must not launch competing intake, repair, publication, or merge work for runner-owned PRs without an explicit handoff).
 - **Dispatched runner mission:** use the supplied issue branch/worktree; return after local validation and publication so the parent runner handles CI waits and repairs.
-- **Interactive session:** use a non-`issue-*` worktree (`.worktrees/<slug>`) so active runner timers cannot reset uncommitted edits; check active branches, PRs, and runner locks first via [runner operations](docs/runner-operations.md).
+- **Interactive session:** use a non-`issue-*` worktree (`.worktrees/<slug>`) so active runner timers cannot reset uncommitted edits; check active branches/PRs/locks and monitor PR CI (`watch-pr.py --timeout 1000`) via [runner operations](docs/runner-operations.md).
 
 ## Read when relevant
 

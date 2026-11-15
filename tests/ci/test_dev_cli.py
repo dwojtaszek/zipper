@@ -250,6 +250,19 @@ class DevCliAndLocalWorkflowTests(unittest.TestCase):
         if shutil.which("ruff"):
             self.assertIn("Run Python lint (ruff)", res.stdout)
 
+    def test_dev_cli_typesafe_tools_trigger_typesafe_audit_and_python_lint(self):
+        for changed in (
+            "tools/typesafe-audit/triage/apply_labels.py",
+            ".github/workflows/typesafe-issue-triage.yml",
+        ):
+            with self.subTest(changed=changed):
+                res = self._run_dev("check", "--dry-run", "--files", changed)
+                self.assertEqual(res.returncode, 0, res.stderr)
+                self.assertIn("Run CI workflow contract tests", res.stdout)
+                self.assertIn("Run TypeSafe audit E2E check", res.stdout)
+                if changed.endswith(".py") and shutil.which("ruff"):
+                    self.assertIn("Run Python lint (ruff)", res.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

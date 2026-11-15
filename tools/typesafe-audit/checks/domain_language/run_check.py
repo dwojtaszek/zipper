@@ -11,7 +11,6 @@ Exit codes: 0 ok/advisory, 2 configuration or input error, 3 remote failure.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import importlib.util
 import json
 import os

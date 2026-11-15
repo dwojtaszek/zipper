@@ -199,6 +199,7 @@ run_check() {
     local need_parity=0
     local need_ci_tests=0
     local need_runner_tests=0
+    local need_typesafe_audit=0
     local need_python_lint=0
     local need_shell_lint=0
     local need_complexity=0
@@ -253,6 +254,9 @@ run_check() {
             .github/workflows/*|.github/scripts/*|.github/actions/*|tools/*|tests/ci/*|tests/perf/*)
                 need_ci_tests=1
                 need_docs_drift=1
+                if [[ "$file" == tools/typesafe-audit/* || "$file" == .github/workflows/typesafe-*.yml ]]; then
+                    need_typesafe_audit=1
+                fi
                 if [[ "$file" == *.py ]]; then
                     need_python_lint=1
                     need_complexity=1
@@ -360,6 +364,19 @@ run_check() {
 
     if [[ "$need_runner_tests" -eq 1 ]]; then
         run_step "Run zipper-runner tests" python3 -m unittest discover -s .zipper-runner/tests -p "test_*.py"
+    fi
+
+    if [[ "$need_typesafe_audit" -eq 1 ]]; then
+        local already_queued=0
+        for script in ${specific_e2e_scripts[@]+"${specific_e2e_scripts[@]}"}; do
+            if [[ "$script" == "tests/test-typesafe-audit.sh" ]]; then
+                already_queued=1
+                break
+            fi
+        done
+        if [[ "$already_queued" -eq 0 && -f tests/test-typesafe-audit.sh ]]; then
+            run_step "Run TypeSafe audit E2E check" bash tests/test-typesafe-audit.sh
+        fi
     fi
 
     if [[ "$need_docs_drift" -eq 1 ]]; then

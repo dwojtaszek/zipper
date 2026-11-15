@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import os
-import re
 import subprocess
 import sys
 import tempfile
@@ -164,9 +162,8 @@ class RunCheckTests(unittest.TestCase):
         # Regression (review MAJOR 1/2): out-of-set type/subsystem/priority and
         # below-threshold confidence must be demoted to needs-human-review
         # with a None value, never reported as judged.
-        with tempfile.TemporaryDirectory() as td:
-            tmp = Path(td)
-            case = collect_module = json.loads((CORPUS / "issues" / "bug-report.json").read_text())
+        with tempfile.TemporaryDirectory():
+            case = json.loads((CORPUS / "issues" / "bug-report.json").read_text())
             corpus = json.loads((CORPUS / "open-issues.json").read_text())["issues"]
             with mock.patch.object(
                 self.run_check.runner, "run_fixture",
@@ -195,8 +192,7 @@ class RunCheckTests(unittest.TestCase):
     def test_missing_model_answer_is_neutral_not_fatal(self):
         # Regression (review MAJOR 3): an absent answer must yield a neutral
         # needs-human-review row, never exit 2 on an advisory dry run.
-        with tempfile.TemporaryDirectory() as td:
-            tmp = Path(td)
+        with tempfile.TemporaryDirectory():
             with mock.patch.object(self.run_check.runner, "run_fixture", return_value={"answers": {}}):
                 args = mock.Mock(fixture_dir="unused", mode="fixture")
                 prepared = self.run_check.prepare(
