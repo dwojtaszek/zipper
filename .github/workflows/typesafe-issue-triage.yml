@@ -194,7 +194,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     if: >-
-      always() &&
+      !cancelled() &&
+      needs.triage.result == 'success' &&
       needs.triage.outputs.assurance_status == 'executed' &&
       (github.event_name == 'issues' ||
        (github.event_name == 'workflow_dispatch' && inputs.apply_labels == true))
