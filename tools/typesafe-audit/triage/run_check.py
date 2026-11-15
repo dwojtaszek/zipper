@@ -183,7 +183,6 @@ def judge(prepared: dict, questions: dict, policy: dict, config: dict, args, api
     if judgments["priority"]["value"] not in policy["priorities"] + ["insufficient-evidence"]:
         judgments["priority"] = {"value": None, "confidence": judgments["priority"]["confidence"], "status": "needs-human-review"}
 
-    duplicates = []
     for candidate in prepared["candidates"]:
         answer = answers.get(f"cand{SPAN_SEPARATOR}{candidate['number']}{SPAN_SEPARATOR}duplicate")
         if answer is None:

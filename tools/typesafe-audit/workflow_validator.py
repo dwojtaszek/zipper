@@ -177,22 +177,31 @@ def _validate_job_permissions(
             )
 
 
-def validate_permissions(workflow: dict) -> None:
-    """Validate that workflow has least-privilege permissions without write overrides."""
-    _require_mapping(workflow, "Workflow root")
-    top_permissions = workflow.get("permissions")
+def _validate_top_permissions(top_permissions: object) -> None:
     if not top_permissions:
         raise WorkflowValidationError("Missing top-level permissions block")
-
     if isinstance(top_permissions, str):
         if "write" in top_permissions.lower():
             raise WorkflowValidationError(f"Top-level permissions must not be write: {top_permissions}")
-    elif isinstance(top_permissions, dict):
-        for scope, level in top_permissions.items():
-            if str(level).lower() == "write" or "write" in str(level).lower():
-                raise WorkflowValidationError(f"Top-level permission for '{scope}' must not be write: {level}")
-        if top_permissions.get("contents") != "read":
-            raise WorkflowValidationError(f"Top-level contents permission must be 'read', got: {top_permissions.get('contents')}")
+        return
+    if not isinstance(top_permissions, dict):
+        return
+    for scope, level in top_permissions.items():
+        level_s = str(level).lower()
+        if "write" in level_s:
+            raise WorkflowValidationError(f"Top-level permission for '{scope}' must not be write: {level}")
+        if scope != "contents":
+            raise WorkflowValidationError(
+                f"Top-level permission '{scope}' must be scoped to individual jobs (SonarCloud S8264)"
+            )
+    if top_permissions.get("contents") != "read":
+        raise WorkflowValidationError(f"Top-level contents permission must be 'read', got: {top_permissions.get('contents')}")
+
+
+def validate_permissions(workflow: dict) -> None:
+    """Validate that workflow has least-privilege permissions without write overrides."""
+    _require_mapping(workflow, "Workflow root")
+    _validate_top_permissions(workflow.get("permissions"))
 
     jobs = _require_mapping(workflow.get("jobs", {}), "Jobs section")
     allowed_job_write_scopes = {"issues"}

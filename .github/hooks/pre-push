@@ -179,6 +179,8 @@ if [[ "$RUN_UNIT_TESTS" == "true" ]]; then
     ALL_REFS_DOCS_ONLY=true
     ANY_RUNNER_ONLY=false
     ANY_CI_ONLY=false
+    ANY_TSA_CHANGED=false
+    ANY_PY_OR_RUFF_CHANGED=false
     for entry in "${REFS_TO_CHECK[@]}"; do
         local_ref="${entry%% *}"
         local_sha="${entry##* }"
@@ -201,7 +203,13 @@ if [[ "$RUN_UNIT_TESTS" == "true" ]]; then
             continue
         fi
         RUNNER_PREF_MATCH=$(printf '%s\n' "$ALL_BRANCH_CHANGES" | grep -c -E '^\.zipper-runner/' || true)
-        CI_MATCHED=$(printf '%s\n' "$ALL_BRANCH_CHANGES" | grep -c -E '^(\.github/(workflows|scripts)/|tests/ci/|tests/wait-for-reviews\.sh$|tests/test-unified-workflow\.(sh|bat)$|dev\.(sh|bat)$|\.pi-lens\.json$|ruff\.toml$|docs/|CHANGELOG(\.md)?$|.*\.(md|markdown)$)' || true)
+        CI_MATCHED=$(printf '%s\n' "$ALL_BRANCH_CHANGES" | grep -c -E '^(\.github/(workflows|scripts|actions)/|tools/|tests/(ci|perf)/|tests/wait-for-reviews\.sh$|tests/test-(unified-workflow|typesafe-audit|ci-build-props|artifact-handling)\.(sh|bat)$|tests/validate-.*\.(sh|bat)$|dev\.(sh|bat)$|\.pi-lens\.json$|ruff\.toml$|docs/|CHANGELOG(\.md)?$|.*\.(md|markdown)$)' || true)
+        if printf '%s\n' "$ALL_BRANCH_CHANGES" | grep -qE '^(tools/typesafe-audit/|\.github/workflows/typesafe-.*\.yml$|tests/test-typesafe-audit\.)'; then
+            ANY_TSA_CHANGED=true
+        fi
+        if printf '%s\n' "$ALL_BRANCH_CHANGES" | grep -qE '(\.py$|^ruff\.toml$)'; then
+            ANY_PY_OR_RUFF_CHANGED=true
+        fi
         if [[ -d tests/ci && "$TOTAL_CHANGED" -gt 0 && "$RUNNER_PREF_MATCH" -eq 0 && "$CI_MATCHED" -eq "$TOTAL_CHANGED" ]]; then
             ANY_CI_ONLY=true
         else
@@ -237,6 +245,16 @@ if [[ "$RUN_UNIT_TESTS" == "true" ]]; then
                     python3 .github/scripts/run-check.py --log "$(mktemp -t zipper-ci-check.XXXXXX)" -- \
                         python3 -m unittest discover -s tests/ci -p 'test_*.py'
                 ) || exit 1
+                if [[ "$ANY_PY_OR_RUFF_CHANGED" == "true" && -f ruff.toml ]] && command -v ruff >/dev/null 2>&1; then
+                    ruff check || exit 1
+                fi
+                if [[ "$ANY_TSA_CHANGED" == "true" && -f tests/test-typesafe-audit.sh ]]; then
+                    (
+                        while IFS= read -r git_env; do unset "$git_env"; done < <(git rev-parse --local-env-vars)
+                        python3 .github/scripts/run-check.py --log "$(mktemp -t zipper-tsa-check.XXXXXX)" -- \
+                            bash tests/test-typesafe-audit.sh
+                    ) || exit 1
+                fi
             fi
         fi
         RUN_UNIT_TESTS=false

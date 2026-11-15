@@ -5,6 +5,7 @@ include = [
   ".github/actions/**/*.py",
   "tests/ci/**/*.py",
   "tests/perf/**/*.py",
+  "tools/**/*.py",
 ]
 
 [lint]

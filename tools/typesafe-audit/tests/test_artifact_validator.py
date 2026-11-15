@@ -6,7 +6,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import workflow_validator  # noqa: E402
 from workflow_validator import (
     parse_workflow_yaml,
     validate_artifact_producer,

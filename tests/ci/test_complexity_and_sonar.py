@@ -170,6 +170,40 @@ class CheckComplexityTests(unittest.TestCase):
         self.assertEqual(len(findings), 1)
         self.assertIn("outer.inner", findings[0])
 
+    def test_python_cognitive_complexity_weights_nesting_and_boolops(self):
+        # Nested loops/ifs + mixed boolean operator chains exceed cognitive complexity 15
+        # even when flat branch count is small (matches SonarCloud python:S3776).
+        nested = (
+            "def deeply_nested(items, a, b, c):\n"
+            "    for x in items:\n"                 # +1 (nesting=0)
+            "        if x > 0:\n"                   # +2 (nesting=1)
+            "            for y in items:\n"         # +3 (nesting=2)
+            "                if y > 0:\n"           # +4 (nesting=3)
+            "                    if a and b or c:\n"  # +5 (nesting=4) + 2 boolops
+            "                        return x + y\n"
+            "    return 0\n"
+        )
+        findings = self.mod.check_python_source("deep.py", nested, None, 15)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("complexity 17 > 15", findings[0])
+
+    def test_python_with_statement_does_not_hide_inner_branches(self):
+        with_nested = (
+            "def with_branches(ctx, items):\n"
+            "    with ctx():\n"
+            "        for x in items:\n"       # +1 (nesting=0)
+            "            if x > 0:\n"         # +2 (nesting=1)
+            "                for y in items:\n"   # +3 (nesting=2)
+            "                    if y > 0:\n"     # +4 (nesting=3)
+            "                        for z in items:\n"  # +5 (nesting=4)
+            "                            if z > 0:\n"    # +6 (nesting=5)
+            "                                return z\n"
+            "    return 0\n"
+        )
+        findings = self.mod.check_python_source("with_nested.py", with_nested, None, 15)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("complexity 21 > 15", findings[0])
+
 
 class CheckSonarTests(unittest.TestCase):
     @classmethod

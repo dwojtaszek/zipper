@@ -77,9 +77,6 @@ class ExtractionTests(TempRepoTest):
         (self.repo / "README.md").write_text("Unchanged readme\n", encoding="utf-8")
         git(self.repo, "add", "-A")
         git(self.repo, "commit", "-qm", "readme")
-        mid = subprocess.run(
-            ["git", "-C", str(self.repo), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
-        ).stdout.strip()
         (self.repo / "README.md").unlink()
         git(self.repo, "add", "-A")
         git(self.repo, "commit", "-qm", "delete-readme")
@@ -91,7 +88,7 @@ class ExtractionTests(TempRepoTest):
 class PrecheckTests(TempRepoTest):
     def test_immutable_id_violation_is_a_defect(self):
         self.evolve("**REQ-102**: Replacement definition; the old requirement is gone.\n")
-        sections = __import__("extract_sections", fromlist=["extract_sections"]).extract_sections(self.repo, self.base)
+        __import__("extract_sections", fromlist=["extract_sections"]).extract_sections(self.repo, self.base)
         findings = prechecks.check_immutable_ids(self.repo, self.base)
         self.assertEqual("immutable-req-id", findings[0]["check"])
         self.assertIn("REQ-100", findings[0]["message"])
