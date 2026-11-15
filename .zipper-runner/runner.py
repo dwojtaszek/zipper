@@ -130,6 +130,8 @@ DEFAULT_CMD_TIMEOUT = int(os.environ.get("RUNNER_CMD_TIMEOUT", "300"))
 # congested link must not be killed at the default, while still never hanging
 # the locked run indefinitely.
 NETWORK_GIT_TIMEOUT = int(os.environ.get("RUNNER_GIT_NETWORK_TIMEOUT", "900"))
+FETCH_RETRY_DELAY_SECONDS = max(0.0, float(os.environ.get("RUNNER_FETCH_RETRY_DELAY", "5")))
+FETCH_FAILURE_ALERT_THRESHOLD = max(1, int(os.environ.get("RUNNER_FETCH_FAILURE_ALERT_THRESHOLD", "2")))
 MAX_RUN_SECONDS = int(os.environ.get("RUNNER_MAX_RUN_SECONDS", "43200"))
 QUOTA_COOLDOWN_MINUTES = int(os.environ.get("RUNNER_QUOTA_COOLDOWN_MINUTES", "60"))
 STATE_MAX_AGE_DAYS = int(os.environ.get("RUNNER_STATE_MAX_AGE_DAYS", "90"))
@@ -6452,19 +6454,94 @@ def _verify_repo_on_main_locked():
     return True
 
 
-def _fetch_origin_or_abort():
+def _fetch_failure_state_path() -> str:
+    return os.path.join(STATE_DIR, "fetch-origin-failures.json")
+
+
+def _record_fetch_origin_failure() -> int | None:
+    if DRY_RUN:
+        return 0
+    path = _fetch_failure_state_path()
+    count = 0
+    try:
+        with open(path) as f:
+            count = int((json.load(f) or {}).get("consecutive_failures", 0))
+    except (OSError, ValueError, TypeError, AttributeError):
+        count = 0
+    count += 1
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        with open(path, "w") as f:
+            json.dump({"consecutive_failures": count, "last_failure": datetime.now(timezone.utc).isoformat()}, f)
+    except OSError as e:
+        print(f"[fetch] Could not persist failure count: {e}")
+        return None
+    return count
+
+
+def _clear_fetch_origin_failures() -> None:
+    if DRY_RUN:
+        return
+    try:
+        os.remove(_fetch_failure_state_path())
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        print(f"[fetch] Could not clear failure count: {e}")
+
+
+def _fetch_alert_in_cooldown(subject: str, cooldown_hours: int = 24) -> bool:
+    path = os.path.join(STATE_DIR, f"rate-{_rate_key(subject)}.json")
+    try:
+        with open(path) as f:
+            state = json.load(f) or {}
+        last_sent = state.get("last_sent")
+        if last_sent:
+            last_dt = datetime.fromisoformat(last_sent)
+            return (datetime.now(timezone.utc) - last_dt).total_seconds() < cooldown_hours * 3600
+    except (OSError, ValueError, TypeError, AttributeError):
+        pass
+    return False
+
+
+def _send_fetch_abort_alert(subject: str, failures: int | None, fetch_err: str) -> None:
+    if DRY_RUN or _fetch_alert_in_cooldown(subject):
+        return
+    count_note = "unable to persist streak" if failures is None else f"{failures} consecutive cycles"
+    sent = send_email(
+        subject,
+        f"<h3>Main repository at {html.escape(REPO_PATH)} failed to fetch from origin "
+        f"({count_note}).</h3>"
+        f"<p>Fetch error: {html.escape(fetch_err.strip())}</p>"
+        f"<p>Startup aborted to prevent operating on stale state.</p>"
+    )
+    if sent:
+        try:
+            _should_send_rate_limited(subject, min_consecutive=1)
+        except OSError as e:
+            print(f"[fetch] Could not record rate-limit marker ({e}).")
+
+
+def _abort_failed_origin_fetch(fetch_err: str) -> None:
+    failures = _record_fetch_origin_failure()
+    streak = "unpersisted" if failures is None else f"{failures}/{FETCH_FAILURE_ALERT_THRESHOLD}"
+    print(f"RECOVERY: git fetch origin failed ({fetch_err.strip()}) "
+          f"[consecutive failure {streak}]. Aborting startup.")
+    if failures is None or failures >= FETCH_FAILURE_ALERT_THRESHOLD:
+        _send_fetch_abort_alert("[Runner] Safety Abort: Failed to fetch origin", failures, fetch_err)
+    sys.exit(1)
+
+
+def _fetch_origin_or_abort(*, allow_retry: bool = False) -> bool:
     print("Fetching latest from origin...")
     fetch_code, _, fetch_err = run_cmd(["git", "fetch", "origin"], cwd=REPO_PATH, timeout=NETWORK_GIT_TIMEOUT)
-    if fetch_code != 0:
-        print(f"RECOVERY: git fetch origin failed ({fetch_err.strip()}). Aborting startup.")
-        if _should_send_rate_limited("[Runner] Safety Abort: Failed to fetch origin"):
-            send_email(
-                "[Runner] Safety Abort: Failed to fetch origin",
-                f"<h3>Main repository at {REPO_PATH} failed to fetch from origin.</h3>"
-                f"<p>Fetch error: {fetch_err.strip()}</p>"
-                f"<p>Startup aborted to prevent operating on stale state.</p>"
-            )
-        sys.exit(1)
+    if fetch_code == 0:
+        _clear_fetch_origin_failures()
+        return True
+    if allow_retry and fetch_code != -1:
+        print(f"RECOVERY: git fetch origin failed ({fetch_err.strip()}); retrying in {FETCH_RETRY_DELAY_SECONDS:g}s...")
+        return False
+    _abort_failed_origin_fetch(fetch_err)
 
 
 def _check_ignored_file_collisions():
@@ -6621,14 +6698,28 @@ def _recover_dirty_main_repo(rebase_err: str):
 
 
 def sync_main_repo():
-    with _repo_mutation_lock() as locked:
-        if not locked:
-            print("Main sync deferred: main checkout is busy with another operation.")
-            return False
-        return _sync_main_repo_locked()
+    fetch_failed_once = False
+    for attempt in range(2):
+        with _repo_mutation_lock() as locked:
+            if not locked:
+                print("Main sync deferred: main checkout is busy with another operation.")
+                if fetch_failed_once:
+                    _abort_failed_origin_fetch("could not re-acquire main-checkout lock for fetch retry")
+                return False
+            result = _sync_main_repo_locked(
+                allow_retry=(attempt == 0), abort_on_non_main=fetch_failed_once
+            )
+            if result is not None:
+                return result
+        fetch_failed_once = True
+        # Release the main-checkout lock before sleeping so the retry acquires a
+        # fresh lock window instead of stacking two fetch durations under one lock.
+        if FETCH_RETRY_DELAY_SECONDS > 0:
+            time.sleep(FETCH_RETRY_DELAY_SECONDS)
+    return False
 
 
-def _sync_main_repo_locked():
+def _sync_main_repo_locked(*, allow_retry: bool = False, abort_on_non_main: bool = False):
     # `verify_repo_on_main` normally recovers a checkout left on another branch
     # before this runs, but it defers when the main-checkout lock is busy. Rebasing
     # a feature branch onto origin/main would rewrite that branch's shape, so this
@@ -6636,9 +6727,12 @@ def _sync_main_repo_locked():
     code, branch, _ = run_cmd(["git", "branch", "--show-current"], cwd=REPO_PATH)
     if code != 0 or branch.strip() != "main":
         print(f"Main sync deferred: checkout is on '{branch.strip()}', not main.")
+        if abort_on_non_main:
+            _abort_failed_origin_fetch(f"checkout is on '{branch.strip()}' before fetch retry")
         return False
 
-    _fetch_origin_or_abort()
+    if not _fetch_origin_or_abort(allow_retry=allow_retry):
+        return None
     _check_ignored_file_collisions()
 
     was_clean = _repo_is_clean(REPO_PATH)

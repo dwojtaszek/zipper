@@ -1356,9 +1356,149 @@ class MainRepoRecoveryTests(unittest.TestCase):
             branches = git("branch", "--list", "runner-backup-*")
             self.assertTrue(bool(branches.strip()))
 
-    def test_syncMainRepo_fetchFails_abortsStartup(self):
+    def test_syncMainRepo_fetchFails_suppressesFirstCycleAndAlertsOnConsecutiveCycles(self):
         with self._recovery_env() as (root, repo, publisher, git, module, emails_file):
+            module.FETCH_RETRY_DELAY_SECONDS = 0
             original_run_cmd = module.run_cmd
+            fetch_calls = 0
+
+            def mock_run_cmd(args, cwd=None, timeout=None):
+                nonlocal fetch_calls
+                if args[:3] == ["git", "fetch", "origin"]:
+                    fetch_calls += 1
+                    return 1, "", "fatal: could not read from remote"
+                return original_run_cmd(args, cwd=cwd, timeout=timeout)
+
+            # Cycle 1: retried once after releasing the lock, aborts quietly on single blip.
+            self._assert_sync_aborts(module, mock_run_cmd)
+            self.assertEqual(fetch_calls, 2)
+            self.assertFalse(emails_file.exists())
+
+            # Cycle 2: consecutive failure reaches threshold and sends one Safety Abort alert.
+            self._assert_sync_aborts(module, mock_run_cmd)
+            self.assertEqual(fetch_calls, 4)
+            emails = emails_file.read_text()
+            self.assertIn("Safety Abort", emails)
+            self.assertIn("Failed to fetch origin", emails)
+            self.assertIn("2 consecutive cycles", emails)
+
+            # Cycle 3: persistent outage stays rate-limited to one email per cooldown window.
+            self._assert_sync_aborts(module, mock_run_cmd)
+            self.assertEqual(emails_file.read_text().count("---EMAIL-END---"), 1)
+
+    def test_syncMainRepo_fetchTransientFailureRecoversOnRetry_succeedsAndClearsStreak(self):
+        with self._recovery_env() as (root, repo, publisher, git, module, emails_file):
+            (publisher / "remote-update.txt").write_text("recovered\n")
+            git("add", "remote-update.txt", cwd=publisher)
+            git("commit", "-m", "remote update", cwd=publisher)
+            git("push", "origin", "main", cwd=publisher)
+
+            (root / "state" / "fetch-origin-failures.json").write_text('{"consecutive_failures": 1}')
+            module.FETCH_RETRY_DELAY_SECONDS = 5
+            original_run_cmd = module.run_cmd
+            attempts = 0
+
+            def mock_run_cmd(args, cwd=None, timeout=None):
+                nonlocal attempts
+                if args[:3] == ["git", "fetch", "origin"]:
+                    attempts += 1
+                    if attempts == 1:
+                        return 128, "", "fatal: unable to access 'https://github.com/dwojtaszek/zipper.git/': Failed to connect to github.com:443 after 133778 ms: Could not connect to server"
+                return original_run_cmd(args, cwd=cwd, timeout=timeout)
+
+            with patch.object(module, "run_cmd", side_effect=mock_run_cmd), \
+                    patch.object(module.time, "sleep") as sleep_mock:
+                self.assertTrue(module.sync_main_repo())
+
+            self.assertEqual(attempts, 2)
+            sleep_mock.assert_called_once_with(5)
+            self.assertEqual((repo / "remote-update.txt").read_text(), "recovered\n")
+            self.assertFalse((root / "state" / "fetch-origin-failures.json").exists())
+            self.assertFalse(emails_file.exists())
+
+    def test_syncMainRepo_fetchSucceedsAfterSingleFailure_resetsStreak(self):
+        with self._recovery_env() as (root, repo, publisher, git, module, emails_file):
+            module.FETCH_RETRY_DELAY_SECONDS = 0
+            original_run_cmd = module.run_cmd
+            should_fail = True
+
+            def mock_run_cmd(args, cwd=None, timeout=None):
+                if args[:3] == ["git", "fetch", "origin"] and should_fail:
+                    return 1, "", "fatal: Could not connect to server"
+                return original_run_cmd(args, cwd=cwd, timeout=timeout)
+
+            # First isolated failure aborts without alerting.
+            self._assert_sync_aborts(module, mock_run_cmd)
+            self.assertFalse(emails_file.exists())
+
+            # Next cycle succeeds and resets the consecutive-failure streak.
+            should_fail = False
+            with patch.object(module, "run_cmd", side_effect=mock_run_cmd):
+                self.assertTrue(module.sync_main_repo())
+
+            # A later isolated failure starts at 1/2 again and still does not alert.
+            should_fail = True
+            self._assert_sync_aborts(module, mock_run_cmd)
+            self.assertFalse(emails_file.exists())
+
+    def test_syncMainRepo_fetchTimeout_skipsRetryAndAborts(self):
+        with self._recovery_env() as (root, repo, publisher, git, module, emails_file):
+            module.FETCH_RETRY_DELAY_SECONDS = 5
+            original_run_cmd = module.run_cmd
+            attempts = 0
+
+            def mock_run_cmd(args, cwd=None, timeout=None):
+                nonlocal attempts
+                if args[:3] == ["git", "fetch", "origin"]:
+                    attempts += 1
+                    return -1, "", "Command timed out after 900s: git fetch origin"
+                return original_run_cmd(args, cwd=cwd, timeout=timeout)
+
+            with patch.object(module.time, "sleep") as sleep_mock:
+                self._assert_sync_aborts(module, mock_run_cmd)
+
+            self.assertEqual(attempts, 1)
+            sleep_mock.assert_not_called()
+
+    def test_syncMainRepo_fetchRetryReleasesLockBeforeSleepAndReacquiresFreshLock(self):
+        with self._recovery_env() as (root, repo, publisher, git, module, emails_file):
+            lock_dir = root / "repo-mutation.lock"
+            module.REPO_MUTATION_LOCK_PATH = str(lock_dir)
+            module.FETCH_RETRY_DELAY_SECONDS = 5
+            original_run_cmd = module.run_cmd
+            observed_owners = []
+            sleep_lock_exists = []
+
+            def mock_run_cmd(args, cwd=None, timeout=None):
+                if args[:3] == ["git", "fetch", "origin"]:
+                    observed_owners.append((lock_dir / "owner").read_text())
+                    if len(observed_owners) == 1:
+                        return 1, "", "fatal: Could not connect to server"
+                return original_run_cmd(args, cwd=cwd, timeout=timeout)
+
+            def fake_sleep(seconds):
+                sleep_lock_exists.append(lock_dir.exists())
+
+            with patch.object(module, "run_cmd", side_effect=mock_run_cmd), \
+                    patch.object(module.time, "sleep", side_effect=fake_sleep) as sleep_mock:
+                self.assertTrue(module.sync_main_repo())
+
+            sleep_mock.assert_called_once_with(5)
+            self.assertEqual(sleep_lock_exists, [False], "lock must be released before retry backoff")
+            self.assertEqual(len(observed_owners), 2)
+            self.assertNotEqual(observed_owners[0], observed_owners[1], "retry must acquire a fresh lock")
+            self.assertFalse(lock_dir.exists())
+
+    def test_syncMainRepo_fetchFailureStateAndDirUnwritable_preservesOutageAlertAndExit(self):
+        with self._recovery_env() as (root, repo, publisher, git, module, emails_file):
+            module.FETCH_RETRY_DELAY_SECONDS = 0
+            # Make STATE_DIR itself a regular file path so neither the streak file
+            # nor the rate-limit file can be written.
+            unwritable_state = root / "state-file"
+            unwritable_state.write_text("not a directory")
+            module.STATE_DIR = str(unwritable_state)
+            original_run_cmd = module.run_cmd
+
             def mock_run_cmd(args, cwd=None, timeout=None):
                 if args[:3] == ["git", "fetch", "origin"]:
                     return 1, "", "fatal: could not read from remote"
@@ -1368,7 +1508,80 @@ class MainRepoRecoveryTests(unittest.TestCase):
 
             emails = emails_file.read_text()
             self.assertIn("Safety Abort", emails)
-            self.assertIn("Failed to fetch origin", emails)
+            self.assertIn("unable to persist streak", emails)
+
+    def test_syncMainRepo_fetchAlertDeliveryFails_preservesRateFileAndRetriesNextCycle(self):
+        with self._recovery_env() as (root, repo, publisher, git, module, emails_file):
+            module.FETCH_RETRY_DELAY_SECONDS = 0
+            subject = "[Runner] Safety Abort: Failed to fetch origin"
+            state_dir = root / "state"
+            rate_file = state_dir / f"rate-{module._rate_key(subject)}.json"
+            stale_dt = (module.datetime.now(module.timezone.utc) - module.timedelta(hours=25)).isoformat()
+            rate_file.write_text(json.dumps({"count": 1, "last_sent": stale_dt}))
+            original_run_cmd = module.run_cmd
+
+            def mock_run_cmd(args, cwd=None, timeout=None):
+                if args[:3] == ["git", "fetch", "origin"]:
+                    return 1, "", "fatal: could not read from remote"
+                return original_run_cmd(args, cwd=cwd, timeout=timeout)
+
+            # Cycle 1: quiet single failure.
+            self._assert_sync_aborts(module, mock_run_cmd)
+
+            # Cycle 2: threshold reached while STATE_DIR prevents file deletion/creation
+            # and rate_file itself is writable. Failed send_email must not mutate rate_file.
+            state_dir.chmod(0o555)
+            try:
+                with patch.object(module, "send_email", return_value=False) as send_mock:
+                    self._assert_sync_aborts(module, mock_run_cmd)
+                send_mock.assert_called_once()
+                self.assertEqual(json.loads(rate_file.read_text())["last_sent"], stale_dt)
+            finally:
+                state_dir.chmod(0o755)
+
+            # Cycle 3: mailer and permissions recover -> Safety Abort alert is delivered once.
+            self._assert_sync_aborts(module, mock_run_cmd)
+            self.assertIn("Safety Abort", emails_file.read_text())
+
+    def test_syncMainRepo_fetchRetryLockBusy_abortsStartupInsteadOfReturningFalse(self):
+        with self._recovery_env() as (root, repo, publisher, git, module, emails_file):
+            module.FETCH_RETRY_DELAY_SECONDS = 0
+            original_run_cmd = module.run_cmd
+
+            def mock_run_cmd(args, cwd=None, timeout=None):
+                if args[:3] == ["git", "fetch", "origin"]:
+                    return 1, "", "fatal: could not read from remote"
+                return original_run_cmd(args, cwd=cwd, timeout=timeout)
+
+            @contextlib.contextmanager
+            def lock_busy_on_retry():
+                yield lock_attempts.pop(0)
+
+            lock_attempts = [True, False]
+            with patch.object(module, "_repo_mutation_lock", side_effect=lambda: lock_busy_on_retry()):
+                self._assert_sync_aborts(module, mock_run_cmd)
+
+            streak = json.loads((root / "state" / "fetch-origin-failures.json").read_text())
+            self.assertEqual(streak["consecutive_failures"], 1)
+
+    def test_syncMainRepo_fetchRetryBranchChanged_abortsStartupInsteadOfReturningFalse(self):
+        with self._recovery_env() as (root, repo, publisher, git, module, emails_file):
+            module.FETCH_RETRY_DELAY_SECONDS = 5
+            original_run_cmd = module.run_cmd
+
+            def mock_run_cmd(args, cwd=None, timeout=None):
+                if args[:3] == ["git", "fetch", "origin"]:
+                    return 1, "", "fatal: could not read from remote"
+                return original_run_cmd(args, cwd=cwd, timeout=timeout)
+
+            def switch_branch_during_sleep(_seconds):
+                git("checkout", "--quiet", "-b", "other")
+
+            with patch.object(module.time, "sleep", side_effect=switch_branch_during_sleep):
+                self._assert_sync_aborts(module, mock_run_cmd)
+
+            streak = json.loads((root / "state" / "fetch-origin-failures.json").read_text())
+            self.assertEqual(streak["consecutive_failures"], 1)
 
     def test_syncMainRepo_cleanIgnoredFileCollision_abortsRecovery(self):
         with self._recovery_env() as (root, repo, publisher, git, module, emails_file):
