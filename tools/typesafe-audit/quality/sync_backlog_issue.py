@@ -102,6 +102,9 @@ def _gh_json(*args: str) -> list[dict]:
     return data if isinstance(data, list) else []
 
 
+TRUSTED_BOT_LOGINS = frozenset({"github-actions[bot]", "app/github-actions"})
+
+
 def find_existing_backlog_issue() -> int | None:
     issues = _gh_json(
         "issue",
@@ -113,14 +116,17 @@ def find_existing_backlog_issue() -> int | None:
         "--limit",
         "50",
         "--json",
-        "number,title,body",
+        "number,title,body,author",
     )
-    matches = [
-        int(issue["number"])
-        for issue in issues
-        if issue.get("title") == BACKLOG_TITLE
-        and (issue.get("body") or "").lstrip().startswith(BACKLOG_MARKER)
-    ]
+    matches = []
+    for issue in issues:
+        author_login = str((issue.get("author") or {}).get("login") or "")
+        if (
+            author_login in TRUSTED_BOT_LOGINS
+            and issue.get("title") == BACKLOG_TITLE
+            and (issue.get("body") or "").lstrip().startswith(BACKLOG_MARKER)
+        ):
+            matches.append(int(issue["number"]))
     return min(matches) if matches else None
 
 

@@ -125,12 +125,13 @@ def question_key(qid: str) -> str:
 
 
 def _valid_confidence(confidence: object) -> bool:
-    return (
-        isinstance(confidence, (int, float))
-        and not isinstance(confidence, bool)
-        and math.isfinite(float(confidence))
-        and 0.0 <= float(confidence) <= 1.0
-    )
+    if not isinstance(confidence, (int, float)) or isinstance(confidence, bool):
+        return False
+    try:
+        value = float(confidence)
+    except OverflowError:
+        return False
+    return math.isfinite(value) and 0.0 <= value <= 1.0
 
 
 def status_for(value: str, confidence: object, policy: dict) -> str:

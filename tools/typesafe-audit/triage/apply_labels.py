@@ -63,12 +63,13 @@ TRACKER_TITLE_PREFIXES = ("roadmap:", "[quality backlog]")
 
 
 def _valid_confidence(conf: object) -> bool:
-    return (
-        isinstance(conf, (int, float))
-        and not isinstance(conf, bool)
-        and math.isfinite(float(conf))
-        and 0.0 <= float(conf) <= 1.0
-    )
+    if not isinstance(conf, (int, float)) or isinstance(conf, bool):
+        return False
+    try:
+        value = float(conf)
+    except OverflowError:
+        return False
+    return math.isfinite(value) and 0.0 <= value <= 1.0
 
 
 def _select_type_label(judgments: dict, existing_lower: set[str], threshold: float) -> str | None:

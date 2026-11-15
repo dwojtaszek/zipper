@@ -275,6 +275,19 @@ class TestWorkflowValidator(unittest.TestCase):
             validate_permissions(wf)
         self.assertIn("issues", str(ctx.exception))
 
+    def test_unmatched_quote_in_step_does_not_crash_validator(self):
+        wf = {
+            "permissions": {"contents": "read"},
+            "jobs": {
+                "triage": {
+                    "permissions": {"contents": "read", "issues": "write"},
+                    "steps": [{"run": 'echo setup; python3 tools/typesafe-audit/triage/run_check.py "unclosed'}],
+                }
+            },
+        }
+        with self.assertRaises(WorkflowValidationError):
+            validate_permissions(wf)
+
 
 if __name__ == "__main__":
     unittest.main()

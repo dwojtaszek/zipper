@@ -331,7 +331,7 @@ class ApplyLabelsTests(unittest.TestCase):
             mock_apply.assert_not_called()
 
     def test_rejects_boolean_and_non_finite_confidence(self):
-        for bad_conf in (True, False, float("nan"), float("inf"), 1.5, -0.1):
+        for bad_conf in (True, False, float("nan"), float("inf"), 1.5, -0.1, 10**400):
             self.assertEqual(self.run_check.status_for("bug", bad_conf, self.policy), "needs-human-review")
             issue = {"number": 201, "author": "dwojtaszek", "title": "T", "labels": []}
             report = {"results": [{"issue": 201, "judgments": {

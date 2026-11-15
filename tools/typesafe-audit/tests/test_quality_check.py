@@ -1268,9 +1268,10 @@ class SyncBacklogIssueTests(unittest.TestCase):
 
     def test_find_existing_backlog_issue_requires_exact_title_and_leading_marker(self):
         fake_issues = [
-            {"number": 99, "title": "Discussion quoting marker", "body": f"See {self.sync.BACKLOG_MARKER}"},
-            {"number": 100, "title": self.sync.BACKLOG_TITLE, "body": "no marker"},
-            {"number": 101, "title": self.sync.BACKLOG_TITLE, "body": f"{self.sync.BACKLOG_MARKER}\n## Backlog"},
+            {"number": 98, "title": self.sync.BACKLOG_TITLE, "body": f"{self.sync.BACKLOG_MARKER}\nspoof", "author": {"login": "random-user"}},
+            {"number": 99, "title": "Discussion quoting marker", "body": f"See {self.sync.BACKLOG_MARKER}", "author": {"login": "github-actions[bot]"}},
+            {"number": 100, "title": self.sync.BACKLOG_TITLE, "body": "no marker", "author": {"login": "github-actions[bot]"}},
+            {"number": 101, "title": self.sync.BACKLOG_TITLE, "body": f"{self.sync.BACKLOG_MARKER}\n## Backlog", "author": {"login": "github-actions[bot]"}},
         ]
         with mock.patch.object(self.sync, "_gh_json", return_value=fake_issues):
             self.assertEqual(self.sync.find_existing_backlog_issue(), 101)
