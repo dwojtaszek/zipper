@@ -24,7 +24,8 @@ if not defined PYCMD (
 )
 set "PYTHONIOENCODING=utf-8"
 
-set WORKFLOW_FILE=%SCRIPT_DIR%..\.github\workflows\typesafe-audit.yml
+set WORKFLOW_DIR=%SCRIPT_DIR%..\.github\workflows
+set WORKFLOW_FILE=%WORKFLOW_DIR%\typesafe-quality-audit.yml
 
 REM --- Part 1: Python unit tests (no network) ---
 
@@ -194,28 +195,18 @@ call :check_contains "weekly schedule trigger" "^  schedule:"
 if errorlevel 1 exit /b 1
 call :check_contains "manual dispatch trigger" "workflow_dispatch"
 if errorlevel 1 exit /b 1
-call :check_contains "path-filtered PR trigger" "^    paths:"
-if errorlevel 1 exit /b 1
 call :check_contains "TYPESAFE_API_KEY secret wiring" "TYPESAFE_API_KEY"
-if errorlevel 1 exit /b 1
-call :check_contains "fork guard" "github\.event\.pull_request\.head\.repo\.fork"
 if errorlevel 1 exit /b 1
 call :check_contains "secret-availability condition" "steps\.secret\.outputs\.available"
 if errorlevel 1 exit /b 1
 
-REM Negative probe: verify that a workflow fixture without the fork guard or
-REM secret-availability condition fails the strengthened assertions, even if it
-REM contains bare "secret" tokens.
+REM Negative probe: verify that a workflow fixture without the secret-availability
+REM condition fails the strengthened assertion, even if it contains bare "secret" tokens.
 set NO_GUARD_FIXTURE=%TEMP_DIR%\workflow-no-guard.yml
-%PYCMD% -c "import pathlib, re, sys; text = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8', errors='replace'); lines = [l for l in text.splitlines() if not re.search(r'github\.event\.pull_request\.head\.repo\.fork|steps\.secret\.outputs\.available', l)]; pathlib.Path(sys.argv[2]).write_text('\n'.join(lines) + '\n', encoding='utf-8')" "%WORKFLOW_FILE%" "%NO_GUARD_FIXTURE%"
+%PYCMD% -c "import pathlib, re, sys; text = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8', errors='replace'); lines = [l for l in text.splitlines() if not re.search(r'steps\.secret\.outputs\.available', l)]; pathlib.Path(sys.argv[2]).write_text('\n'.join(lines) + '\n', encoding='utf-8')" "%WORKFLOW_FILE%" "%NO_GUARD_FIXTURE%"
 %PYCMD% -c "import pathlib, sys; sys.exit(0 if 'secret' in pathlib.Path(sys.argv[1]).read_text(encoding='utf-8', errors='replace') else 1)" "%NO_GUARD_FIXTURE%"
 if errorlevel 1 (
     echo [ ERROR ] Negative probe fixture must contain bare 'secret' token.
-    exit /b 1
-)
-call :check_contains "fork guard" "github\.event\.pull_request\.head\.repo\.fork" "%NO_GUARD_FIXTURE%" >nul 2>&1
-if not errorlevel 1 (
-    echo [ ERROR ] Negative probe failed: fork guard unexpectedly passed on fixture without guards.
     exit /b 1
 )
 call :check_contains "secret-availability condition" "steps\.secret\.outputs\.available" "%NO_GUARD_FIXTURE%" >nul 2>&1
@@ -225,17 +216,24 @@ if not errorlevel 1 (
 )
 echo [ SUCCESS ] Workflow check: negative probe (fixture without guards fails)
 
-call :check_action_pins
-if errorlevel 1 exit /b 1
+for %%W in ("%WORKFLOW_DIR%\typesafe-*.yml") do (
+    set "PIN_TARGET=%%~fW"
+    call :check_action_pins
+    if errorlevel 1 exit /b 1
+)
 
-REM Advisory: the runner must not run in --strict (blocking) mode in CI. Both
-REM token orders are matched, and the dot is escaped so runnerXpy cannot match.
-%PYCMD% -c "import pathlib, re, sys; text = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8', errors='replace'); matches = [l for l in text.splitlines() if re.search(r'runner\.py.*--strict|--strict.*runner\.py', l, re.IGNORECASE)]; [print(l, file=sys.stderr) for l in matches]; sys.exit(1 if matches else 0)" "%WORKFLOW_FILE%" >"%WORKFLOW_CHECK_LOG%" 2>&1
-if not errorlevel 1 goto :advisory_ok
-echo [ ERROR ] Workflow check failed: audit must stay advisory ^(no --strict^)
-type "%WORKFLOW_CHECK_LOG%" >&2
-exit /b 1
-:advisory_ok
+REM Advisory: runner.py / run_check.py must not run in --strict (blocking) mode in CI. Both
+REM token orders are matched across all typesafe-*.yml workflows.
+for %%W in ("%WORKFLOW_DIR%\typesafe-*.yml") do (
+    %PYCMD% -c "import pathlib, re, sys; text = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8', errors='replace'); matches = [l for l in text.splitlines() if re.search(r'(?:runner|run_check)\.py.*--strict|--strict.*(?:runner|run_check)\.py', l, re.IGNORECASE)]; [print(l, file=sys.stderr) for l in matches]; sys.exit(1 if matches else 0)" "%%~fW" >"%WORKFLOW_CHECK_LOG%" 2>&1
+    if not errorlevel 1 (
+        rem advisory ok
+    ) else (
+        echo [ ERROR ] Workflow check failed: %%~nxW must stay advisory ^(no --strict^)
+        type "%WORKFLOW_CHECK_LOG%" >&2
+        exit /b 1
+    )
+)
 echo [ SUCCESS ] Workflow check: advisory (no --strict)
 
 REM YAML-aware workflow validation (validates all typesafe-*.yml workflows)
@@ -280,7 +278,7 @@ exit /b 0
 
 :check_action_pins
 REM Action references must be pinned to a full 40-char commit SHA (#955).
-%PYCMD% -c "import pathlib, re, sys; text = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8', errors='replace'); quote = chr(34); uses_lines = [l.split('#')[0].strip() for l in text.splitlines() if re.search(r'[' + quote + r'\x27]?uses[' + quote + r'\x27]?\s*:', l)]; action_lines = [l for l in uses_lines if l]; (print('[ ERROR ] Workflow check failed: no action uses lines found.', file=sys.stderr), sys.exit(1)) if not action_lines else None; unpinned = [l for l in action_lines if not re.search(r'@[0-9a-f]{40}\s*$', l, re.I)]; (print(f'[ ERROR ] Workflow check failed: action must be pinned to a full commit SHA: {unpinned[0]}', file=sys.stderr), sys.exit(1)) if unpinned else sys.exit(0)" "%WORKFLOW_FILE%" >"%ACTION_USES_LOG%" 2>&1
+%PYCMD% -c "import pathlib, re, sys; text = pathlib.Path(sys.argv[1]).read_text(encoding='utf-8', errors='replace'); quote = chr(34); uses_lines = [l.split('#')[0].strip() for l in text.splitlines() if re.search(r'[' + quote + r'\x27]?uses[' + quote + r'\x27]?\s*:', l)]; action_lines = [l for l in uses_lines if l]; (print('[ ERROR ] Workflow check failed: no action uses lines found.', file=sys.stderr), sys.exit(1)) if not action_lines else None; unpinned = [l for l in action_lines if not re.search(r'@[0-9a-f]{40}\s*$', l, re.I)]; (print(f'[ ERROR ] Workflow check failed: action must be pinned to a full commit SHA: {unpinned[0]}', file=sys.stderr), sys.exit(1)) if unpinned else sys.exit(0)" "%PIN_TARGET%" >"%ACTION_USES_LOG%" 2>&1
 if not errorlevel 1 goto :action_pins_ok
 type "%ACTION_USES_LOG%" >&2
 exit /b 1

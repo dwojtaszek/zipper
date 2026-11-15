@@ -22,7 +22,8 @@ function print_error() { echo -e "\033[41m[ ERROR ]\033[0m $1" >&2; }
 cleanup() { rm -rf "$TEMP_DIR"; }
 trap cleanup EXIT
 
-WORKFLOW_FILE="$SCRIPT_DIR/../.github/workflows/typesafe-audit.yml"
+WORKFLOW_DIR="$SCRIPT_DIR/../.github/workflows"
+WORKFLOW_FILE="$WORKFLOW_DIR/typesafe-quality-audit.yml"
 
 # --- Part 1: Python unit tests (no network) ---
 
@@ -159,22 +160,15 @@ check_contains "concurrency cancellation" "^concurrency:"
 check_contains "explicit job timeout" "timeout-minutes:"
 check_contains "weekly schedule trigger" "^  schedule:"
 check_contains "manual dispatch trigger" "workflow_dispatch"
-check_contains "path-filtered PR trigger" "^    paths:"
 check_contains "TYPESAFE_API_KEY secret wiring" "TYPESAFE_API_KEY"
-check_contains "fork guard" "github\.event\.pull_request\.head\.repo\.fork"
 check_contains "secret-availability condition" "steps\.secret\.outputs\.available"
 
-# Negative probe: verify that a workflow fixture without the fork guard or
-# secret-availability condition fails the strengthened assertions, even if it
-# contains bare "secret" tokens.
+# Negative probe: verify that a workflow fixture without the secret-availability
+# condition fails the strengthened assertion, even if it contains bare "secret" tokens.
 NO_GUARD_FIXTURE="$TEMP_DIR/workflow-no-guard.yml"
-grep -vE 'github\.event\.pull_request\.head\.repo\.fork|steps\.secret\.outputs\.available' "$WORKFLOW_FILE" > "$NO_GUARD_FIXTURE"
+grep -vE 'steps\.secret\.outputs\.available' "$WORKFLOW_FILE" > "$NO_GUARD_FIXTURE"
 if ! grep -q "secret" "$NO_GUARD_FIXTURE"; then
     print_error "Negative probe fixture must contain bare 'secret' token"
-    exit 1
-fi
-if (check_contains "fork guard" "github\.event\.pull_request\.head\.repo\.fork" "$NO_GUARD_FIXTURE") 2>/dev/null; then
-    print_error "Negative probe failed: fork guard unexpectedly passed on fixture without guards"
     exit 1
 fi
 if (check_contains "secret-availability condition" "steps\.secret\.outputs\.available" "$NO_GUARD_FIXTURE") 2>/dev/null; then
@@ -184,30 +178,34 @@ fi
 print_success "Workflow check: negative probe (fixture without guards fails)"
 
 
-# Every action reference must be pinned to a full 40-char commit SHA. Keys may be
-# quoted ('uses': / "uses":), comments are stripped so a SHA inside a comment
+# Every action reference in typesafe-*.yml must be pinned to a full 40-char commit SHA.
+# Keys may be quoted ('uses': / "uses":), comments are stripped so a SHA inside a comment
 # cannot pose as a pin, and the result is read in full (no `grep -q`, which under
 # `pipefail` can turn a violation into a SIGPIPE success). A workflow with no
 # action lines at all must fail rather than pass vacuously.
-if [[ "$(grep -cE "['\"]?uses['\"]?:" "$WORKFLOW_FILE" || true)" -eq 0 ]]; then
-    print_error "Workflow check failed: no action uses lines found"
-    exit 1
-fi
-unpinned_actions=$(grep -E "['\"]?uses['\"]?:" "$WORKFLOW_FILE" | grep -vE '^[[:space:]]*#' | sed 's/#.*//' | grep -vE '@[0-9a-f]{40}[[:space:]]*$' || true)
-if [[ -n "$unpinned_actions" ]]; then
-    print_error "Workflow check failed: every action must be pinned to a full commit SHA"
-    exit 1
-fi
+for wf in "$WORKFLOW_DIR"/typesafe-*.yml; do
+    if [[ "$(grep -cE "['\"]?uses['\"]?:" "$wf" || true)" -eq 0 ]]; then
+        print_error "Workflow check failed: no action uses lines found in $wf"
+        exit 1
+    fi
+    unpinned_actions=$(grep -E "['\"]?uses['\"]?:" "$wf" | grep -vE '^[[:space:]]*#' | sed 's/#.*//' | grep -vE '@[0-9a-f]{40}[[:space:]]*$' || true)
+    if [[ -n "$unpinned_actions" ]]; then
+        print_error "Workflow check failed: every action in $wf must be pinned to a full commit SHA"
+        exit 1
+    fi
+done
 print_success "Workflow check: all actions pinned to full commit SHAs"
-# Advisory: the runner must not run in --strict (blocking) mode in CI. Matched
-# case-insensitively and without `grep -q` for the same pipefail reason above.
-if strict_lines=$(grep -E "runner\.py" "$WORKFLOW_FILE" | grep -i -- "--strict"); then
-    print_error "Workflow check failed: audit must stay advisory (no --strict)"
-    exit 1
-elif [[ $? -gt 1 ]]; then
-    print_error "Workflow check failed: advisory mode could not be checked"
-    exit 1
-fi
+# Advisory: runner.py / run_check.py must not run in --strict (blocking) mode in CI.
+# Matched case-insensitively and without `grep -q` for the same pipefail reason above.
+for wf in "$WORKFLOW_DIR"/typesafe-*.yml; do
+    if strict_lines=$(grep -E "(runner|run_check)\.py" "$wf" | grep -i -- "--strict"); then
+        print_error "Workflow check failed: $wf must stay advisory (no --strict)"
+        exit 1
+    elif [[ $? -gt 1 ]]; then
+        print_error "Workflow check failed: advisory mode could not be checked for $wf"
+        exit 1
+    fi
+done
 print_success "Workflow check: advisory (no --strict)"
 
 # YAML-aware workflow validation (validates all typesafe-*.yml workflows)

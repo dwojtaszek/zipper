@@ -1,12 +1,12 @@
 # TypeSafe quality prioritization (#959): coverage gaps + surviving mutants.
-# Advisory ranking only — deterministic tools (coverlet, Stryker) stay the
-# source of truth for coverage and survivor status; TypeSafe never decides
-# those. Scheduled weekly and manual dispatch; never on PRs.
+# Deterministic tools (coverlet, Stryker) stay the source of truth for
+# coverage and survivor status; TypeSafe ranks risk weights and syncs a single
+# pinned quality backlog issue on schedule (or opt-in manual dispatch). Never on PRs.
 name: typesafe-quality-audit
 
 on:
   schedule:
-    # Weekly full run, Mondays 08:00 UTC (after the requirements full audit).
+    # Weekly full run, Mondays 08:00 UTC.
     - cron: "0 8 * * 1"
   workflow_dispatch:
     inputs:
@@ -18,6 +18,11 @@ on:
         description: "Per-shard mutation timeout in minutes"
         required: false
         default: "120"
+      update_issue:
+        description: "Create or update the pinned quality backlog issue"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -269,4 +274,44 @@ jobs:
             results/typesafe-quality/assurance-result.json
           retention-days: 7
           if-no-files-found: warn
+
+  quality-backlog-issue:
+    needs: quality-audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: >-
+      needs.quality-audit.result == 'success' &&
+      (github.event_name == 'schedule' ||
+       (github.event_name == 'workflow_dispatch' && inputs.update_issue == true))
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Download quality shard reports
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          pattern: typesafe-quality-report-shard-*
+          path: results/downloaded
+          merge-multiple: false
+
+      - name: Sync quality backlog issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT_SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ ! -d results/downloaded ]; then
+            echo "No downloaded shard artifacts found; skipping backlog sync."
+            exit 0
+          fi
+          python3 tools/typesafe-audit/quality/sync_backlog_issue.py \
+            --reports-dir results/downloaded \
+            --expected-shards 2 \
+            --sha "$COMMIT_SHA" \
+            --run-url "$RUN_URL" \
+            --summary-out "$GITHUB_STEP_SUMMARY"
 

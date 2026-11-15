@@ -5,6 +5,8 @@
   "labels": ["bug", "testing", "requirements", "documentation", "performance", "security", "refactor", "enhancement", "P0", "P1", "P2", "P3"],
   "duplicate_values": ["duplicate", "related", "unrelated", "insufficient-evidence"],
   "confidence_threshold": 0.7,
+  "label_confidence_threshold": 0.85,
+  "min_candidate_score": 3,
   "max_issue_chars": 8192,
   "max_state_bytes": 131072,
   "max_candidates": 5,

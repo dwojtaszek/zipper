@@ -15,6 +15,17 @@ from pathlib import Path
 
 _REQ_ID = re.compile(r"\bREQ(?:_E)?-\d{3,4}\b")
 _PATH = re.compile(r"\b[\w.-]+(?:/[\w.-]+)+\.(?:cs|py|md|yml|sh|bat|json)\b")
+_STOPWORDS = frozenset({
+    "about", "after", "also", "been", "before", "being", "between", "both",
+    "change", "changed", "changes", "check", "checks", "code", "could",
+    "does", "each", "file", "files", "from", "have", "here", "into", "issue",
+    "issues", "just", "like", "look", "make", "more", "most", "need", "note",
+    "only", "other", "output", "over", "pull", "report", "reported", "request",
+    "same", "should", "some", "such", "test", "tests", "than", "that", "their",
+    "them", "then", "there", "these", "they", "this", "those", "under", "used",
+    "using", "very", "want", "were", "what", "when", "where", "which", "while",
+    "will", "with", "without", "work", "would",
+})
 _MARKUP_PATTERNS = (
     (re.compile(r"<!--.*?-->", re.DOTALL), ""),
     (re.compile(r"!?\[([^\]]*)\]\([^)]*\)"), r"\1"),
@@ -33,29 +44,39 @@ def strip_markup(text: str, max_chars: int) -> str:
 
 
 def extract_keywords(text: str) -> list[str]:
-    """REQ IDs, file paths, and lowercase word tokens (>=4 chars), in order."""
+    """REQ IDs, file paths, and non-stopword lowercase tokens (>=4 chars), in order."""
     keywords: list[str] = []
     for match in _REQ_ID.findall(text or ""):
-        keywords.append(match)
+        if match not in keywords:
+            keywords.append(match)
     for match in _PATH.findall(text or ""):
-        keywords.append(match)
+        if match not in keywords:
+            keywords.append(match)
     for word in re.findall(r"[a-z_]{4,}", (text or "").lower()):
-        if word not in keywords:
+        if word not in _STOPWORDS and word not in keywords:
             keywords.append(word)
     return keywords
 
 
-def search_candidates(issue: dict, corpus: list[dict], max_candidates: int) -> list[dict]:
-    """Deterministic keyword-overlap ranking over open issues."""
+def _keyword_weight(token: str) -> int:
+    if _REQ_ID.fullmatch(token) or _PATH.fullmatch(token):
+        return 3
+    return 1
+
+
+def search_candidates(issue: dict, corpus: list[dict], max_candidates: int, min_score: int = 3) -> list[dict]:
+    """Deterministic weighted keyword-overlap ranking over open issues."""
     query = set(extract_keywords(f"{issue.get('title', '')} {issue.get('body', '')}"))
     scored = []
     for other in corpus:
         if other.get("number") == issue.get("number"):
             continue
-        overlap = len(query & set(extract_keywords(f"{other.get('title', '')} {other.get('body', '')}")))
-        scored.append((overlap, other.get("number", 0), other))
+        shared = query & set(extract_keywords(f"{other.get('title', '')} {other.get('body', '')}"))
+        overlap = sum(_keyword_weight(token) for token in shared)
+        if overlap >= min_score:
+            scored.append((overlap, other.get("number", 0), other))
     scored.sort(key=lambda item: (-item[0], item[1]))
-    return [dict(item[2], score=item[0]) for item in scored[:max_candidates] if item[0] > 0]
+    return [dict(item[2], score=item[0]) for item in scored[:max_candidates]]
 
 
 def allowed_sets(policy: dict, req_ids: list[str]) -> dict:

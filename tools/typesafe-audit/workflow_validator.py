@@ -10,6 +10,7 @@ Validates:
 """
 
 import os
+import re
 import shlex
 import sys
 
@@ -145,6 +146,37 @@ def _require_mapping(obj: object, name: str) -> dict:
     return obj
 
 
+def _job_executes_runner(job_def: dict) -> bool:
+    steps = job_def.get("steps", [])
+    if not isinstance(steps, list):
+        return False
+    for step in steps:
+        if isinstance(step, dict) and isinstance(step.get("run"), str) and _step_executes_runner(step["run"]):
+            return True
+    return False
+
+
+def _validate_job_permissions(
+    job_name: str, job_perms: object, allowed_job_write_scopes: set[str], runs_typesafe: bool
+) -> None:
+    if isinstance(job_perms, str):
+        if "write" in job_perms.lower():
+            raise WorkflowValidationError(f"Job '{job_name}' overrides permissions with write: {job_perms}")
+        return
+    if not isinstance(job_perms, dict):
+        return
+    if "contents" in job_perms and str(job_perms["contents"]).lower() != "read":
+        raise WorkflowValidationError(
+            f"Job '{job_name}' contents permission must remain 'read', got: {job_perms['contents']}"
+        )
+    for scope, level in job_perms.items():
+        level_s = str(level).lower()
+        if "write" in level_s and (runs_typesafe or scope not in allowed_job_write_scopes or level_s != "write"):
+            raise WorkflowValidationError(
+                f"Job '{job_name}' overrides '{scope}' permission with write: {level}"
+            )
+
+
 def validate_permissions(workflow: dict) -> None:
     """Validate that workflow has least-privilege permissions without write overrides."""
     _require_mapping(workflow, "Workflow root")
@@ -163,19 +195,12 @@ def validate_permissions(workflow: dict) -> None:
             raise WorkflowValidationError(f"Top-level contents permission must be 'read', got: {top_permissions.get('contents')}")
 
     jobs = _require_mapping(workflow.get("jobs", {}), "Jobs section")
+    allowed_job_write_scopes = {"issues"}
     for job_name, job_def in jobs.items():
-        if not isinstance(job_def, dict):
-            continue
-        job_perms = job_def.get("permissions")
-        if not job_perms:
-            continue
-        if isinstance(job_perms, str):
-            if "write" in job_perms.lower():
-                raise WorkflowValidationError(f"Job '{job_name}' overrides permissions with write: {job_perms}")
-        elif isinstance(job_perms, dict):
-            for scope, level in job_perms.items():
-                if str(level).lower() == "write" or "write" in str(level).lower():
-                    raise WorkflowValidationError(f"Job '{job_name}' overrides '{scope}' permission with write: {level}")
+        if isinstance(job_def, dict) and job_def.get("permissions"):
+            _validate_job_permissions(
+                job_name, job_def["permissions"], allowed_job_write_scopes, _job_executes_runner(job_def)
+            )
 
 
 def _extract_commands(run_script: str) -> list[str]:
@@ -195,24 +220,45 @@ def _extract_commands(run_script: str) -> list[str]:
     return reconstructed_lines
 
 
+def _split_shell_subcommands(tokens: list[str]) -> list[list[str]]:
+    separators = {";", "&&", "||", "|", "&"}
+    subcommands: list[list[str]] = []
+    current: list[str] = []
+    for tok in tokens:
+        if tok in separators:
+            if current:
+                subcommands.append(current)
+                current = []
+        else:
+            current.append(tok)
+    if current:
+        subcommands.append(current)
+    return subcommands
+
+
+def _tokenize_shell(cmd: str) -> list[str]:
+    try:
+        lexer = shlex.shlex(cmd, posix=True, punctuation_chars=";&|")
+        return list(lexer)
+    except ValueError:
+        return re.findall(r"&&|\|\||[;&|]|[^\s;&|]+", cmd)
+
+
 def _executes_runner(tokens: list[str]) -> bool:
-    if not tokens:
-        return False
-    if tokens[0].endswith("runner.py") or tokens[0].endswith("run_check.py"):
-        return True
-    first_cmd = os.path.basename(tokens[0])
-    if first_cmd in ("echo", "printf", "cat", "grep", "sed", "awk"):
-        return False
-    return any(t.endswith("runner.py") or t.endswith("run_check.py") for t in tokens)
+    for sub in _split_shell_subcommands(tokens):
+        if sub[0].endswith("runner.py") or sub[0].endswith("run_check.py"):
+            return True
+        first_cmd = os.path.basename(sub[0])
+        if first_cmd in ("echo", "printf", "cat", "grep", "sed", "awk"):
+            continue
+        if any(t.endswith("runner.py") or t.endswith("run_check.py") for t in sub):
+            return True
+    return False
 
 
 def _step_executes_runner(run_script: str) -> bool:
     for cmd in _extract_commands(run_script):
-        try:
-            tokens = shlex.split(cmd)
-        except ValueError:
-            tokens = cmd.split()
-        if _executes_runner(tokens):
+        if _executes_runner(_tokenize_shell(cmd)):
             return True
     return False
 
@@ -258,14 +304,9 @@ def validate_advisory_mode(workflow: dict) -> None:
                 continue
 
             for line in _extract_commands(run_cmd):
-                try:
-                    tokens = shlex.split(line)
-                except ValueError:
-                    tokens = line.split()
-
-                if _executes_runner(tokens):
-                    lower_tokens = [t.lower() for t in tokens]
-                    if "--strict" in lower_tokens:
+                tokens = _tokenize_shell(line)
+                for sub in _split_shell_subcommands(tokens):
+                    if _executes_runner(sub) and "--strict" in [t.lower() for t in sub]:
                         raise WorkflowValidationError(
                             f"In job '{job_name}', step '{step.get('name', 'unnamed')}': "
                             "runner.py must stay advisory (no --strict)"
@@ -904,7 +945,7 @@ def main() -> int:
                 if f.startswith("typesafe-") and f.endswith(".yml")
             ])
         else:
-            workflow_paths = [os.path.join(workflows_dir, "typesafe-audit.yml")]
+            workflow_paths = [os.path.join(workflows_dir, "typesafe-quality-audit.yml")]
 
     all_errors = []
     for workflow_path in workflow_paths:

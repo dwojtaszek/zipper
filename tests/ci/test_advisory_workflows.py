@@ -69,7 +69,7 @@ class AdvisoryWorkflowExitClassificationTests(unittest.TestCase):
         for wf_text, step_name in [
             (self.quality_wf_text, "Run TypeSafe quality ranking (advisory)"),
             (self.quality_wf_text, "Mutation testing shard (Phase 2)"),
-            (self.triage_wf_text, "Run TypeSafe triage (dry run, advisory)"),
+            (self.triage_wf_text, "Run TypeSafe triage (advisory)"),
         ]:
             with self.subTest(step=step_name):
                 fallback = self._extract_step_run_fallback(wf_text, step_name)
@@ -380,8 +380,8 @@ class AdvisoryWorkflowExitClassificationTests(unittest.TestCase):
     @unittest.skipIf(os.name == "nt" or shutil.which("bash") is None, "POSIX bash execution boundary")
     def test_issue_triage_step_exit_classification_under_bash_e(self):
         """Issue triage step must handle exit codes 0, 2, and 3 correctly under bash -eo pipefail."""
-        step_run = self._get_step_run(self.triage_wf_text, "Run TypeSafe triage (dry run, advisory)")
-        self.assertTrue(step_run, "Could not locate 'Run TypeSafe triage (dry run, advisory)' step script")
+        step_run = self._get_step_run(self.triage_wf_text, "Run TypeSafe triage (advisory)")
+        self.assertTrue(step_run, "Could not locate 'Run TypeSafe triage (advisory)' step script")
         self._assert_advisory_exit_classification(
             step_run, "Issue triage unavailable (remote failure; advisory)"
         )
