@@ -70,12 +70,28 @@ class CheckComplexityTests(unittest.TestCase):
         source = f'public class Sample\n{{\n    public static string Verbatim()\n    {{\n        return @"\n{if_lines}\n";\n    }}\n}}\n'
         self.assertEqual(self.mod.check_csharp_source("Sample.cs", source, None, 15), [])
 
-    def test_python_match_arms_count_toward_complexity(self):
+    def test_python_match_follows_sonar_cognitive_complexity(self):
+        # Flat dispatch match scores 1 under SonarCloud S3776 regardless of arm count,
+        # whereas nested match inside conditionals/loops accumulates 1 + nesting.
         cases = "\n".join(f"        case {i}:\n            return {i}" for i in range(16))
-        source = f"def matcher(x):\n    match x:\n{cases}\n        case _:\n            return -1\n"
-        findings = self.mod.check_python_source("sample.py", source, None, 15)
+        flat_source = f"def matcher(x):\n    match x:\n{cases}\n        case _:\n            return -1\n"
+        self.assertEqual(self.mod.check_python_source("sample.py", flat_source, None, 15), [])
+
+        nested_match = (
+            "def nested_matcher(items):\n"
+            "    for x in items:\n"           # +1 (nesting=0)
+            "        if x:\n"                 # +2 (nesting=1)
+            "            match x:\n"          # +3 (nesting=2)
+            "                case y if y:\n"  # body at nesting=3
+            "                    for z in y:\n"  # +4 (nesting=3)
+            "                        if z:\n"    # +5 (nesting=4)
+            "                            if z > 1:\n"  # +6 (nesting=5)
+            "                                return z\n"
+            "    return 0\n"
+        )
+        findings = self.mod.check_python_source("nested_match.py", nested_match, None, 15)
         self.assertEqual(len(findings), 1)
-        self.assertIn("matcher", findings[0])
+        self.assertIn("complexity 21 > 15", findings[0])
 
     def test_csharp_escaped_backslash_char_literal_and_primary_constructor(self):
         branches = "\n".join("        if (x > 0) { x--; }" for _ in range(16))
@@ -203,6 +219,30 @@ class CheckComplexityTests(unittest.TestCase):
         findings = self.mod.check_python_source("with_nested.py", with_nested, None, 15)
         self.assertEqual(len(findings), 1)
         self.assertIn("complexity 21 > 15", findings[0])
+
+    def test_python_comprehensions_and_else_nesting_follow_threshold(self):
+        # Multiple unfiltered/filtered comprehensions accumulate generator + filter cost.
+        comp_source = (
+            "def heavy_comps(rows):\n"
+            "    return [\n"
+            "        [a for a in r if a > 0 if a < 9]\n"
+            "        for r in rows if r\n"
+            "    ] + [x for x in rows] + [x for x in rows] + [x for x in rows] + [x for x in rows] + [x for x in rows] + [x for x in rows] + [x for x in rows] + [x for x in rows]\n"
+        )
+        comp_findings = self.mod.check_python_source("comps.py", comp_source, None, 15)
+        self.assertEqual(len(comp_findings), 1)
+
+        # Flat if/elif/else chain stays at outer nesting (score 3), while branches inside else get +1 nesting.
+        elif_chain = (
+            "def flat_elif(a, b):\n"
+            "    if a:\n"
+            "        return 1\n"
+            "    elif b:\n"
+            "        return 2\n"
+            "    else:\n"
+            "        return 3\n"
+        )
+        self.assertEqual(self.mod.check_python_source("elif_chain.py", elif_chain, None, 2), ["elif_chain.py:1: Python function 'flat_elif' complexity 3 > 2"])
 
 
 class CheckSonarTests(unittest.TestCase):

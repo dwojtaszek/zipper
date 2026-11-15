@@ -86,14 +86,13 @@ def _py_boolop_score(node: ast.BoolOp, nesting: int) -> int:
 
 def _py_comp_score(node: ast.AST, nesting: int) -> int:
     generators = getattr(node, "generators", ())
-    has_ifs = any(g.ifs for g in generators)
-    inner_nesting = nesting + (1 if has_ifs else 0)
+    inner_nesting = nesting + (1 if generators else 0)
     score = 0
     for gen in generators:
-        score += (1 + nesting) * len(gen.ifs)
+        score += 1 + nesting
         score += _py_expr_score(gen.iter, nesting)
         for cond in gen.ifs:
-            score += _py_expr_score(cond, nesting + 1)
+            score += (1 + nesting) + _py_expr_score(cond, inner_nesting)
     for field in ("elt", "key", "value"):
         child = getattr(node, field, None)
         if isinstance(child, ast.AST):
@@ -142,6 +141,20 @@ def _py_try_score(node: ast.AST, nesting: int) -> int:
     return score + _py_stmts_score(getattr(node, "finalbody", ()), nesting)
 
 
+def _py_with_score(stmt: ast.With | ast.AsyncWith, nesting: int) -> int:
+    items_score = sum(_py_expr_score(item.context_expr, nesting) for item in stmt.items)
+    return items_score + _py_stmts_score(stmt.body, nesting)
+
+
+def _py_match_score(stmt: ast.Match, nesting: int) -> int:
+    # SonarCloud S3776 charges a single (1 + nesting) for the match statement itself,
+    # not per case label, while case guards and bodies are scored at nesting + 1.
+    score = 1 + nesting + _py_expr_score(stmt.subject, nesting)
+    for case in stmt.cases:
+        score += _py_expr_score(case.guard, nesting + 1) + _py_stmts_score(case.body, nesting + 1)
+    return score
+
+
 def _py_stmt_score(stmt: ast.AST, nesting: int) -> int:
     if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
         return 0
@@ -156,13 +169,9 @@ def _py_stmt_score(stmt: ast.AST, nesting: int) -> int:
     if isinstance(stmt, _TRY_NODES):
         return _py_try_score(stmt, nesting)
     if isinstance(stmt, (ast.With, ast.AsyncWith)):
-        items_score = sum(_py_expr_score(item.context_expr, nesting) for item in stmt.items)
-        return items_score + _py_stmts_score(stmt.body, nesting)
+        return _py_with_score(stmt, nesting)
     if isinstance(stmt, ast.Match):
-        score = _py_expr_score(stmt.subject, nesting)
-        for case in stmt.cases:
-            score += 1 + _py_expr_score(case.guard, nesting + 1) + _py_stmts_score(case.body, nesting + 1)
-        return score
+        return _py_match_score(stmt, nesting)
     return sum(_py_expr_score(child, nesting) for child in ast.iter_child_nodes(stmt))
 
 

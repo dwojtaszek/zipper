@@ -137,6 +137,21 @@ if [[ "$DOCS_ONLY" == "true" || "$RUNNER_ONLY" == "true" ]]; then
     exit 0
 fi
 
+run_staged_tooling_checks() {
+    if [[ -f ruff.toml ]] && command -v ruff >/dev/null 2>&1 && printf '%s\n' "$STAGED" | grep -qE '(\.py$|^ruff\.toml$)'; then
+        echo "▶ Running ruff check..."
+        ruff check || exit 1
+    fi
+    if [[ -f tests/test-typesafe-audit.sh ]] && printf '%s\n' "$STAGED" | grep -qE '^(tools/typesafe-audit/|\.github/workflows/typesafe-.*\.yml$|tests/test-typesafe-audit\.)'; then
+        echo "▶ Running TypeSafe audit E2E check..."
+        (
+            while IFS= read -r git_env; do unset "$git_env"; done < <(git rev-parse --local-env-vars)
+            python3 .github/scripts/run-check.py --log "$(mktemp -t zipper-tsa-check.XXXXXX)" -- \
+                bash tests/test-typesafe-audit.sh
+        ) || exit 1
+    fi
+}
+
 CI_SCRIPTS_ONLY=false
 if [[ -d tests/ci ]]; then
     RUNNER_PREF_MATCH=$(printf '%s\n' "$STAGED" | grep -c -E '^\.zipper-runner/' || true)
@@ -152,18 +167,7 @@ if [[ "$CI_SCRIPTS_ONLY" == "true" ]]; then
         python3 .github/scripts/run-check.py --log "$(mktemp -t zipper-ci-check.XXXXXX)" -- \
             python3 -m unittest discover -s tests/ci -p 'test_*.py'
     ) || exit 1
-    if [[ -f ruff.toml ]] && command -v ruff >/dev/null 2>&1 && printf '%s\n' "$STAGED" | grep -qE '(\.py$|^ruff\.toml$)'; then
-        echo "▶ Running ruff check..."
-        ruff check || exit 1
-    fi
-    if [[ -f tests/test-typesafe-audit.sh ]] && printf '%s\n' "$STAGED" | grep -qE '^(tools/typesafe-audit/|\.github/workflows/typesafe-.*\.yml$|tests/test-typesafe-audit\.)'; then
-        echo "▶ Running TypeSafe audit E2E check..."
-        (
-            while IFS= read -r git_env; do unset "$git_env"; done < <(git rev-parse --local-env-vars)
-            python3 .github/scripts/run-check.py --log "$(mktemp -t zipper-tsa-check.XXXXXX)" -- \
-                bash tests/test-typesafe-audit.sh
-        ) || exit 1
-    fi
+    run_staged_tooling_checks
     if [[ -f "src/Zipper.Tests/Zipper.Tests.csproj" ]]; then
         echo "▶ Running DocsDriftTests..."
         dotnet test src/Zipper.Tests/Zipper.Tests.csproj --filter "FullyQualifiedName~DocsDriftTests" --logger "console;verbosity=quiet" || exit 1
@@ -227,6 +231,8 @@ if [[ "$ANALYZER_TRIGGER" -gt 0 ]]; then
         exit 1
     fi
 fi
+
+run_staged_tooling_checks
 
 echo "✓ Pre-commit: format + unit tests passed"
 

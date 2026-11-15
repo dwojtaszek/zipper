@@ -648,7 +648,7 @@ public class DocsDriftTests
             Path.Combine(RepoRoot, "README.md"),
             Path.Combine(RepoRoot, "CI.md"),
         };
-        files.AddRange(Directory.GetFiles(Path.Combine(RepoRoot, "docs"), "*.md"));
+        files.AddRange(Directory.GetFiles(Path.Combine(RepoRoot, "docs"), "*.md", SearchOption.AllDirectories));
         foreach (var skillsRel in new[]
         {
             Path.Combine(".factory", "skills"),
@@ -663,6 +663,33 @@ public class DocsDriftTests
             }
         }
 
+        var failures = FindMissingWorkflowAndScriptReferences(RepoRoot, files);
+        Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
+    }
+
+    [Fact]
+    public void FindMissingWorkflowAndScriptReferences_MissingScriptInNestedDoc_ReportsFailure()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), $"zipper-doc-ref-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(tempRoot, "docs", "nested"));
+        try
+        {
+            var nestedDoc = Path.Combine(tempRoot, "docs", "nested", "guide.md");
+            File.WriteAllText(nestedDoc, "Run `tests/missing-script.sh` and `.github/workflows/missing.yml`.");
+            var docsFiles = Directory.GetFiles(Path.Combine(tempRoot, "docs"), "*.md", SearchOption.AllDirectories);
+            var failures = FindMissingWorkflowAndScriptReferences(tempRoot, docsFiles);
+            Assert.Equal(2, failures.Count);
+            Assert.Contains(failures, f => f.Contains("docs/nested/guide.md") && f.Contains("tests/missing-script.sh"));
+            Assert.Contains(failures, f => f.Contains("docs/nested/guide.md") && f.Contains(".github/workflows/missing.yml"));
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    private static List<string> FindMissingWorkflowAndScriptReferences(string repoRoot, IEnumerable<string> files)
+    {
         var failures = new List<string>();
         var refPattern = new System.Text.RegularExpressions.Regex(
             @"(?<![A-Za-z0-9_./-])(\.github/workflows/[A-Za-z0-9_.-]+\.yml|tests/[A-Za-z0-9_./-]+\.(?:sh|bat|py)|tools/typesafe-audit/[A-Za-z0-9_./-]+\.py)\b",
@@ -671,19 +698,19 @@ public class DocsDriftTests
 
         foreach (var file in files)
         {
-            var relSource = Path.GetRelativePath(RepoRoot, file);
+            var relSource = Path.GetRelativePath(repoRoot, file).Replace('\\', '/');
             var text = File.ReadAllText(file);
             foreach (System.Text.RegularExpressions.Match match in refPattern.Matches(text))
             {
                 var relTarget = match.Groups[1].Value;
-                if (!File.Exists(Path.Combine(RepoRoot, relTarget)))
+                if (!File.Exists(Path.Combine(repoRoot, relTarget)))
                 {
                     failures.Add($"{relSource}: missing referenced workflow/script '{relTarget}'");
                 }
             }
         }
 
-        Assert.True(failures.Count == 0, string.Join(Environment.NewLine, failures));
+        return failures;
     }
 }
 

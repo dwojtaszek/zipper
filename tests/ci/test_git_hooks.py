@@ -446,6 +446,60 @@ class GitHooksBehavioralTests(unittest.TestCase):
         self.assertIn("Scoped tests already passed for this clean HEAD", push_res.stdout)
         self.assertNotIn("MOCK_DOTNET_CALLED: test src/Zipper.Tests/Zipper.Tests.csproj --logger", push_res.stdout)
 
+    def test_mixed_product_and_typesafe_commit_still_runs_ruff_and_typesafe_audit(self):
+        """Mixed product + tooling changes must still run ruff and test-typesafe-audit.sh in pre-commit and pre-push."""
+        commit = self._commit_readme(msg="initial")
+        self._git("update-ref", "refs/remotes/origin/main", commit)
+        (self.repo_dir / "ruff.toml").write_text("[lint]\nselect = [\"F\"]\n", encoding="utf-8")
+        tests_dir = self.repo_dir / "tests"
+        tests_dir.mkdir(parents=True, exist_ok=True)
+        tsa_script = tests_dir / "test-typesafe-audit.sh"
+        tsa_script.write_text("#!/bin/bash\necho 'MOCK_TSA_CALLED'\nexit 0\n", encoding="utf-8")
+        tsa_script.chmod(0o755)
+        (tests_dir / "run-e2e-basic.sh").write_text("#!/bin/bash\nexit 0\n", encoding="utf-8")
+        (tests_dir / "run-e2e-basic.sh").chmod(0o755)
+        gh_scripts = self.repo_dir / ".github/scripts"
+        gh_scripts.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / ".github/scripts/run-check.py", gh_scripts / "run-check.py")
+        shutil.copy2(ROOT / ".github/scripts/change-scope.py", gh_scripts / "change-scope.py")
+        self._git("add", "ruff.toml", "tests/test-typesafe-audit.sh", "tests/run-e2e-basic.sh", ".github/scripts/run-check.py", ".github/scripts/change-scope.py")
+        self._git("commit", "-m", "fixtures", "--no-verify")
+
+        (self.repo_dir / "src").mkdir(parents=True, exist_ok=True)
+        (self.repo_dir / "src/App.cs").write_text("// change", encoding="utf-8")
+        tsa_dir = self.repo_dir / "tools/typesafe-audit"
+        tsa_dir.mkdir(parents=True, exist_ok=True)
+        (tsa_dir / "helper.py").write_text("x = 1\n", encoding="utf-8")
+        self._git("add", "src/App.cs", "tools/typesafe-audit/helper.py")
+
+        env = self._env_with_logging_dotnet()
+        mock_ruff = self.repo_dir / "bin/ruff"
+        mock_ruff.write_text("#!/bin/bash\necho \"MOCK_RUFF_CALLED: $@\"\nexit 0\n", encoding="utf-8")
+        mock_ruff.chmod(0o755)
+
+        pre_commit_res = subprocess.run(
+            ["bash", str(self.hooks_dir / "pre-commit")],
+            cwd=self.repo_dir,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(pre_commit_res.returncode, 0, pre_commit_res.stdout + pre_commit_res.stderr)
+        self.assertIn("Running unit tests", pre_commit_res.stdout)
+        self.assertIn("MOCK_RUFF_CALLED", pre_commit_res.stdout)
+        self.assertIn("MOCK_TSA_CALLED", pre_commit_res.stdout)
+
+        self._git("commit", "-m", "mixed change", "--no-verify")
+        head = self._git("rev-parse", "HEAD")
+        push_res = self._run_pre_push(
+            f"refs/heads/main {head} refs/heads/main 0000000000000000000000000000000000000000\n",
+            env=env,
+        )
+        self.assertEqual(push_res.returncode, 0, push_res.stdout + push_res.stderr)
+        self.assertIn("MOCK_RUFF_CALLED", push_res.stdout)
+        self.assertIn("MOCK_TSA_CALLED", push_res.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
