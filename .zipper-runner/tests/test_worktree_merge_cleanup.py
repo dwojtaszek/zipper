@@ -284,6 +284,7 @@ class SquashMergeCleanupTests(unittest.TestCase):
         self.assertFalse(fixture.git_fails("cat-file", "-e", f"refs/heads/{backups[0]}:local-wip.txt"))
         bodies = " ".join(str(body) for _, body in fixture.emails)
         self.assertIn(f"git log main..{backups[0]}", bodies)
+        self.assertIn("squash-merge", bodies)
         self.assertIn("wip: diverged local work", bodies)
 
     def test_removeWorktree_divergedUnpushedMergedBranchPinFails_preservesWorktree(self):

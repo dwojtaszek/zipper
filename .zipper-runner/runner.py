@@ -1434,20 +1434,22 @@ def _remove_worktree(wt_path: str, branch: str = "", *, is_merged: bool = False,
         subject = f"[Runner] Preserved commits past the merged head of '{branch}'"
         if _should_send_rate_limited(subject):
             commit_list = "".join(f"<li><code>{html.escape(c)}</code></li>" for c in post_merge_commits)
+            squash_note = (
+                " Note: because PRs squash-merge into <code>main</code>, <code>main..&lt;backup&gt;</code> may also "
+                "include commits whose changes were already incorporated by the PR; inspect diffs against <code>main</code> "
+                "before cherry-picking."
+                if post_merge_base == "main"
+                else ""
+            )
             send_email(
                 subject,
-                f"<h3>Preserved commits the merge did not take from '{branch}'</h3>"
+                f"<h3>Preserved commits not in <code>{html.escape(post_merge_base)}</code> history from '{html.escape(branch)}'</h3>"
                 f"<p>PR <code>{html.escape(merged_head[:8] or 'main')}</code> merged and its worktree at {html.escape(wt_path)} was "
                 f"removed, but branch '{html.escape(branch)}' also carried {len(post_merge_commits)} commit(s) "
-                f"the merge never took — work committed after the PR had already merged. They are pinned on "
+                f"beyond <code>{html.escape(post_merge_base)}</code>. They are pinned on "
                 f"<code>{html.escape(post_merge_pin)}</code>, so nothing was discarded.</p>"
-                # The range base is the merged head, not `main`: a squash merge leaves the
-                # branch's own commits out of main's history, so `main..<pin>` would also
-                # list the PR's already-merged commits and invite re-cherry-picking them.
-                # `<post_merge_base>..<pin>` is `merged_head..<pin>` in that shape, and
-                # `main..<pin>` when the local branch diverged from `merged_head`.
-                f"<p>Review them with <code>git log {html.escape(post_merge_base)}..{html.escape(post_merge_pin)}</code> and either "
-                f"cherry-pick or drop them deliberately. The worktree slot is free again.</p>"
+                f"<p>Inspect them with <code>git log {html.escape(post_merge_base)}..{html.escape(post_merge_pin)}</code> and either "
+                f"cherry-pick or drop them deliberately.{squash_note} The worktree slot is free again.</p>"
                 f"<ul>{commit_list}</ul>",
             )
     elif snapshot_pin:
