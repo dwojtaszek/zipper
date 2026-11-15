@@ -35,9 +35,14 @@ def main() -> None:
 
     issue = gh("issue", "view", issue_number, "--json", "number,title,body,labels,comments,author")
     comments = [
-        {"order": index, "author": c.get("author", {}).get("login", "unknown"), "body": c.get("body", "")}
+        {
+            "order": index,
+            "author": ((c.get("author") or {}).get("login") or "unknown"),
+            "author_association": c.get("authorAssociation", ""),
+            "body": c.get("body", ""),
+        }
         for index, c in enumerate(issue.get("comments", []))
-        if not c.get("author", {}).get("login", "").endswith("[bot]")
+        if not ((c.get("author") or {}).get("login") or "").endswith("[bot]")
     ]
 
     open_issues = gh(

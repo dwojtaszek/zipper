@@ -356,4 +356,3 @@ We welcome contributions! Please see our [Contributing Guide](docs/contributing.
 - [Ubiquitous Language](UBIQUITOUS_LANGUAGE.md) — Domain language definitions
 - [CI/CD & Testing Guide](docs/cicd.md) — Pipeline map, local hooks, and CI gates
 - [External Checks & Dependency Policy](CI.md) — SonarCloud, CodeRabbit, CodeQL, golden baselines, and dependency updates
-- [Weekly Functional QA](docs/weekly-qa.md) — Scheduled CLI smoke tests, optional Droid checks, and weekly issue reporting

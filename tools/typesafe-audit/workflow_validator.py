@@ -219,24 +219,45 @@ def _extract_commands(run_script: str) -> list[str]:
     return reconstructed_lines
 
 
+def _split_shell_subcommands(tokens: list[str]) -> list[list[str]]:
+    separators = {";", "&&", "||", "|", "&"}
+    subcommands: list[list[str]] = []
+    current: list[str] = []
+    for tok in tokens:
+        if tok in separators:
+            if current:
+                subcommands.append(current)
+                current = []
+        else:
+            current.append(tok)
+    if current:
+        subcommands.append(current)
+    return subcommands
+
+
+def _tokenize_shell(cmd: str) -> list[str]:
+    try:
+        lexer = shlex.shlex(cmd, posix=True, punctuation_chars=";&|")
+        return list(lexer)
+    except ValueError:
+        return re.findall(r"&&|\|\||[;&|]|[^\s;&|]+", cmd)
+
+
 def _executes_runner(tokens: list[str]) -> bool:
-    if not tokens:
-        return False
-    if tokens[0].endswith("runner.py") or tokens[0].endswith("run_check.py"):
-        return True
-    first_cmd = os.path.basename(tokens[0])
-    if first_cmd in ("echo", "printf", "cat", "grep", "sed", "awk"):
-        return False
-    return any(t.endswith("runner.py") or t.endswith("run_check.py") for t in tokens)
+    for sub in _split_shell_subcommands(tokens):
+        if sub[0].endswith("runner.py") or sub[0].endswith("run_check.py"):
+            return True
+        first_cmd = os.path.basename(sub[0])
+        if first_cmd in ("echo", "printf", "cat", "grep", "sed", "awk"):
+            continue
+        if any(t.endswith("runner.py") or t.endswith("run_check.py") for t in sub):
+            return True
+    return False
 
 
 def _step_executes_runner(run_script: str) -> bool:
     for cmd in _extract_commands(run_script):
-        try:
-            tokens = shlex.split(cmd)
-        except ValueError:
-            tokens = cmd.split()
-        if _executes_runner(tokens):
+        if _executes_runner(_tokenize_shell(cmd)):
             return True
     return False
 
@@ -282,14 +303,9 @@ def validate_advisory_mode(workflow: dict) -> None:
                 continue
 
             for line in _extract_commands(run_cmd):
-                try:
-                    tokens = shlex.split(line)
-                except ValueError:
-                    tokens = line.split()
-
-                if _executes_runner(tokens):
-                    lower_tokens = [t.lower() for t in tokens]
-                    if "--strict" in lower_tokens:
+                tokens = _tokenize_shell(line)
+                for sub in _split_shell_subcommands(tokens):
+                    if _executes_runner(sub) and "--strict" in [t.lower() for t in sub]:
                         raise WorkflowValidationError(
                             f"In job '{job_name}', step '{step.get('name', 'unnamed')}': "
                             "runner.py must stay advisory (no --strict)"

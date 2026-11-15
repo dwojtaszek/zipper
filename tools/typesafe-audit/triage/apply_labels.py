@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import subprocess
 import sys
 from pathlib import Path
@@ -61,6 +62,15 @@ SUBSYSTEM_LABEL_MAP = {
 TRACKER_TITLE_PREFIXES = ("roadmap:", "[quality backlog]")
 
 
+def _valid_confidence(conf: object) -> bool:
+    return (
+        isinstance(conf, (int, float))
+        and not isinstance(conf, bool)
+        and math.isfinite(float(conf))
+        and 0.0 <= float(conf) <= 1.0
+    )
+
+
 def _select_type_label(judgments: dict, existing_lower: set[str], threshold: float) -> str | None:
     if existing_lower & EXISTING_TYPE_LABELS:
         return None
@@ -69,7 +79,7 @@ def _select_type_label(judgments: dict, existing_lower: set[str], threshold: flo
     type_conf = type_j.get("confidence")
     if (
         type_j.get("status") != "judged"
-        or not isinstance(type_conf, (int, float))
+        or not _valid_confidence(type_conf)
         or float(type_conf) < threshold
         or type_val not in APPLICABLE_TYPE_LABELS
     ):
@@ -88,7 +98,7 @@ def _select_subsystem_label(judgments: dict, threshold: float) -> str | None:
     if (
         not mapped_sub
         or sub_j.get("status") != "judged"
-        or not isinstance(sub_conf, (int, float))
+        or not _valid_confidence(sub_conf)
         or float(sub_conf) < threshold
     ):
         return None

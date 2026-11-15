@@ -68,7 +68,7 @@ jobs:
             echo "json={\"executed\":false,\"scope\":\"triage\",\"sha\":\"${{ github.sha }}\",\"status\":\"unavailable\",\"reason\":\"missing_typesafe_api_key\"}"
           } >> "$GITHUB_OUTPUT"
           {
-            echo "## Issue triage skipped (dry run)"
+            echo "## Issue triage skipped"
             echo ""
             echo "TYPESAFE_API_KEY is not available in this context."
             echo ""
@@ -95,7 +95,7 @@ jobs:
           python3 tools/typesafe-audit/triage/collect_issue.py \
             "$ISSUE_NUMBER" results/typesafe-triage/issue-input.json
 
-      - name: Run TypeSafe triage (dry run, advisory)
+      - name: Run TypeSafe triage (advisory)
         id: triage-check
         if: steps.secret.outputs.available == 'true'
         env:

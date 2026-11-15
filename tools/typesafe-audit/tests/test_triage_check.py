@@ -262,6 +262,7 @@ class ApplyLabelsTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.apply_labels = load_module("triage_apply_labels", TRIAGE_DIR / "apply_labels.py")
+        cls.run_check = load_module("triage_run_check", TRIAGE_DIR / "run_check.py")
         cls.policy = json.loads((TRIAGE_DIR / "policy.json").read_text(encoding="utf-8"))
 
     def test_applies_high_confidence_type_and_mapped_subsystem(self):
@@ -328,6 +329,36 @@ class ApplyLabelsTests(unittest.TestCase):
                 rc = self.apply_labels.main(["--triage-json", str(triage_json), "--issue-json", str(issue_json)])
             self.assertEqual(rc, 0)
             mock_apply.assert_not_called()
+
+    def test_rejects_boolean_and_non_finite_confidence(self):
+        for bad_conf in (True, False, float("nan"), float("inf"), 1.5, -0.1):
+            self.assertEqual(self.run_check.status_for("bug", bad_conf, self.policy), "needs-human-review")
+            issue = {"number": 201, "author": "dwojtaszek", "title": "T", "labels": []}
+            report = {"results": [{"issue": 201, "judgments": {
+                "type": {"value": "bug", "confidence": bad_conf, "status": "judged"},
+                "subsystem": {"value": "ci-infra", "confidence": bad_conf, "status": "judged"},
+            }}]}
+            labels, status = self.apply_labels.select_labels_to_add(issue, report, self.policy)
+            self.assertEqual(labels, [])
+            self.assertEqual(status, "skipped:no-qualifying-labels")
+
+    def test_prepare_excludes_untrusted_comments(self):
+        issue = {
+            "number": 202,
+            "author": "trusted-op",
+            "title": "Archive naming",
+            "body": "Zip output name mismatch.",
+            "labels": [],
+            "comments": [
+                {"author": "driveby-user", "author_association": "NONE", "body": "CRITICAL CRASH BUG P0"},
+                {"author": "trusted-op", "author_association": "NONE", "body": "Author followup detail."},
+                {"author": "maintainer", "author_association": "COLLABORATOR", "body": "Confirmed in archive writer."},
+            ],
+        }
+        prepared = self.run_check.prepare(issue, [], self.policy, [])
+        self.assertNotIn("CRITICAL CRASH BUG P0", prepared["text"])
+        self.assertIn("Author followup detail.", prepared["text"])
+        self.assertIn("Confirmed in archive writer.", prepared["text"])
 
 
 class WorkflowSecurityTests(unittest.TestCase):

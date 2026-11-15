@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 from pathlib import Path
@@ -46,15 +47,29 @@ def load_requirements_ids(repo_root: Path) -> list[str]:
     return sorted(set(re.findall(r"\bREQ(?:_E)?-\d{3,4}\b", path.read_text(encoding="utf-8"))))
 
 
+TRUSTED_COMMENT_ASSOCIATIONS = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
+
+
+def _is_trusted_comment(comment: dict, issue_author: str) -> bool:
+    assoc = str(comment.get("author_association") or "").upper()
+    if assoc in TRUSTED_COMMENT_ASSOCIATIONS:
+        return True
+    comment_author = str(comment.get("author") or "")
+    return bool(issue_author and comment_author == issue_author)
+
+
 def prepare(issue: dict, corpus: list[dict], policy: dict, req_ids: list[str]) -> dict:
     """Deterministic state: stripped text, keywords, candidates, allowed sets."""
-    # Cumulative cap across body + comments keeps untrusted text bounded.
+    # Cumulative cap across body + trusted comments keeps untrusted text from steering labels.
     budget = policy["max_issue_chars"]
+    issue_author = str(issue.get("author") or "")
     text = collect.strip_markup(f"{issue.get('title', '')}\n{issue.get('body', '')}", budget)
     budget -= len(text)
     for comment in issue.get("comments", []):
         if budget <= 0:
             break
+        if not _is_trusted_comment(comment, issue_author):
+            continue
         excerpt = collect.strip_markup(comment.get("body", ""), budget)
         text += "\n" + excerpt
         budget -= len(excerpt)
@@ -109,8 +124,17 @@ def question_key(qid: str) -> str:
     return f"main{SPAN_SEPARATOR}{qid}"
 
 
-def status_for(value: str, confidence: float | None, policy: dict) -> str:
-    if confidence is None or confidence < policy["confidence_threshold"]:
+def _valid_confidence(confidence: object) -> bool:
+    return (
+        isinstance(confidence, (int, float))
+        and not isinstance(confidence, bool)
+        and math.isfinite(float(confidence))
+        and 0.0 <= float(confidence) <= 1.0
+    )
+
+
+def status_for(value: str, confidence: object, policy: dict) -> str:
+    if not _valid_confidence(confidence) or float(confidence) < policy["confidence_threshold"]:
         return "needs-human-review"
     return "judged"
 
@@ -174,7 +198,11 @@ def judge(prepared: dict, questions: dict, policy: dict, config: dict, args, api
             value = "insufficient-evidence"
         entry = {"candidate": candidate["number"], "candidate_url": candidate["url"], "value": value, "confidence": confidence}
         # Duplicate suggestions require retrieval + high-confidence judgment.
-        entry["status"] = "duplicate-suggestion" if value == "duplicate" and confidence is not None and confidence >= policy["confidence_threshold"] else status_for(value, confidence, policy)
+        entry["status"] = (
+            "duplicate-suggestion"
+            if value == "duplicate" and _valid_confidence(confidence) and float(confidence) >= policy["confidence_threshold"]
+            else status_for(value, confidence, policy)
+        )
         judgments.setdefault("duplicates", []).append(entry)
 
     req_relevance = {}
@@ -189,7 +217,7 @@ def judge(prepared: dict, questions: dict, policy: dict, config: dict, args, api
 
 
 def render_markdown(report: dict) -> str:
-    lines = ["# Issue Triage (dry-run)", ""]
+    lines = ["# Issue Triage (advisory)", ""]
     lines.append(f"- Mode: {report['mode']}")
     lines.append(f"- Runner: v{report['runner_version']}")
     lines.append("")
@@ -211,7 +239,7 @@ def render_markdown(report: dict) -> str:
         for req_id, relevance in sorted(j.get("req_relevance", {}).items()):
             lines.append(f"- REQ relevance {req_id}: noul={relevance['noul']}")
         lines.append("")
-    lines.append("_Dry run: no labels, comments, closures, assignments, or new issues were written._")
+    lines.append("_Triage step is read-only; downstream apply-labels may apply high-confidence labels._")
     lines.append("")
     return "\n".join(lines)
 

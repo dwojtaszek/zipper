@@ -261,6 +261,20 @@ class TestWorkflowValidator(unittest.TestCase):
             validate_advisory_mode({"permissions": {"contents": "read"}, "jobs": "not_a_dict"})
         self.assertIn("YAML mapping", str(ctx.exception))
 
+    def test_chained_runner_after_echo_with_write_fails(self):
+        wf = {
+            "permissions": {"contents": "read"},
+            "jobs": {
+                "triage": {
+                    "permissions": {"contents": "read", "issues": "write"},
+                    "steps": [{"run": "echo setup; python3 tools/typesafe-audit/triage/run_check.py"}],
+                }
+            },
+        }
+        with self.assertRaises(WorkflowValidationError) as ctx:
+            validate_permissions(wf)
+        self.assertIn("issues", str(ctx.exception))
+
 
 if __name__ == "__main__":
     unittest.main()
