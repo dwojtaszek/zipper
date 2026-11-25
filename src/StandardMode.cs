@@ -69,13 +69,13 @@ internal class StandardMode : IGenerationMode
             {
                 await Console.Error.WriteLineAsync(string.Format(System.Globalization.CultureInfo.InvariantCulture,
                     "  Warning: archive size {0:N0} bytes is outside the +/-10% target tolerance ({1:N0} bytes, deviation {2:P1}).",
-                    actual, target, deviation)).ConfigureAwait(false);
+                    actual, target, deviation).AsMemory(), CancellationToken.None).ConfigureAwait(ConfigureAwaitOptions.None);
             }
             else
             {
                 await Console.Out.WriteLineAsync(string.Format(System.Globalization.CultureInfo.InvariantCulture,
                     "  Target ZIP size met: {0:N0} bytes (within +/-10% of {1:N0} bytes, deviation {2:P1}).",
-                    actual, target, deviation)).ConfigureAwait(false);
+                    actual, target, deviation).AsMemory(), CancellationToken.None).ConfigureAwait(ConfigureAwaitOptions.None);
             }
         }
 

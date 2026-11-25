@@ -114,6 +114,28 @@ fn prop_loadfile_only_invariants(c: LoadfileCase) {
         );
     });
 
+    assert_loadfile_contents(&c, &text);
+
+    // Determinism check with identical seed
+    let out_dir2 = dir.path().join("out2");
+    let mut args2 = args.clone();
+    let idx = args2.iter().position(|a| a == "--output-path").unwrap() + 1;
+    args2[idx] = out_dir2.to_string_lossy().into_owned();
+    let out2 = run_zipper(dir.path(), &args2);
+    assert_no_crash(&out2, "second deterministic run");
+    assert_eq!(out2.code, Some(0), "Second deterministic run failed");
+    let loadfile2 = find_first_with_ext(&out_dir2, c.format.ext()).expect("second loadfile");
+    let raw2 = fs::read(&loadfile2).expect("read loadfile2");
+    if raw != raw2 {
+        ephyra::signature(&format!("loadfile_nondeterministic_{:?}", c.format));
+        panic!(
+            "Non-deterministic loadfile output for {:?} with seed {}",
+            c.format, c.seed
+        );
+    }
+}
+
+fn assert_loadfile_contents(c: &LoadfileCase, text: &str) {
     // EOL check
     match c.eol {
         EolKind::Crlf => assert!(text.contains("\r\n"), "Expected CRLF line endings"),
@@ -152,7 +174,7 @@ fn prop_loadfile_only_invariants(c: LoadfileCase) {
                     );
                 }
             }
-            let parsed = parse_delimited_records(&text, c.col_char(), c.quote_char())
+            let parsed = parse_delimited_records(text, c.col_char(), c.quote_char())
                 .unwrap_or_else(|e| {
                     ephyra::signature(&format!(
                         "delimited_parse_fail_{:?}_{:?}_{:?}",
@@ -223,7 +245,7 @@ fn prop_loadfile_only_invariants(c: LoadfileCase) {
             }
         }
         LoadFormat::EdrmXml => {
-            let doc = roxmltree::Document::parse(&text).unwrap_or_else(|e| {
+            let doc = roxmltree::Document::parse(text).unwrap_or_else(|e| {
                 ephyra::signature("edrm_xml_parse_fail");
                 panic!("Invalid EDRM-XML output: {e}");
             });
@@ -237,24 +259,6 @@ fn prop_loadfile_only_invariants(c: LoadfileCase) {
                 c.count
             );
         }
-    }
-
-    // Determinism check with identical seed
-    let out_dir2 = dir.path().join("out2");
-    let mut args2 = args.clone();
-    let idx = args2.iter().position(|a| a == "--output-path").unwrap() + 1;
-    args2[idx] = out_dir2.to_string_lossy().into_owned();
-    let out2 = run_zipper(dir.path(), &args2);
-    assert_no_crash(&out2, "second deterministic run");
-    assert_eq!(out2.code, Some(0), "Second deterministic run failed");
-    let loadfile2 = find_first_with_ext(&out_dir2, c.format.ext()).expect("second loadfile");
-    let raw2 = fs::read(&loadfile2).expect("read loadfile2");
-    if raw != raw2 {
-        ephyra::signature(&format!("loadfile_nondeterministic_{:?}", c.format));
-        panic!(
-            "Non-deterministic loadfile output for {:?} with seed {}",
-            c.format, c.seed
-        );
     }
 }
 
@@ -437,7 +441,7 @@ fn prop_chaos_invariants(c: ChaosCase) {
                     let path = e.path();
                     if path.is_dir() {
                         walk_sidecars(&path, found);
-                    } else if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    } else if let Some(name) = path.file_name().and_then(std::ffi::OsStr::to_str) {
                         if name.ends_with("_chaos_expectations.json") {
                             let bytes = fs::read(&path).expect("read sidecar");
                             let _: serde_json::Value = serde_json::from_slice(&bytes)
@@ -535,7 +539,9 @@ fn prop_production_set_invariants(c: ProductionCase) {
                 let path = e.path();
                 if path.is_dir() {
                     collect_manifests(&path, out);
-                } else if path.file_name().and_then(|n| n.to_str()) == Some("_manifest.json") {
+                } else if path.file_name().and_then(std::ffi::OsStr::to_str)
+                    == Some("_manifest.json")
+                {
                     out.push(path);
                 }
             }
@@ -694,7 +700,9 @@ fn prop_archive_invariants(c: ArchiveCase) {
     let native_count = entries
         .iter()
         .filter(|name| {
-            let extension = Path::new(name).extension().and_then(|ext| ext.to_str());
+            let extension = Path::new(name)
+                .extension()
+                .and_then(std::ffi::OsStr::to_str);
             extension == Some(c.doc_type.flag_value())
                 || (c.doc_type == DocType::Tiff && extension == Some("tif"))
         })
@@ -1092,45 +1100,49 @@ fn prop_production_deep_invariants(c: ProductionDeepCase) {
     }
 
     for set_dir in &set_dirs {
-        let text_root = set_dir.join("TEXT");
-        let has_text_file = fs::read_dir(&text_root)
-            .expect("TEXT directory")
-            .any(|entry| {
-                let path = entry.expect("TEXT entry").path();
-                path.is_file()
-                    || (path.is_dir()
-                        && fs::read_dir(path)
-                            .expect("TEXT volume")
-                            .any(|file| file.expect("TEXT volume entry").path().is_file()))
-            });
-        assert!(
-            has_text_file,
-            "Missing text files under {}",
-            text_root.display()
-        );
-        let dat_path = set_dir.join("DATA/loadfile.dat");
-        assert!(dat_path.exists(), "Missing {}", dat_path.display());
-        let raw = fs::read(&dat_path).expect("read loadfile.dat");
-        let text = decode_loadfile_bytes(&raw, EncodingKind::Utf8).expect("decode utf8");
-        let rows = parse_delimited_records(&text, '\x14', Some('\u{fe}')).expect("parse dat");
-        assert!(rows.len() >= 1 + usize::from(c.count));
-        let hdr = &rows[0];
-        let native_idx = hdr.iter().position(|h| h == "NATIVE_PATH");
-        let text_idx = hdr.iter().position(|h| h == "TEXT_PATH");
-        let img_idx = hdr.iter().position(|h| h == "IMAGE_PATH");
+        assert_production_files(set_dir, c.count);
+    }
+}
 
-        for row in &rows[1..] {
-            assert_eq!(row.len(), hdr.len());
-            for idx_opt in [native_idx, text_idx, img_idx] {
-                if let Some(idx) = idx_opt {
-                    let rel = row[idx].trim();
-                    if !rel.is_empty() {
-                        let norm = rel.replace('\\', "/");
-                        let full = set_dir.join(&norm);
-                        if !full.exists() {
-                            ephyra::signature("production_missing_referenced_file");
-                            panic!("DAT referenced missing file: {}", full.display());
-                        }
+fn assert_production_files(set_dir: &Path, count: u8) {
+    let text_root = set_dir.join("TEXT");
+    let has_text_file = fs::read_dir(&text_root)
+        .expect("TEXT directory")
+        .any(|entry| {
+            let path = entry.expect("TEXT entry").path();
+            path.is_file()
+                || (path.is_dir()
+                    && fs::read_dir(path)
+                        .expect("TEXT volume")
+                        .any(|file| file.expect("TEXT volume entry").path().is_file()))
+        });
+    assert!(
+        has_text_file,
+        "Missing text files under {}",
+        text_root.display()
+    );
+    let dat_path = set_dir.join("DATA/loadfile.dat");
+    assert!(dat_path.exists(), "Missing {}", dat_path.display());
+    let raw = fs::read(&dat_path).expect("read loadfile.dat");
+    let text = decode_loadfile_bytes(&raw, EncodingKind::Utf8).expect("decode utf8");
+    let rows = parse_delimited_records(&text, '\x14', Some('\u{fe}')).expect("parse dat");
+    assert!(rows.len() >= 1 + usize::from(count));
+    let hdr = &rows[0];
+    let native_idx = hdr.iter().position(|h| h == "NATIVE_PATH");
+    let text_idx = hdr.iter().position(|h| h == "TEXT_PATH");
+    let img_idx = hdr.iter().position(|h| h == "IMAGE_PATH");
+
+    for row in &rows[1..] {
+        assert_eq!(row.len(), hdr.len());
+        for idx_opt in [native_idx, text_idx, img_idx] {
+            if let Some(idx) = idx_opt {
+                let rel = row[idx].trim();
+                if !rel.is_empty() {
+                    let norm = rel.replace('\\', "/");
+                    let full = set_dir.join(&norm);
+                    if !full.exists() {
+                        ephyra::signature("production_missing_referenced_file");
+                        panic!("DAT referenced missing file: {}", full.display());
                     }
                 }
             }

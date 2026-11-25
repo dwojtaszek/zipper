@@ -13,7 +13,7 @@ pub fn zipper_bin() -> PathBuf {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let release = manifest
         .parent()
-        .and_then(|p| p.parent())
+        .and_then(Path::parent)
         .expect("tools/ephyra-harness inside repo root")
         .join("src/bin/Release/net10.0")
         .join(format!("Zipper{}", std::env::consts::EXE_SUFFIX));
@@ -864,93 +864,79 @@ pub fn parse_delimited_records(
     col_delim: char,
     quote_delim: Option<char>,
 ) -> Result<Vec<Vec<String>>, String> {
+    let Some(quote_delim) = quote_delim else {
+        return Ok(text
+            .split(['\r', '\n'])
+            .filter(|line| !line.is_empty())
+            .map(|line| line.split(col_delim).map(str::to_string).collect())
+            .collect());
+    };
+
     let mut records = Vec::new();
     let mut row = Vec::new();
     let mut field = String::new();
-    let chars: Vec<char> = text.chars().collect();
-    let mut i = 0;
+    let mut chars = text.chars().peekable();
+    let mut quoted_field = false;
 
-    if let Some(q) = quote_delim {
-        let mut in_quotes = false;
-        let mut at_field_start = true;
-        let mut after_close_quote = false;
-        while i < chars.len() {
-            let ch = chars[i];
-            if in_quotes {
-                if ch == q {
-                    if i + 1 < chars.len() && chars[i + 1] == q {
-                        field.push(q);
-                        i += 2;
-                        continue;
-                    }
-                    in_quotes = false;
-                    after_close_quote = true;
-                    i += 1;
-                    continue;
-                }
-                field.push(ch);
-                i += 1;
-                continue;
+    while let Some(ch) = chars.next() {
+        match ch {
+            ch if ch == quote_delim && field.is_empty() && !quoted_field => {
+                field = read_quoted_field(&mut chars, quote_delim)?;
+                quoted_field = true;
             }
-
-            if at_field_start && ch == q {
-                in_quotes = true;
-                at_field_start = false;
-                i += 1;
-                continue;
-            }
-
-            if ch == col_delim {
+            ch if ch == col_delim => {
                 row.push(std::mem::take(&mut field));
-                at_field_start = true;
-                after_close_quote = false;
-                i += 1;
-                continue;
+                quoted_field = false;
             }
-
-            if ch == '\r' || ch == '\n' {
-                if ch == '\r' && i + 1 < chars.len() && chars[i + 1] == '\n' {
-                    i += 1;
+            '\r' | '\n' => {
+                if ch == '\r' {
+                    chars.next_if_eq(&'\n');
                 }
-                if !(row.is_empty() && field.is_empty() && !after_close_quote) {
+                if !row.is_empty() || !field.is_empty() || quoted_field {
                     row.push(std::mem::take(&mut field));
                     records.push(std::mem::take(&mut row));
                 }
-                at_field_start = true;
-                after_close_quote = false;
-                i += 1;
-                continue;
+                quoted_field = false;
             }
-
-            if after_close_quote {
+            ch if quoted_field => {
                 return Err(format!(
-                    "Unexpected character {:?} after closing quote in row {}",
-                    ch,
+                    "Unexpected character {ch:?} after closing quote in row {}",
                     records.len()
                 ));
             }
-            at_field_start = false;
-            field.push(ch);
-            i += 1;
-        }
-        if in_quotes {
-            return Err("Unclosed quote at EOF".to_string());
-        }
-        if !row.is_empty() || !field.is_empty() || after_close_quote {
-            row.push(field);
-            records.push(row);
-        }
-    } else {
-        // Split on CRLF, LF, or standalone CR so --eol CR is parsed record-by-record.
-        for line in text.split('\n').flat_map(|s| s.split('\r')) {
-            if line.is_empty() {
-                continue;
-            }
-            records.push(line.split(col_delim).map(|s| s.to_string()).collect());
+            ch => field.push(ch),
         }
     }
-
+    if !row.is_empty() || !field.is_empty() || quoted_field {
+        row.push(field);
+        records.push(row);
+    }
     Ok(records)
+}
+
+fn read_quoted_field(
+    chars: &mut std::iter::Peekable<std::str::Chars<'_>>,
+    quote: char,
+) -> Result<String, String> {
+    let mut field = String::new();
+    while let Some(ch) = chars.next() {
+        if ch == quote && chars.next_if_eq(&quote).is_none() {
+            return Ok(field);
+        }
+        field.push(ch);
+    }
+    Err("Unclosed quote at EOF".to_string())
+}
+
+#[test]
+fn parses_escaped_quotes_multiline_and_empty_records() {
+    let text = "\r\n'a''a','line1\r\nline2'\r\n''\n,";
+    assert_eq!(
+        parse_delimited_records(text, ',', Some('\'')).unwrap(),
+        vec![vec!["a'a", "line1\r\nline2"], vec![""], vec!["", ""]]
+    );
+    assert!(parse_delimited_records("'x'y", ',', Some('\'')).is_err());
+    assert!(parse_delimited_records("'x", ',', Some('\'')).is_err());
 }
 
 /// Validates a ZIP file with the `zip` crate and returns entry names.
@@ -985,7 +971,7 @@ pub fn find_first_with_ext(dir: &Path, ext: &str) -> Option<PathBuf> {
     let entries = std::fs::read_dir(dir).ok()?;
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) == Some(ext) {
+        if path.extension().and_then(std::ffi::OsStr::to_str) == Some(ext) {
             return Some(path);
         }
     }
