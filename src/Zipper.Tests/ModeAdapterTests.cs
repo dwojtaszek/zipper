@@ -55,6 +55,33 @@ public class StandardModeTests
     }
 
     [Fact]
+    public async Task RunAsync_ConcordanceOnly_ValidatesDatPath()
+    {
+        var directory = Directory.CreateTempSubdirectory("zipper-concordance-");
+        try
+        {
+            var loadFilePath = Path.Combine(directory.FullName, "load.dat");
+            await File.WriteAllTextAsync(loadFilePath, "\u00feCOLUMN_A\u00fe\u0014\u00feCOLUMN_B\u00fe\r\n\u00fevalue\u00fe\r\n");
+            var mode = new StandardMode((_, _) => Task.FromResult(new FileGenerationResult
+            {
+                LoadFilePath = loadFilePath,
+            }));
+            var request = new FileGenerationRequest
+            {
+                LoadFile = new LoadFileConfig { Formats = [LoadFileFormat.Concordance] },
+            };
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => mode.RunAsync(request));
+
+            Assert.Equal("Post-generation validation failed.", exception.Message);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task RunAsync_WithChaosMode_ThrowsInvalidOperationException()
     {
         var mode = new StandardMode((req, ct) => Task.FromResult(new FileGenerationResult()));

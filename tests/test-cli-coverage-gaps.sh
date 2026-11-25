@@ -46,11 +46,20 @@ fi
 
 # --- Multi-format generation ---
 
-print_info "Test: --load-file-formats dat,opt,csv"
-if zipper --type pdf --count 5 --output-path "$TEST_OUTPUT_DIR/multi_format" --load-file-formats dat,opt,csv > /dev/null 2>&1; then
-    [[ -n "$(find "$TEST_OUTPUT_DIR/multi_format" -name "*.dat" -print -quit)" ]] && pass "produces .dat" || fail "produces .dat"
-    [[ -n "$(find "$TEST_OUTPUT_DIR/multi_format" -name "*.opt" -print -quit)" ]] && pass "produces .opt" || fail "produces .opt"
-    [[ -n "$(find "$TEST_OUTPUT_DIR/multi_format" -name "*.csv" -print -quit)" ]] && pass "produces .csv" || fail "produces .csv"
+print_info "Test: --load-file-formats dat,opt,csv,concordance"
+if zipper --type pdf --count 5 --output-path "$TEST_OUTPUT_DIR/multi_format" --load-file-formats dat,opt,csv,concordance > /dev/null 2>&1; then
+    if [[ -n "$(find "$TEST_OUTPUT_DIR/multi_format" -name "*.dat" ! -name "*.concordance.dat" -print -quit)" ]]; then
+        pass "produces .dat"
+    else
+        fail "produces .dat"
+    fi
+    for extension in opt csv concordance.dat; do
+        if [[ -n "$(find "$TEST_OUTPUT_DIR/multi_format" -name "*.$extension" -print -quit)" ]]; then
+            pass "produces .$extension"
+        else
+            fail "produces .$extension"
+        fi
+    done
 else
     fail "--load-file-formats command failed"
 fi

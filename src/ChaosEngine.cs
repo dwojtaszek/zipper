@@ -95,10 +95,11 @@ internal class ChaosEngine
         long targetableLines = GetTargetableLines(totalLines, this.onlyOptEncoding, this.onlyCsvBom, this.hasDatRecordOnlyTypes);
         this.sampler = new ChaosSampler(targetableLines, chaosAmount, random);
 
-        // If quote-delim is "none", disable the quotes chaos type
+        // If quote-delim is "none", disable quote-dropping chaos types
         if (string.IsNullOrEmpty(quoteDelimiter))
         {
             this.enabledTypes.Remove("quotes");
+            this.enabledTypes.Remove("concordance-quote-escape");
         }
 
         // Initialize Applier

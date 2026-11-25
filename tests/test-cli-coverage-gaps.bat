@@ -37,13 +37,20 @@ if not errorlevel 1 (
 
 REM --- Multi-format generation ---
 
-echo [ INFO ] Test: --load-file-formats dat,opt,csv
-%ZIPPER_CMD% --type pdf --count 5 --output-path "%TEST_OUTPUT_DIR%\multi_format" --load-file-formats dat,opt,csv >nul 2>&1
-if exist "%TEST_OUTPUT_DIR%\multi_format\*.dat" (
-    echo [ INFO ] PASS: produces .dat
+echo [ INFO ] Test: --load-file-formats dat,opt,csv,concordance
+%ZIPPER_CMD% --type pdf --count 5 --output-path "%TEST_OUTPUT_DIR%\multi_format" --load-file-formats dat,opt,csv,concordance >nul 2>&1
+set "STANDARD_DAT="
+for %%F in ("%TEST_OUTPUT_DIR%\multi_format\*.concordance.dat") do (
+    if exist "%%~fF" (
+        set "CONCORDANCE_NAME=%%~nF"
+        if exist "%%~dpF!CONCORDANCE_NAME:~0,-12!.dat" set "STANDARD_DAT=1"
+    )
+)
+if defined STANDARD_DAT (
+    echo [ INFO ] PASS: produces both .dat and .concordance.dat
     set /a PASSED+=1
 ) else (
-    echo [ ERROR ] FAIL: produces .dat
+    echo [ ERROR ] FAIL: expected distinct DAT and Concordance files
     set /a FAILED+=1
 )
 

@@ -112,6 +112,8 @@ internal class ZipArchiveSink : IArchiveSink
                         return stream;
                     };
 
+                bool disambiguateConcordance = formatsToGenerate.Contains(LoadFileFormat.Dat)
+                    && formatsToGenerate.Contains(LoadFileFormat.Concordance);
                 var actualLoadFileTarget = await LoadFileOrchestrator.EmitAllAsync(
                     request,
                     processedFiles,
@@ -119,7 +121,10 @@ internal class ZipArchiveSink : IArchiveSink
                     WriterMode.Standard,
                     (format, writer) =>
                     {
-                        var actualLoadFileName = baseFileName + writer.FileExtension;
+                        var extension = disambiguateConcordance && format == LoadFileFormat.Concordance
+                            ? ".concordance.dat"
+                            : writer.FileExtension;
+                        var actualLoadFileName = baseFileName + extension;
                         return (actualLoadFileName, actualLoadFileName + "_properties.json");
                     },
                     openTarget,
@@ -133,26 +138,30 @@ internal class ZipArchiveSink : IArchiveSink
         }
         catch
         {
-            foreach (var sidecar in createdSidecars)
+            DeleteCreatedSidecars(createdSidecars);
+            throw;
+        }
+    }
+
+    private static void DeleteCreatedSidecars(List<string> createdSidecars)
+    {
+        foreach (var sidecar in createdSidecars)
+        {
+            if (File.Exists(sidecar))
             {
-                if (File.Exists(sidecar))
+                try
                 {
-                    try
-                    {
-                        File.Delete(sidecar);
-                    }
+                    File.Delete(sidecar);
+                }
 #pragma warning disable CA1031
 #pragma warning disable RCS1075
-                    catch (Exception)
-                    {
-                        // Suppress cleanup exceptions to preserve original error
-                    }
+                catch (Exception)
+                {
+                    // Suppress cleanup exceptions to preserve original error
+                }
 #pragma warning restore RCS1075
 #pragma warning restore CA1031
-                }
             }
-
-            throw;
         }
     }
 
