@@ -1168,13 +1168,13 @@ public class ChaosEngineTests
     public void Intercept_ConcordanceWithEmptyQuoteDelimiter_SkipsQuoteEscapeAnomalies()
     {
         var engine = new ChaosEngine(5, "5", null, LoadFileFormat.Concordance, "\t", string.Empty, "\n", 42);
-        const string line = "Value\tOther";
+        const string line = "Value\u00fe\tOther";
 
         for (int i = 1; i <= 5; i++)
         {
             if (engine.ShouldIntercept(i))
             {
-                _ = engine.Intercept(i, line, $"DOC{i:D8}");
+                Assert.Equal("Value\u00fe,Other", engine.Intercept(i, line, $"DOC{i:D8}"));
             }
         }
 

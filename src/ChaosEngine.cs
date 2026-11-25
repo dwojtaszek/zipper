@@ -275,7 +275,7 @@ internal class ChaosEngine
         if (format == LoadFileFormat.Concordance)
         {
             char fieldDelim = string.IsNullOrEmpty(columnDelimiter) ? '\u0014' : columnDelimiter[0];
-            char quoteDelim = string.IsNullOrEmpty(quoteDelimiter) ? '\u00fe' : quoteDelimiter[0];
+            char? quoteDelim = string.IsNullOrEmpty(quoteDelimiter) ? null : quoteDelimiter[0];
             return new ConcordanceAnomalyApplier(random, fieldDelim, quoteDelim);
         }
 

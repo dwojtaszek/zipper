@@ -1128,22 +1128,22 @@ fn assert_production_files(set_dir: &Path, count: u8) {
     let rows = parse_delimited_records(&text, '\x14', Some('\u{fe}')).expect("parse dat");
     assert!(rows.len() >= 1 + usize::from(count));
     let hdr = &rows[0];
-    let native_idx = hdr.iter().position(|h| h == "NATIVE_PATH");
-    let text_idx = hdr.iter().position(|h| h == "TEXT_PATH");
-    let img_idx = hdr.iter().position(|h| h == "IMAGE_PATH");
+    let path_indices = ["NATIVE_PATH", "TEXT_PATH", "IMAGE_PATH"].map(|column| {
+        hdr.iter()
+            .position(|header| header == column)
+            .expect(column)
+    });
 
     for row in &rows[1..] {
         assert_eq!(row.len(), hdr.len());
-        for idx_opt in [native_idx, text_idx, img_idx] {
-            if let Some(idx) = idx_opt {
-                let rel = row[idx].trim();
-                if !rel.is_empty() {
-                    let norm = rel.replace('\\', "/");
-                    let full = set_dir.join(&norm);
-                    if !full.exists() {
-                        ephyra::signature("production_missing_referenced_file");
-                        panic!("DAT referenced missing file: {}", full.display());
-                    }
+        for idx in path_indices {
+            let rel = row[idx].trim();
+            if !rel.is_empty() {
+                let norm = rel.replace('\\', "/");
+                let full = set_dir.join(&norm);
+                if !full.exists() {
+                    ephyra::signature("production_missing_referenced_file");
+                    panic!("DAT referenced missing file: {}", full.display());
                 }
             }
         }
