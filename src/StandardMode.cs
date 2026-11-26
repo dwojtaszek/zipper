@@ -69,13 +69,13 @@ internal class StandardMode : IGenerationMode
             {
                 await Console.Error.WriteLineAsync(string.Format(System.Globalization.CultureInfo.InvariantCulture,
                     "  Warning: archive size {0:N0} bytes is outside the +/-10% target tolerance ({1:N0} bytes, deviation {2:P1}).",
-                    actual, target, deviation)).ConfigureAwait(false);
+                    actual, target, deviation).AsMemory(), CancellationToken.None).ConfigureAwait(ConfigureAwaitOptions.None);
             }
             else
             {
                 await Console.Out.WriteLineAsync(string.Format(System.Globalization.CultureInfo.InvariantCulture,
                     "  Target ZIP size met: {0:N0} bytes (within +/-10% of {1:N0} bytes, deviation {2:P1}).",
-                    actual, target, deviation)).ConfigureAwait(false);
+                    actual, target, deviation).AsMemory(), CancellationToken.None).ConfigureAwait(ConfigureAwaitOptions.None);
             }
         }
 
@@ -142,9 +142,13 @@ internal class StandardMode : IGenerationMode
 
     private static IReadOnlyDictionary<string, string> BuildDefaultLoadFiles(FileGenerationResult result, FileGenerationRequest request)
     {
-        var baseName = Path.GetFileNameWithoutExtension(result.LoadFilePath);
+        var fileName = Path.GetFileName(result.LoadFilePath);
+        var baseName = fileName.EndsWith(".concordance.dat", StringComparison.OrdinalIgnoreCase)
+            ? fileName[..^".concordance.dat".Length]
+            : Path.GetFileNameWithoutExtension(fileName);
         var directory = Path.GetDirectoryName(result.LoadFilePath) ?? string.Empty;
         var formats = request.LoadFile.Formats.Count > 0 ? request.LoadFile.Formats : new[] { LoadFileFormat.Dat };
+        bool disambiguateConcordance = formats.Contains(LoadFileFormat.Dat) && formats.Contains(LoadFileFormat.Concordance);
         var paths = new Dictionary<string, string>();
         foreach (var format in formats)
         {
@@ -161,6 +165,7 @@ internal class StandardMode : IGenerationMode
                 LoadFileFormat.Opt => ".opt",
                 LoadFileFormat.Csv => ".csv",
                 LoadFileFormat.EdrmXml => ".xml",
+                LoadFileFormat.Concordance when disambiguateConcordance => ".concordance.dat",
                 _ => ".dat",
             };
             paths[name] = Path.Combine(directory, baseName + ext);

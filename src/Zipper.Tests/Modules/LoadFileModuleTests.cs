@@ -150,6 +150,14 @@ public class LoadFileModuleTests
     }
 
     [Fact]
+    public void TryBuild_DuplicateLoadFileFormats_DeduplicatesPreservingOrder()
+    {
+        Assert.True(TryBuild(0, null, false, null, null, false, new[] { "--load-file-formats", "dat,edrm-xml,xml,dat" }, out var config));
+
+        Assert.Equal(new[] { LoadFileFormat.Dat, LoadFileFormat.EdrmXml }, config.Formats);
+    }
+
+    [Fact]
     public void TryBuild_LoadfileOnlyEncoding_UsesExtendedSet()
     {
         Assert.True(TryBuild(0, "WINDOWS-1252", false, null, null, false, new[] { "--loadfile-only" }, out var config));

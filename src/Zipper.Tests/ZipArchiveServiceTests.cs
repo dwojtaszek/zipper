@@ -581,6 +581,49 @@ public class ZipArchiveServiceTests : TempDirectoryTestBase
         Assert.Equal(3, optLines.Length); // Opticon: no header, 3 rows
     }
 
+    [Theory]
+    [InlineData(false, "load.dat")]
+    [InlineData(true, "load.concordance.dat")]
+    public async Task CreateArchiveAsync_ConcordanceIncluded_UsesDistinctNameWhenDatIsAlsoRequested(bool includeDat, string expectedTarget)
+    {
+        var zipPath = this.GetTempFilePath();
+        var loadPathBase = this.GetTempFilePath();
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileType = "pdf",
+                FileCount = 2,
+                Concurrency = 1,
+                IncludeLoadFile = true,
+            },
+            LoadFile = new LoadFileConfig
+            {
+                Formats = includeDat ? [LoadFileFormat.Dat, LoadFileFormat.Concordance] : [LoadFileFormat.Concordance],
+            },
+        };
+
+        var channel = Channel.CreateUnbounded<FileData>();
+        for (int i = 1; i <= 2; i++)
+        {
+            await channel.Writer.WriteAsync(this.CreateZipTestFileData(i));
+        }
+
+        channel.Writer.Complete();
+
+        var actualTarget = await new ZipArchiveSink().CreateArchiveAsync(zipPath, "load", loadPathBase, request, channel.Reader);
+
+        Assert.Equal(expectedTarget, actualTarget);
+        using var archive = ZipFile.OpenRead(zipPath);
+        Assert.NotNull(archive.GetEntry(expectedTarget));
+        Assert.NotNull(archive.GetEntry(expectedTarget + "_properties.json"));
+        if (includeDat)
+        {
+            Assert.NotNull(archive.GetEntry("load.dat"));
+            Assert.NotNull(archive.GetEntry("load.dat_properties.json"));
+        }
+    }
+
     [Fact]
     public async Task CreateArchiveAsync_AuditFile_TotalRecordsEqualsFileCount()
     {

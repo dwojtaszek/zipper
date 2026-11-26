@@ -16,9 +16,9 @@ internal sealed class ConcordanceAnomalyApplier : IAnomalyApplier
 {
     private readonly Random random;
     private readonly char fieldDelim;
-    private readonly char quoteDelim;
+    private readonly char? quoteDelim;
 
-    public ConcordanceAnomalyApplier(Random random, char fieldDelim, char quoteDelim)
+    public ConcordanceAnomalyApplier(Random random, char fieldDelim, char? quoteDelim)
     {
         this.random = random;
         this.fieldDelim = fieldDelim;
@@ -130,7 +130,7 @@ internal sealed class ConcordanceAnomalyApplier : IAnomalyApplier
     private string ApplyConcordanceQuoteEscape(string line, out string column, out string description)
     {
         // Find the last quote delimiter to drop (mirrors DatAnomalyApplier.ApplyDroppedQuote strategy)
-        int lastQuotePos = line.LastIndexOf(this.quoteDelim);
+        int lastQuotePos = this.quoteDelim is char quote ? line.LastIndexOf(quote) : -1;
         if (lastQuotePos < 0)
         {
             column = "N/A";
@@ -142,7 +142,7 @@ internal sealed class ConcordanceAnomalyApplier : IAnomalyApplier
         int delimCount = GetFieldDelimiterPositions(line, lastQuotePos).Count;
 
         column = $"Column {delimCount + 1}";
-        description = $"Dropped the closing Concordance quote delimiter (ascii:{(int)this.quoteDelim}) on column {delimCount + 1}, breaking Concordance field parsing.";
+        description = $"Dropped the closing Concordance quote delimiter (ascii:{(int)this.quoteDelim.GetValueOrDefault()}) on column {delimCount + 1}, breaking Concordance field parsing.";
 
         return string.Concat(line.AsSpan(0, lastQuotePos), line.AsSpan(lastQuotePos + 1));
     }
