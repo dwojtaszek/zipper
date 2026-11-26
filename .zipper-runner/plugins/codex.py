@@ -15,9 +15,11 @@ import subprocess
 import shutil
 
 
-DEFAULT_MODEL = "gpt-6.1-sol"
+DEFAULT_MODEL = "gpt-6.2-sol"
 
 KNOWN_MODELS = [
+    "openai/gpt-6.2-sol",
+    "openai/gpt-6.2-astra",
     "openai/gpt-6.1-sol",
     "openai/gpt-5.6-terra",
     "openai/gpt-5.5",
@@ -104,7 +106,7 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
         prompt: The task description to pass to the agent.
         cwd: Absolute path to the git worktree where the work happens.
         is_continue: If True, resumes the most recent session in cwd.
-        model: Model to use (defaults to 'openai/gpt-6.1-sol', low effort).
+        model: Model to use (defaults to 'openai/gpt-6.2-sol', low effort).
 
     Returns:
         (exit_code, stdout, stderr)

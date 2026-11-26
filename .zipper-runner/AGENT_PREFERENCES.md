@@ -4,7 +4,9 @@ Set priority: `0` = don't use, `1` = best, `2` = good, `3` = fallback.
 
 | Agent | Model | Priority |
 |-------|-------|----------|
-| `codex` | `openai/gpt-6.1-sol` | 1|
+| `codex` | `openai/gpt-6.2-sol` | 1|
+| `codex` | `openai/gpt-6.2-astra` | 2|
+| `codex` | `openai/gpt-6.1-sol` | 3|
 | `opencode` | `deepseek/deepseek-chat` | 0|
 | `opencode` | `deepseek/deepseek-reasoner` | 0|
 | `opencode` | `deepseek/deepseek-v4-flash` | 0|
@@ -32,7 +34,7 @@ Set priority: `0` = don't use, `1` = best, `2` = good, `3` = fallback.
 | `opencode` | `opencode/glm-5` | 0|
 | `opencode` | `opencode/glm-5.1` | 0|
 | `opencode` | `opencode/glm-5.2` | 0|
-| `opencode` | `opencode/glm-5.3-flash-free` | 2|
+| `opencode` | `opencode/glm-5.3-flash-free` | 0|
 | `opencode` | `opencode/gpt-5` | 0|
 | `opencode` | `opencode/gpt-5-codex` | 0|
 | `opencode` | `opencode/gpt-5.1-codex` | 0|
