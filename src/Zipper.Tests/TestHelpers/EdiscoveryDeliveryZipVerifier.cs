@@ -22,7 +22,7 @@ public sealed record EdiscoveryDeliveryReport(
 }
 
 /// <summary>Recipe expectation for one Standard DAT row, keyed by Control Number.</summary>
-public sealed record StandardDeliveryRow(string NativePath, string TextPath);
+public sealed record StandardDeliveryRow(string NativePath, string TextPath, string ParentDocId);
 
 /// <summary>
 /// Independent reader and verification harness for e-discovery ZIP deliveries
@@ -106,7 +106,7 @@ internal static class EdiscoveryDeliveryZipVerifier
         foreach (var (relativePath, hash) in diskManifest.Where(entry => !entry.Key.Contains("::", StringComparison.Ordinal)))
         {
             Assert.True(
-                archiveManifest.TryGetValue($"{archiveManifestPrefix}{GoldenBaselineHarness.EscapeManifestKeyPart(relativePath)}", out var archiveHash),
+                archiveManifest.TryGetValue($"{archiveManifestPrefix}{relativePath}", out var archiveHash),
                 $"Archive manifest is missing '{relativePath}'.");
             Assert.Equal(hash, archiveHash);
         }
@@ -403,6 +403,7 @@ internal static class EdiscoveryDeliveryZipVerifier
                     $"Standard DAT Control Number '{cols[controlNumIdx]}' is absent from the recipe inventory.");
                 Assert.Equal(expectedRow!.NativePath, nativeRel);
                 Assert.Equal(expectedRow.TextPath, textRel);
+                Assert.Equal(expectedRow.ParentDocId, cols[parentDocIdIdx]);
             }
 
             familyRecords.Add(new FamilyRecord(

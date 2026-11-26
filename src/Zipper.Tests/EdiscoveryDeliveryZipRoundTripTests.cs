@@ -266,7 +266,7 @@ public class EdiscoveryDeliveryZipRoundTripTests : WorkingDirectoryTestBase
             AddExpectedHash(hashes, textPath, textContent);
 
             var controlNumber = $"DOC{i:D8}";
-            AddExpectedRow(rows, controlNumber, workItem.FilePathInZip, textPath);
+            AddExpectedRow(rows, controlNumber, workItem.FilePathInZip, textPath, string.Empty);
 
             var attachments = generated.GetAttachments();
             var attachmentNames = attachments.Select(a => a.filename).ToList();
@@ -283,7 +283,8 @@ public class EdiscoveryDeliveryZipRoundTripTests : WorkingDirectoryTestBase
                     rows,
                     FamilyPlan.GetChildId(controlNumber, attachmentNumber),
                     attachmentPath,
-                    attachmentTextPath);
+                    attachmentTextPath,
+                    controlNumber);
             }
         }
 
@@ -300,10 +301,13 @@ public class EdiscoveryDeliveryZipRoundTripTests : WorkingDirectoryTestBase
         Dictionary<string, StandardDeliveryRow> expected,
         string controlNumber,
         string nativePath,
-        string textPath)
+        string textPath,
+        string parentDocId)
     {
         Assert.True(
-            expected.TryAdd(controlNumber, new StandardDeliveryRow(nativePath.Replace('\\', '/'), textPath.Replace('\\', '/'))),
+            expected.TryAdd(
+                controlNumber,
+                new StandardDeliveryRow(nativePath.Replace('\\', '/'), textPath.Replace('\\', '/'), parentDocId)),
             $"Duplicate expected Control Number '{controlNumber}'.");
     }
 

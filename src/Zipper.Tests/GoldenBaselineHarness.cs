@@ -189,6 +189,12 @@ public static class GoldenBaselineHarness
 
                     if (normalizeTimestamps && entry.Length == 0)
                     {
+                        // Open the member so an unreadable local header is rejected here too,
+                        // matching the raw path that hashes the stream.
+                        using (entry.Open())
+                        {
+                        }
+
                         // Empty directories have no content bytes to hash; canonicalize by
                         // relative-path-in-archive and full directory name to keep parity stable.
                         var dirKey = $"{keyPrefix}::{entryKeyPart}";

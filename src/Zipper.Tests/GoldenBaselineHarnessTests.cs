@@ -704,10 +704,13 @@ public class GoldenBaselineHarnessTests
 
             var fallbackDir = Path.Combine(tempDir.FullName, "fallback-dir");
             Directory.CreateDirectory(fallbackDir);
-            var newlineNamedInvalidZip = Path.Combine(fallbackDir, "broken\nname.zip");
+            var fallbackName = OperatingSystem.IsWindows() ? "broken_name.zip" : "broken\nname.zip";
+            var newlineNamedInvalidZip = Path.Combine(fallbackDir, fallbackName);
             await File.WriteAllTextAsync(newlineNamedInvalidZip, "not a zip");
             var fallbackManifest = GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(fallbackDir);
-            Assert.Contains("  broken\\nname.zip", fallbackManifest);
+            Assert.Contains(
+                OperatingSystem.IsWindows() ? "  broken_name.zip" : "  broken\\nname.zip",
+                fallbackManifest);
             Assert.Single(fallbackManifest.Split('\n', StringSplitOptions.RemoveEmptyEntries));
 
             var dirPayloadDir = Path.Combine(tempDir.FullName, "dir-payload");
