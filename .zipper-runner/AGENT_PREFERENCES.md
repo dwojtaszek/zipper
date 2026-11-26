@@ -65,7 +65,8 @@ Set priority: `0` = don't use, `1` = best, `2` = good, `3` = fallback.
 | `agy` | `default` | 0|
 | `agy` | `claude-sonnet-4-6` | 0|
 | `agy` | `claude-opus-4-6-thinking` | 2|
-| `agy` | `gemini-3.8-flash-high` | 1|
+| `agy` | `gemini-4-hydrogen-high` | 1|
+| `agy` | `gemini-3.8-flash-high` | 2|
 | `agy` | `gemini-3.8-flash-medium` | 0|
 | `agy` | `gemini-3.8-flash-low` | 0|
 | `agy` | `gemini-3.7-flash-high` | 0|
