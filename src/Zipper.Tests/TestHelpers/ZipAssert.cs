@@ -66,17 +66,25 @@ public static class ZipAssert
             Assert.StartsWith(rootPrefix, entry.FullName, StringComparison.Ordinal);
         }
 
-        // Method code assertion (Store = 0, Deflate = 8). The .NET writer stores empty
-        // entries with method 0 even when the requested method is Deflate, so only
-        // non-empty members carry the requested method.
+        // Method code assertion (Store = 0, Deflate = 8). A Store request must always
+        // require Store (method 0), even for empty files. For Deflate, the .NET writer
+        // stores empty entries with method 0, so empty entries may be Stored while
+        // non-empty members must be Deflated.
         int expectedMethodCode = expectedMethod == ZipCompressionMethod.Store ? 0 : 8;
         using (var sharpZip = new ICSharpCode.SharpZipLib.Zip.ZipFile(zipPath))
         {
             foreach (ICSharpCode.SharpZipLib.Zip.ZipEntry entry in sharpZip)
             {
-                if (!entry.IsDirectory && entry.Size > 0)
+                if (!entry.IsDirectory)
                 {
-                    Assert.Equal(expectedMethodCode, (int)entry.CompressionMethod);
+                    if (expectedMethod == ZipCompressionMethod.Store)
+                    {
+                        Assert.Equal(0, (int)entry.CompressionMethod);
+                    }
+                    else if (entry.Size > 0)
+                    {
+                        Assert.Equal(expectedMethodCode, (int)entry.CompressionMethod);
+                    }
                 }
             }
         }

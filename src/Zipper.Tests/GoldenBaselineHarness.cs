@@ -164,14 +164,8 @@ public static class GoldenBaselineHarness
                         var dirKey = $"{relPath}::{entry.FullName}";
                         var payload = Encoding.UTF8.GetBytes($"{relPath}\n{entry.FullName}");
                         archiveEntries.Add((dirKey, $"{HashBytes(payload)}  {dirKey}"));
+                        continue;
                     }
-                    else
-                    {
-                        var dirKey = $"{relPath}::{entry.FullName}";
-                        var payload = Encoding.UTF8.GetBytes($"{relPath}\n{entry.FullName}\nraw");
-                        archiveEntries.Add((dirKey, $"{HashBytes(payload)}  {dirKey}"));
-                    }
-                    continue;
                 }
 
                 using var entryStream = entry.Open();

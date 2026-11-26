@@ -261,6 +261,7 @@ internal static class EdiscoveryDeliveryZipVerifier
 
         var familyRecords = new List<FamilyRecord>();
         var nativePaths = new HashSet<string>(StringComparer.Ordinal);
+        var textPaths = new HashSet<string>(StringComparer.Ordinal);
         for (int i = 1; i < datLines.Length; i++)
         {
             var cols = DelimitedTestParser.ParseLine(datLines[i], colDelim, quoteDelim).ToArray();
@@ -278,10 +279,13 @@ internal static class EdiscoveryDeliveryZipVerifier
             Assert.NotNull(nativeEntry);
             Assert.Equal(expectedFileSize, nativeEntry!.Length);
 
-            // Extracted Text is enabled for this recipe, so every row must reference a packaged text file.
+            // Extracted Text is enabled for this recipe, so every row must reference its expected text sidecar.
             var textRel = cols[extractedTextIdx].Replace('\\', '/');
             Assert.False(string.IsNullOrEmpty(textRel), $"Standard DAT row {i} has no Extracted Text reference.");
+            var expectedTextRel = Path.ChangeExtension(nativeRel, ".txt").Replace('\\', '/');
+            Assert.Equal(expectedTextRel, textRel);
             Assert.Contains(textRel, archiveEntryNames);
+            textPaths.Add(textRel);
 
             familyRecords.Add(new FamilyRecord(
                 cols[controlNumIdx],
@@ -310,10 +314,53 @@ internal static class EdiscoveryDeliveryZipVerifier
             Assert.NotEmpty(familyChildren);
         }
 
+        // Locate included OPT load file if present, and verify format structure.
+        var optEntry = archive.Entries.FirstOrDefault(e => !e.FullName.Contains('/') && e.FullName.EndsWith(".opt", StringComparison.OrdinalIgnoreCase));
+        if (optEntry is not null)
+        {
+            using var optReader = new StreamReader(optEntry.Open(), Encoding.UTF8);
+            var optContent = await optReader.ReadToEndAsync();
+            var optLines = optContent.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            Assert.NotEmpty(optLines);
+
+            foreach (var optLine in optLines)
+            {
+                var parts = optLine.Split(',');
+                Assert.True(parts.Length >= 7, $"Standard OPT line had {parts.Length} fields, expected >= 7: {optLine}");
+            }
+        }
+
+        // Compare DAT native references against the independently established recipe inventory.
+        long expectedNativeCount = request.Output.FileCount + familyChildren.Count;
+        Assert.Equal(expectedNativeCount, (long)nativePaths.Count);
+
+        static bool IsArchiveLoadFileArtifact(string name)
+        {
+            if (name.Contains('/'))
+            {
+                return false;
+            }
+
+            return name.EndsWith(".dat", StringComparison.OrdinalIgnoreCase)
+                || name.EndsWith(".opt", StringComparison.OrdinalIgnoreCase)
+                || name.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+                || name.EndsWith(".csv", StringComparison.OrdinalIgnoreCase)
+                || name.EndsWith(".xml", StringComparison.OrdinalIgnoreCase);
+        }
+
+        var deliveredArchiveNatives = archiveEntryNames
+            .Where(name => !IsArchiveLoadFileArtifact(name) && !textPaths.Contains(name))
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.True(
+            nativePaths.SetEquals(deliveredArchiveNatives),
+            $"Standard DAT native references do not match delivered archive natives. Missing from DAT: [{string.Join(", ", deliveredArchiveNatives.Except(nativePaths))}]. Extra in DAT: [{string.Join(", ", nativePaths.Except(deliveredArchiveNatives))}].");
+
         // Count Native Files by their DAT role, so a .txt attachment still counts as a Native.
         long nativeFilesCount = nativePaths.Count;
 
         long totalDocuments = datLines.Length - 1;
+        Assert.Equal(expectedNativeCount, totalDocuments);
 
         // 7. Report documents, Native Files, and ZIP members separately.
         var report = new EdiscoveryDeliveryReport(
@@ -361,13 +408,24 @@ internal static class EdiscoveryDeliveryZipVerifier
             .ToDictionary(r => r.DocId, StringComparer.Ordinal);
         var childrenByParent = familyRecords
             .Where(r => !string.IsNullOrEmpty(r.ParentDocId))
-            .GroupBy(r => r.ParentDocId, StringComparer.Ordinal);
+            .GroupBy(r => r.ParentDocId, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
 
-        foreach (var group in childrenByParent)
+        foreach (var (parentId, group) in childrenByParent)
         {
-            Assert.True(parents.TryGetValue(group.Key, out var parent), $"Family child parent '{group.Key}' has no parent row.");
+            Assert.True(parents.TryGetValue(parentId, out var parent), $"Family child parent '{parentId}' has no parent row.");
             var lastChild = group.OrderBy(r => r.DocId, StringComparer.Ordinal).Last();
             Assert.Equal(lastChild.DocId, parent!.EndAttach);
+        }
+
+        foreach (var (parentId, parent) in parents)
+        {
+            Assert.True(
+                childrenByParent.TryGetValue(parentId, out var group),
+                $"Parent '{parentId}' has BegAttach '{parent.BegAttach}' != EndAttach '{parent.EndAttach}', but has no family children.");
+            Assert.NotEmpty(group);
+            var lastChild = group.OrderBy(r => r.DocId, StringComparer.Ordinal).Last();
+            Assert.Equal(lastChild.DocId, parent.EndAttach);
         }
     }
 
