@@ -261,6 +261,27 @@ public class ZipAssertTests : TempDirectoryTestBase
         });
     }
 
+    [Fact]
+    public void AssertProductionZipMatchesDisk_TrailingDirectorySeparator_Passes()
+    {
+        var prodDir = Path.Combine(this.TempDir, "PROD_TRAIL");
+        Directory.CreateDirectory(Path.Combine(prodDir, "DATA"));
+        File.WriteAllText(Path.Combine(prodDir, "DATA", "loadfile.dat"), "header");
+        File.WriteAllText(Path.Combine(prodDir, "_manifest.json"), "{}");
+        var zipPath = Path.Combine(this.TempDir, "PROD_TRAIL.zip");
+
+        using (var archive = ZipFile.Open(zipPath, ZipArchiveMode.Create))
+        {
+            var dataEntry = archive.CreateEntry("PROD_TRAIL/DATA/loadfile.dat", CompressionLevel.NoCompression);
+            using (var writer = new StreamWriter(dataEntry.Open())) { writer.Write("header"); }
+
+            var manifestEntry = archive.CreateEntry("PROD_TRAIL/_manifest.json", CompressionLevel.NoCompression);
+            using (var writer = new StreamWriter(manifestEntry.Open())) { writer.Write("{}"); }
+        }
+
+        ZipAssert.AssertProductionZipMatchesDisk(zipPath, prodDir + Path.DirectorySeparatorChar, ZipCompressionMethod.Store);
+    }
+
     private static int IndexOfPattern(byte[] source, byte[] pattern)
     {
         for (int i = 0; i <= source.Length - pattern.Length; i++)

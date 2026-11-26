@@ -133,6 +133,13 @@ public static class GoldenBaselineHarness
         return relPath.StartsWith("./", StringComparison.Ordinal) ? relPath[2..] : relPath;
     }
 
+    private static bool ContainsLineBreak(string value) => value.Contains('\r') || value.Contains('\n');
+
+    private static string EscapeManifestKeyPart(string value) =>
+        value.Replace("\\", "\\\\", StringComparison.Ordinal)
+             .Replace("\r", "\\r", StringComparison.Ordinal)
+             .Replace("\n", "\\n", StringComparison.Ordinal);
+
     private static bool IsArchive(string fullPath)
     {
         var ext = Path.GetExtension(fullPath);
@@ -150,24 +157,31 @@ public static class GoldenBaselineHarness
     {
         try
         {
+            if (!allowWholeFileFallback && ContainsLineBreak(relPath))
+            {
+                throw new InvalidDataException($"Archive name '{relPath}' contains an unsupported newline character.");
+            }
+
+            var keyPrefix = EscapeManifestKeyPart(relPath);
             var archiveEntries = new List<(string Key, string Line)>();
             using var fileStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             using var zip = new ZipArchive(fileStream, ZipArchiveMode.Read);
             foreach (var entry in zip.Entries.OrderBy(e => e.FullName, StringComparer.Ordinal))
             {
-                if (entry.FullName.Contains('\n') || entry.FullName.Contains('\r'))
+                if (!allowWholeFileFallback && ContainsLineBreak(entry.FullName))
                 {
                     throw new InvalidDataException($"Archive entry name '{entry.FullName}' contains an unsupported newline character.");
                 }
 
+                var entryKeyPart = EscapeManifestKeyPart(entry.FullName);
                 if (entry.FullName.EndsWith('/'))
                 {
                     if (normalizeTimestamps)
                     {
                         // Directories have no content bytes to hash; canonicalize by
                         // relative-path-in-archive and full directory name to keep parity stable.
-                        var dirKey = $"{relPath}::{entry.FullName}";
-                        var payload = Encoding.UTF8.GetBytes($"{relPath}\n{entry.FullName}");
+                        var dirKey = $"{keyPrefix}::{entryKeyPart}";
+                        var payload = Encoding.UTF8.GetBytes($"{keyPrefix}\n{entryKeyPart}");
                         archiveEntries.Add((dirKey, $"{HashBytes(payload)}  {dirKey}"));
                         continue;
                     }
@@ -175,7 +189,7 @@ public static class GoldenBaselineHarness
 
                 using var entryStream = entry.Open();
                 var hashHex = ComputeHash(entry.FullName, entryStream, normalizeTimestamps);
-                var entryKey = $"{relPath}::{entry.FullName}";
+                var entryKey = $"{keyPrefix}::{entryKeyPart}";
                 archiveEntries.Add((entryKey, $"{hashHex}  {entryKey}"));
             }
 
@@ -196,15 +210,15 @@ public static class GoldenBaselineHarness
                 // directory name set; raw mode keeps hashing the bytes as-is.
                 if (normalizeTimestamps)
                 {
-                    var directoryNames = string.Join('\n', zip.Entries.Select(static e => e.FullName).OrderBy(static n => n, StringComparer.Ordinal));
-                    var payload = Encoding.UTF8.GetBytes($"{relPath}\n{directoryNames}");
-                    entries.Add((relPath, $"{HashBytes(payload)}  {relPath}"));
+                    var directoryNames = string.Join('\n', zip.Entries.Select(e => EscapeManifestKeyPart(e.FullName)).OrderBy(static n => n, StringComparer.Ordinal));
+                    var payload = Encoding.UTF8.GetBytes($"{keyPrefix}\n{directoryNames}");
+                    entries.Add((keyPrefix, $"{HashBytes(payload)}  {keyPrefix}"));
                 }
                 else
                 {
                     using var fs = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                     var hashHex = ComputeHash(relPath, fs, normalizeTimestamps: false);
-                    entries.Add((relPath, $"{hashHex}  {relPath}"));
+                    entries.Add((keyPrefix, $"{hashHex}  {keyPrefix}"));
                 }
             }
             else

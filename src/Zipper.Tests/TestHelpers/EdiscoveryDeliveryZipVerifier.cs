@@ -43,12 +43,13 @@ internal static class EdiscoveryDeliveryZipVerifier
         Assert.True(File.Exists(zipFilePath), $"Production ZIP file not found at '{zipFilePath}'.");
         Assert.True(Directory.Exists(productionDirectory), $"Production directory not found at '{productionDirectory}'.");
 
-        var prodName = Path.GetFileName(Path.TrimEndingDirectorySeparator(productionDirectory));
+        var normalizedProductionDirectory = Path.TrimEndingDirectorySeparator(Path.GetFullPath(productionDirectory));
+        var prodName = Path.GetFileName(normalizedProductionDirectory);
         var rootPrefix = prodName + "/";
-        var parentDir = Path.GetDirectoryName(Path.GetFullPath(productionDirectory))!;
+        var parentDir = Path.GetDirectoryName(normalizedProductionDirectory)!;
 
         // 1. Independent reader: inventory, compression method, decompression/CRC, and bytes vs disk.
-        ZipAssert.AssertProductionZipMatchesDisk(zipFilePath, productionDirectory, request.Output.CompressionMethod);
+        ZipAssert.AssertProductionZipMatchesDisk(zipFilePath, normalizedProductionDirectory, request.Output.CompressionMethod);
 
         using var archive = ZipFile.OpenRead(zipFilePath);
         var archiveEntryNames = archive.Entries
@@ -71,6 +72,28 @@ internal static class EdiscoveryDeliveryZipVerifier
         Assert.Equal(0, validationReport.ErrorCount);
         Assert.Equal(0, validationReport.WarningCount);
         Assert.Empty(validationReport.Findings);
+
+        // The generation run validated these same files before packaging. Matching counts prove
+        // the request built from the CLI args is equivalent for every field the validator reads.
+        var persistedReportPath = Path.Combine(productionDirectory, "_validation_report.json");
+        Assert.True(File.Exists(persistedReportPath), "_validation_report.json must exist.");
+        var persistedReport = JsonSerializer.Deserialize<ProductionSetValidationReport>(
+            await File.ReadAllTextAsync(persistedReportPath));
+        Assert.NotNull(persistedReport);
+        Assert.Equal(persistedReport!.Status, validationReport.Status);
+        Assert.Equal(persistedReport.ErrorCount, validationReport.ErrorCount);
+        Assert.Equal(persistedReport.WarningCount, validationReport.WarningCount);
+        Assert.Equal(persistedReport.CheckedFileCounts.Count, validationReport.CheckedFileCounts.Count);
+        foreach (var (kind, count) in validationReport.CheckedFileCounts)
+        {
+            Assert.Equal(count, persistedReport.CheckedFileCounts[kind]);
+        }
+
+        Assert.Equal(persistedReport.CheckedLoadFileRowCounts.Count, validationReport.CheckedLoadFileRowCounts.Count);
+        foreach (var (loadFile, count) in validationReport.CheckedLoadFileRowCounts)
+        {
+            Assert.Equal(count, persistedReport.CheckedLoadFileRowCounts[loadFile]);
+        }
 
         // 3. Golden hash-manifest tooling: disk and archive manifests must describe the same bytes.
         var diskManifest = ParseManifest(GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(productionDirectory));
@@ -198,7 +221,8 @@ internal static class EdiscoveryDeliveryZipVerifier
         long parentDocuments = totalDocuments - familyChildren.Count;
         Assert.Equal((long)request.Output.FileCount, parentDocuments);
 
-        // CheckedLoadFileRowCounts["dat"] includes the header row per ProductionSetPostValidator lines 239 and 251.
+        // CheckedLoadFileRowCounts["dat"] includes its header row (see ProductionSetPostValidator),
+        // so it is one more than the data record count.
         Assert.Equal((int)totalDocuments + 1, validationReport.CheckedLoadFileRowCounts["dat"]);
         Assert.Equal(optLines.Count, validationReport.CheckedLoadFileRowCounts["opt"]);
 
@@ -219,7 +243,8 @@ internal static class EdiscoveryDeliveryZipVerifier
     public static async Task<EdiscoveryDeliveryReport> VerifyStandardModeZipDeliveryAsync(
         string zipFilePath,
         FileGenerationRequest request,
-        ITestOutputHelper? output = null)
+        ITestOutputHelper? output = null,
+        IReadOnlyDictionary<string, string>? expectedContentHashesByMember = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(zipFilePath);
         ArgumentNullException.ThrowIfNull(request);
@@ -248,6 +273,7 @@ internal static class EdiscoveryDeliveryZipVerifier
             using (var sharpZip = new ICSharpCode.SharpZipLib.Zip.ZipFile(zipFilePath))
             {
                 var sharpZipEntries = new HashSet<string>(StringComparer.Ordinal);
+                var verifiedExpectedMembers = new HashSet<string>(StringComparer.Ordinal);
                 foreach (ICSharpCode.SharpZipLib.Zip.ZipEntry entry in sharpZip)
                 {
                     if (!entry.IsDirectory && !entry.Name.EndsWith('/'))
@@ -265,9 +291,22 @@ internal static class EdiscoveryDeliveryZipVerifier
                         Assert.True(
                             diskHash.AsSpan().SequenceEqual(entryHash),
                             $"Streaming hash mismatch for '{entry.Name}' against disk artifact.");
+
+                        if (expectedContentHashesByMember is not null && expectedContentHashesByMember.TryGetValue(entry.Name, out var expectedHash))
+                        {
+                            var entryHashHex = Convert.ToHexString(entryHash).ToLowerInvariant();
+                            Assert.Equal(expectedHash, entryHashHex);
+                            verifiedExpectedMembers.Add(entry.Name);
+                        }
                     }
                 }
                 Assert.True(diskFiles.SetEquals(sharpZipEntries));
+                if (expectedContentHashesByMember is not null)
+                {
+                    Assert.True(
+                        verifiedExpectedMembers.SetEquals(expectedContentHashesByMember.Keys),
+                        $"Expected pre-packaging members missing from ZIP: [{string.Join(", ", expectedContentHashesByMember.Keys.Except(verifiedExpectedMembers))}].");
+                }
             }
         }
         finally
@@ -314,10 +353,12 @@ internal static class EdiscoveryDeliveryZipVerifier
         var familyRecords = new List<FamilyRecord>();
         var nativePaths = new HashSet<string>(StringComparer.Ordinal);
         var textPaths = new HashSet<string>(StringComparer.Ordinal);
+        var controlNumbers = new HashSet<string>(StringComparer.Ordinal);
         for (int i = 1; i < datLines.Length; i++)
         {
             var cols = DelimitedTestParser.ParseLine(datLines[i], colDelim, quoteDelim).ToArray();
             Assert.Equal(header.Length, cols.Length);
+            Assert.True(controlNumbers.Add(cols[controlNumIdx]), $"Standard DAT row {i} repeats Control Number '{cols[controlNumIdx]}'.");
 
             // Native file path resolves inside ZIP, and its DAT File Size is the pre-packaging size.
             var nativeRel = cols[filePathIdx].Replace('\\', '/');
@@ -336,7 +377,11 @@ internal static class EdiscoveryDeliveryZipVerifier
             Assert.False(string.IsNullOrEmpty(textRel), $"Standard DAT row {i} has no Extracted Text reference.");
             Assert.True(textRel.EndsWith(".txt", StringComparison.OrdinalIgnoreCase), $"Standard DAT row {i} Extracted Text must end with .txt: {textRel}");
             Assert.NotEqual(nativeRel, textRel);
-            if (string.IsNullOrEmpty(cols[parentDocIdIdx]))
+            // A non-.txt parent's sidecar replaces the native extension. A .txt native cannot
+            // use that rule (ChangeExtension returns the native path), so only require a
+            // distinct, resolving sidecar for it.
+            if (string.IsNullOrEmpty(cols[parentDocIdIdx]) &&
+                !nativeRel.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
             {
                 var expectedTextRel = Path.ChangeExtension(nativeRel, ".txt").Replace('\\', '/');
                 Assert.Equal(expectedTextRel, textRel);
@@ -390,6 +435,7 @@ internal static class EdiscoveryDeliveryZipVerifier
         }
 
         // Compare DAT native references against the independently established recipe inventory.
+        // Output.FileCount is the requested original-document count; attachments add rows.
         long expectedNativeCount = request.Output.FileCount + familyChildren.Count;
         Assert.Equal(expectedNativeCount, (long)nativePaths.Count);
         long parentDocuments = (long)nativePaths.Count - familyChildren.Count;

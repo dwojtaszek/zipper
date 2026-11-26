@@ -1,5 +1,8 @@
+using System.IO.Compression;
+using System.Security.Cryptography;
 using Xunit;
 using Xunit.Abstractions;
+using Zipper.LoadFiles;
 using Zipper.Tests.TestHelpers;
 
 namespace Zipper.Tests;
@@ -54,7 +57,8 @@ public class EdiscoveryDeliveryZipRoundTripTests : WorkingDirectoryTestBase
             var zipFiles = Directory.GetFiles(testDir, "*.zip");
             var zipFile = Assert.Single(zipFiles);
 
-            var report = await EdiscoveryDeliveryZipVerifier.VerifyStandardModeZipDeliveryAsync(zipFile, request!, this.output);
+            var expectedHashes = BuildExpectedStandardContentHashes(request!);
+            var report = await EdiscoveryDeliveryZipVerifier.VerifyStandardModeZipDeliveryAsync(zipFile, request!, this.output, expectedHashes);
 
             Assert.True(report.DocumentCount > 0, "Document count must be greater than zero.");
             Assert.True(report.NativeFileCount > 0, "Native file count must be greater than zero.");
@@ -145,6 +149,122 @@ public class EdiscoveryDeliveryZipRoundTripTests : WorkingDirectoryTestBase
                 Directory.Delete(testDir, true);
             }
         }
+    }
+
+    [Fact]
+    public async Task StandardMode_TamperedNativeBytesWithValidCrc_FailsVerification()
+    {
+        var testDir = Path.Combine(this.TempDir, $"std_tamper_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(testDir);
+
+        try
+        {
+            var args = new[]
+            {
+                "--types", "pdf:1,docx:1,eml:1,tiff:1",
+                "--count", "4",
+                "--output-path", testDir,
+                "--include-load-file",
+                "--loadfile-format", "dat",
+                "--with-families",
+                "--attachment-rate", "100",
+                "--with-text",
+                "--seed", "42",
+            };
+
+            var request = Cli.Pipeline.Build(args);
+            Assert.NotNull(request);
+
+            var (exitCode, stdout, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => Program.Main(args));
+            Assert.True(exitCode == 0, $"Program.Main failed with exit code {exitCode}. Stderr: {stderr}, Stdout: {stdout}");
+
+            var zipFile = Assert.Single(Directory.GetFiles(testDir, "*.zip"));
+            var expectedHashes = BuildExpectedStandardContentHashes(request!);
+            var tamperedZip = Path.Combine(testDir, "tampered.zip");
+
+            using (var source = ZipFile.OpenRead(zipFile))
+            using (var target = ZipFile.Open(tamperedZip, ZipArchiveMode.Create))
+            {
+                foreach (var entry in source.Entries)
+                {
+                    byte[] bytes;
+                    using (var reader = new BinaryReader(entry.Open()))
+                    {
+                        bytes = reader.ReadBytes((int)entry.Length);
+                    }
+
+                    if (string.Equals(entry.FullName, "folder_001/00000001.pdf", StringComparison.Ordinal))
+                    {
+                        Assert.NotEmpty(bytes);
+                        bytes[0] ^= 0xFF;
+                    }
+
+                    var copiedEntry = target.CreateEntry(entry.FullName, CompressionLevel.NoCompression);
+                    using var writer = copiedEntry.Open();
+                    writer.Write(bytes);
+                }
+            }
+
+            await Assert.ThrowsAnyAsync<Xunit.Sdk.XunitException>(() =>
+                EdiscoveryDeliveryZipVerifier.VerifyStandardModeZipDeliveryAsync(tamperedZip, request!, null, expectedHashes));
+        }
+        finally
+        {
+            if (Directory.Exists(testDir))
+            {
+                Directory.Delete(testDir, true);
+            }
+        }
+    }
+
+    private static Dictionary<string, string> BuildExpectedStandardContentHashes(FileGenerationRequest request)
+    {
+        var generators = FileGeneratorFactory.CreateMap(request);
+        var expected = new Dictionary<string, string>(StringComparer.Ordinal);
+        var fileCount = request.Output.FileCount;
+
+        for (long i = 1; i <= fileCount; i++)
+        {
+            var fileType = request.Output.ResolveFileType(i);
+            var folderNumber = Distributions.GetFolderNumber(i, fileCount, request.Output.Folders, request.LoadFile.Distribution);
+            var folderPrefix = $"folder_{folderNumber:D3}/";
+            var fileName = $"{i:D8}.{fileType}";
+            var workItem = new FileWorkItem
+            {
+                Index = i,
+                FolderNumber = folderNumber,
+                FolderName = $"folder_{folderNumber:D3}",
+                FileName = fileName,
+                FilePathInZip = $"folder_{folderNumber:D3}/{fileName}",
+                FileType = fileType,
+            };
+
+            var generated = generators[fileType].Generate(workItem, request);
+            AddExpectedHash(expected, workItem.FilePathInZip, generated.Content);
+            var textContent = string.Equals(fileType, "eml", StringComparison.OrdinalIgnoreCase)
+                ? PlaceholderFiles.EmlExtractedText
+                : PlaceholderFiles.ExtractedText;
+            AddExpectedHash(expected, $"{folderPrefix}{TextPathHelper.GetTextPath(fileName)}", textContent);
+
+            var attachments = generated.GetAttachments();
+            var attachmentNames = attachments.Select(a => a.filename).ToList();
+            for (int attachmentIndex = 0; attachmentIndex < attachments.Count; attachmentIndex++)
+            {
+                var attachmentNumber = attachmentIndex + 1;
+                var attachment = attachments[attachmentIndex];
+                var isDuplicate = FamilyPlan.IsDuplicateAttachmentName(attachmentNames, attachmentIndex);
+                AddExpectedHash(expected, FamilyPlan.GetAttachmentPath(workItem, attachment.filename, attachmentNumber, isDuplicate), attachment.content);
+                AddExpectedHash(expected, FamilyPlan.GetAttachmentTextPath(workItem, attachment.filename, attachmentNumber), PlaceholderFiles.ExtractedText);
+            }
+        }
+
+        return expected;
+    }
+
+    private static void AddExpectedHash(Dictionary<string, string> expected, string memberName, byte[] content)
+    {
+        var hash = Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
+        Assert.True(expected.TryAdd(memberName.Replace('\\', '/'), hash), $"Duplicate expected ZIP member '{memberName}'.");
     }
 
     public static async Task<EdiscoveryDeliveryReport> RunProductionSetScaleRecipeAsync(

@@ -57,7 +57,8 @@ public static class ZipAssert
         using var archive = ZipFile.OpenRead(zipPath);
         Assert.NotEmpty(archive.Entries);
 
-        var prodName = Path.GetFileName(Path.TrimEndingDirectorySeparator(productionDir));
+        var normalizedProductionDir = Path.TrimEndingDirectorySeparator(Path.GetFullPath(productionDir));
+        var prodName = Path.GetFileName(normalizedProductionDir);
         var rootPrefix = prodName + "/";
 
         // Root layout assertion: all entries must start with the intended root prefix.
@@ -90,7 +91,7 @@ public static class ZipAssert
         }
 
         // Compare complete Archive file-entry namespace against on-disk tree using the independent reader.
-        var parentDir = Path.GetDirectoryName(Path.GetFullPath(productionDir))!;
+        var parentDir = Path.GetDirectoryName(normalizedProductionDir)!;
         var diskFiles = Directory.GetFiles(productionDir, "*", SearchOption.AllDirectories)
             .Select(f => Path.GetRelativePath(parentDir, f).Replace('\\', '/'))
             .ToHashSet(StringComparer.Ordinal);

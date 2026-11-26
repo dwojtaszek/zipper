@@ -655,6 +655,41 @@ public class GoldenBaselineHarnessTests
             Assert.Throws<InvalidDataException>(() => GoldenBaselineHarness.GenerateTimestampNormalizedSha256ManifestForArchive(newlineZipPath));
             Assert.Throws<InvalidDataException>(() => GoldenBaselineHarness.GenerateRawSha256ManifestForArchive(newlineZipPath));
 
+            var newlineDir = Path.Combine(tempDir.FullName, "newline-dir");
+            Directory.CreateDirectory(newlineDir);
+            var nestedZipPath = Path.Combine(newlineDir, "nested.zip");
+            using (var nestedStream = new FileStream(nestedZipPath, FileMode.Create, FileAccess.Write))
+            using (var nestedArchive = new System.IO.Compression.ZipArchive(nestedStream, System.IO.Compression.ZipArchiveMode.Create))
+            {
+                await using (var writer = new StreamWriter(nestedArchive.CreateEntry("reports/a\nb.txt").Open()))
+                {
+                    await writer.WriteAsync("hello world");
+                }
+
+                await using (var writer = new StreamWriter(nestedArchive.CreateEntry("_manifest.json").Open()))
+                {
+                    await writer.WriteAsync("{\"productionDate\":\"2026-01-01\"}");
+                }
+            }
+
+            var directoryManifest = GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(newlineDir);
+            Assert.Contains($"{expectedNormalizedJsonHash}  nested.zip::_manifest.json", directoryManifest);
+            Assert.Contains("nested.zip::reports/a\\nb.txt", directoryManifest);
+            Assert.Equal(2, directoryManifest.Split('\n', StringSplitOptions.RemoveEmptyEntries).Length);
+
+            if (!OperatingSystem.IsWindows())
+            {
+                var newlineNamedZip = Path.Combine(newlineDir, "a\nb.zip");
+                using (var namedStream = new FileStream(newlineNamedZip, FileMode.Create, FileAccess.Write))
+                using (var namedArchive = new System.IO.Compression.ZipArchive(namedStream, System.IO.Compression.ZipArchiveMode.Create))
+                {
+                    await using var writer = new StreamWriter(namedArchive.CreateEntry("doc.txt").Open());
+                    await writer.WriteAsync("hello world");
+                }
+
+                Assert.Contains($"  a\\nb.zip::doc.txt", GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(newlineDir));
+            }
+
             var unreadableArchive = Path.Combine(tempDir.FullName, "not-an-archive.zip");
             await File.WriteAllTextAsync(unreadableArchive, "not a zip");
             Assert.Throws<InvalidDataException>(() => GoldenBaselineHarness.GenerateTimestampNormalizedSha256ManifestForArchive(unreadableArchive));
