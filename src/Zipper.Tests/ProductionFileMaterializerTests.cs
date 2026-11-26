@@ -119,8 +119,10 @@ public class ProductionFileMaterializerTests
         Assert.True(materializer.ShouldValidate);
     }
 
-    [Fact]
-    public async Task CreateZipAsync_EdiscoveryProductionSet_MatchesStreamingHashAndIndependentReader()
+    [Theory]
+    [InlineData(Config.ZipCompressionMethod.Deflate)]
+    [InlineData(Config.ZipCompressionMethod.Store)]
+    public async Task CreateZipAsync_EdiscoveryProductionSet_MatchesStreamingHashAndIndependentReader(Config.ZipCompressionMethod method)
     {
         var root = Path.Combine(Path.GetTempPath(), "ZipProdEdiscovery_" + Guid.NewGuid().ToString("N"));
         var prodDir = Path.Combine(root, "PRODUCTION_001");
@@ -150,11 +152,11 @@ public class ProductionFileMaterializerTests
             await new ProductionFileMaterializer().CreateZipAsync(
                 prodDir,
                 zipPath,
-                Config.ZipCompressionMethod.Deflate,
+                method,
                 CancellationToken.None);
 
             // Reuses ZipAssert independent reader and streaming integrity assertions
-            TestHelpers.ZipAssert.AssertProductionZipMatchesDisk(zipPath, prodDir, Config.ZipCompressionMethod.Deflate);
+            TestHelpers.ZipAssert.AssertProductionZipMatchesDisk(zipPath, prodDir, method);
         }
         finally
         {

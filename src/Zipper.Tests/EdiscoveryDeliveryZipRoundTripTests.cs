@@ -76,34 +76,7 @@ public class EdiscoveryDeliveryZipRoundTripTests : WorkingDirectoryTestBase
 
         try
         {
-            var args = new[]
-            {
-                "--production-set",
-                "--production-zip",
-                "--types", "pdf:1,docx:1,eml:1,tiff:1",
-                "--count", "4",
-                "--output-path", testDir,
-                "--volume-size", "2",
-                "--bates-prefix", "PROD",
-                "--with-families",
-                "--attachment-rate", "100",
-                "--with-text",
-                "--seed", "42",
-            };
-
-            var request = Cli.Pipeline.Build(args);
-            Assert.NotNull(request);
-
-            var (exitCode, stdout, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => Program.Main(args));
-            Assert.Equal(0, exitCode);
-
-            var prodDirs = Directory.GetDirectories(testDir, "PRODUCTION_*");
-            var prodDir = Assert.Single(prodDirs);
-
-            var zipFiles = Directory.GetFiles(testDir, "PRODUCTION_*.zip");
-            var zipFile = Assert.Single(zipFiles);
-
-            var report = await EdiscoveryDeliveryZipVerifier.VerifyProductionSetZipDeliveryAsync(zipFile, prodDir, request!, this.output);
+            var report = await RunProductionSetScaleRecipeAsync(4, 2, testDir, this.output);
 
             Assert.True(report.VolumeCount >= 2, $"Expected at least 2 volumes, got {report.VolumeCount}.");
             Assert.True(report.DocumentCount > 0, "Document count must be greater than zero.");
@@ -197,8 +170,8 @@ public class EdiscoveryDeliveryZipRoundTripTests : WorkingDirectoryTestBase
         var request = Cli.Pipeline.Build(args);
         Assert.NotNull(request);
 
-        var (exitCode, _, _) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => Program.Main(args));
-        Assert.Equal(0, exitCode);
+        var (exitCode, stdout, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => Program.Main(args));
+        Assert.True(exitCode == 0, $"Program.Main failed with exit code {exitCode}. Stderr: {stderr}, Stdout: {stdout}");
 
         var prodDirs = Directory.GetDirectories(outputDirectory, "PRODUCTION_*");
         var prodDir = Assert.Single(prodDirs);

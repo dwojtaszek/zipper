@@ -28,9 +28,6 @@ public sealed record EdiscoveryDeliveryReport(
 /// </summary>
 internal static class EdiscoveryDeliveryZipVerifier
 {
-    private const char Delimiter = '\u0014';
-    private const char Quote = '\u00fe';
-
     /// <summary>
     /// Verifies a Production Set ZIP delivery against its on-disk artifacts and e-discovery contract.
     /// </summary>
@@ -128,8 +125,13 @@ internal static class EdiscoveryDeliveryZipVerifier
         var archiveManifest = GoldenBaselineHarness.GenerateTimestampNormalizedSha256ManifestForArchive(zipFilePath);
         Assert.False(string.IsNullOrEmpty(diskManifest));
         Assert.False(string.IsNullOrEmpty(archiveManifest));
+        Assert.Contains("_manifest.json", archiveManifest, StringComparison.Ordinal);
+        Assert.Contains("DATA/loadfile.dat", archiveManifest, StringComparison.Ordinal);
 
         // 4. Assert DAT/OPT references resolve inside the delivery (both disk and ZIP)
+        char colDelim = request.Delimiters?.GetColumnChar() ?? '\u0014';
+        char quoteDelim = request.Delimiters?.GetQuoteChar() ?? '\u00fe';
+
         var datPath = Path.Combine(productionDirectory, "DATA", "loadfile.dat");
         Assert.True(File.Exists(datPath), "loadfile.dat must exist on disk.");
         var datLines = (await File.ReadAllLinesAsync(datPath, Encoding.UTF8))
@@ -137,7 +139,7 @@ internal static class EdiscoveryDeliveryZipVerifier
             .ToList();
         Assert.True(datLines.Count > 1, "loadfile.dat must contain header and at least one record.");
 
-        var header = datLines[0].Split(Delimiter).Select(h => h.Trim(Quote, '\r')).ToArray();
+        var header = DelimitedTestParser.ParseLine(datLines[0], colDelim, quoteDelim).ToArray();
         int docIdIdx = Array.FindIndex(header, h => string.Equals(h, "DOCID", StringComparison.OrdinalIgnoreCase));
         int nativeIdx = Array.FindIndex(header, h => string.Equals(h, "NATIVE_PATH", StringComparison.OrdinalIgnoreCase));
         int imageIdx = Array.FindIndex(header, h => string.Equals(h, "IMAGE_PATH", StringComparison.OrdinalIgnoreCase));
@@ -155,30 +157,33 @@ internal static class EdiscoveryDeliveryZipVerifier
 
         for (int i = 1; i < datLines.Count; i++)
         {
-            var cols = datLines[i].Split(Delimiter).Select(c => c.Trim(Quote, '\r')).ToArray();
+            var cols = DelimitedTestParser.ParseLine(datLines[i], colDelim, quoteDelim).ToArray();
 
             // Native path resolution
             if (!string.IsNullOrEmpty(cols[nativeIdx]))
             {
                 var rel = cols[nativeIdx].Replace('\\', '/');
-                Assert.True(File.Exists(Path.Combine(productionDirectory, rel)), $"DAT referenced native file missing on disk: {rel}");
-                Assert.Contains($"{rootPrefix}{rel}", archiveEntryNames);
+                var diskEntryKey = $"{rootPrefix}{rel}";
+                Assert.True(diskFiles.Contains(diskEntryKey), $"DAT referenced native file missing on disk: {rel}");
+                Assert.Contains(diskEntryKey, archiveEntryNames);
             }
 
             // Image path resolution
             if (!string.IsNullOrEmpty(cols[imageIdx]))
             {
                 var rel = cols[imageIdx].Replace('\\', '/');
-                Assert.True(File.Exists(Path.Combine(productionDirectory, rel)), $"DAT referenced image file missing on disk: {rel}");
-                Assert.Contains($"{rootPrefix}{rel}", archiveEntryNames);
+                var diskEntryKey = $"{rootPrefix}{rel}";
+                Assert.True(diskFiles.Contains(diskEntryKey), $"DAT referenced image file missing on disk: {rel}");
+                Assert.Contains(diskEntryKey, archiveEntryNames);
             }
 
             // Text path resolution
             if (textIdx >= 0 && textIdx < cols.Length && !string.IsNullOrEmpty(cols[textIdx]))
             {
                 var rel = cols[textIdx].Replace('\\', '/');
-                Assert.True(File.Exists(Path.Combine(productionDirectory, rel)), $"DAT referenced text file missing on disk: {rel}");
-                Assert.Contains($"{rootPrefix}{rel}", archiveEntryNames);
+                var diskEntryKey = $"{rootPrefix}{rel}";
+                Assert.True(diskFiles.Contains(diskEntryKey), $"DAT referenced text file missing on disk: {rel}");
+                Assert.Contains(diskEntryKey, archiveEntryNames);
             }
 
             // Family tracking
@@ -214,13 +219,15 @@ internal static class EdiscoveryDeliveryZipVerifier
             var parts = optLine.Split(',');
             Assert.True(parts.Length >= 7, $"OPT line had {parts.Length} fields, expected >= 7: {optLine}");
             var imgRel = parts[2].Trim().Replace('\\', '/');
-            Assert.True(File.Exists(Path.Combine(productionDirectory, imgRel)), $"OPT referenced image missing on disk: {imgRel}");
-            Assert.Contains($"{rootPrefix}{imgRel}", archiveEntryNames);
+            var diskEntryKey = $"{rootPrefix}{imgRel}";
+            Assert.True(diskFiles.Contains(diskEntryKey), $"OPT referenced image missing on disk: {imgRel}");
+            Assert.Contains(diskEntryKey, archiveEntryNames);
         }
 
         // 5. Family membership survival check
         if (request.Metadata.WithFamilies && request.Output.HasFileType("eml") && request.LoadFile.AttachmentRate > 0)
         {
+            Assert.True(familyParentCount > 0, "Expected family parent records in DAT load file.");
             Assert.True(familyChildCount > 0, "Expected family child attachment records in DAT load file.");
         }
 
@@ -239,7 +246,7 @@ internal static class EdiscoveryDeliveryZipVerifier
         Assert.Equal((int)nativeFileCount, validationReport.CheckedFileCounts["native"]);
 
         // Actual native files on disk under NATIVES/
-        var actualNativeFiles = Directory.GetFiles(Path.Combine(productionDirectory, "NATIVES"), "*.*", SearchOption.AllDirectories);
+        var actualNativeFiles = Directory.GetFiles(Path.Combine(productionDirectory, "NATIVES"), "*", SearchOption.AllDirectories);
         Assert.Equal(nativeFileCount, (long)actualNativeFiles.Length);
 
         // Actual volume subdirectories
@@ -304,16 +311,19 @@ internal static class EdiscoveryDeliveryZipVerifier
         var archiveManifest = GoldenBaselineHarness.GenerateTimestampNormalizedSha256ManifestForArchive(zipFilePath);
         Assert.False(string.IsNullOrEmpty(archiveManifest));
 
-        // Locate included DAT load file in archive
-        var datEntry = archive.Entries.FirstOrDefault(e => e.FullName.EndsWith(".dat", StringComparison.OrdinalIgnoreCase) && !e.FullName.EndsWith(".opt", StringComparison.OrdinalIgnoreCase));
+        // Locate included DAT load file in archive root
+        var datEntry = archive.Entries.FirstOrDefault(e => !e.FullName.Contains('/') && e.FullName.EndsWith(".dat", StringComparison.OrdinalIgnoreCase));
         Assert.NotNull(datEntry);
+
+        char colDelim = request.Delimiters?.GetColumnChar() ?? '\u0014';
+        char quoteDelim = request.Delimiters?.GetQuoteChar() ?? '\u00fe';
 
         using var datReader = new StreamReader(datEntry!.Open(), Encoding.UTF8);
         var datContent = await datReader.ReadToEndAsync();
         var datLines = datContent.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries);
         Assert.True(datLines.Length > 1, "Standard DAT must contain header and records.");
 
-        var header = datLines[0].Split(Delimiter).Select(h => h.Trim(Quote, '\r')).ToArray();
+        var header = DelimitedTestParser.ParseLine(datLines[0], colDelim, quoteDelim).ToArray();
         int filePathIdx = Array.FindIndex(header, h => string.Equals(h, "File Path", StringComparison.OrdinalIgnoreCase));
         int extractedTextIdx = Array.FindIndex(header, h => string.Equals(h, "Extracted Text", StringComparison.OrdinalIgnoreCase));
         int begAttachIdx = Array.FindIndex(header, h => string.Equals(h, "BEGATTACH", StringComparison.OrdinalIgnoreCase));
@@ -322,13 +332,14 @@ internal static class EdiscoveryDeliveryZipVerifier
         int controlNumIdx = Array.FindIndex(header, h => string.Equals(h, "Control Number", StringComparison.OrdinalIgnoreCase));
 
         Assert.True(filePathIdx >= 0, "File Path column missing from Standard DAT header.");
+        Assert.True(controlNumIdx >= 0, "Control Number column missing from Standard DAT header.");
 
         int familyParentCount = 0;
         int familyChildCount = 0;
 
         for (int i = 1; i < datLines.Length; i++)
         {
-            var cols = datLines[i].Split(Delimiter).Select(c => c.Trim(Quote, '\r')).ToArray();
+            var cols = DelimitedTestParser.ParseLine(datLines[i], colDelim, quoteDelim).ToArray();
 
             // Native file path resolves inside ZIP
             var nativeRel = cols[filePathIdx].Replace('\\', '/');
@@ -364,6 +375,7 @@ internal static class EdiscoveryDeliveryZipVerifier
         // Family membership survival check
         if (request.Metadata.WithFamilies && request.Output.HasFileType("eml") && request.LoadFile.AttachmentRate > 0)
         {
+            Assert.True(familyParentCount > 0, "Expected family parent records in Standard DAT.");
             Assert.True(familyChildCount > 0, "Expected family child attachment records in Standard DAT.");
         }
 

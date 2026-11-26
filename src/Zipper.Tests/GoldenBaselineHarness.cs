@@ -66,12 +66,7 @@ public static class GoldenBaselineHarness
     /// <returns>A manifest string of <c>sha256  relative-path-in-archive</c> lines, path-sorted.</returns>
     public static string GenerateTimestampNormalizedSha256ManifestForArchive(string archivePath)
     {
-        ArgumentNullException.ThrowIfNull(archivePath);
-        var entries = new List<(string Key, string Line)>();
-        var relPath = Path.GetFileName(archivePath);
-        CollectArchiveEntries(archivePath, relPath, normalizeTimestamps: true, entries);
-        entries.Sort((a, b) => StringComparer.Ordinal.Compare(a.Key, b.Key));
-        return string.Join('\n', entries.Select(e => e.Line));
+        return GenerateManifestCoreForArchive(archivePath, normalizeTimestamps: true);
     }
 
     /// <summary>
@@ -82,10 +77,15 @@ public static class GoldenBaselineHarness
     /// <returns>A manifest string of <c>sha256  relative-path-in-archive</c> lines, path-sorted.</returns>
     public static string GenerateRawSha256ManifestForArchive(string archivePath)
     {
+        return GenerateManifestCoreForArchive(archivePath, normalizeTimestamps: false);
+    }
+
+    private static string GenerateManifestCoreForArchive(string archivePath, bool normalizeTimestamps)
+    {
         ArgumentNullException.ThrowIfNull(archivePath);
         var entries = new List<(string Key, string Line)>();
         var relPath = Path.GetFileName(archivePath);
-        CollectArchiveEntries(archivePath, relPath, normalizeTimestamps: false, entries);
+        CollectArchiveEntries(archivePath, relPath, normalizeTimestamps, entries);
         entries.Sort((a, b) => StringComparer.Ordinal.Compare(a.Key, b.Key));
         return string.Join('\n', entries.Select(e => e.Line));
     }

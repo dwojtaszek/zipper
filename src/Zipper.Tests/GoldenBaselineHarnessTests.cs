@@ -600,6 +600,49 @@ public class GoldenBaselineHarnessTests
         }
     }
 
+    [Fact]
+    public async Task Harness_GenerateManifestForArchive_NormalizedAndRawMatchArchiveEntries()
+    {
+        var tempDir = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "ArchiveManifest_" + Guid.NewGuid().ToString("N")));
+        try
+        {
+            var zipPath = Path.Combine(tempDir.FullName, "test.zip");
+            await using (var zipStream = new FileStream(zipPath, FileMode.Create, FileAccess.Write))
+            using (var archive = new System.IO.Compression.ZipArchive(zipStream, System.IO.Compression.ZipArchiveMode.Create))
+            {
+                var entry1 = archive.CreateEntry("doc.txt");
+                await using (var writer = new StreamWriter(entry1.Open()))
+                {
+                    await writer.WriteAsync("hello world");
+                }
+
+                var entry2 = archive.CreateEntry("_manifest.json");
+                await using (var writer = new StreamWriter(entry2.Open()))
+                {
+                    await writer.WriteAsync("{\"productionDate\":\"2026-01-01\"}");
+                }
+            }
+
+            string normManifest = GoldenBaselineHarness.GenerateTimestampNormalizedSha256ManifestForArchive(zipPath);
+            string rawManifest = GoldenBaselineHarness.GenerateRawSha256ManifestForArchive(zipPath);
+
+            Assert.Contains("doc.txt", normManifest, StringComparison.Ordinal);
+            Assert.Contains("_manifest.json", normManifest, StringComparison.Ordinal);
+            Assert.Contains("doc.txt", rawManifest, StringComparison.Ordinal);
+            Assert.Contains("_manifest.json", rawManifest, StringComparison.Ordinal);
+
+            Assert.Throws<ArgumentNullException>(() => GoldenBaselineHarness.GenerateTimestampNormalizedSha256ManifestForArchive(null!));
+            Assert.Throws<ArgumentNullException>(() => GoldenBaselineHarness.GenerateRawSha256ManifestForArchive(null!));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir.FullName))
+            {
+                Directory.Delete(tempDir.FullName, true);
+            }
+        }
+    }
+
     private static string? FindRepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
