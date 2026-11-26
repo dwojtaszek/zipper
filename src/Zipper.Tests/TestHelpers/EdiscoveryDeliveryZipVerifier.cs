@@ -1,5 +1,4 @@
 using System.IO.Compression;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Xunit;
@@ -48,15 +47,12 @@ internal static class EdiscoveryDeliveryZipVerifier
         var rootPrefix = prodName + "/";
         var parentDir = Path.GetDirectoryName(Path.GetFullPath(productionDirectory))!;
 
-        // 1. Independent reader: verify ZIP inventory and streaming content hashes against disk
+        // 1. Independent reader: inventory, compression method, decompression/CRC, and bytes vs disk.
+        ZipAssert.AssertProductionZipMatchesDisk(zipFilePath, productionDirectory, request.Output.CompressionMethod);
+
         using var archive = ZipFile.OpenRead(zipFilePath);
-        Assert.NotEmpty(archive.Entries);
-
-        var archiveFileEntries = archive.Entries
+        var archiveEntryNames = archive.Entries
             .Where(e => !e.FullName.EndsWith('/'))
-            .ToList();
-
-        var archiveEntryNames = archiveFileEntries
             .Select(e => e.FullName)
             .ToHashSet(StringComparer.Ordinal);
 
@@ -64,71 +60,29 @@ internal static class EdiscoveryDeliveryZipVerifier
             .Select(f => Path.GetRelativePath(parentDir, f).Replace('\\', '/'))
             .ToHashSet(StringComparer.Ordinal);
 
-        // Root prefix assertion
-        foreach (var entry in archiveFileEntries)
-        {
-            Assert.StartsWith(rootPrefix, entry.FullName, StringComparison.Ordinal);
-        }
+        AssertDeliveryTypeCoverage(archive.Entries);
 
-        // Inventory assertion: every file on disk is an archive entry, and vice versa
-        Assert.True(
-            diskFiles.SetEquals(archiveEntryNames),
-            $"Archive inventory mismatch. Missing in ZIP: [{string.Join(", ", diskFiles.Except(archiveEntryNames))}]. Extra in ZIP: [{string.Join(", ", archiveEntryNames.Except(diskFiles))}].");
-
-        // Streaming content hash assertion: compare entry SHA-256 and CRC32 to disk
-        byte[] buffer = new byte[8192];
-        foreach (var entry in archiveFileEntries)
-        {
-            var diskPath = Path.Combine(parentDir, entry.FullName.Replace('/', Path.DirectorySeparatorChar));
-            Assert.True(File.Exists(diskPath), $"Matching disk file not found for entry '{entry.FullName}'.");
-
-            var crc = new ICSharpCode.SharpZipLib.Checksum.Crc32();
-            using var entrySha = SHA256.Create();
-            using var entryStream = entry.Open();
-            int bytesRead;
-            long totalRead = 0;
-            while ((bytesRead = entryStream.Read(buffer, 0, buffer.Length)) > 0)
-            {
-                entrySha.TransformBlock(buffer, 0, bytesRead, null, 0);
-                crc.Update(new ArraySegment<byte>(buffer, 0, bytesRead));
-                totalRead += bytesRead;
-            }
-
-            entrySha.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
-
-            Assert.Equal(entry.Length, totalRead);
-            Assert.Equal(entry.Crc32, (uint)crc.Value);
-            var entryHash = Convert.ToHexString(entrySha.Hash!).ToLowerInvariant();
-
-            using var diskSha = SHA256.Create();
-            using var diskStream = File.OpenRead(diskPath);
-            while ((bytesRead = diskStream.Read(buffer, 0, buffer.Length)) > 0)
-            {
-                diskSha.TransformBlock(buffer, 0, bytesRead, null, 0);
-            }
-
-            diskSha.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
-            var diskHash = Convert.ToHexString(diskSha.Hash!).ToLowerInvariant();
-
-            Assert.Equal(diskHash, entryHash);
-        }
-
-        // 2. Production Set validation pipeline: run PostGenerationValidator
+        // 2. Production Set validation pipeline: run PostGenerationValidator.
         var validationReport = ProductionSetPostValidator.Validate(productionDirectory, request);
         Assert.Equal("passed", validationReport.Status);
         Assert.Equal(0, validationReport.ErrorCount);
         Assert.Equal(0, validationReport.WarningCount);
         Assert.Empty(validationReport.Findings);
 
-        // 3. Golden hash-manifest tooling
-        var diskManifest = GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(productionDirectory);
-        var archiveManifest = GoldenBaselineHarness.GenerateTimestampNormalizedSha256ManifestForArchive(zipFilePath);
-        Assert.False(string.IsNullOrEmpty(diskManifest));
-        Assert.False(string.IsNullOrEmpty(archiveManifest));
-        Assert.Contains("_manifest.json", archiveManifest, StringComparison.Ordinal);
-        Assert.Contains("DATA/loadfile.dat", archiveManifest, StringComparison.Ordinal);
+        // 3. Golden hash-manifest tooling: disk and archive manifests must describe the same bytes.
+        var diskManifest = ParseManifest(GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(productionDirectory));
+        var archiveManifest = ParseManifest(GoldenBaselineHarness.GenerateTimestampNormalizedSha256ManifestForArchive(zipFilePath));
+        Assert.NotEmpty(diskManifest);
+        var archiveManifestPrefix = $"{Path.GetFileName(zipFilePath)}::{prodName}/";
+        foreach (var (relativePath, hash) in diskManifest.Where(entry => !entry.Key.Contains("::", StringComparison.Ordinal)))
+        {
+            Assert.True(
+                archiveManifest.TryGetValue($"{archiveManifestPrefix}{relativePath}", out var archiveHash),
+                $"Archive manifest is missing '{relativePath}'.");
+            Assert.Equal(hash, archiveHash);
+        }
 
-        // 4. Assert DAT/OPT references resolve inside the delivery (both disk and ZIP)
+        // 4. Assert DAT/OPT references resolve inside the delivery (both disk and ZIP).
         char colDelim = request.Delimiters?.GetColumnChar() ?? '\u0014';
         char quoteDelim = request.Delimiters?.GetQuoteChar() ?? '\u00fe';
 
@@ -151,62 +105,43 @@ internal static class EdiscoveryDeliveryZipVerifier
         Assert.True(docIdIdx >= 0, "DOCID column missing from DAT header.");
         Assert.True(nativeIdx >= 0, "NATIVE_PATH column missing from DAT header.");
         Assert.True(imageIdx >= 0, "IMAGE_PATH column missing from DAT header.");
+        Assert.True(textIdx >= 0, "TEXT_PATH column missing from DAT header.");
+        Assert.True(begAttachIdx >= 0, "BEGATTACH column missing from DAT header.");
+        Assert.True(endAttachIdx >= 0, "ENDATTACH column missing from DAT header.");
+        Assert.True(parentDocIdIdx >= 0, "PARENTDOCID column missing from DAT header.");
 
-        int familyParentCount = 0;
-        int familyChildCount = 0;
-
+        var familyRecords = new List<FamilyRecord>();
         for (int i = 1; i < datLines.Count; i++)
         {
             var cols = DelimitedTestParser.ParseLine(datLines[i], colDelim, quoteDelim).ToArray();
+            Assert.Equal(header.Length, cols.Length);
 
-            // Native path resolution
-            if (!string.IsNullOrEmpty(cols[nativeIdx]))
-            {
-                var rel = cols[nativeIdx].Replace('\\', '/');
-                var diskEntryKey = $"{rootPrefix}{rel}";
-                Assert.True(diskFiles.Contains(diskEntryKey), $"DAT referenced native file missing on disk: {rel}");
-                Assert.Contains(diskEntryKey, archiveEntryNames);
-            }
+            AssertResolves(cols[nativeIdx], "native", rootPrefix, diskFiles, archiveEntryNames);
+            AssertResolves(cols[imageIdx], "image", rootPrefix, diskFiles, archiveEntryNames);
+            Assert.False(string.IsNullOrEmpty(cols[textIdx]), $"DAT row {i} has no Extracted Text reference.");
+            AssertResolves(cols[textIdx], "text", rootPrefix, diskFiles, archiveEntryNames);
 
-            // Image path resolution
-            if (!string.IsNullOrEmpty(cols[imageIdx]))
-            {
-                var rel = cols[imageIdx].Replace('\\', '/');
-                var diskEntryKey = $"{rootPrefix}{rel}";
-                Assert.True(diskFiles.Contains(diskEntryKey), $"DAT referenced image file missing on disk: {rel}");
-                Assert.Contains(diskEntryKey, archiveEntryNames);
-            }
-
-            // Text path resolution
-            if (textIdx >= 0 && textIdx < cols.Length && !string.IsNullOrEmpty(cols[textIdx]))
-            {
-                var rel = cols[textIdx].Replace('\\', '/');
-                var diskEntryKey = $"{rootPrefix}{rel}";
-                Assert.True(diskFiles.Contains(diskEntryKey), $"DAT referenced text file missing on disk: {rel}");
-                Assert.Contains(diskEntryKey, archiveEntryNames);
-            }
-
-            // Family tracking
-            if (begAttachIdx >= 0 && endAttachIdx >= 0 && parentDocIdIdx >= 0)
-            {
-                string begAttach = cols[begAttachIdx];
-                string endAttach = cols[endAttachIdx];
-                string parentDocId = cols[parentDocIdIdx];
-
-                if (string.IsNullOrEmpty(parentDocId) && !string.Equals(begAttach, endAttach, StringComparison.Ordinal))
-                {
-                    familyParentCount++;
-                }
-                else if (!string.IsNullOrEmpty(parentDocId))
-                {
-                    familyChildCount++;
-                    Assert.Equal(begAttach, parentDocId);
-                    Assert.Contains("_A", cols[docIdIdx], StringComparison.Ordinal);
-                }
-            }
+            familyRecords.Add(new FamilyRecord(
+                cols[docIdIdx],
+                cols[begAttachIdx],
+                cols[endAttachIdx],
+                cols[parentDocIdIdx]));
         }
 
-        // OPT resolution
+        // Family membership survives: every child resolves to a parent row, regardless of row order.
+        var familyParentIds = familyRecords
+            .Where(r => string.IsNullOrEmpty(r.ParentDocId) && !string.Equals(r.BegAttach, r.EndAttach, StringComparison.Ordinal))
+            .Select(r => r.DocId)
+            .ToHashSet(StringComparer.Ordinal);
+        var familyChildren = familyRecords.Where(r => !string.IsNullOrEmpty(r.ParentDocId)).ToList();
+        foreach (var child in familyChildren)
+        {
+            Assert.Equal(child.BegAttach, child.ParentDocId);
+            Assert.Contains(child.ParentDocId, familyParentIds);
+            Assert.StartsWith(child.ParentDocId, child.DocId, StringComparison.Ordinal);
+        }
+
+        // OPT resolution.
         var optPath = Path.Combine(productionDirectory, "DATA", "loadfile.opt");
         Assert.True(File.Exists(optPath), "loadfile.opt must exist on disk.");
         var optLines = (await File.ReadAllLinesAsync(optPath, Encoding.UTF8))
@@ -218,20 +153,17 @@ internal static class EdiscoveryDeliveryZipVerifier
         {
             var parts = optLine.Split(',');
             Assert.True(parts.Length >= 7, $"OPT line had {parts.Length} fields, expected >= 7: {optLine}");
-            var imgRel = parts[2].Trim().Replace('\\', '/');
-            var diskEntryKey = $"{rootPrefix}{imgRel}";
-            Assert.True(diskFiles.Contains(diskEntryKey), $"OPT referenced image missing on disk: {imgRel}");
-            Assert.Contains(diskEntryKey, archiveEntryNames);
+            AssertResolves(parts[2].Trim(), "OPT image", rootPrefix, diskFiles, archiveEntryNames);
         }
 
-        // 5. Family membership survival check
+        // 5. Family membership survival check.
         if (request.Metadata.WithFamilies && request.Output.HasFileType("eml") && request.LoadFile.AttachmentRate > 0)
         {
-            Assert.True(familyParentCount > 0, "Expected family parent records in DAT load file.");
-            Assert.True(familyChildCount > 0, "Expected family child attachment records in DAT load file.");
+            Assert.NotEmpty(familyParentIds);
+            Assert.NotEmpty(familyChildren);
         }
 
-        // 6. Manifest and validation counts agree
+        // 6. Manifest and validation counts agree.
         var manifestPath = Path.Combine(productionDirectory, "_manifest.json");
         Assert.True(File.Exists(manifestPath), "_manifest.json must exist.");
         using var manifestDoc = JsonDocument.Parse(await File.ReadAllTextAsync(manifestPath));
@@ -245,19 +177,20 @@ internal static class EdiscoveryDeliveryZipVerifier
         Assert.Equal(nativeFileCount, parentNativeFileCount + attachmentNativeFileCount);
         Assert.Equal((int)nativeFileCount, validationReport.CheckedFileCounts["native"]);
 
-        // Actual native files on disk under NATIVES/
+        // Actual Native Files on disk under NATIVES/.
         var actualNativeFiles = Directory.GetFiles(Path.Combine(productionDirectory, "NATIVES"), "*", SearchOption.AllDirectories);
         Assert.Equal(nativeFileCount, (long)actualNativeFiles.Length);
 
-        // Actual volume subdirectories
+        // Actual volume subdirectories.
         var actualVolumeDirs = Directory.GetDirectories(Path.Combine(productionDirectory, "NATIVES"), "VOL*");
         Assert.Equal(volumeCount, actualVolumeDirs.Length);
 
         long totalDocuments = datLines.Count - 1;
+        // CheckedLoadFileRowCounts["dat"] includes the header row.
         Assert.Equal((int)totalDocuments + 1, validationReport.CheckedLoadFileRowCounts["dat"]);
         Assert.Equal(optLines.Count, validationReport.CheckedLoadFileRowCounts["opt"]);
 
-        // 7. Report documents, Native Files, and ZIP members separately
+        // 7. Report documents, Native Files, and ZIP members separately.
         var report = new EdiscoveryDeliveryReport(
             DocumentCount: totalDocuments,
             NativeFileCount: nativeFileCount,
@@ -281,37 +214,22 @@ internal static class EdiscoveryDeliveryZipVerifier
 
         Assert.True(File.Exists(zipFilePath), $"Standard ZIP archive not found at '{zipFilePath}'.");
 
-        using var archive = ZipFile.OpenRead(zipFilePath);
-        Assert.NotEmpty(archive.Entries);
+        // Independent reader: duplicate names, decompression, and CRC integrity.
+        ZipAssert.AssertValidZip(zipFilePath);
 
-        byte[] buffer = new byte[8192];
+        using var archive = ZipFile.OpenRead(zipFilePath);
         var archiveEntryNames = archive.Entries
             .Where(e => !e.FullName.EndsWith('/'))
             .Select(e => e.FullName)
             .ToHashSet(StringComparer.Ordinal);
 
-        // Streaming CRC & decompression verification for every entry
-        foreach (var entry in archive.Entries.Where(e => !e.FullName.EndsWith('/')))
-        {
-            var crc = new ICSharpCode.SharpZipLib.Checksum.Crc32();
-            using var stream = entry.Open();
-            int bytesRead;
-            long totalRead = 0;
-            while ((bytesRead = stream.Read(buffer, 0, buffer.Length)) > 0)
-            {
-                crc.Update(new ArraySegment<byte>(buffer, 0, bytesRead));
-                totalRead += bytesRead;
-            }
+        AssertDeliveryTypeCoverage(archive.Entries);
 
-            Assert.Equal(entry.Length, totalRead);
-            Assert.Equal(entry.Crc32, (uint)crc.Value);
-        }
+        // Golden hash-manifest tooling on the archive.
+        var archiveManifest = ParseManifest(GoldenBaselineHarness.GenerateTimestampNormalizedSha256ManifestForArchive(zipFilePath));
+        Assert.NotEmpty(archiveManifest);
 
-        // Golden hash-manifest tooling on archive
-        var archiveManifest = GoldenBaselineHarness.GenerateTimestampNormalizedSha256ManifestForArchive(zipFilePath);
-        Assert.False(string.IsNullOrEmpty(archiveManifest));
-
-        // Locate included DAT load file in archive root
+        // Locate included DAT load file in archive root.
         var datEntry = archive.Entries.FirstOrDefault(e => !e.FullName.Contains('/') && e.FullName.EndsWith(".dat", StringComparison.OrdinalIgnoreCase));
         Assert.NotNull(datEntry);
 
@@ -325,6 +243,7 @@ internal static class EdiscoveryDeliveryZipVerifier
 
         var header = DelimitedTestParser.ParseLine(datLines[0], colDelim, quoteDelim).ToArray();
         int filePathIdx = Array.FindIndex(header, h => string.Equals(h, "File Path", StringComparison.OrdinalIgnoreCase));
+        int fileSizeIdx = Array.FindIndex(header, h => string.Equals(h, "File Size", StringComparison.OrdinalIgnoreCase));
         int extractedTextIdx = Array.FindIndex(header, h => string.Equals(h, "Extracted Text", StringComparison.OrdinalIgnoreCase));
         int begAttachIdx = Array.FindIndex(header, h => string.Equals(h, "BEGATTACH", StringComparison.OrdinalIgnoreCase));
         int endAttachIdx = Array.FindIndex(header, h => string.Equals(h, "ENDATTACH", StringComparison.OrdinalIgnoreCase));
@@ -332,54 +251,61 @@ internal static class EdiscoveryDeliveryZipVerifier
         int controlNumIdx = Array.FindIndex(header, h => string.Equals(h, "Control Number", StringComparison.OrdinalIgnoreCase));
 
         Assert.True(filePathIdx >= 0, "File Path column missing from Standard DAT header.");
+        Assert.True(fileSizeIdx >= 0, "File Size column missing from Standard DAT header.");
         Assert.True(controlNumIdx >= 0, "Control Number column missing from Standard DAT header.");
+        Assert.True(extractedTextIdx >= 0, "Extracted Text column missing from Standard DAT header.");
+        Assert.True(begAttachIdx >= 0, "BEGATTACH column missing from Standard DAT header.");
+        Assert.True(endAttachIdx >= 0, "ENDATTACH column missing from Standard DAT header.");
+        Assert.True(parentDocIdIdx >= 0, "PARENTDOCID column missing from Standard DAT header.");
 
-        int familyParentCount = 0;
-        int familyChildCount = 0;
-
+        var familyRecords = new List<FamilyRecord>();
         for (int i = 1; i < datLines.Length; i++)
         {
             var cols = DelimitedTestParser.ParseLine(datLines[i], colDelim, quoteDelim).ToArray();
+            Assert.Equal(header.Length, cols.Length);
 
-            // Native file path resolves inside ZIP
+            // Native file path resolves inside ZIP, and its DAT File Size is the pre-packaging size.
             var nativeRel = cols[filePathIdx].Replace('\\', '/');
             Assert.Contains(nativeRel, archiveEntryNames);
-
-            // Extracted text resolves inside ZIP when enabled
-            if (extractedTextIdx >= 0 && extractedTextIdx < cols.Length && !string.IsNullOrEmpty(cols[extractedTextIdx]))
+            if (fileSizeIdx >= 0 && fileSizeIdx < cols.Length && !string.IsNullOrEmpty(cols[fileSizeIdx]))
             {
-                var textRel = cols[extractedTextIdx].Replace('\\', '/');
-                Assert.Contains(textRel, archiveEntryNames);
+                var nativeEntry = archive.GetEntry(nativeRel);
+                Assert.NotNull(nativeEntry);
+                Assert.Equal(long.Parse(cols[fileSizeIdx], System.Globalization.CultureInfo.InvariantCulture), nativeEntry!.Length);
             }
 
-            // Family tracking
-            if (begAttachIdx >= 0 && endAttachIdx >= 0 && parentDocIdIdx >= 0)
-            {
-                string begAttach = cols[begAttachIdx];
-                string endAttach = cols[endAttachIdx];
-                string parentDocId = cols[parentDocIdIdx];
+            // Extracted Text is enabled for this recipe, so every row must reference a packaged text file.
+            var textRel = cols[extractedTextIdx].Replace('\\', '/');
+            Assert.False(string.IsNullOrEmpty(textRel), $"Standard DAT row {i} has no Extracted Text reference.");
+            Assert.Contains(textRel, archiveEntryNames);
 
-                if (string.IsNullOrEmpty(parentDocId) && !string.Equals(begAttach, endAttach, StringComparison.Ordinal))
-                {
-                    familyParentCount++;
-                }
-                else if (!string.IsNullOrEmpty(parentDocId))
-                {
-                    familyChildCount++;
-                    Assert.Equal(begAttach, parentDocId);
-                    Assert.Contains("_A", cols[controlNumIdx], StringComparison.Ordinal);
-                }
-            }
+            familyRecords.Add(new FamilyRecord(
+                cols[controlNumIdx],
+                cols[begAttachIdx],
+                cols[endAttachIdx],
+                cols[parentDocIdIdx]));
         }
 
-        // Family membership survival check
+        // Family membership survives: every child resolves to a parent row, regardless of row order.
+        var familyParentIds = familyRecords
+            .Where(r => string.IsNullOrEmpty(r.ParentDocId) && !string.Equals(r.BegAttach, r.EndAttach, StringComparison.Ordinal))
+            .Select(r => r.DocId)
+            .ToHashSet(StringComparer.Ordinal);
+        var familyChildren = familyRecords.Where(r => !string.IsNullOrEmpty(r.ParentDocId)).ToList();
+        foreach (var child in familyChildren)
+        {
+            Assert.Equal(child.BegAttach, child.ParentDocId);
+            Assert.Contains(child.ParentDocId, familyParentIds);
+            Assert.StartsWith(child.ParentDocId, child.DocId, StringComparison.Ordinal);
+        }
+
         if (request.Metadata.WithFamilies && request.Output.HasFileType("eml") && request.LoadFile.AttachmentRate > 0)
         {
-            Assert.True(familyParentCount > 0, "Expected family parent records in Standard DAT.");
-            Assert.True(familyChildCount > 0, "Expected family child attachment records in Standard DAT.");
+            Assert.NotEmpty(familyParentIds);
+            Assert.NotEmpty(familyChildren);
         }
 
-        // Count Native Files (excluding load files, properties sidecars, and extracted text files)
+        // Count Native Files (excluding load files, properties sidecars, and extracted text files).
         long nativeFilesCount = archive.Entries.Count(e =>
             !e.FullName.EndsWith('/') &&
             !e.FullName.EndsWith(".dat", StringComparison.OrdinalIgnoreCase) &&
@@ -389,7 +315,7 @@ internal static class EdiscoveryDeliveryZipVerifier
 
         long totalDocuments = datLines.Length - 1;
 
-        // 7. Report documents, Native Files, and ZIP members separately
+        // 7. Report documents, Native Files, and ZIP members separately.
         var report = new EdiscoveryDeliveryReport(
             DocumentCount: totalDocuments,
             NativeFileCount: nativeFilesCount,
@@ -399,4 +325,51 @@ internal static class EdiscoveryDeliveryZipVerifier
         output?.WriteLine($"[E-Discovery Delivery Report] {report}");
         return report;
     }
+
+    private static void AssertResolves(
+        string referencedPath,
+        string kind,
+        string rootPrefix,
+        IReadOnlySet<string> diskFiles,
+        IReadOnlySet<string> archiveEntryNames)
+    {
+        if (string.IsNullOrEmpty(referencedPath))
+        {
+            return;
+        }
+
+        var relativePath = referencedPath.Replace('\\', '/');
+        var deliveryPath = $"{rootPrefix}{relativePath}";
+        Assert.True(diskFiles.Contains(deliveryPath), $"Load File referenced {kind} file missing on disk: {relativePath}");
+        Assert.Contains(deliveryPath, archiveEntryNames);
+    }
+
+    private static void AssertDeliveryTypeCoverage(IEnumerable<ZipArchiveEntry> entries)
+    {
+        var names = entries.Select(e => e.FullName).ToList();
+        Assert.Contains(names, n => n.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(names, n => n.EndsWith(".docx", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(names, n => n.EndsWith(".eml", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(names, n => n.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(names, n => n.EndsWith(".txt", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static Dictionary<string, string> ParseManifest(string manifest)
+    {
+        var entries = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var line in manifest.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = line.Split("  ", 2, StringSplitOptions.None);
+            Assert.Equal(2, parts.Length);
+            entries.Add(parts[1], parts[0]);
+        }
+
+        return entries;
+    }
+
+    private sealed record FamilyRecord(
+        string DocId,
+        string BegAttach,
+        string EndAttach,
+        string ParentDocId);
 }

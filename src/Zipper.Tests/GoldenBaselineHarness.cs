@@ -64,6 +64,7 @@ public static class GoldenBaselineHarness
     /// </summary>
     /// <param name="archivePath">The path to an archive file (.zip, .docx, .xlsx).</param>
     /// <returns>A manifest string of <c>sha256  relative-path-in-archive</c> lines, path-sorted.</returns>
+    /// <exception cref="InvalidDataException">The file is not a readable archive.</exception>
     public static string GenerateTimestampNormalizedSha256ManifestForArchive(string archivePath)
     {
         return GenerateManifestCoreForArchive(archivePath, normalizeTimestamps: true);
@@ -75,6 +76,7 @@ public static class GoldenBaselineHarness
     /// </summary>
     /// <param name="archivePath">The path to an archive file (.zip, .docx, .xlsx).</param>
     /// <returns>A manifest string of <c>sha256  relative-path-in-archive</c> lines, path-sorted.</returns>
+    /// <exception cref="InvalidDataException">The file is not a readable archive.</exception>
     public static string GenerateRawSha256ManifestForArchive(string archivePath)
     {
         return GenerateManifestCoreForArchive(archivePath, normalizeTimestamps: false);
@@ -85,7 +87,7 @@ public static class GoldenBaselineHarness
         ArgumentNullException.ThrowIfNull(archivePath);
         var entries = new List<(string Key, string Line)>();
         var relPath = Path.GetFileName(archivePath);
-        CollectArchiveEntries(archivePath, relPath, normalizeTimestamps, entries);
+        CollectArchiveEntries(archivePath, relPath, normalizeTimestamps, entries, allowWholeFileFallback: false);
         entries.Sort((a, b) => StringComparer.Ordinal.Compare(a.Key, b.Key));
         return string.Join('\n', entries.Select(e => e.Line));
     }
@@ -142,7 +144,8 @@ public static class GoldenBaselineHarness
         string fullPath,
         string relPath,
         bool normalizeTimestamps,
-        List<(string Key, string Line)> entries)
+        List<(string Key, string Line)> entries,
+        bool allowWholeFileFallback = true)
     {
         try
         {
@@ -204,6 +207,11 @@ public static class GoldenBaselineHarness
         }
         catch (Exception ex) when (ex is InvalidDataException or NotSupportedException)
         {
+            if (!allowWholeFileFallback)
+            {
+                throw;
+            }
+
             AddFileEntry(fullPath, relPath, normalizeTimestamps, entries);
         }
     }

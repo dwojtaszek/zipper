@@ -25,6 +25,12 @@ public static class ZipAssert
             Assert.Equal(expectedCount.Value, archive.Entries.Count);
         }
 
+        var fileEntryNames = archive.Entries
+            .Where(e => !e.FullName.EndsWith('/'))
+            .Select(e => e.FullName)
+            .ToList();
+        Assert.Equal(fileEntryNames.Count, fileEntryNames.Distinct(StringComparer.Ordinal).Count());
+
         foreach (var entry in archive.Entries)
         {
             using var stream = entry.Open();

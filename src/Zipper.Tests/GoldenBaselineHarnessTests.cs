@@ -626,10 +626,18 @@ public class GoldenBaselineHarnessTests
             string normManifest = GoldenBaselineHarness.GenerateTimestampNormalizedSha256ManifestForArchive(zipPath);
             string rawManifest = GoldenBaselineHarness.GenerateRawSha256ManifestForArchive(zipPath);
 
-            Assert.Contains("doc.txt", normManifest, StringComparison.Ordinal);
-            Assert.Contains("_manifest.json", normManifest, StringComparison.Ordinal);
-            Assert.Contains("doc.txt", rawManifest, StringComparison.Ordinal);
-            Assert.Contains("_manifest.json", rawManifest, StringComparison.Ordinal);
+            var expectedDocHash = Convert.ToHexString(
+                System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes("hello world"))).ToLowerInvariant();
+            Assert.Contains("test.zip::doc.txt", normManifest, StringComparison.Ordinal);
+            Assert.Contains(expectedDocHash, normManifest, StringComparison.Ordinal);
+            Assert.Contains("test.zip::_manifest.json", normManifest, StringComparison.Ordinal);
+            Assert.Contains("test.zip::doc.txt", rawManifest, StringComparison.Ordinal);
+            Assert.Contains(expectedDocHash, rawManifest, StringComparison.Ordinal);
+
+            var unreadableArchive = Path.Combine(tempDir.FullName, "not-an-archive.zip");
+            await File.WriteAllTextAsync(unreadableArchive, "not a zip");
+            Assert.Throws<InvalidDataException>(() => GoldenBaselineHarness.GenerateTimestampNormalizedSha256ManifestForArchive(unreadableArchive));
+            Assert.Throws<InvalidDataException>(() => GoldenBaselineHarness.GenerateRawSha256ManifestForArchive(unreadableArchive));
 
             Assert.Throws<ArgumentNullException>(() => GoldenBaselineHarness.GenerateTimestampNormalizedSha256ManifestForArchive(null!));
             Assert.Throws<ArgumentNullException>(() => GoldenBaselineHarness.GenerateRawSha256ManifestForArchive(null!));
