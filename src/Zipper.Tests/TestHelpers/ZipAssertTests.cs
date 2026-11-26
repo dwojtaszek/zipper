@@ -84,6 +84,20 @@ public class ZipAssertTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public void AssertValidZip_DirectoryEntryWithPayload_ThrowsException()
+    {
+        var zipPath = this.GetTempFilePath();
+        using (var archive = ZipFile.Open(zipPath, ZipArchiveMode.Create))
+        {
+            var entry = archive.CreateEntry("VOL001/", CompressionLevel.NoCompression);
+            using var stream = entry.Open();
+            stream.Write(Encoding.UTF8.GetBytes("unexpected directory payload"));
+        }
+
+        Assert.ThrowsAny<XunitException>(() => ZipAssert.AssertValidZip(zipPath, 1));
+    }
+
+    [Fact]
     public void AssertValidZip_NonExistentFile_ThrowsException()
     {
         var nonExistent = Path.Combine(this.TempDir, "does-not-exist.zip");

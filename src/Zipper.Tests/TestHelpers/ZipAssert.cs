@@ -147,12 +147,13 @@ public static class ZipAssert
         using var sharpZip = new ICSharpCode.SharpZipLib.Zip.ZipFile(zipPath);
         foreach (ICSharpCode.SharpZipLib.Zip.ZipEntry entry in sharpZip)
         {
-            using var stream = sharpZip.GetInputStream(entry);
             if (entry.IsDirectory)
             {
-                continue;
+                Assert.Equal(0, entry.Size);
+                Assert.Equal(0u, (uint)entry.Crc);
             }
 
+            using var stream = sharpZip.GetInputStream(entry);
             var crc = new ICSharpCode.SharpZipLib.Checksum.Crc32();
             long totalBytes = 0;
             int bytesRead;
