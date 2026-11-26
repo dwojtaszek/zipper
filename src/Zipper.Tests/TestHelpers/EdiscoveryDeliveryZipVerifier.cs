@@ -21,6 +21,9 @@ public sealed record EdiscoveryDeliveryReport(
         $"Documents: {DocumentCount}, Native Files: {NativeFileCount}, ZIP members: {ZipMemberCount}, Volumes: {VolumeCount}";
 }
 
+/// <summary>Recipe expectation for one Standard DAT row, keyed by Control Number.</summary>
+public sealed record StandardDeliveryRow(string NativePath, string TextPath);
+
 /// <summary>
 /// Independent reader and verification harness for e-discovery ZIP deliveries
 /// (both Production Set mode with --production-zip and Standard mode with --include-load-file).
@@ -99,11 +102,11 @@ internal static class EdiscoveryDeliveryZipVerifier
         var diskManifest = ParseManifest(GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(productionDirectory));
         var archiveManifest = ParseManifest(GoldenBaselineHarness.GenerateTimestampNormalizedSha256ManifestForArchive(zipFilePath));
         Assert.NotEmpty(diskManifest);
-        var archiveManifestPrefix = $"{Path.GetFileName(zipFilePath)}::{prodName}/";
+        var archiveManifestPrefix = $"{GoldenBaselineHarness.EscapeManifestKeyPart(Path.GetFileName(zipFilePath))}::{GoldenBaselineHarness.EscapeManifestKeyPart(prodName)}/";
         foreach (var (relativePath, hash) in diskManifest.Where(entry => !entry.Key.Contains("::", StringComparison.Ordinal)))
         {
             Assert.True(
-                archiveManifest.TryGetValue($"{archiveManifestPrefix}{relativePath}", out var archiveHash),
+                archiveManifest.TryGetValue($"{archiveManifestPrefix}{GoldenBaselineHarness.EscapeManifestKeyPart(relativePath)}", out var archiveHash),
                 $"Archive manifest is missing '{relativePath}'.");
             Assert.Equal(hash, archiveHash);
         }
@@ -244,7 +247,8 @@ internal static class EdiscoveryDeliveryZipVerifier
         string zipFilePath,
         FileGenerationRequest request,
         ITestOutputHelper? output = null,
-        IReadOnlyDictionary<string, string>? expectedContentHashesByMember = null)
+        IReadOnlyDictionary<string, string>? expectedContentHashesByMember = null,
+        IReadOnlyDictionary<string, StandardDeliveryRow>? expectedRowsByControlNumber = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(zipFilePath);
         ArgumentNullException.ThrowIfNull(request);
@@ -295,7 +299,9 @@ internal static class EdiscoveryDeliveryZipVerifier
                         if (expectedContentHashesByMember is not null && expectedContentHashesByMember.TryGetValue(entry.Name, out var expectedHash))
                         {
                             var entryHashHex = Convert.ToHexString(entryHash).ToLowerInvariant();
-                            Assert.Equal(expectedHash, entryHashHex);
+                            Assert.True(
+                                string.Equals(expectedHash, entryHashHex, StringComparison.Ordinal),
+                                $"Pre-packaging hash mismatch for '{entry.Name}': expected {expectedHash}, got {entryHashHex}.");
                             verifiedExpectedMembers.Add(entry.Name);
                         }
                     }
@@ -358,6 +364,7 @@ internal static class EdiscoveryDeliveryZipVerifier
         {
             var cols = DelimitedTestParser.ParseLine(datLines[i], colDelim, quoteDelim).ToArray();
             Assert.Equal(header.Length, cols.Length);
+            Assert.False(string.IsNullOrWhiteSpace(cols[controlNumIdx]), $"Standard DAT row {i} has a blank Control Number.");
             Assert.True(controlNumbers.Add(cols[controlNumIdx]), $"Standard DAT row {i} repeats Control Number '{cols[controlNumIdx]}'.");
 
             // Native file path resolves inside ZIP, and its DAT File Size is the pre-packaging size.
@@ -389,11 +396,25 @@ internal static class EdiscoveryDeliveryZipVerifier
             Assert.Contains(textRel, archiveEntryNames);
             textPaths.Add(textRel);
 
+            if (expectedRowsByControlNumber is not null)
+            {
+                Assert.True(
+                    expectedRowsByControlNumber.TryGetValue(cols[controlNumIdx], out var expectedRow),
+                    $"Standard DAT Control Number '{cols[controlNumIdx]}' is absent from the recipe inventory.");
+                Assert.Equal(expectedRow!.NativePath, nativeRel);
+                Assert.Equal(expectedRow.TextPath, textRel);
+            }
+
             familyRecords.Add(new FamilyRecord(
                 cols[controlNumIdx],
                 cols[begAttachIdx],
                 cols[endAttachIdx],
                 cols[parentDocIdIdx]));
+        }
+
+        if (expectedRowsByControlNumber is not null)
+        {
+            Assert.Equal(expectedRowsByControlNumber.Count, familyRecords.Count);
         }
 
         // Family membership survives: every child resolves to a parent row, regardless of row order.

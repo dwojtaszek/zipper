@@ -124,7 +124,8 @@ public static class GoldenBaselineHarness
     {
         using var stream = File.OpenRead(fullPath);
         var hashHex = ComputeHash(relPath, stream, normalizeTimestamps);
-        entries.Add((relPath, $"{hashHex}  {relPath}"));
+        var manifestKey = EscapeManifestKeyPart(relPath);
+        entries.Add((manifestKey, $"{hashHex}  {manifestKey}"));
     }
 
     private static string NormalizeRelativePath(string rootDir, string fullPath)
@@ -135,8 +136,13 @@ public static class GoldenBaselineHarness
 
     private static bool ContainsLineBreak(string value) => value.Contains('\r') || value.Contains('\n');
 
-    private static string EscapeManifestKeyPart(string value) =>
+    /// <summary>
+    /// Escapes characters that would break the <c>sha256  key</c> line format or make
+    /// <c>archive-name::member-name</c> component boundaries ambiguous.
+    /// </summary>
+    internal static string EscapeManifestKeyPart(string value) =>
         value.Replace("\\", "\\\\", StringComparison.Ordinal)
+             .Replace(":", "\\:", StringComparison.Ordinal)
              .Replace("\r", "\\r", StringComparison.Ordinal)
              .Replace("\n", "\\n", StringComparison.Ordinal);
 
@@ -176,9 +182,14 @@ public static class GoldenBaselineHarness
                 var entryKeyPart = EscapeManifestKeyPart(entry.FullName);
                 if (entry.FullName.EndsWith('/'))
                 {
-                    if (normalizeTimestamps)
+                    if (entry.Length > 0 && !allowWholeFileFallback)
                     {
-                        // Directories have no content bytes to hash; canonicalize by
+                        throw new InvalidDataException($"Archive directory entry '{entry.FullName}' unexpectedly contains content bytes.");
+                    }
+
+                    if (normalizeTimestamps && entry.Length == 0)
+                    {
+                        // Empty directories have no content bytes to hash; canonicalize by
                         // relative-path-in-archive and full directory name to keep parity stable.
                         var dirKey = $"{keyPrefix}::{entryKeyPart}";
                         var payload = Encoding.UTF8.GetBytes($"{keyPrefix}\n{entryKeyPart}");

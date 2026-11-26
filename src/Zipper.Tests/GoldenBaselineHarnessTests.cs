@@ -690,6 +690,41 @@ public class GoldenBaselineHarnessTests
                 Assert.Contains($"  a\\nb.zip::doc.txt", GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(newlineDir));
             }
 
+            var colonZipPath = Path.Combine(tempDir.FullName, "colon.zip");
+            using (var colonStream = new FileStream(colonZipPath, FileMode.Create, FileAccess.Write))
+            using (var colonArchive = new System.IO.Compression.ZipArchive(colonStream, System.IO.Compression.ZipArchiveMode.Create))
+            {
+                await using var writer = new StreamWriter(colonArchive.CreateEntry("b.zip::c.txt").Open());
+                await writer.WriteAsync("hello world");
+            }
+
+            Assert.Contains(
+                "colon.zip::b.zip\\:\\:c.txt",
+                GoldenBaselineHarness.GenerateTimestampNormalizedSha256ManifestForArchive(colonZipPath));
+
+            var fallbackDir = Path.Combine(tempDir.FullName, "fallback-dir");
+            Directory.CreateDirectory(fallbackDir);
+            var newlineNamedInvalidZip = Path.Combine(fallbackDir, "broken\nname.zip");
+            await File.WriteAllTextAsync(newlineNamedInvalidZip, "not a zip");
+            var fallbackManifest = GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(fallbackDir);
+            Assert.Contains("  broken\\nname.zip", fallbackManifest);
+            Assert.Single(fallbackManifest.Split('\n', StringSplitOptions.RemoveEmptyEntries));
+
+            var dirPayloadDir = Path.Combine(tempDir.FullName, "dir-payload");
+            Directory.CreateDirectory(dirPayloadDir);
+            var dirPayloadZip = Path.Combine(dirPayloadDir, "dirpayload.zip");
+            using (var payloadStream = new FileStream(dirPayloadZip, FileMode.Create, FileAccess.Write))
+            using (var payloadArchive = new System.IO.Compression.ZipArchive(payloadStream, System.IO.Compression.ZipArchiveMode.Create))
+            {
+                await using var writer = new StreamWriter(payloadArchive.CreateEntry("VOL001/").Open());
+                await writer.WriteAsync("hidden directory payload");
+            }
+
+            Assert.Throws<InvalidDataException>(() => GoldenBaselineHarness.GenerateTimestampNormalizedSha256ManifestForArchive(dirPayloadZip));
+            Assert.Contains(
+                $"{Sha256("hidden directory payload")}  dirpayload.zip::VOL001/",
+                GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(dirPayloadDir));
+
             var unreadableArchive = Path.Combine(tempDir.FullName, "not-an-archive.zip");
             await File.WriteAllTextAsync(unreadableArchive, "not a zip");
             Assert.Throws<InvalidDataException>(() => GoldenBaselineHarness.GenerateTimestampNormalizedSha256ManifestForArchive(unreadableArchive));
