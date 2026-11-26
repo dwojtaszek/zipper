@@ -58,6 +58,38 @@ public static class GoldenBaselineHarness
         return GenerateManifestCore(rootDir, normalizeTimestamps: false);
     }
 
+    /// <summary>
+    /// Generates a deterministic SHA-256 manifest for every entry in <paramref name="archivePath"/>,
+    /// normalizing transient timestamp and wall-clock execution values in JSON artifacts in-place.
+    /// </summary>
+    /// <param name="archivePath">The path to an archive file (.zip, .docx, .xlsx).</param>
+    /// <returns>A manifest string of <c>sha256  relative-path-in-archive</c> lines, path-sorted.</returns>
+    public static string GenerateTimestampNormalizedSha256ManifestForArchive(string archivePath)
+    {
+        ArgumentNullException.ThrowIfNull(archivePath);
+        var entries = new List<(string Key, string Line)>();
+        var relPath = Path.GetFileName(archivePath);
+        CollectArchiveEntries(archivePath, relPath, normalizeTimestamps: true, entries);
+        entries.Sort((a, b) => StringComparer.Ordinal.Compare(a.Key, b.Key));
+        return string.Join('\n', entries.Select(e => e.Line));
+    }
+
+    /// <summary>
+    /// Generates a raw SHA-256 manifest for every entry in <paramref name="archivePath"/>
+    /// without normalizing timestamps or transient fields.
+    /// </summary>
+    /// <param name="archivePath">The path to an archive file (.zip, .docx, .xlsx).</param>
+    /// <returns>A manifest string of <c>sha256  relative-path-in-archive</c> lines, path-sorted.</returns>
+    public static string GenerateRawSha256ManifestForArchive(string archivePath)
+    {
+        ArgumentNullException.ThrowIfNull(archivePath);
+        var entries = new List<(string Key, string Line)>();
+        var relPath = Path.GetFileName(archivePath);
+        CollectArchiveEntries(archivePath, relPath, normalizeTimestamps: false, entries);
+        entries.Sort((a, b) => StringComparer.Ordinal.Compare(a.Key, b.Key));
+        return string.Join('\n', entries.Select(e => e.Line));
+    }
+
     private static string GenerateManifestCore(string rootDir, bool normalizeTimestamps)
     {
         ArgumentNullException.ThrowIfNull(rootDir);
