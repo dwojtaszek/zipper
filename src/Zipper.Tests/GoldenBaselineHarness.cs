@@ -64,7 +64,7 @@ public static class GoldenBaselineHarness
     /// before hashing. The archive itself is not modified.
     /// </summary>
     /// <param name="archivePath">The path to an archive file (.zip, .docx, .xlsx).</param>
-    /// <returns>A manifest string of <c>sha256  relative-path-in-archive</c> lines, path-sorted.</returns>
+    /// <returns>A manifest string of <c>sha256  archive-file-name::entry-name</c> lines, path-sorted.</returns>
     /// <exception cref="InvalidDataException">The file is not a readable archive.</exception>
     public static string GenerateTimestampNormalizedSha256ManifestForArchive(string archivePath)
     {
@@ -76,7 +76,7 @@ public static class GoldenBaselineHarness
     /// without normalizing timestamps or transient fields.
     /// </summary>
     /// <param name="archivePath">The path to an archive file (.zip, .docx, .xlsx).</param>
-    /// <returns>A manifest string of <c>sha256  relative-path-in-archive</c> lines, path-sorted.</returns>
+    /// <returns>A manifest string of <c>sha256  archive-file-name::entry-name</c> lines, path-sorted.</returns>
     /// <exception cref="InvalidDataException">The file is not a readable archive.</exception>
     public static string GenerateRawSha256ManifestForArchive(string archivePath)
     {

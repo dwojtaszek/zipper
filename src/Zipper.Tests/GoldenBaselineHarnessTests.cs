@@ -632,10 +632,10 @@ public class GoldenBaselineHarnessTests
             var expectedDocHash = Sha256("hello world");
             var expectedRawJsonHash = Sha256("{\"productionDate\":\"2026-01-01\"}");
             var expectedNormalizedJsonHash = Sha256("{\"productionDate\":\"__normalized__\"}");
-            Assert.Contains($"{expectedDocHash}  test.zip::doc.txt", normManifest, StringComparison.Ordinal);
-            Assert.Contains($"{expectedNormalizedJsonHash}  test.zip::_manifest.json", normManifest, StringComparison.Ordinal);
-            Assert.Contains($"{expectedDocHash}  test.zip::doc.txt", rawManifest, StringComparison.Ordinal);
-            Assert.Contains($"{expectedRawJsonHash}  test.zip::_manifest.json", rawManifest, StringComparison.Ordinal);
+            var expectedNorm = $"{expectedNormalizedJsonHash}  test.zip::_manifest.json\n{expectedDocHash}  test.zip::doc.txt";
+            var expectedRaw = $"{expectedRawJsonHash}  test.zip::_manifest.json\n{expectedDocHash}  test.zip::doc.txt";
+            Assert.Equal(expectedNorm, normManifest);
+            Assert.Equal(expectedRaw, rawManifest);
 
             var emptyZipPath = Path.Combine(tempDir.FullName, "empty.zip");
             using (var emptyZipStream = new FileStream(emptyZipPath, FileMode.Create, FileAccess.Write))

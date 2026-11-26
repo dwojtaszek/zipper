@@ -60,7 +60,10 @@ internal static class EdiscoveryDeliveryZipVerifier
             .Select(f => Path.GetRelativePath(parentDir, f).Replace('\\', '/'))
             .ToHashSet(StringComparer.Ordinal);
 
-        AssertDeliveryTypeCoverage(archive.Entries);
+        AssertNativeDeliveryTypeCoverage(
+            archive.Entries.Where(e => e.FullName.Contains("/NATIVES/", StringComparison.OrdinalIgnoreCase)).Select(e => e.FullName));
+        Assert.Contains(archive.Entries, e => e.FullName.Contains("/TEXT/", StringComparison.OrdinalIgnoreCase) && e.FullName.EndsWith(".txt", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(archive.Entries, e => e.FullName.Contains("/IMAGES/", StringComparison.OrdinalIgnoreCase) && (e.FullName.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) || e.FullName.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase)));
 
         // 2. Production Set validation pipeline: run PostGenerationValidator.
         var validationReport = ProductionSetPostValidator.Validate(productionDirectory, request);
@@ -177,6 +180,8 @@ internal static class EdiscoveryDeliveryZipVerifier
 
         Assert.Equal(nativeFileCount, parentNativeFileCount + attachmentNativeFileCount);
         Assert.Equal((int)nativeFileCount, validationReport.CheckedFileCounts["native"]);
+        Assert.Equal((long)request.Output.FileCount, parentNativeFileCount);
+        Assert.Equal((long)familyChildren.Count, attachmentNativeFileCount);
 
         // Actual Native Files on disk under NATIVES/.
         var actualNativeFiles = Directory.GetFiles(Path.Combine(productionDirectory, "NATIVES"), "*", SearchOption.AllDirectories);
@@ -187,7 +192,10 @@ internal static class EdiscoveryDeliveryZipVerifier
         Assert.Equal(volumeCount, actualVolumeDirs.Length);
 
         long totalDocuments = datLines.Count - 1;
-        // CheckedLoadFileRowCounts["dat"] includes the header row.
+        long parentDocuments = totalDocuments - familyChildren.Count;
+        Assert.Equal((long)request.Output.FileCount, parentDocuments);
+
+        // CheckedLoadFileRowCounts["dat"] includes the header row per ProductionSetPostValidator lines 239 and 251.
         Assert.Equal((int)totalDocuments + 1, validationReport.CheckedLoadFileRowCounts["dat"]);
         Assert.Equal(optLines.Count, validationReport.CheckedLoadFileRowCounts["opt"]);
 
@@ -223,8 +231,6 @@ internal static class EdiscoveryDeliveryZipVerifier
             .Where(e => !e.FullName.EndsWith('/'))
             .Select(e => e.FullName)
             .ToHashSet(StringComparer.Ordinal);
-
-        AssertDeliveryTypeCoverage(archive.Entries);
 
         // Golden hash-manifest tooling on the archive.
         var archiveManifest = ParseManifest(GoldenBaselineHarness.GenerateTimestampNormalizedSha256ManifestForArchive(zipFilePath));
@@ -284,6 +290,7 @@ internal static class EdiscoveryDeliveryZipVerifier
             Assert.False(string.IsNullOrEmpty(textRel), $"Standard DAT row {i} has no Extracted Text reference.");
             var expectedTextRel = Path.ChangeExtension(nativeRel, ".txt").Replace('\\', '/');
             Assert.Equal(expectedTextRel, textRel);
+            Assert.NotEqual(nativeRel, textRel);
             Assert.Contains(textRel, archiveEntryNames);
             textPaths.Add(textRel);
 
@@ -333,6 +340,12 @@ internal static class EdiscoveryDeliveryZipVerifier
         // Compare DAT native references against the independently established recipe inventory.
         long expectedNativeCount = request.Output.FileCount + familyChildren.Count;
         Assert.Equal(expectedNativeCount, (long)nativePaths.Count);
+        long parentDocuments = (long)nativePaths.Count - familyChildren.Count;
+        Assert.Equal((long)request.Output.FileCount, parentDocuments);
+        Assert.DoesNotContain(textPaths, p => nativePaths.Contains(p));
+
+        AssertNativeDeliveryTypeCoverage(nativePaths);
+        Assert.Contains(textPaths, n => n.EndsWith(".txt", StringComparison.OrdinalIgnoreCase));
 
         static bool IsArchiveLoadFileArtifact(string name)
         {
@@ -361,6 +374,7 @@ internal static class EdiscoveryDeliveryZipVerifier
 
         long totalDocuments = datLines.Length - 1;
         Assert.Equal(expectedNativeCount, totalDocuments);
+        Assert.Equal((long)request.Output.FileCount, totalDocuments - familyChildren.Count);
 
         // 7. Report documents, Native Files, and ZIP members separately.
         var report = new EdiscoveryDeliveryReport(
@@ -391,14 +405,13 @@ internal static class EdiscoveryDeliveryZipVerifier
         Assert.Contains(deliveryPath, archiveEntryNames);
     }
 
-    private static void AssertDeliveryTypeCoverage(IEnumerable<ZipArchiveEntry> entries)
+    private static void AssertNativeDeliveryTypeCoverage(IEnumerable<string> nativeFilePaths)
     {
-        var names = entries.Select(e => e.FullName).ToList();
+        var names = nativeFilePaths.ToList();
         Assert.Contains(names, n => n.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(names, n => n.EndsWith(".docx", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(names, n => n.EndsWith(".eml", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(names, n => n.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) || n.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(names, n => n.EndsWith(".txt", StringComparison.OrdinalIgnoreCase));
     }
 
     private static void AssertFamilyRanges(IReadOnlyList<FamilyRecord> familyRecords)
@@ -414,6 +427,10 @@ internal static class EdiscoveryDeliveryZipVerifier
         foreach (var (parentId, group) in childrenByParent)
         {
             Assert.True(parents.TryGetValue(parentId, out var parent), $"Family child parent '{parentId}' has no parent row.");
+            foreach (var child in group)
+            {
+                Assert.Equal(parent!.EndAttach, child.EndAttach);
+            }
             var lastChild = group.OrderBy(r => r.DocId, StringComparer.Ordinal).Last();
             Assert.Equal(lastChild.DocId, parent!.EndAttach);
         }
