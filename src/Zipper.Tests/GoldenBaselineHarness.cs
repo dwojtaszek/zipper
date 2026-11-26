@@ -155,6 +155,11 @@ public static class GoldenBaselineHarness
             using var zip = new ZipArchive(fileStream, ZipArchiveMode.Read);
             foreach (var entry in zip.Entries.OrderBy(e => e.FullName, StringComparer.Ordinal))
             {
+                if (entry.FullName.Contains('\n') || entry.FullName.Contains('\r'))
+                {
+                    throw new InvalidDataException($"Archive entry name '{entry.FullName}' contains an unsupported newline character.");
+                }
+
                 if (entry.FullName.EndsWith('/'))
                 {
                     if (normalizeTimestamps)

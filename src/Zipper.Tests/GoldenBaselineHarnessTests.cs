@@ -646,6 +646,15 @@ public class GoldenBaselineHarnessTests
             Assert.Equal(string.Empty, GoldenBaselineHarness.GenerateTimestampNormalizedSha256ManifestForArchive(emptyZipPath));
             Assert.Equal(string.Empty, GoldenBaselineHarness.GenerateRawSha256ManifestForArchive(emptyZipPath));
 
+            var newlineZipPath = Path.Combine(tempDir.FullName, "newline.zip");
+            using (var zipStream = new FileStream(newlineZipPath, FileMode.Create, FileAccess.Write))
+            using (var archive = new System.IO.Compression.ZipArchive(zipStream, System.IO.Compression.ZipArchiveMode.Create))
+            {
+                archive.CreateEntry("reports/a\nb.txt");
+            }
+            Assert.Throws<InvalidDataException>(() => GoldenBaselineHarness.GenerateTimestampNormalizedSha256ManifestForArchive(newlineZipPath));
+            Assert.Throws<InvalidDataException>(() => GoldenBaselineHarness.GenerateRawSha256ManifestForArchive(newlineZipPath));
+
             var unreadableArchive = Path.Combine(tempDir.FullName, "not-an-archive.zip");
             await File.WriteAllTextAsync(unreadableArchive, "not a zip");
             Assert.Throws<InvalidDataException>(() => GoldenBaselineHarness.GenerateTimestampNormalizedSha256ManifestForArchive(unreadableArchive));

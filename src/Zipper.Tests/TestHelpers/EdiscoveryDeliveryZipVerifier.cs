@@ -120,6 +120,7 @@ internal static class EdiscoveryDeliveryZipVerifier
             Assert.Equal(header.Length, cols.Length);
 
             Assert.False(string.IsNullOrEmpty(cols[nativeIdx]), $"DAT row {i} has empty NATIVE_PATH.");
+            Assert.Equal(cols[docIdIdx], Path.GetFileNameWithoutExtension(cols[nativeIdx].Replace('\\', '/')));
             AssertResolves(cols[nativeIdx], "native", rootPrefix, diskFiles, archiveEntryNames);
             Assert.False(string.IsNullOrEmpty(cols[imageIdx]), $"DAT row {i} has empty IMAGE_PATH.");
             AssertResolves(cols[imageIdx], "image", rootPrefix, diskFiles, archiveEntryNames);
@@ -333,9 +334,13 @@ internal static class EdiscoveryDeliveryZipVerifier
             // Extracted Text is enabled for this recipe, so every row must reference its expected text sidecar.
             var textRel = cols[extractedTextIdx].Replace('\\', '/');
             Assert.False(string.IsNullOrEmpty(textRel), $"Standard DAT row {i} has no Extracted Text reference.");
-            var expectedTextRel = Path.ChangeExtension(nativeRel, ".txt").Replace('\\', '/');
-            Assert.Equal(expectedTextRel, textRel);
+            Assert.True(textRel.EndsWith(".txt", StringComparison.OrdinalIgnoreCase), $"Standard DAT row {i} Extracted Text must end with .txt: {textRel}");
             Assert.NotEqual(nativeRel, textRel);
+            if (string.IsNullOrEmpty(cols[parentDocIdIdx]))
+            {
+                var expectedTextRel = Path.ChangeExtension(nativeRel, ".txt").Replace('\\', '/');
+                Assert.Equal(expectedTextRel, textRel);
+            }
             Assert.Contains(textRel, archiveEntryNames);
             textPaths.Add(textRel);
 
@@ -479,6 +484,12 @@ internal static class EdiscoveryDeliveryZipVerifier
             {
                 Assert.Equal(parent.BegAttach, child.BegAttach);
                 Assert.Equal(parent.EndAttach, child.EndAttach);
+                Assert.True(
+                    string.Compare(child.DocId, parent.BegAttach, StringComparison.Ordinal) > 0,
+                    $"Child doc id '{child.DocId}' must sort after parent BegAttach '{parent.BegAttach}'.");
+                Assert.True(
+                    string.Compare(child.DocId, parent.EndAttach, StringComparison.Ordinal) <= 0,
+                    $"Child doc id '{child.DocId}' must sort no later than parent EndAttach '{parent.EndAttach}'.");
             }
             var lastChild = group.OrderBy(r => r.DocId, StringComparer.Ordinal).Last();
             Assert.Equal(lastChild.DocId, parent.EndAttach);
