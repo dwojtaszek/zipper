@@ -48,7 +48,7 @@ public class EdiscoveryDeliveryZipRoundTripTests : WorkingDirectoryTestBase
             Assert.NotNull(request);
 
             var (exitCode, stdout, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => Program.Main(args));
-            Assert.Equal(0, exitCode);
+            Assert.True(exitCode == 0, $"Program.Main failed with exit code {exitCode}. Stderr: {stderr}, Stdout: {stdout}");
 
             var zipFiles = Directory.GetFiles(testDir, "*.zip");
             var zipFile = Assert.Single(zipFiles);

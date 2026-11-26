@@ -148,6 +148,7 @@ public class ProductionFileMaterializerTests
             await File.WriteAllTextAsync(Path.Combine(prodDir, "IMAGES", "VOL002", "PROD0002.tif"), "TIF2");
             await File.WriteAllTextAsync(Path.Combine(prodDir, "TEXT", "VOL001", "PROD0001.txt"), "TXT1");
             await File.WriteAllTextAsync(Path.Combine(prodDir, "TEXT", "VOL002", "PROD0002.txt"), "TXT2");
+            await File.WriteAllTextAsync(Path.Combine(prodDir, "TEXT", "VOL001", "EMPTY.txt"), string.Empty);
 
             await new ProductionFileMaterializer().CreateZipAsync(
                 prodDir,

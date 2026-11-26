@@ -60,7 +60,8 @@ public static class GoldenBaselineHarness
 
     /// <summary>
     /// Generates a deterministic SHA-256 manifest for every entry in <paramref name="archivePath"/>,
-    /// normalizing transient timestamp and wall-clock execution values in JSON artifacts in-place.
+    /// normalizing transient timestamp and wall-clock execution values in JSON artifacts in memory
+    /// before hashing. The archive itself is not modified.
     /// </summary>
     /// <param name="archivePath">The path to an archive file (.zip, .docx, .xlsx).</param>
     /// <returns>A manifest string of <c>sha256  relative-path-in-archive</c> lines, path-sorted.</returns>
@@ -181,6 +182,13 @@ public static class GoldenBaselineHarness
 
             if (archiveEntries.Count == 0)
             {
+                // The direct archive APIs promise one line per actual entry, so an empty
+                // archive has an empty manifest rather than a synthetic whole-file marker.
+                if (!allowWholeFileFallback)
+                {
+                    return;
+                }
+
                 // A directory-only archive has no file entries to hash and its raw bytes
                 // embed per-entry LastWriteTime (ZipArchive.CreateEntry stamps the current
                 // time with 2-second DOS granularity), which would break timestamp

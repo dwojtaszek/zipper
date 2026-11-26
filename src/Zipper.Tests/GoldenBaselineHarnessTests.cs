@@ -626,13 +626,25 @@ public class GoldenBaselineHarnessTests
             string normManifest = GoldenBaselineHarness.GenerateTimestampNormalizedSha256ManifestForArchive(zipPath);
             string rawManifest = GoldenBaselineHarness.GenerateRawSha256ManifestForArchive(zipPath);
 
-            var expectedDocHash = Convert.ToHexString(
-                System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes("hello world"))).ToLowerInvariant();
-            Assert.Contains("test.zip::doc.txt", normManifest, StringComparison.Ordinal);
-            Assert.Contains(expectedDocHash, normManifest, StringComparison.Ordinal);
-            Assert.Contains("test.zip::_manifest.json", normManifest, StringComparison.Ordinal);
-            Assert.Contains("test.zip::doc.txt", rawManifest, StringComparison.Ordinal);
-            Assert.Contains(expectedDocHash, rawManifest, StringComparison.Ordinal);
+            static string Sha256(string value) => Convert.ToHexString(
+                System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
+
+            var expectedDocHash = Sha256("hello world");
+            var expectedRawJsonHash = Sha256("{\"productionDate\":\"2026-01-01\"}");
+            var expectedNormalizedJsonHash = Sha256("{\"productionDate\":\"__normalized__\"}");
+            Assert.Contains($"{expectedDocHash}  test.zip::doc.txt", normManifest, StringComparison.Ordinal);
+            Assert.Contains($"{expectedNormalizedJsonHash}  test.zip::_manifest.json", normManifest, StringComparison.Ordinal);
+            Assert.Contains($"{expectedDocHash}  test.zip::doc.txt", rawManifest, StringComparison.Ordinal);
+            Assert.Contains($"{expectedRawJsonHash}  test.zip::_manifest.json", rawManifest, StringComparison.Ordinal);
+
+            var emptyZipPath = Path.Combine(tempDir.FullName, "empty.zip");
+            using (var emptyZipStream = new FileStream(emptyZipPath, FileMode.Create, FileAccess.Write))
+            using (new System.IO.Compression.ZipArchive(emptyZipStream, System.IO.Compression.ZipArchiveMode.Create))
+            {
+            }
+
+            Assert.Equal(string.Empty, GoldenBaselineHarness.GenerateTimestampNormalizedSha256ManifestForArchive(emptyZipPath));
+            Assert.Equal(string.Empty, GoldenBaselineHarness.GenerateRawSha256ManifestForArchive(emptyZipPath));
 
             var unreadableArchive = Path.Combine(tempDir.FullName, "not-an-archive.zip");
             await File.WriteAllTextAsync(unreadableArchive, "not a zip");

@@ -138,8 +138,9 @@ internal static class EdiscoveryDeliveryZipVerifier
         {
             Assert.Equal(child.BegAttach, child.ParentDocId);
             Assert.Contains(child.ParentDocId, familyParentIds);
-            Assert.StartsWith(child.ParentDocId, child.DocId, StringComparison.Ordinal);
         }
+
+        AssertFamilyRanges(familyRecords);
 
         // OPT resolution.
         var optPath = Path.Combine(productionDirectory, "DATA", "loadfile.opt");
@@ -259,6 +260,7 @@ internal static class EdiscoveryDeliveryZipVerifier
         Assert.True(parentDocIdIdx >= 0, "PARENTDOCID column missing from Standard DAT header.");
 
         var familyRecords = new List<FamilyRecord>();
+        var nativePaths = new HashSet<string>(StringComparer.Ordinal);
         for (int i = 1; i < datLines.Length; i++)
         {
             var cols = DelimitedTestParser.ParseLine(datLines[i], colDelim, quoteDelim).ToArray();
@@ -267,12 +269,14 @@ internal static class EdiscoveryDeliveryZipVerifier
             // Native file path resolves inside ZIP, and its DAT File Size is the pre-packaging size.
             var nativeRel = cols[filePathIdx].Replace('\\', '/');
             Assert.Contains(nativeRel, archiveEntryNames);
-            if (fileSizeIdx >= 0 && fileSizeIdx < cols.Length && !string.IsNullOrEmpty(cols[fileSizeIdx]))
-            {
-                var nativeEntry = archive.GetEntry(nativeRel);
-                Assert.NotNull(nativeEntry);
-                Assert.Equal(long.Parse(cols[fileSizeIdx], System.Globalization.CultureInfo.InvariantCulture), nativeEntry!.Length);
-            }
+            nativePaths.Add(nativeRel);
+            Assert.False(string.IsNullOrWhiteSpace(cols[fileSizeIdx]), $"Standard DAT row {i} has no File Size.");
+            Assert.True(
+                long.TryParse(cols[fileSizeIdx], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var expectedFileSize),
+                $"Standard DAT row {i} has invalid File Size '{cols[fileSizeIdx]}'.");
+            var nativeEntry = archive.GetEntry(nativeRel);
+            Assert.NotNull(nativeEntry);
+            Assert.Equal(expectedFileSize, nativeEntry!.Length);
 
             // Extracted Text is enabled for this recipe, so every row must reference a packaged text file.
             var textRel = cols[extractedTextIdx].Replace('\\', '/');
@@ -296,8 +300,9 @@ internal static class EdiscoveryDeliveryZipVerifier
         {
             Assert.Equal(child.BegAttach, child.ParentDocId);
             Assert.Contains(child.ParentDocId, familyParentIds);
-            Assert.StartsWith(child.ParentDocId, child.DocId, StringComparison.Ordinal);
         }
+
+        AssertFamilyRanges(familyRecords);
 
         if (request.Metadata.WithFamilies && request.Output.HasFileType("eml") && request.LoadFile.AttachmentRate > 0)
         {
@@ -305,13 +310,8 @@ internal static class EdiscoveryDeliveryZipVerifier
             Assert.NotEmpty(familyChildren);
         }
 
-        // Count Native Files (excluding load files, properties sidecars, and extracted text files).
-        long nativeFilesCount = archive.Entries.Count(e =>
-            !e.FullName.EndsWith('/') &&
-            !e.FullName.EndsWith(".dat", StringComparison.OrdinalIgnoreCase) &&
-            !e.FullName.EndsWith(".opt", StringComparison.OrdinalIgnoreCase) &&
-            !e.FullName.EndsWith(".json", StringComparison.OrdinalIgnoreCase) &&
-            !e.FullName.EndsWith(".txt", StringComparison.OrdinalIgnoreCase));
+        // Count Native Files by their DAT role, so a .txt attachment still counts as a Native.
+        long nativeFilesCount = nativePaths.Count;
 
         long totalDocuments = datLines.Length - 1;
 
@@ -350,8 +350,25 @@ internal static class EdiscoveryDeliveryZipVerifier
         Assert.Contains(names, n => n.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(names, n => n.EndsWith(".docx", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(names, n => n.EndsWith(".eml", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(names, n => n.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(names, n => n.EndsWith(".tif", StringComparison.OrdinalIgnoreCase) || n.EndsWith(".tiff", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(names, n => n.EndsWith(".txt", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static void AssertFamilyRanges(IReadOnlyList<FamilyRecord> familyRecords)
+    {
+        var parents = familyRecords
+            .Where(r => string.IsNullOrEmpty(r.ParentDocId) && !string.Equals(r.BegAttach, r.EndAttach, StringComparison.Ordinal))
+            .ToDictionary(r => r.DocId, StringComparer.Ordinal);
+        var childrenByParent = familyRecords
+            .Where(r => !string.IsNullOrEmpty(r.ParentDocId))
+            .GroupBy(r => r.ParentDocId, StringComparer.Ordinal);
+
+        foreach (var group in childrenByParent)
+        {
+            Assert.True(parents.TryGetValue(group.Key, out var parent), $"Family child parent '{group.Key}' has no parent row.");
+            var lastChild = group.OrderBy(r => r.DocId, StringComparer.Ordinal).Last();
+            Assert.Equal(lastChild.DocId, parent!.EndAttach);
+        }
     }
 
     private static Dictionary<string, string> ParseManifest(string manifest)
