@@ -89,43 +89,55 @@ public static class ZipAssert
             }
         }
 
-        // Compare complete Archive file-entry namespace against on-disk tree.
+        // Compare complete Archive file-entry namespace against on-disk tree using the independent reader.
         var parentDir = Path.GetDirectoryName(Path.GetFullPath(productionDir))!;
         var diskFiles = Directory.GetFiles(productionDir, "*", SearchOption.AllDirectories)
             .Select(f => Path.GetRelativePath(parentDir, f).Replace('\\', '/'))
             .ToHashSet(StringComparer.Ordinal);
 
-        var archiveFileEntries = archive.Entries
-            .Where(e => !e.FullName.EndsWith('/'))
-            .Select(e => e.FullName)
-            .ToHashSet(StringComparer.Ordinal);
-
-        // Missing entries or extra entries must fail.
-        Assert.True(
-            diskFiles.SetEquals(archiveFileEntries),
-            $"Archive entries do not match on-disk tree. Missing from archive: [{string.Join(", ", diskFiles.Except(archiveFileEntries))}]. Extra in archive: [{string.Join(", ", archiveFileEntries.Except(diskFiles))}].");
-
-        // Verify DATA load files and manifest are present.
-        Assert.Contains(archiveFileEntries, e => e.EndsWith("/_manifest.json", StringComparison.Ordinal));
-        Assert.Contains(archiveFileEntries, e => e.Contains("/DATA/", StringComparison.Ordinal));
-
-        // Hash each entry and its disk file incrementally so memory stays bounded by the
-        // hash buffer, not by the largest Native File.
-        foreach (var entry in archive.Entries.Where(e => !e.FullName.EndsWith('/')))
+        using (var sharpZip = new ICSharpCode.SharpZipLib.Zip.ZipFile(zipPath))
         {
-            var diskPath = Path.Combine(parentDir, entry.FullName.Replace('/', Path.DirectorySeparatorChar));
-            Assert.True(File.Exists(diskPath), $"Matching disk file not found for archive entry: {entry.FullName}");
+            var archiveFileEntries = new HashSet<string>(StringComparer.Ordinal);
+            foreach (ICSharpCode.SharpZipLib.Zip.ZipEntry entry in sharpZip)
+            {
+                if (!entry.IsDirectory && !entry.Name.EndsWith('/'))
+                {
+                    archiveFileEntries.Add(entry.Name);
+                }
+            }
 
-            using var entryStream = entry.Open();
-            using var diskStream = File.OpenRead(diskPath);
-            Assert.Equal(diskStream.Length, entry.Length);
-
-            var entryHash = System.Security.Cryptography.SHA256.HashData(entryStream);
-            var diskHash = System.Security.Cryptography.SHA256.HashData(diskStream);
-
+            // Missing entries or extra entries must fail.
             Assert.True(
-                diskHash.AsSpan().SequenceEqual(entryHash),
-                $"Content mismatch for entry '{entry.FullName}' against disk file '{diskPath}'.");
+                diskFiles.SetEquals(archiveFileEntries),
+                $"Archive entries do not match on-disk tree. Missing from archive: [{string.Join(", ", diskFiles.Except(archiveFileEntries))}]. Extra in archive: [{string.Join(", ", archiveFileEntries.Except(diskFiles))}].");
+
+            // Verify DATA load files and manifest are present.
+            Assert.Contains(archiveFileEntries, e => e.EndsWith("/_manifest.json", StringComparison.Ordinal));
+            Assert.Contains(archiveFileEntries, e => e.Contains("/DATA/", StringComparison.Ordinal));
+
+            // Hash each entry and its disk file incrementally using the independent reader so memory
+            // stays bounded by the hash buffer, not by the largest Native File.
+            foreach (ICSharpCode.SharpZipLib.Zip.ZipEntry entry in sharpZip)
+            {
+                if (entry.IsDirectory || entry.Name.EndsWith('/'))
+                {
+                    continue;
+                }
+
+                var diskPath = Path.Combine(parentDir, entry.Name.Replace('/', Path.DirectorySeparatorChar));
+                Assert.True(File.Exists(diskPath), $"Matching disk file not found for archive entry: {entry.Name}");
+
+                using var entryStream = sharpZip.GetInputStream(entry);
+                using var diskStream = File.OpenRead(diskPath);
+                Assert.Equal(diskStream.Length, entry.Size);
+
+                var entryHash = System.Security.Cryptography.SHA256.HashData(entryStream);
+                var diskHash = System.Security.Cryptography.SHA256.HashData(diskStream);
+
+                Assert.True(
+                    diskHash.AsSpan().SequenceEqual(entryHash),
+                    $"Content mismatch for entry '{entry.Name}' against disk file '{diskPath}'.");
+            }
         }
     }
 
@@ -135,12 +147,12 @@ public static class ZipAssert
         using var sharpZip = new ICSharpCode.SharpZipLib.Zip.ZipFile(zipPath);
         foreach (ICSharpCode.SharpZipLib.Zip.ZipEntry entry in sharpZip)
         {
+            using var stream = sharpZip.GetInputStream(entry);
             if (entry.IsDirectory)
             {
                 continue;
             }
 
-            using var stream = sharpZip.GetInputStream(entry);
             var crc = new ICSharpCode.SharpZipLib.Checksum.Crc32();
             long totalBytes = 0;
             int bytesRead;

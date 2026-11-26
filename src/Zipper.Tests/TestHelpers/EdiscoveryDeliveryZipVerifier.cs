@@ -119,7 +119,9 @@ internal static class EdiscoveryDeliveryZipVerifier
             var cols = DelimitedTestParser.ParseLine(datLines[i], colDelim, quoteDelim).ToArray();
             Assert.Equal(header.Length, cols.Length);
 
+            Assert.False(string.IsNullOrEmpty(cols[nativeIdx]), $"DAT row {i} has empty NATIVE_PATH.");
             AssertResolves(cols[nativeIdx], "native", rootPrefix, diskFiles, archiveEntryNames);
+            Assert.False(string.IsNullOrEmpty(cols[imageIdx]), $"DAT row {i} has empty IMAGE_PATH.");
             AssertResolves(cols[imageIdx], "image", rootPrefix, diskFiles, archiveEntryNames);
             Assert.False(string.IsNullOrEmpty(cols[textIdx]), $"DAT row {i} has no Extracted Text reference.");
             AssertResolves(cols[textIdx], "text", rootPrefix, diskFiles, archiveEntryNames);
@@ -232,6 +234,49 @@ internal static class EdiscoveryDeliveryZipVerifier
             .Select(e => e.FullName)
             .ToHashSet(StringComparer.Ordinal);
 
+        // Independent reader matches ZIP inventory and streaming content hashes to disk artifacts.
+        var tempExtractDir = Path.Combine(Path.GetDirectoryName(zipFilePath)!, "extracted_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempExtractDir);
+        try
+        {
+            ZipFile.ExtractToDirectory(zipFilePath, tempExtractDir);
+            var diskFiles = Directory.GetFiles(tempExtractDir, "*", SearchOption.AllDirectories)
+                .Select(f => Path.GetRelativePath(tempExtractDir, f).Replace('\\', '/'))
+                .ToHashSet(StringComparer.Ordinal);
+
+            using (var sharpZip = new ICSharpCode.SharpZipLib.Zip.ZipFile(zipFilePath))
+            {
+                var sharpZipEntries = new HashSet<string>(StringComparer.Ordinal);
+                foreach (ICSharpCode.SharpZipLib.Zip.ZipEntry entry in sharpZip)
+                {
+                    if (!entry.IsDirectory && !entry.Name.EndsWith('/'))
+                    {
+                        sharpZipEntries.Add(entry.Name);
+                        var diskPath = Path.Combine(tempExtractDir, entry.Name.Replace('/', Path.DirectorySeparatorChar));
+                        Assert.True(File.Exists(diskPath), $"Matching disk file not found for archive entry: {entry.Name}");
+
+                        using var entryStream = sharpZip.GetInputStream(entry);
+                        using var diskStream = File.OpenRead(diskPath);
+                        Assert.Equal(diskStream.Length, entry.Size);
+
+                        var entryHash = System.Security.Cryptography.SHA256.HashData(entryStream);
+                        var diskHash = System.Security.Cryptography.SHA256.HashData(diskStream);
+                        Assert.True(
+                            diskHash.AsSpan().SequenceEqual(entryHash),
+                            $"Streaming hash mismatch for '{entry.Name}' against disk artifact.");
+                    }
+                }
+                Assert.True(diskFiles.SetEquals(sharpZipEntries));
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(tempExtractDir))
+            {
+                Directory.Delete(tempExtractDir, true);
+            }
+        }
+
         // Golden hash-manifest tooling on the archive.
         var archiveManifest = ParseManifest(GoldenBaselineHarness.GenerateTimestampNormalizedSha256ManifestForArchive(zipFilePath));
         Assert.NotEmpty(archiveManifest);
@@ -321,7 +366,7 @@ internal static class EdiscoveryDeliveryZipVerifier
             Assert.NotEmpty(familyChildren);
         }
 
-        // Locate included OPT load file if present, and verify format structure.
+        // Locate included OPT load file if present, and verify format structure and image resolution.
         var optEntry = archive.Entries.FirstOrDefault(e => !e.FullName.Contains('/') && e.FullName.EndsWith(".opt", StringComparison.OrdinalIgnoreCase));
         if (optEntry is not null)
         {
@@ -334,6 +379,8 @@ internal static class EdiscoveryDeliveryZipVerifier
             {
                 var parts = optLine.Split(',');
                 Assert.True(parts.Length >= 7, $"Standard OPT line had {parts.Length} fields, expected >= 7: {optLine}");
+                var imageRel = parts[2].Trim().Replace('\\', '/');
+                Assert.Contains(imageRel, archiveEntryNames);
             }
         }
 
@@ -427,16 +474,19 @@ internal static class EdiscoveryDeliveryZipVerifier
         foreach (var (parentId, group) in childrenByParent)
         {
             Assert.True(parents.TryGetValue(parentId, out var parent), $"Family child parent '{parentId}' has no parent row.");
+            Assert.Equal(parent!.DocId, parent.BegAttach);
             foreach (var child in group)
             {
-                Assert.Equal(parent!.EndAttach, child.EndAttach);
+                Assert.Equal(parent.BegAttach, child.BegAttach);
+                Assert.Equal(parent.EndAttach, child.EndAttach);
             }
             var lastChild = group.OrderBy(r => r.DocId, StringComparer.Ordinal).Last();
-            Assert.Equal(lastChild.DocId, parent!.EndAttach);
+            Assert.Equal(lastChild.DocId, parent.EndAttach);
         }
 
         foreach (var (parentId, parent) in parents)
         {
+            Assert.Equal(parent.DocId, parent.BegAttach);
             Assert.True(
                 childrenByParent.TryGetValue(parentId, out var group),
                 $"Parent '{parentId}' has BegAttach '{parent.BegAttach}' != EndAttach '{parent.EndAttach}', but has no family children.");

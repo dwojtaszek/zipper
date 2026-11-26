@@ -38,6 +38,7 @@ public class EdiscoveryDeliveryZipRoundTripTests : WorkingDirectoryTestBase
                 "--count", "4",
                 "--output-path", testDir,
                 "--include-load-file",
+                "--loadfile-format", "dat",
                 "--with-families",
                 "--attachment-rate", "100",
                 "--with-text",
