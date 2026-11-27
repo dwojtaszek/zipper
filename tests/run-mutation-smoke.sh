@@ -170,8 +170,8 @@ PATTERNS=(
     's/!=/==/'
     's/&&/||/'
     's/\|\|/\&\&/'
-    's/\btrue\b/false/'
-    's/\bfalse\b/true/'
+    's/(^|[^[:alnum:]_])true([^[:alnum:]_]|$)/\1false\2/'
+    's/(^|[^[:alnum:]_])false([^[:alnum:]_]|$)/\1true\2/'
     's/>=/>/'
     's/<=/</'
 )
@@ -190,6 +190,21 @@ OPERATOR_COUNT=${#PATTERNS[@]}
 PATTERNS+=('s/"(\\"|[^"])*"/"MUTATED"/')
 DESCS+=('string literal → "MUTATED"')
 STRING_IDX=$(( ${#PATTERNS[@]} - 1 ))
+
+apply_mutation() {
+    local idx="$1" address="${2:-}" pattern
+    pattern="${PATTERNS[$idx]}"
+    case "${DESCS[$idx]}" in
+        'true → false'|'false → true')
+            # Temporarily mask only the scheduling argument so other booleans still mutate.
+            sed -E -e "${address}{" \
+                -e $'s/(\\.ConfigureAwait[[:space:]]*\\([[:space:]]*(continueOnCapturedContext:[[:space:]]*)?)true([[:space:]]*\\))/\\1\001\\3/g' \
+                -e $'s/(\\.ConfigureAwait[[:space:]]*\\([[:space:]]*(continueOnCapturedContext:[[:space:]]*)?)false([[:space:]]*\\))/\\1\002\\3/g' \
+                -e "$pattern" -e $'s/\001/true/g; s/\002/false/g' -e '}'
+            ;;
+        *) sed -E "${address}$pattern" ;;
+    esac
+}
 
 # String-literal mutants only make sense for value producers. Mutating a log
 # line or an unscoped file would report a survivor that no test should kill.
@@ -225,7 +240,7 @@ for file in "${FILES[@]}"; do
         [[ -z "$trimmed" ]] && continue
 
         for ((idx = 0; idx < OPERATOR_COUNT; idx++)); do
-            mutated=$(printf '%s\n' "$code_only" | sed -E "${PATTERNS[$idx]}" 2>/dev/null) || continue
+            mutated=$(printf '%s\n' "$code_only" | apply_mutation "$idx" 2>/dev/null) || continue
             if [[ "$mutated" != "$code_only" ]]; then
                 CANDIDATES+=("${file}|${ln}|${idx}")
             fi
@@ -438,7 +453,7 @@ for candidate in "${CANDIDATES[@]}"; do
 
     # Generate mutated candidate into temporary file first so we can check content-hash cache
     TMP_FILE="${file}.mutation-tmp"
-    sed -E "${ln}${PATTERNS[$idx]}" "$file" > "$TMP_FILE"
+    apply_mutation "$idx" "$ln" < "$file" > "$TMP_FILE"
 
     stem=$(basename "$file" .cs)
     stem_test_file=$(find src/Zipper.Tests -name "${stem}Tests.cs" -print -quit 2>/dev/null || echo "")

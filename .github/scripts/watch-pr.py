@@ -43,9 +43,10 @@ def publish_snapshot(snapshot, state, previous, quiet=False):
     return state.copy()
 
 
-def find_run(gh, repo, head, pr):
+def find_run(gh, repo, head, pr, run_id=None):
     runs = gh('api', f'repos/{repo}/actions/workflows/pr.yml/runs?head_sha={head}&event=pull_request&per_page=100')['workflow_runs']
     return next((run['id'] for run in runs if run['head_sha'] == head
+                 and (run_id is None or run['id'] == run_id)
                  and any(item['number'] == pr for item in run['pull_requests'])), None)
 
 
@@ -56,13 +57,15 @@ def summarize_job(job):
                           if step['status'] == 'in_progress'), None)}
 
 
-def poll_pr(gh, repo, pr, state):
+def poll_pr(gh, repo, pr, state, verify_run=False):
     if state['run_id'] is None:
         state['run_id'] = find_run(gh, repo, state['head'], pr)
     if gh('pr', 'view', str(pr), '--json', 'headRefOid')['headRefOid'] != state['head']:
         state['status'] = 'superseded'
         state['conclusion'] = ''
         return 3
+    if verify_run and state['run_id'] is not None and find_run(gh, repo, state['head'], pr, state['run_id']) is None:
+        raise ValueError('Snapshot workflow run does not belong to the pinned PR head')
     if state['run_id'] is None:
         state['status'] = 'waiting-for-run'
     else:
@@ -106,13 +109,34 @@ def read_snapshot(snapshot: Path, pr: int) -> int:
     return 4
 
 
+def is_commit_sha(head):
+    return isinstance(head, str) and re.fullmatch(r'[0-9a-f]{40}', head) is not None
+
+
+def resume_snapshot(snapshot, pr):
+    state = json.loads(snapshot.read_text(encoding='utf-8'))
+    if not isinstance(state, dict) or state.get('pr') != pr or state.get('status') != 'timeout':
+        raise ValueError('Expected a timed-out snapshot for this PR')
+    head, run = state.get('head'), state.get('run_id')
+    if not is_commit_sha(head):
+        raise ValueError('Snapshot does not contain a pinned commit SHA')
+    if run is not None and (type(run) is not int or run <= 0):
+        raise ValueError('Snapshot contains an invalid workflow run ID')
+    jobs = state.get('jobs')
+    if not isinstance(jobs, list) or any(not isinstance(job, dict) or 'id' not in job for job in jobs):
+        raise ValueError('Snapshot does not contain a valid job list')
+    return state
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('pr', type=int)
     parser.add_argument('--snapshot', type=Path, required=True)
     parser.add_argument('--interval', type=int, default=30)
     parser.add_argument('--timeout', type=int, default=3600)
-    parser.add_argument('--status', action='store_true', help='Print existing snapshot state and exit without polling')
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument('--resume', action='store_true', help='Continue a timed-out snapshot on the same head and run')
+    mode.add_argument('--status', action='store_true', help='Print existing snapshot state and exit without polling')
     parser.add_argument('--quiet', action='store_true', help='Print only completed jobs and workflow state transitions')
     args = parser.parse_args()
     if args.pr < 1 or args.interval < 1 or args.timeout < 1:
@@ -120,7 +144,13 @@ def main():
     if args.status:
         return read_snapshot(args.snapshot, args.pr)
     state = {'pr': args.pr, 'head': None, 'run_id': None, 'status': 'starting', 'conclusion': '', 'jobs': []}
-    previous = {}
+    if args.resume:
+        try:
+            state = resume_snapshot(args.snapshot, args.pr)
+        except (OSError, ValueError) as error:
+            print(f'Cannot resume snapshot: {error}', file=sys.stderr)
+            return 3
+    previous = state.copy() if args.resume else {}
     deadline = time.monotonic() + args.timeout
 
     def gh(*arguments):
@@ -131,12 +161,15 @@ def main():
         previous = publish_snapshot(args.snapshot, state, previous, quiet=args.quiet)
 
     try:
-        state['head'] = gh('pr', 'view', str(args.pr), '--json', 'headRefOid')['headRefOid']
-        if not isinstance(state['head'], str) or not re.fullmatch(r'[0-9a-f]{40}', state['head']):
+        if not args.resume:
+            state['head'] = gh('pr', 'view', str(args.pr), '--json', 'headRefOid')['headRefOid']
+        if not is_commit_sha(state['head']):
             raise ValueError('PR head was not a readable commit SHA')
         repo = gh('repo', 'view', '--json', 'nameWithOwner')['nameWithOwner']
+        verify_run = args.resume and state['run_id'] is not None
         while time.monotonic() < deadline:
-            result = poll_pr(gh, repo, args.pr, state)
+            result = poll_pr(gh, repo, args.pr, state, verify_run)
+            verify_run = False
             if result is not None:
                 publish()
                 return result

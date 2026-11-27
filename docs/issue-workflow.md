@@ -104,9 +104,10 @@ Be harsh. I'll be disappointed if you don't find at least one significant proble
 The `coderabbit` CLI (installed at `~/.local/bin/coderabbit`, already authenticated) reviews a branch locally **before** it is pushed to GitHub, so findings are fixed while they are still cheap. On public repositories with fewer than 10 stars, the remote CodeRabbit GitHub App skips automatic reviews on push, making this local CLI gate the primary review check. A local review is required before initial PR submission and before pushing any updates to an existing PR. Run it after autoreview and after committing, right before pushing:
 
 ```bash
-coderabbit review --committed --base main --agent --fresh
+timeout 960 coderabbit review --committed --base main --agent --fresh
 ```
 
+- Give the command and its outer launcher at least 15 minutes from the first attempt. Use the long-running process session when the launcher has a shorter per-call wait.
 - `--committed --base main` reviews the branch's commits against `main`. For uncommitted work use `--uncommitted` (add `--include-untracked` for new files).
 - `--agent` emits structured JSON findings (one `{"type":"finding", ...}` line each) instead of prose.
 - `coderabbit doctor` verifies install/auth/repo readiness; `coderabbit review findings` lists open findings from the last review.

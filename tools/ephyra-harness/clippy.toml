@@ -1,0 +1,2 @@
+# Emit scores above the library limit. The local gate applies a separate test limit.
+cognitive-complexity-threshold = 13

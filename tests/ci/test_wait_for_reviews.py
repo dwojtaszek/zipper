@@ -285,6 +285,11 @@ class ReviewWaitGateTests(unittest.TestCase):
             "<h3>Great, no issues found!</h3>\n"
             f"<!-- https://github.com/dwojtaszek/zipper/commit/{HEAD_SHA} -->"
         )
+        empty_groups = "<h3>Code Review by Qodo</h3>\n" + "".join(
+            f'<img alt="{label}">\n\n_Nice, no open findings for this group_\n\n'
+            for label in ("Action required", "Remediation recommended", "Informational")
+        )
+        head_marker = f"<!-- https://github.com/dwojtaszek/zipper/commit/{HEAD_SHA} -->"
         stale_body = (
             "<h3>Code Review by Qodo</h3>\n"
             "<img alt='Action required'>\n"
@@ -362,6 +367,13 @@ class ReviewWaitGateTests(unittest.TestCase):
         ]
         for name, comments, expected_code, expected_unresolved in (
             ("clean", [{"author": {"login": "qodo-code-review"}, "authorAssociation": "NONE", "body": clean_body}], 0, 0),
+            ("empty_groups", [{"author": {"login": "qodo-code-review"}, "body": empty_groups + head_marker}], 0, 0),
+            ("ambiguous_groups", [{"author": {"login": "qodo-code-review"}, "body": (
+                empty_groups.replace("_Nice, no open findings for this group_", "", 1) + head_marker
+            )}], 1, 1),
+            ("numbered_finding_with_empty_groups", [{"author": {"login": "qodo-code-review"}, "body": (
+                empty_groups + "<summary>1. Still open</summary>\n" + head_marker
+            )}], 1, 1),
             ("stale", [{"author": {"login": "qodo-code-review"}, "authorAssociation": "NONE", "body": stale_body}], 0, 0),
             ("acked_all", [
                 {"author": {"login": "qodo-code-review"}, "authorAssociation": "NONE", "body": current_findings},
