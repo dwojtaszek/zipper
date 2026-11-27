@@ -377,6 +377,54 @@ public class ZipAssertTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public void AssertProductionZipMatchesDisk_DirectoryEntryDeflatedWhenStoreExpected_ThrowsException()
+    {
+        var prodDir = Path.Combine(this.TempDir, "PROD_DIR_DEFLATE");
+        Directory.CreateDirectory(prodDir);
+        var dataDir = Path.Combine(prodDir, "DATA");
+        Directory.CreateDirectory(dataDir);
+        File.WriteAllText(Path.Combine(dataDir, "load.dat"), "data");
+        File.WriteAllText(Path.Combine(prodDir, "_manifest.json"), "{}");
+        var zipPath = Path.Combine(this.TempDir, "PROD_DIR_DEFLATE.zip");
+
+        using (var fs = File.Create(zipPath))
+        using (var zipStream = new ICSharpCode.SharpZipLib.Zip.ZipOutputStream(fs))
+        {
+            zipStream.SetLevel(6);
+            var dirEntry = new ICSharpCode.SharpZipLib.Zip.ZipEntry("PROD_DIR_DEFLATE/DATA/")
+            {
+                CompressionMethod = ICSharpCode.SharpZipLib.Zip.CompressionMethod.Deflated
+            };
+            zipStream.PutNextEntry(dirEntry);
+            zipStream.CloseEntry();
+
+            zipStream.SetLevel(0);
+            var entry1 = new ICSharpCode.SharpZipLib.Zip.ZipEntry("PROD_DIR_DEFLATE/DATA/load.dat")
+            {
+                CompressionMethod = ICSharpCode.SharpZipLib.Zip.CompressionMethod.Stored
+            };
+            zipStream.PutNextEntry(entry1);
+            zipStream.Write(Encoding.UTF8.GetBytes("data"));
+            zipStream.CloseEntry();
+
+            var entry2 = new ICSharpCode.SharpZipLib.Zip.ZipEntry("PROD_DIR_DEFLATE/_manifest.json")
+            {
+                CompressionMethod = ICSharpCode.SharpZipLib.Zip.CompressionMethod.Stored
+            };
+            zipStream.PutNextEntry(entry2);
+            zipStream.Write(Encoding.UTF8.GetBytes("{}"));
+            zipStream.CloseEntry();
+
+            zipStream.Finish();
+        }
+
+        Assert.ThrowsAny<XunitException>(() =>
+        {
+            ZipAssert.AssertProductionZipMatchesDisk(zipPath, prodDir, ZipCompressionMethod.Store);
+        });
+    }
+
+    [Fact]
     public void AssertProductionZipMatchesDisk_EmptyArchive_ThrowsException()
     {
         var prodDir = Path.Combine(this.TempDir, "PROD_EMPTY");

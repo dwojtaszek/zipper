@@ -184,12 +184,18 @@ public static class GoldenBaselineHarness
                 {
                     if (!allowWholeFileFallback)
                     {
-                        // Do not trust the declared length: read the stream so a Stored
-                        // directory that hides payload bytes is rejected in every mode.
-                        using var directoryStream = entry.Open();
-                        if (entry.Length > 0 || directoryStream.ReadByte() != -1)
+                        // Do not trust the declared length: inspect decompressed data independently
+                        // through SharpZipLib so that directory entries that conceal payload bytes
+                        // are rejected even if uncompressed size is declared 0 under Deflate or Store.
+                        using var sharpZip = new ICSharpCode.SharpZipLib.Zip.ZipFile(fullPath);
+                        var szEntry = sharpZip.GetEntry(entry.FullName);
+                        if (szEntry is not null)
                         {
-                            throw new InvalidDataException($"Archive directory entry '{entry.FullName}' unexpectedly contains content bytes.");
+                            using var szStream = sharpZip.GetInputStream(szEntry);
+                            if (szEntry.Size > 0 || szStream.ReadByte() != -1)
+                            {
+                                throw new InvalidDataException($"Archive directory entry '{entry.FullName}' unexpectedly contains content bytes.");
+                            }
                         }
                     }
 

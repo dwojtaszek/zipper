@@ -132,21 +132,21 @@ public static class ZipAssert
         }
 
         // Method code assertion (Store = 0, Deflate = 8). A Store request must always
-        // require Store (method 0), even for empty files. For Deflate, the .NET writer
-        // stores empty entries with method 0, so empty entries may be Stored while
+        // require Store (method 0), even for empty files and directory entries. For Deflate,
+        // the .NET writer stores empty entries with method 0, so empty entries may be Stored while
         // non-empty members must be Deflated.
         int expectedMethodCode = expectedMethod == ZipCompressionMethod.Store ? 0 : 8;
         using (var sharpZip = new ICSharpCode.SharpZipLib.Zip.ZipFile(zipPath))
         {
             foreach (ICSharpCode.SharpZipLib.Zip.ZipEntry entry in sharpZip)
             {
-                if (!entry.IsDirectory)
+                if (expectedMethod == ZipCompressionMethod.Store)
                 {
-                    if (expectedMethod == ZipCompressionMethod.Store)
-                    {
-                        Assert.Equal(0, (int)entry.CompressionMethod);
-                    }
-                    else if (entry.Size > 0)
+                    Assert.Equal(0, (int)entry.CompressionMethod);
+                }
+                else if (!entry.IsDirectory)
+                {
+                    if (entry.Size > 0)
                     {
                         Assert.Equal(expectedMethodCode, (int)entry.CompressionMethod);
                     }
@@ -254,10 +254,17 @@ public static class ZipAssert
             var crc = new ICSharpCode.SharpZipLib.Checksum.Crc32();
             long totalBytes = 0;
             int bytesRead;
-            while ((bytesRead = stream.Read(buffer, 0, buffer.Length)) > 0)
+            try
             {
-                crc.Update(new ArraySegment<byte>(buffer, 0, bytesRead));
-                totalBytes += bytesRead;
+                while ((bytesRead = stream.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    crc.Update(new ArraySegment<byte>(buffer, 0, bytesRead));
+                    totalBytes += bytesRead;
+                }
+            }
+            catch (Exception ex)
+            {
+                Assert.Fail($"Failed to decompress entry '{entry.Name}' with SharpZipLib: {ex.Message}");
             }
 
             Assert.Equal(entry.Size, totalBytes);
