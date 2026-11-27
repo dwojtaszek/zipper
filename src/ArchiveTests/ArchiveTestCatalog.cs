@@ -750,6 +750,14 @@ internal static class ArchiveTestCatalog
             "nested-archives-depth-two", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
             Suites: [CompatibilitySuite, SecuritySuite],
             Recipe: NestedArchiveControlRecipe),
+        ["nested-opaque-forward"] = new(
+            "nested-opaque-forward", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite],
+            Recipe: OpaqueNestedArchiveRecipe(reverse: false)),
+        ["nested-opaque-reversed"] = new(
+            "nested-opaque-reversed", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite],
+            Recipe: OpaqueNestedArchiveRecipe(reverse: true)),
         // Ticket #935 cumulative-budget boundary: two inner Archives with
         // deflated zero content plus a pad sibling. The pad Length is an upper
         // bound; the builder computes the exact pad landing the recursive
@@ -1035,17 +1043,24 @@ internal static class ArchiveTestCatalog
     // A genuine depth-two nesting: the outer Archive carries a real inner Archive as
     // one member's exact content plus a plain sibling file; the inner Archive holds
     // only a regular file — no recursive self-reference, no third level.
-    private static ArchiveTestRecipe NestedArchiveControlRecipe
+    private static ArchiveTestRecipe NestedArchiveControlRecipe => new(
+    [
+        NestedArchiveEntry(),
+        ArchiveTestRecipeEntry.File("outer.txt", 30, "stored"),
+    ]);
+
+    private static ArchiveTestRecipe OpaqueNestedArchiveRecipe(bool reverse)
     {
-        get
-        {
-            var inner = BuildInnerArchiveBytes();
-            return new ArchiveTestRecipe(
-            [
-                new ArchiveTestRecipeEntry("inner.zip", inner.Length, "stored", IsDirectory: false, PayloadPrefix: inner),
-                ArchiveTestRecipeEntry.File("outer.txt", 30, "stored"),
-            ]);
-        }
+        var inner = NestedArchiveEntry();
+        var bytes = "PK\u0003\u0004ordinary bytes"u8.ToArray();
+        var plain = new ArchiveTestRecipeEntry("zip-looking.bin", bytes.Length, "stored", IsDirectory: false, PayloadPrefix: bytes);
+        return new ArchiveTestRecipe(reverse ? [plain, inner] : [inner, plain]);
+    }
+
+    private static ArchiveTestRecipeEntry NestedArchiveEntry()
+    {
+        var bytes = BuildInnerArchiveBytes();
+        return new ArchiveTestRecipeEntry("inner.zip", bytes.Length, "stored", IsDirectory: false, PayloadPrefix: bytes);
     }
 
     // Built with a fixed timestamp and host-independent entry metadata (issue #1178) so
