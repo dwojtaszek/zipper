@@ -20,6 +20,7 @@ import subprocess
 import signal
 import stat
 from datetime import datetime, timedelta, timezone
+from time import sleep as sleep_before_fetch_retry
 from typing import NamedTuple
 import urllib.request
 import urllib.error
@@ -6824,7 +6825,7 @@ def sync_main_repo():
         # Release the main-checkout lock before sleeping so the retry acquires a
         # fresh lock window instead of stacking two fetch durations under one lock.
         if FETCH_RETRY_DELAY_SECONDS > 0:
-            time.sleep(FETCH_RETRY_DELAY_SECONDS)
+            sleep_before_fetch_retry(FETCH_RETRY_DELAY_SECONDS)
     return False
 
 

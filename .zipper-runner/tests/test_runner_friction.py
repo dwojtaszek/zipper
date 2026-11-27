@@ -1407,7 +1407,7 @@ class MainRepoRecoveryTests(unittest.TestCase):
                 return original_run_cmd(args, cwd=cwd, timeout=timeout)
 
             with patch.object(module, "run_cmd", side_effect=mock_run_cmd), \
-                    patch.object(module.time, "sleep") as sleep_mock:
+                    patch.object(module, "sleep_before_fetch_retry") as sleep_mock:
                 self.assertTrue(module.sync_main_repo())
 
             self.assertEqual(attempts, 2)
@@ -1454,7 +1454,7 @@ class MainRepoRecoveryTests(unittest.TestCase):
                     return -1, "", "Command timed out after 900s: git fetch origin"
                 return original_run_cmd(args, cwd=cwd, timeout=timeout)
 
-            with patch.object(module.time, "sleep") as sleep_mock:
+            with patch.object(module, "sleep_before_fetch_retry") as sleep_mock:
                 self._assert_sync_aborts(module, mock_run_cmd)
 
             self.assertEqual(attempts, 1)
@@ -1480,7 +1480,7 @@ class MainRepoRecoveryTests(unittest.TestCase):
                 sleep_lock_exists.append(lock_dir.exists())
 
             with patch.object(module, "run_cmd", side_effect=mock_run_cmd), \
-                    patch.object(module.time, "sleep", side_effect=fake_sleep) as sleep_mock:
+                    patch.object(module, "sleep_before_fetch_retry", side_effect=fake_sleep) as sleep_mock:
                 self.assertTrue(module.sync_main_repo())
 
             sleep_mock.assert_called_once_with(5)
@@ -1577,7 +1577,7 @@ class MainRepoRecoveryTests(unittest.TestCase):
             def switch_branch_during_sleep(_seconds):
                 git("checkout", "--quiet", "-b", "other")
 
-            with patch.object(module.time, "sleep", side_effect=switch_branch_during_sleep):
+            with patch.object(module, "sleep_before_fetch_retry", side_effect=switch_branch_during_sleep):
                 self._assert_sync_aborts(module, mock_run_cmd)
 
             streak = json.loads((root / "state" / "fetch-origin-failures.json").read_text())

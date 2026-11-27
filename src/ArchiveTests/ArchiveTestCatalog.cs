@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 
@@ -16,7 +17,7 @@ internal sealed record ArchiveTestRecipeEntry(
     bool IsDirectory,
     byte[]? PayloadPrefix,
     bool IsPolicyName = false,
-    bool IsCloudCompatName = false,
+    bool IsBoundedDeepName = false,
     uint ExternalAttributes = 0,
     byte? HostSystem = null)
 {
@@ -42,16 +43,13 @@ internal sealed record ArchiveTestRecipeEntry(
             IsPolicyName: true, ExternalAttributes: externalAttributes, HostSystem: hostSystem);
 
     /// <summary>
-    /// A cloud-compatibility entry (ticket #878): a valid deep member path whose
-    /// segment depth is governed by a consumer platform limit (ADLS Gen2: 63
-    /// hierarchical-namespace segments), not by the depth-2 recipe budget. The
-    /// dedicated ValidateAdlsSegmentBudget guard in the builder is the only
-    /// exemption from ValidatePathDepth; REQ-213 stays untouched.
+    /// A file whose path is under test uses the bounded deep-path guard in place
+    /// of the ordinary depth-2 guard. The payload is fixed across Cases and Seeds.
     /// </summary>
-    internal static ArchiveTestRecipeEntry CloudCompatFile(string name, string text) =>
+    internal static ArchiveTestRecipeEntry DeepPathFile(string name, string text) =>
         new(
             name, text.Length, "stored", IsDirectory: false, PayloadPrefix: Encoding.ASCII.GetBytes(text),
-            IsCloudCompatName: true);
+            IsBoundedDeepName: true);
 }
 
 internal sealed record ArchiveTestRecipe(IReadOnlyList<ArchiveTestRecipeEntry> Entries);
@@ -194,6 +192,8 @@ internal static class ArchiveTestCatalog
     internal const string MalformedSuite = "malformed";
     internal const string SecuritySuite = "security";
     internal const string EncodingSuite = "encoding";
+    internal const string DirectoryWorkloadSuite = "directory-workload";
+    internal const string NameLengthBoundariesCaseKey = "valid-name-length-boundaries";
     internal const string AllSuites = "all";
 
     /// <summary>
@@ -210,6 +210,7 @@ internal static class ArchiveTestCatalog
         MalformedSuite,
         SecuritySuite,
         EncodingSuite,
+        DirectoryWorkloadSuite,
         AllSuites,
     ];
 
@@ -312,7 +313,19 @@ internal static class ArchiveTestCatalog
         return bytes;
     }
 
-    private static readonly IReadOnlyDictionary<string, ArchiveTestCaseDefinition> Cases = new Dictionary<string, ArchiveTestCaseDefinition>(StringComparer.Ordinal)
+    private static readonly ArchiveTestRecipeEntry[] TreeDirectories =
+    [
+        ArchiveTestRecipeEntry.Directory("café/"),
+        ArchiveTestRecipeEntry.Directory("café/文/"),
+        ArchiveTestRecipeEntry.Directory("café/空/"),
+        ArchiveTestRecipeEntry.Directory("café/空/a/") with { IsBoundedDeepName = true },
+        ArchiveTestRecipeEntry.Directory("café/空/a/b/") with { IsBoundedDeepName = true },
+    ];
+
+    private static readonly ArchiveTestRecipeEntry TreeFile =
+        ArchiveTestRecipeEntry.DeepPathFile("café/文/file.txt", "atc-directory-tree");
+
+    private static readonly Dictionary<string, ArchiveTestCaseDefinition> Cases = new(StringComparer.Ordinal)
     {
         ["valid-empty"] = new(
             "valid-empty", CaseRevision: 1, ExpectationRevision: 2, Classification: "valid",
@@ -380,6 +393,16 @@ internal static class ArchiveTestCatalog
                 ArchiveTestRecipeEntry.File("dir/file.txt", 60, "stored"),
                 ArchiveTestRecipeEntry.File("top.txt", 30, "stored"),
             ])),
+        ["directory-tree-explicit"] = DirectoryControl("directory-tree-explicit", [.. TreeDirectories, TreeFile]),
+        ["directory-tree-implicit"] = DirectoryControl("directory-tree-implicit", [TreeFile]),
+        ["directory-tree-only"] = DirectoryControl("directory-tree-only", TreeDirectories),
+        [NameLengthBoundariesCaseKey] = DirectoryControl(NameLengthBoundariesCaseKey,
+        [
+            ArchiveTestRecipeEntry.DeepPathFile(LengthBoundaryName(54), "atc-name-boundary"),
+            ArchiveTestRecipeEntry.DeepPathFile(LengthBoundaryName(55), "atc-byte-length-exceeded"),
+            ArchiveTestRecipeEntry.DeepPathFile(LengthBoundaryName(56), "atc-scalar-length-exceeded"),
+        ]) with
+        { ExpectationRevision = 2 },
         // A valid control whose stored payload begins with local-header-signature-like
         // bytes (PK\x03\x04): readers must treat them as data, never as a header.
         ["valid-signature-payload"] = new(
@@ -800,6 +823,29 @@ internal static class ArchiveTestCatalog
             "combined-crc-and-truncate",
             ArchiveTestMutationKind.CrcLocalMismatch, ArchiveTestMutationKind.TruncatePayloadTail),
     };
+
+    static ArchiveTestCatalog()
+    {
+        // Split the opt-in workload into fixture pairs within the ordinary per-Archive budget.
+        const int EntriesPerFixture = 1_000;
+        for (var shard = 0; shard < 10; shard++)
+        {
+            var key = string.Create(CultureInfo.InvariantCulture, $"empty-directories-{shard + 1:00}");
+            var entries = Enumerable.Range(shard * EntriesPerFixture + 1, EntriesPerFixture)
+                .Select(index => ArchiveTestRecipeEntry.Directory(
+                    string.Create(CultureInfo.InvariantCulture, $"empty-{index:00000}/")))
+                .ToArray();
+            Cases.Add(key, DirectoryControl(key, entries, DirectoryWorkloadSuite));
+        }
+    }
+
+    private static ArchiveTestCaseDefinition DirectoryControl(
+        string key, IReadOnlyList<ArchiveTestRecipeEntry> entries, string suite = CompatibilitySuite) =>
+        new(key, CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [suite], Recipe: new ArchiveTestRecipe(entries));
+
+    private static string LengthBoundaryName(int suffixLength) =>
+        string.Join("/", Enumerable.Repeat(new string('p', 240), 4)) + "/é" + new string('x', suffixLength) + ".txt";
 
     private const string MalformedClassification = "malformed";
     internal const string PolicySensitiveClassification = "policy-sensitive";
@@ -1225,22 +1271,19 @@ internal static class ArchiveTestCatalog
     ]);
 
     // Ticket #878 ADLS Gen2 segment depth: container-relative member paths of
-    // exactly 63 segments (the hierarchical-namespace boundary, legal) and 64
-    // (the first violation). Built with the dedicated CloudCompatFile entry whose
-    // own 64-segment guard replaces the depth-2 recipe budget (REQ-213 untouched);
-    // ADLS Gen2 counts account and container on the wire, so account-relative
-    // depth is the segment count + 2.
+    // 63 and 64 segments, including the filename. ADLS Gen2 also counts the
+    // account and container when evaluating the destination path.
     private static string AdlsPath(int segments) =>
         string.Join("/", Enumerable.Range(1, segments - 1).Select(index => $"d{index:00}")) + "/target.txt";
 
     private static ArchiveTestRecipe AdlsSegmentBoundaryRecipe => new(
     [
-        ArchiveTestRecipeEntry.CloudCompatFile(AdlsPath(63), "atc-adls-boundary"),
+        ArchiveTestRecipeEntry.DeepPathFile(AdlsPath(63), "atc-adls-boundary"),
     ]);
 
     private static ArchiveTestRecipe AdlsSegmentExceededRecipe => new(
     [
-        ArchiveTestRecipeEntry.CloudCompatFile(AdlsPath(64), "atc-adls-exceeded"),
+        ArchiveTestRecipeEntry.DeepPathFile(AdlsPath(64), "atc-adls-exceeded"),
     ]);
 
     // Ticket #875 entry-type confusion: a trailing-slash directory marker carrying a
@@ -1290,7 +1333,7 @@ internal static class ArchiveTestCatalog
         }
 
         return [.. Cases.Values
-            .Where(c => suite == AllSuites || c.Suites.Contains(suite))
+            .Where(c => suite == AllSuites ? !c.Suites.Contains(DirectoryWorkloadSuite) : c.Suites.Contains(suite))
             .OrderBy(c => c.CaseKey, StringComparer.Ordinal)];
     }
 }

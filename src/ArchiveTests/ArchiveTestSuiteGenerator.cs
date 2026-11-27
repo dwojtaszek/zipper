@@ -362,12 +362,14 @@ internal static class ArchiveTestSuiteGenerator
                 return PolicyExpectations(definition);
             }
 
+            // REQ-212 requires the whole fixture to be scoped when extraction needs a specific host.
+            var platform = definition.CaseKey == ArchiveTestCatalog.NameLengthBoundariesCaseKey ? "long-path-filesystem" : null;
             return
             [
-                Expectation(ListOperation, StrictProfile, ["listed-count-matches-entries"], [NoPartialWrites, "listed-count == entry-count"]),
-                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches"], [NoPartialWrites]),
-                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-passes"], [NoPartialWrites]),
-                Expectation(ExtractOperation, StrictProfile, ["extract-completes"], [NoPartialWrites, "extracted-bytes-match-content-hashes"]),
+                Expectation(ListOperation, StrictProfile, ["listed-count-matches-entries"], [NoPartialWrites, "listed-count == entry-count"], platform: platform),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches"], [NoPartialWrites], platform: platform),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-passes"], [NoPartialWrites], platform: platform),
+                Expectation(ExtractOperation, StrictProfile, ["extract-completes"], [NoPartialWrites, "extracted-bytes-match-content-hashes"], platform: platform),
             ];
         }
 
@@ -796,9 +798,8 @@ internal static class ArchiveTestSuiteGenerator
             "azure-directory-marker-collision" =>
                 new PolicyExpectationProfile(null, [NoSilentOverwrite, DistinctContentHashes]),
             // ADLS Gen2 segment depth (ticket #878): container-relative 63/64
-            // segment members. The boundary member is legal everywhere; the
-            // exceeded member only violates the hierarchical-namespace limit,
-            // so only named ADLS jobs evaluate its extraction verdict.
+            // segment members. Named ADLS jobs evaluate the exceeded path
+            // against the destination's own segment-counting convention.
             "path-adls-segments-boundary" =>
                 new PolicyExpectationProfile(null, []),
             "path-adls-segments-exceeded" =>

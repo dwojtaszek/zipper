@@ -16,7 +16,7 @@ set PASSED=0
 set FAILED=0
 set SMOKE_CASES=5
 set /a EXPECTED_FILES=%SMOKE_CASES%*2
-set ALL_CASES=123
+set ALL_CASES=127
 
 REM Stored/header-only byte goldens (#846): stored entries plus fixed timestamps
 REM are byte-stable across runtimes, so the Fixture IDs are frozen and asserted on
@@ -319,9 +319,9 @@ if !ALL_OK! EQU 1 (
 
 %PYCMD% tests\archive-tests\verify-fixtures.py "%ALL_OUT%" --report "%TEST_OUTPUT_DIR%\all-verification.json" >nul 2>&1
 if errorlevel 1 (
-    call :fail "independent verifier must pass the complete catalogue"
+    call :fail "independent verifier must pass the non-opt-in catalogue"
 ) else (
-    call :pass "independent verifier passed the complete catalogue"
+    call :pass "independent verifier passed the non-opt-in catalogue"
 )
 
 REM 10.1. Cancellation (REQ-215/REQ-219): start the longest suite in a hidden
@@ -601,9 +601,9 @@ set "npm_config_cache=%OFFLINE_CACHE%"
 set "npm_config_registry=http://127.0.0.1:9/"
 %PYCMD% tests\archive-tests\verify-fixtures.py "%ALL_OUT%" --report "%TEST_OUTPUT_DIR%\all-offline-verification.json" >nul 2>&1
 if errorlevel 1 (
-    call :fail "offline verification must pass the complete catalogue without downloads"
+    call :fail "offline verification must pass the non-opt-in catalogue without downloads"
 ) else (
-    call :pass "offline verification passed the complete catalogue without downloads"
+    call :pass "offline verification passed the non-opt-in catalogue without downloads"
 )
 set "npm_config_cache="
 set "npm_config_registry="
