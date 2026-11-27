@@ -64,11 +64,14 @@ public static class ZipAssert
             }
         }
 
-        var fileEntryNames = archive.Entries
-            .Where(e => !e.FullName.EndsWith('/'))
+        var allEntryNames = archive.Entries
             .Select(e => e.FullName)
             .ToList();
-        Assert.Equal(fileEntryNames.Count, fileEntryNames.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(allEntryNames.Count, allEntryNames.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+
+        var fileEntryNames = allEntryNames
+            .Where(name => !name.EndsWith('/'))
+            .ToList();
 
         // A path cannot be both a file and a directory: extraction fails on the collision,
         // including directories implied by a child entry.

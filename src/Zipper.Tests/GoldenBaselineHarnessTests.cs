@@ -708,8 +708,9 @@ public class GoldenBaselineHarnessTests
             var newlineNamedInvalidZip = Path.Combine(fallbackDir, fallbackName);
             await File.WriteAllTextAsync(newlineNamedInvalidZip, "not a zip");
             var fallbackManifest = GoldenBaselineHarness.GenerateTimestampNormalizedSha256Manifest(fallbackDir);
+            var expectedKey = OperatingSystem.IsWindows() ? "broken_name.zip" : "broken\\nname.zip";
             Assert.Contains(
-                OperatingSystem.IsWindows() ? "  broken_name.zip" : "  broken\\nname.zip",
+                $"{Sha256("not a zip")}  {expectedKey}",
                 fallbackManifest);
             Assert.Single(fallbackManifest.Split('\n', StringSplitOptions.RemoveEmptyEntries));
 

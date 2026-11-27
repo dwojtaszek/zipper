@@ -110,6 +110,34 @@ public class ZipAssertTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public void AssertValidZip_DuplicateDirectoryEntries_ThrowsException()
+    {
+        var zipPath = this.GetTempFilePath();
+        using (var archive = ZipFile.Open(zipPath, ZipArchiveMode.Create))
+        {
+            archive.CreateEntry("VOL001/");
+            archive.CreateEntry("VOL001/");
+        }
+
+        Assert.ThrowsAny<XunitException>(() => ZipAssert.AssertValidZip(zipPath, 2));
+    }
+
+    [Fact]
+    public void AssertValidZip_ExplicitDirectoryAlongsideFile_Passes()
+    {
+        var zipPath = this.GetTempFilePath();
+        using (var archive = ZipFile.Open(zipPath, ZipArchiveMode.Create))
+        {
+            archive.CreateEntry("VOL001/");
+            var file = archive.CreateEntry("VOL001/a.pdf", CompressionLevel.NoCompression);
+            using var writer = new StreamWriter(file.Open());
+            writer.Write("payload");
+        }
+
+        ZipAssert.AssertValidZip(zipPath, 2);
+    }
+
+    [Fact]
     public void AssertValidZip_CaseOnlyDuplicateNames_ThrowsException()
     {
         var zipPath = this.GetTempFilePath();

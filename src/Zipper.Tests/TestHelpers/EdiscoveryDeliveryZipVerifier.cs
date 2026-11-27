@@ -291,6 +291,8 @@ internal static class EdiscoveryDeliveryZipVerifier
         Assert.Equal(volumeCount, actualVolumeDirs.Length);
 
         // Parent rows must split across volumes by the requested VolumeSize; attachment rows are excluded.
+        // ProductionSetPlanner assigns volume by parent document index (i / VolumeSize + 1);
+        // family attachments accompany their parent into that parent's volume.
         for (int i = 0; i < (int)request.Output.FileCount; i++)
         {
             var expectedDocId = request.Bates is not null
@@ -646,12 +648,9 @@ internal static class EdiscoveryDeliveryZipVerifier
         IReadOnlySet<string> diskFiles,
         IReadOnlySet<string> archiveEntryNames)
     {
-        if (string.IsNullOrEmpty(referencedPath))
-        {
-            return;
-        }
+        Assert.False(string.IsNullOrWhiteSpace(referencedPath), $"Load File referenced {kind} path must not be blank.");
 
-        var relativePath = referencedPath.Replace('\\', '/');
+        var relativePath = referencedPath.Trim().Replace('\\', '/');
         var deliveryPath = $"{rootPrefix}{relativePath}";
         Assert.True(diskFiles.Contains(deliveryPath), $"Load File referenced {kind} file missing on disk: {relativePath}");
         Assert.Contains(deliveryPath, archiveEntryNames);
