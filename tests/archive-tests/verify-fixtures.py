@@ -2689,6 +2689,8 @@ def _verify_extra_field(check, case, zip_bytes):
             raise VerificationError(check, "Expectation File is missing entry ordinal %d" % ordinal)
         if entry["c_extra_len"] != 0:
             raise VerificationError(check, "valid-extra-field entry %d has a central extra field" % ordinal)
+        if entry["l_method"] != 0 or entry["c_method"] != 0:
+            raise VerificationError(check, "valid-extra-field entry %d is not Stored in both headers" % ordinal)
         if (entry["l_flags"] | entry["c_flags"]) & 0x0008:
             raise VerificationError(check, "valid-extra-field entry %d declares a data descriptor" % ordinal)
         if (sidecar.get("readableName") != entry["c_name"].decode("utf-8", "replace")

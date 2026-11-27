@@ -3350,6 +3350,12 @@ class ProducerCompatibilityControlTests(TempDirTest):
                 mutated[offset] ^= 1
                 self._assert_fails("valid-extra-field", bytes(mutated), entries)
 
+        local_method = bytearray(zip_bytes)
+        struct.pack_into("<H", local_method, 8, 8)
+        with self.assertRaises(vf.VerificationError):
+            vf._verify_extra_field(
+                "producer-compatibility", {"entries": entries}, bytes(local_method))
+
         # Flip the payload and both declared CRCs together: only the sidecar hash can reject it.
         import binascii
         payload_flip = bytearray(zip_bytes)
