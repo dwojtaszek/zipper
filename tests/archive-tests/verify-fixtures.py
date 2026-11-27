@@ -563,103 +563,8 @@ class FixtureVerifier:
         mutation_note = verify_mutations(case, zip_bytes, actual_sha)
         checks.append({"check": "mutations", "status": "pass", "detail": mutation_note})
 
-        # Central Directory extra-field length overrun (ticket #1288): the
-        # declared field starts at the next entry and extends past physical EOF.
-        if case.get("caseKey") == "extra-field-truncated":
-            extra_note = verify_central_extra_length_overrun(case, zip_bytes)
-            checks.append({"check": "central-extra-length-overrun", "status": "pass",
-                           "detail": extra_note})
-
-        if case.get("caseKey") == "zip64-eocd-offset-disagreement":
-            zip64_note = verify_zip64_eocd_offset_disagreement(case, zip_bytes)
-            checks.append({"check": "zip64-eocd-offset-disagreement", "status": "pass",
-                           "detail": zip64_note})
-
-        if case.get("caseKey") == "trailing-data-undeclared":
-            trailing_note = verify_undeclared_trailing_data(case, zip_bytes)
-            checks.append({"check": "undeclared-trailing-data", "status": "pass",
-                           "detail": trailing_note})
-
-        # Orphan hidden entry (ticket #869): the hidden LFH at offset 0 has no CDH;
-        # CD-driven readers list only visibles while a forward LFH scan sees more.
-        if case.get("caseKey") == "orphan-local-header":
-            orphan_note = verify_orphan_hidden(case, zip_bytes)
-            checks.append({"check": "orphan-hidden", "status": "pass", "detail": orphan_note})
-
-        # EOCD ambiguity (ticket #870): two complete central-directory/EOCD pairs
-        # select disjoint entries. Python's backward scan must select the trailing
-        # shadow pair while the authentic EOCD's declared comment spans to EOF.
-        if case.get("caseKey") == "eocdr-ambiguity-comment":
-            eocd_note = verify_eocd_ambiguity(case, zip_bytes)
-            checks.append({"check": "eocd-ambiguity", "status": "pass", "detail": eocd_note})
-
-        # Zip64 locator ambiguity (#1280): derive the true EOCD from the fixed
-        # Archive comment length, then parse the fake Zip64 records from the
-        # final central-header comment rather than trusting mutation metadata.
-        if case.get("caseKey") == "zip64-locator-ambiguity":
-            zip64_note = verify_zip64_locator_ambiguity(case, zip_bytes)
-            checks.append({"check": "zip64-locator-ambiguity", "status": "pass",
-                           "detail": zip64_note})
-
-        # Unicode Path extra field (ticket #871): a valid 0x7075 subfield in both
-        # headers whose CRC matches the standard name; readers ignore the field.
-        if case.get("caseKey") == "unicode-path-extra-mismatch":
-            unicode_note = verify_unicode_path_extra(case, zip_bytes)
-            checks.append({"check": "unicode-path", "status": "pass", "detail": unicode_note})
-
-        # ADLS Gen2 segment depth (ticket #878): the single member's
-        # container-relative path pins the hierarchical-namespace boundary
-        # (63 segments, legal) or the first violation (64).
-        if case.get("caseKey") in ("path-adls-segments-boundary", "path-adls-segments-exceeded"):
-            adls_note = verify_adls_segments(case)
-            checks.append({"check": "adls-segments", "status": "pass", "detail": adls_note})
-
-        # Legacy-codec trail-byte names (ticket #887): the named CP932/Big5/GBK
-        # consumer decodes the raw name bytes and asserts no spurious split.
-        if case.get("caseKey") in ENCODING_TRAIL_BYTE_CASES:
-            encoding_note = verify_encoding_trail_bytes(case, zip_bytes)
-            checks.append({"check": "encoding-trail-byte", "status": "pass", "detail": encoding_note})
-
-        # Local/central codec divergence (#1283): bit 11 selects a different
-        # valid codec for each header, and both decoded names must agree.
-        if case.get("caseKey") == ENCODING_CODEC_DIVERGENCE_CASE_KEY:
-            encoding_note = verify_encoding_codec_divergence(case, zip_bytes)
-            checks.append({"check": "encoding-codec-divergence", "status": "pass",
-                           "detail": encoding_note})
-
-        # Prefixed cases (ticket #873): a 64-byte signature-free stub precedes the
-        # Archive; the rebased twin shifts every offset past it, the unrebased twin
-        # leaves stale offsets behind.
-        if case.get("caseKey") in ("prefix-rebased", "prefix-unrebased"):
-            prefix_note = verify_prefix_model(case, zip_bytes)
-            checks.append({"check": "prefix-model", "status": "pass", "detail": prefix_note})
-
-        # Coded valid controls (tickets #897/#898): the sidecar carries no method
-        # field, so the method codes are audited here from both headers instead.
-        if case.get("caseKey") == "valid-bzip2":
-            coded_note = verify_coded_method(case, zip_bytes, 12)
-            checks.append({"check": "coded-method", "status": "pass", "detail": coded_note})
-        # Shared-range resource case (ticket #872): every central header points at
-        # the single local header; the declared expansion is honestly structured.
-        if case.get("caseKey") == "zip-bomb-overlapping-deflate":
-            shared_note = verify_shared_payload_range(case, zip_bytes)
-            checks.append({"check": "shared-range", "status": "pass", "detail": shared_note})
-
-        # Coded valid controls (ticket #898; #897 adds BZip2; #931 adds the
-        # Deflate64-specific control): the sidecar carries no method field,
-        # so the method codes are audited here from both headers.
-        if case.get("caseKey") in ("valid-deflate64", "valid-deflate64-long-match"):
-            coded_note = verify_coded_method(case, zip_bytes, 9)
-            checks.append({"check": "coded-method", "status": "pass", "detail": coded_note})
-
-        # Hostile filename bytes (ticket #876) and normalization-sensitive
-        # traversal names (ticket #1290): raw header bytes are audited by ordinal,
-        # never through Python's name-keyed lookup.
-        if case.get("caseKey") in (
-                "filename-null-byte", "filename-c0-control",
-                "name-sibling-prefix-traversal"):
-            hostile_note = verify_hostile_name(case, zip_bytes)
-            checks.append({"check": "hostile-name", "status": "pass", "detail": hostile_note})
+        # Case-specific structural audits (wired via CASE_STRUCTURE_AUDITS table).
+        _run_case_structure_audits(case, zip_bytes, checks)
 
         return checks
 
@@ -2614,6 +2519,222 @@ def verify_compression_methods(case, zip_bytes):
             raise VerificationError("compression-methods", "method-local-central-mismatch must have local 8, central 0, codec stored")
 
     return "entries=%d" % len(entries)
+
+
+PRODUCER_COMPATIBILITY_CASE_KEYS = frozenset((
+    "valid-max-eocd-comment",
+    "valid-directory-attributes",
+    "valid-extra-field",
+    "valid-descriptor-signature",
+    "valid-descriptor-no-signature",
+))
+
+
+def _read_length_anchored_entry(check, zip_bytes, ordinal, cursor, eocd_offset, cd_offset):
+    if cursor + ZIP_CENTRAL_HEADER_FIXED_SIZE > eocd_offset or zip_bytes[cursor:cursor + 4] != b"PK\x01\x02":
+        raise VerificationError(check, "central header %d is missing or truncated" % ordinal)
+    version_made_by, _ver_needed, c_flags, c_method = struct.unpack_from("<HHHH", zip_bytes, cursor + 4)
+    c_crc, c_comp, c_uncomp = struct.unpack_from("<III", zip_bytes, cursor + 16)
+    c_name_len, c_extra_len, c_comm_len = struct.unpack_from("<HHH", zip_bytes, cursor + 28)
+    external_attr, local_offset = struct.unpack_from("<II", zip_bytes, cursor + 38)
+    c_name = zip_bytes[cursor + 46:cursor + 46 + c_name_len]
+    next_cursor = cursor + ZIP_CENTRAL_HEADER_FIXED_SIZE + c_name_len + c_extra_len + c_comm_len
+    if next_cursor > eocd_offset:
+        raise VerificationError(check, "central header %d overruns the central directory" % ordinal)
+
+    if local_offset + ZIP_LOCAL_HEADER_FIXED_SIZE > cd_offset or zip_bytes[local_offset:local_offset + 4] != b"PK\x03\x04":
+        raise VerificationError(check, "local header %d is missing" % ordinal)
+    l_flags, l_method = struct.unpack_from("<HH", zip_bytes, local_offset + 6)
+    l_crc, l_comp, l_uncomp = struct.unpack_from("<III", zip_bytes, local_offset + 14)
+    l_name_len, l_extra_len = struct.unpack_from("<HH", zip_bytes, local_offset + 26)
+    l_name_start = local_offset + ZIP_LOCAL_HEADER_FIXED_SIZE
+    l_extra_start = l_name_start + l_name_len
+    data_offset = l_extra_start + l_extra_len
+    if data_offset > cd_offset or data_offset + c_comp > cd_offset:
+        raise VerificationError(check, "local entry %d payload extends past the central directory" % ordinal)
+    return next_cursor, {
+        "version_made_by": version_made_by,
+        "host_system": version_made_by >> 8,
+        "external_attr": external_attr,
+        "c_flags": c_flags,
+        "c_method": c_method,
+        "c_crc": c_crc,
+        "c_comp": c_comp,
+        "c_uncomp": c_uncomp,
+        "c_name": c_name,
+        "c_extra_len": c_extra_len,
+        "l_flags": l_flags,
+        "l_method": l_method,
+        "l_crc": l_crc,
+        "l_comp": l_comp,
+        "l_uncomp": l_uncomp,
+        "l_name": zip_bytes[l_name_start:l_extra_start],
+        "l_extra": zip_bytes[l_extra_start:data_offset],
+        "data_offset": data_offset,
+    }
+
+
+def _parse_length_anchored_entries(check, zip_bytes, comment_length, expected_entry_count):
+    """Parses EOCD, central headers, and local headers anchored by EOCD comment length."""
+    if len(zip_bytes) < ZIP_EOCD_FIXED_SIZE + comment_length:
+        raise VerificationError(check, "archive is too small for the EOCD and declared comment")
+    eocd_offset = len(zip_bytes) - ZIP_EOCD_FIXED_SIZE - comment_length
+    if zip_bytes[eocd_offset:eocd_offset + 4] != b"PK\x05\x06":
+        raise VerificationError(check, "length-anchored EOCD signature is missing")
+    disk, cd_disk, disk_entries, total_entries, cd_size, cd_offset, wire_comment_len = (
+        struct.unpack_from("<HHHHIIH", zip_bytes, eocd_offset + 4))
+    if (disk, cd_disk) != (0, 0) or disk_entries != total_entries:
+        raise VerificationError(check, "EOCD disk or entry-count fields disagree")
+    if wire_comment_len != comment_length:
+        raise VerificationError(
+            check, "EOCD comment length is %d, expected %d" % (wire_comment_len, comment_length))
+    if total_entries > MAX_ENTRIES or total_entries != expected_entry_count:
+        raise VerificationError(
+            check, "EOCD reports %d entries, expected %d" % (total_entries, expected_entry_count))
+    if cd_offset + cd_size != eocd_offset:
+        raise VerificationError(check, "central directory does not end at the EOCD")
+
+    cursor = cd_offset
+    parsed = []
+    for ordinal in range(total_entries):
+        cursor, entry = _read_length_anchored_entry(
+            check, zip_bytes, ordinal, cursor, eocd_offset, cd_offset)
+        parsed.append(entry)
+
+    if cursor != cd_offset + cd_size:
+        raise VerificationError(check, "central directory span does not match its entries")
+    comment_bytes = zip_bytes[eocd_offset + ZIP_EOCD_FIXED_SIZE:]
+    return eocd_offset, cd_offset, comment_bytes, parsed
+
+
+def _verify_max_eocd_comment(check, case, zip_bytes):
+    sidecar_entries = case.get("entries", [])
+    if len(sidecar_entries) != 1:
+        raise VerificationError(check, "valid-max-eocd-comment must contain exactly one entry")
+    _, _, comment_bytes, parsed = _parse_length_anchored_entries(check, zip_bytes, 65535, 1)
+    if comment_bytes != b"X" * 65535:
+        raise VerificationError(check, "max EOCD comment does not carry 65,535 'X' bytes")
+    entry, sidecar = parsed[0], sidecar_entries[0]
+    header_fields = (
+        entry["c_name"], entry["l_name"], entry["host_system"], entry["external_attr"],
+        entry["l_flags"] & 0x0008, entry["c_flags"] & 0x0008,
+        entry["l_method"], entry["c_method"], entry["l_extra"], entry["c_extra_len"],
+        entry["l_crc"], entry["l_comp"], entry["l_uncomp"],
+        entry["c_comp"], entry["c_uncomp"],
+    )
+    expected_fields = (b"d.txt", b"d.txt", 3, 0o600 << 16, 0, 0, 0, 0, b"", 0, entry["c_crc"], 100, 100, 100, 100)
+    if header_fields != expected_fields:
+        raise VerificationError(check, "valid-max-eocd-comment wire headers do not match pinned seekable sample")
+    payload_sha = sha256_hex(zip_bytes[entry["data_offset"]:entry["data_offset"] + 100])
+    if (sidecar.get("kind") != "file" or sidecar.get("readableName") != "d.txt"
+            or sidecar.get("contentSize") != 100 or payload_sha != sidecar.get("contentSha256")):
+        raise VerificationError(check, "valid-max-eocd-comment entry sidecar or payload hash disagrees")
+    return "eocd-comment=65535 seekable-flags=0 d.txt-verified"
+
+
+def _verify_directory_attributes(check, case, zip_bytes):
+    expected_specs = ((b"dos-dir", 0, 0x00000010), (b"unix-dir", 3, 0x41ED0000))
+    sidecar_entries = case.get("entries", [])
+    if len(sidecar_entries) != len(expected_specs):
+        raise VerificationError(check, "valid-directory-attributes must declare exactly two entries")
+    _, _, _, parsed = _parse_length_anchored_entries(check, zip_bytes, 0, len(expected_specs))
+    empty_sha = sha256_hex(b"")
+    for ordinal, (expected_name, expected_host, expected_attr) in enumerate(expected_specs):
+        entry, sidecar = parsed[ordinal], sidecar_entries[ordinal]
+        wire_tuple = (
+            entry["c_name"], entry["l_name"], entry["host_system"], entry["external_attr"],
+            entry["c_method"], entry["l_method"], entry["c_comp"], entry["c_uncomp"],
+            entry["l_comp"], entry["l_uncomp"],
+        )
+        if wire_tuple != (expected_name, expected_name, expected_host, expected_attr, 0, 0, 0, 0, 0, 0):
+            raise VerificationError(
+                check, "entry %d wire fields do not match %s attributes" % (ordinal, expected_name.decode("ascii")))
+        sidecar_tuple = (
+            sidecar.get("kind"), sidecar.get("readableName"),
+            sidecar.get("contentSize"), sidecar.get("contentSha256"),
+        )
+        if sidecar_tuple != ("file", expected_name.decode("ascii"), 0, empty_sha):
+            raise VerificationError(
+                check, "entry %d sidecar does not preserve reference-reader file interpretation" % ordinal)
+    return "dos-dir=fat/0x10 unix-dir=unix/0x41ed0000"
+
+
+def _verify_extra_field(check, case, zip_bytes):
+    sidecar_entries = case.get("entries", [])
+    if not sidecar_entries:
+        raise VerificationError(check, "valid-extra-field must contain at least one entry")
+    _, _, _, parsed = _parse_length_anchored_entries(check, zip_bytes, 0, len(sidecar_entries))
+    entry = parsed[0]
+    if entry["l_extra"] != b"\x99\x99\x04\x00\xaa\xbb\xcc\xdd" or entry["c_extra_len"] != 0:
+        raise VerificationError(check, "valid-extra-field local 0x9999 extra field or central extra length mismatches")
+    return "local-extra=0x9999+4bytes central-extra=0"
+
+
+def _verify_descriptor_form(check, case, zip_bytes):
+    case_key = case["caseKey"]
+    signed = case_key == "valid-descriptor-signature"
+    if len(case.get("entries", [])) != 1:
+        raise VerificationError(check, "%s must contain exactly one entry" % case_key)
+    _, cd_offset, _, parsed = _parse_length_anchored_entries(check, zip_bytes, 0, 1)
+    entry = parsed[0]
+    header_tuple = (
+        entry["c_name"], entry["l_name"],
+        bool(entry["l_flags"] & 0x0008), bool(entry["c_flags"] & 0x0008),
+        entry["l_crc"], entry["l_comp"], entry["l_uncomp"], entry["l_method"], entry["c_method"],
+    )
+    if header_tuple != (b"d.txt", b"d.txt", True, True, 0, 0, 0, 0, 0):
+        raise VerificationError(check, "%s headers do not carry expected bit-3 descriptor framing" % case_key)
+    descriptor = zip_bytes[entry["data_offset"] + entry["c_comp"]:cd_offset]
+    core = struct.pack("<III", entry["c_crc"], entry["c_comp"], entry["c_uncomp"])
+    expected_descriptor = (b"PK\x07\x08" + core) if signed else core
+    if descriptor != expected_descriptor:
+        raise VerificationError(check, "%s data descriptor bytes do not match expected form" % case_key)
+    return "descriptor=%s" % ("signed-16B" if signed else "unsigned-12B")
+
+
+PRODUCER_COMPATIBILITY_VERIFIERS = {
+    "valid-max-eocd-comment": _verify_max_eocd_comment,
+    "valid-directory-attributes": _verify_directory_attributes,
+    "valid-extra-field": _verify_extra_field,
+    "valid-descriptor-signature": _verify_descriptor_form,
+    "valid-descriptor-no-signature": _verify_descriptor_form,
+}
+
+
+def verify_producer_compatibility(case, zip_bytes):
+    """Independent wire-field audit for ZIP producer compatibility controls (#1465)."""
+    check = "producer-compatibility"
+    verifier = PRODUCER_COMPATIBILITY_VERIFIERS.get(case.get("caseKey"))
+    if verifier is None:
+        raise VerificationError(check, "unexpected producer compatibility Case Key %r" % case.get("caseKey"))
+    return verifier(check, case, zip_bytes)
+
+
+CASE_STRUCTURE_AUDITS = (
+    (("extra-field-truncated",), "central-extra-length-overrun", verify_central_extra_length_overrun),
+    (("zip64-eocd-offset-disagreement",), "zip64-eocd-offset-disagreement", verify_zip64_eocd_offset_disagreement),
+    (("trailing-data-undeclared",), "undeclared-trailing-data", verify_undeclared_trailing_data),
+    (("orphan-local-header",), "orphan-hidden", verify_orphan_hidden),
+    (("eocdr-ambiguity-comment",), "eocd-ambiguity", verify_eocd_ambiguity),
+    (("zip64-locator-ambiguity",), "zip64-locator-ambiguity", verify_zip64_locator_ambiguity),
+    (("unicode-path-extra-mismatch",), "unicode-path", verify_unicode_path_extra),
+    (("path-adls-segments-boundary", "path-adls-segments-exceeded"), "adls-segments", lambda c, _z: verify_adls_segments(c)),
+    (tuple(ENCODING_TRAIL_BYTE_CASES), "encoding-trail-byte", verify_encoding_trail_bytes),
+    ((ENCODING_CODEC_DIVERGENCE_CASE_KEY,), "encoding-codec-divergence", verify_encoding_codec_divergence),
+    (("prefix-rebased", "prefix-unrebased"), "prefix-model", verify_prefix_model),
+    (("valid-bzip2",), "coded-method", lambda c, z: verify_coded_method(c, z, 12)),
+    (("zip-bomb-overlapping-deflate",), "shared-range", verify_shared_payload_range),
+    (("valid-deflate64", "valid-deflate64-long-match"), "coded-method", lambda c, z: verify_coded_method(c, z, 9)),
+    (("filename-null-byte", "filename-c0-control", "name-sibling-prefix-traversal"), "hostile-name", verify_hostile_name),
+    (PRODUCER_COMPATIBILITY_CASE_KEYS, "producer-compatibility", verify_producer_compatibility),
+)
+
+
+def _run_case_structure_audits(case, zip_bytes, checks):
+    case_key = case.get("caseKey")
+    for keys, check_name, verifier in CASE_STRUCTURE_AUDITS:
+        if case_key in keys:
+            checks.append({"check": check_name, "status": "pass", "detail": verifier(case, zip_bytes)})
 
 
 def verify_mutations(case, zip_bytes, actual_sha):

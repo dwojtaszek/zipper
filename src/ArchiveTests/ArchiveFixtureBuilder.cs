@@ -852,6 +852,21 @@ internal static class ArchiveFixtureBuilder
     {
         // CPython 3.14.10 output through the EOCD, followed by 65,535 ASCII X bytes.
         // The regeneration recipe and complete Archive hash are in docs/archive-test-suites.md.
+        if (definition.Recipe.Entries.Count != 1 || definition.Recipe.Entries[0].IsDirectory)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test case '{definition.CaseKey}': the pinned max-EOCD baseline expects one file entry.");
+        }
+
+        var entry = definition.Recipe.Entries[0];
+        if (ArchiveTestCodec.WireCode(entry.PayloadCodec) != ArchiveTestCodec.Stored
+            || entry.PayloadPrefix is not { Length: 100 } content
+            || entry.Length != content.Length)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test case '{definition.CaseKey}': pinned max-EOCD recipe must match the 100-byte stored entry.");
+        }
+
         var prefix = Convert.FromBase64String(
             "UEsDBBQAAAAAAAAAIQDMK8MoZAAAAGQAAAAFAAAAZC50eHSLgQOCTxUyU3C8Xz/2TqiZ" +
             "St5pW5ul2Brjpt1N9S7rnA+wmwHTEqTsTt4vIUzVW6KHvaIVdoYqXkEahXC9ujJIRq6z" +
@@ -861,17 +876,24 @@ internal static class ArchiveFixtureBuilder
         prefix.CopyTo(bytes, 0);
         bytes.AsSpan(prefix.Length).Fill((byte)'X');
 
-        var entry = definition.Recipe.Entries.Single();
-        var content = entry.PayloadPrefix!;
+        var archiveSha = Convert.ToHexStringLower(SHA256.HashData(bytes));
+        var contentSha = Convert.ToHexStringLower(SHA256.HashData(content));
+        if (!archiveSha.Equals("375c216e6e14e50b5905b87b905e1c9a470f77dadcdf4b44281ef8bf650a0969", StringComparison.Ordinal)
+            || !contentSha.Equals("b4b497d4a5a17c953cdf31226c8d28e330ad08b4250140dadd16088b7ed4d00f", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Archive Test case '{definition.CaseKey}': pinned max-EOCD bytes or recipe payload no longer match provenance.");
+        }
+
         return new ArchiveFixtureArtifact(
             ArchiveBytes: bytes,
-            ArchiveSha256: Convert.ToHexStringLower(SHA256.HashData(bytes)),
+            ArchiveSha256: archiveSha,
             Layout: ArchiveFixtureLayout.Read(bytes, ushort.MaxValue),
             Entries:
             [
                 new ArchiveFixtureEntryExpectation(
                     Ordinal: 0, Name: entry.Name, IsDirectory: false, Method: ArchiveTestCodec.Stored,
-                    Content: content, ContentSha256: Convert.ToHexStringLower(SHA256.HashData(content)),
+                    Content: content, ContentSha256: contentSha,
                     PayloadCodec: entry.PayloadCodec),
             ],
             Mutations: []);

@@ -60,6 +60,11 @@ public class ArchiveTestSuiteGeneratorTests : WorkingDirectoryTestBase
             using var seekablePayload = seekableEntry.Open();
             using var streamedPayload = streamedEntry.Open();
             Assert.Equal(SHA256.HashData(seekablePayload), SHA256.HashData(streamedPayload));
+
+            var reseeded = await GenerateAsync(ArchiveTestRequest.Create([caseKey], 99, Path.Combine(TempDir, "out-seed99")));
+            var reseededId = Assert.Single(reseeded.FixtureIds);
+            Assert.NotEqual(result.FixtureIds[0], reseededId);
+            Assert.Equal(bytes, await File.ReadAllBytesAsync(Path.Combine(reseeded.PublishedDirectory, reseededId + ".zip")));
         }
 
         if (caseKey == "valid-directory-attributes")
@@ -692,6 +697,7 @@ public class ArchiveTestSuiteGeneratorTests : WorkingDirectoryTestBase
     [InlineData("bzip2-high-ratio-bounded", "extract", "success", 4)]
     [InlineData("valid-zip64-descriptor-signature", "extract", "success", 2)]
     [InlineData("valid-zip64-descriptor-no-signature", "extract", "success", 2)]
+    [InlineData("valid-directory-attributes", "extract", "success", 1)]
     [InlineData("bzip2-corrupt-block-magic", "test", "failure", 3)]
     [InlineData("bzip2-truncated-stream", "test", "failure", 3)]
     [InlineData("bzip2-wrong-crc", "test", "failure", 3)]
