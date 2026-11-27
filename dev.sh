@@ -251,6 +251,9 @@ run_check() {
                 need_analyzer_tests=1
                 need_parity=1
                 ;;
+            tools/ephyra-harness/*.rs|tools/ephyra-harness/*.toml|tools/ephyra-harness/Cargo.lock)
+                need_complexity=1
+                ;;
             .github/workflows/*|.github/scripts/*|.github/actions/*|tools/*|tests/ci/*|tests/perf/*)
                 need_ci_tests=1
                 need_docs_drift=1

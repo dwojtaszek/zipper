@@ -43,10 +43,12 @@ A request to prepare a PR ends with the branch, review result, checks, and any p
 
 ## CI monitoring
 
-Start one watcher after publishing each PR head, sized to the full Windows + goldens leg (~13–15 min, so use `--timeout 1000` with a ≥1050s shell budget instead of short 8-minute retries):
+Start one watcher after publishing each PR head. Allow 20 minutes for Windows and goldens, with at least 1250 seconds in the outer launcher.
 
 ```bash
-python3 .github/scripts/watch-pr.py 1421 --snapshot /tmp/zipper-pr-1421.json --timeout 1000
+python3 .github/scripts/watch-pr.py 1421 --snapshot /tmp/zipper-pr-1421.json --timeout 1200
+# Resume an active run after watcher exit 124 using the pinned head and run ID:
+python3 .github/scripts/watch-pr.py 1421 --snapshot /tmp/zipper-pr-1421.json --timeout 1200 --resume
 # Inspect an existing snapshot without starting another polling loop:
 python3 .github/scripts/watch-pr.py 1421 --snapshot /tmp/zipper-pr-1421.json --status
 ```

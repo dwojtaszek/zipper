@@ -170,6 +170,23 @@ echo "$OUT1" | grep -q 'string literal → "MUTATED"' || {
     exit 1
 }
 
+echo "Testing only ConfigureAwait booleans are excluded..."
+cat >> "$WORK/src/Program.cs" <<'EOF'
+await pending.ConfigureAwait(false); // ignored-scheduling
+await pending.ConfigureAwait(continueOnCapturedContext: true); // ignored-named-scheduling
+await pending.ConfigureAwait(false); SetOption(false); // ordinary-boolean
+EOF
+OUT30=$(run_candidates --max 30)
+for marker in ignored-scheduling ignored-named-scheduling; do
+    line=$(grep -n "$marker" "$WORK/src/Program.cs" | cut -d: -f1)
+    if grep -q "Program.cs:$line " <<<"$OUT30"; then
+        echo "FAIL: ConfigureAwait scheduling argument selected ($marker)"
+        exit 1
+    fi
+done
+line=$(grep -n ordinary-boolean "$WORK/src/Program.cs" | cut -d: -f1)
+grep -q "Program.cs:$line false → true" <<<"$OUT30"
+
 echo "Testing listing does not modify source..."
 SHA_AFTER=$(cksum "$WORK/src/LoadFiles/SyntheticRowValues.cs" | awk '{print $1 ":" $2}')
 if [[ "$SHA_BEFORE" != "$SHA_AFTER" ]]; then

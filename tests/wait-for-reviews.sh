@@ -447,12 +447,15 @@ qodo_unresolved_json=$(jq --arg head "$REVIEW_HEAD" --arg owner "$OWNER" --arg a
     else
       ($qodo_matches | max_by([(.comment.updatedAt // .comment.createdAt // ""), .index])) as $latest
       | ($latest.comment.body // "") as $body
-      | if ($body | test("Great, no issues found!"; "i"))
+      | ([$body | scan("<summary>\\s*\\d+\\.[^<]*(?:<code>[^<]*</code>[^<]*)*</summary>")]
+          | map(gsub("<[^>]+>"; "") | gsub("^\\s+|\\s+$"; ""))) as $summaries
+      | if ($summaries | length) == 0 and (
+           ($body | test("Great, no issues found!"; "i"))
            or (($body | test("Action required|Remediation recommended|Agent prompt"; "i")) | not)
+           or (([$body | scan("(?im)^_Nice, no open findings for this group_\\s*$")] | length) == 3
+               and (($body | test("Agent prompt"; "i")) | not)))
         then {count: 0, summaries: []}
-        else
-          ([$body | scan("<summary>\\s*\\d+\\.[^<]*(?:<code>[^<]*</code>[^<]*)*</summary>")]
-            | map(gsub("<[^>]+>"; "") | gsub("^\\s+|\\s+$"; ""))) as $summaries
+        else $summaries
           | [range(0; $summaries | length) as $i
               | {
                   num: (($summaries[$i] | capture("^(?<n>\\d+)\\.") | .n) // (($i + 1) | tostring)),

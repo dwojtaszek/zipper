@@ -20,6 +20,11 @@ ephyra check --tests 10000 --no-instrument
 EPHYRA_SEED=42 ephyra test --no-instrument --test cli_properties -- --test-threads=2 --skip prop_cli_fuzz_no_crash
 ```
 
+Zipper’s local `./dev.sh` runs the harness complexity check for Rust source
+and Cargo configuration changes. Install Clippy with `rustup component add clippy`.
+The Clippy limits are 13 for library code and 21 for integration tests, calibrated
+against the three functions flagged by SonarCloud in PR #1461.
+
 Use an absolute `ZIPPER_BIN` path to override the default Release executable.
 The CLI writes reports, observations, and saved failures under `.ephyra/` by
 default. Pass `--dir` to keep runs separate. To replay a reported seed and

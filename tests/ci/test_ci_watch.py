@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 @unittest.skipIf(os.name == 'nt', 'executable GitHub fixture is POSIX-only')
 class CiWatchTests(unittest.TestCase):
-    def run_watch(self, directory, failure=False, changed=False, no_run=False, api_failure=False, timeout=10, slow=False, other_pr=False, quiet=False):
+    def run_watch(self, directory, failure=False, changed=False, no_run=False, api_failure=False, timeout=10, slow=False, other_pr=False, quiet=False, resume=False):
         root = Path(directory)
         gh = root / 'gh'
         gh.write_text(
@@ -58,6 +58,8 @@ class CiWatchTests(unittest.TestCase):
                '--snapshot', str(root / 'snapshot.json'), '--interval', '1', '--timeout', str(timeout)]
         if quiet:
             cmd.append('--quiet')
+        if resume:
+            cmd.append('--resume')
         return subprocess.run(cmd, cwd=ROOT, env=env, capture_output=True, text=True, timeout=15)
 
     def test_quiet_suppresses_in_progress_job_lines(self):
@@ -79,6 +81,35 @@ class CiWatchTests(unittest.TestCase):
             calls = [json.loads(line) for line in (Path(directory) / 'calls').read_text().splitlines()]
             self.assertEqual(sum(call[:2] == ['run', 'view'] for call in calls), 3)
             self.assertFalse(any('checks' in call for call in calls))
+
+    def test_resume_validates_pinned_run_once_and_rechecks_head(self):
+        for changed in (False, True):
+            with self.subTest(changed=changed), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / 'snapshot.json').write_text(json.dumps({
+                    'pr': 1421, 'head': 'a' * 40, 'run_id': 99, 'status': 'timeout',
+                    'conclusion': '', 'jobs': [],
+                }))
+                (root / 'head-seen').touch()
+                result = self.run_watch(directory, changed=changed, resume=True)
+                self.assertEqual(result.returncode, 3 if changed else 0, result.stdout + result.stderr)
+                calls = [json.loads(line) for line in (root / 'calls').read_text().splitlines()]
+                self.assertEqual(sum(call[0] == 'api' for call in calls), 0 if changed else 1)
+                run_calls = [call[2] for call in calls if call[:2] == ['run', 'view']]
+                self.assertEqual(run_calls, [] if changed else ['99', '99', '99'])
+
+    def test_resume_rejects_run_for_another_pr(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'snapshot.json').write_text(json.dumps({
+                'pr': 1421, 'head': 'a' * 40, 'run_id': 99, 'status': 'timeout',
+                'conclusion': '', 'jobs': [],
+            }))
+            result = self.run_watch(directory, resume=True, other_pr=True)
+            self.assertEqual(result.returncode, 3, result.stdout + result.stderr)
+            self.assertIn('does not belong to the pinned PR head', result.stderr)
+            calls = [json.loads(line) for line in (root / 'calls').read_text().splitlines()]
+            self.assertFalse(any(call[:2] == ['run', 'view'] for call in calls))
 
     def test_failure_is_retained_in_snapshot_and_exit_status(self):
         with tempfile.TemporaryDirectory() as directory:

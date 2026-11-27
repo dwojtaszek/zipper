@@ -2,6 +2,7 @@
 """Diff-scoped cognitive complexity guard matching SonarCloud S3776 limits."""
 import argparse
 import ast
+import json
 import os
 from pathlib import Path
 import re
@@ -37,7 +38,7 @@ def _changed_lines_from_git(diff_target: str) -> dict[str, set[int]]:
     if untracked.returncode == 0:
         for rel in untracked.stdout.splitlines():
             p = ROOT / rel
-            if p.is_file() and rel.endswith((".py", ".cs")):
+            if p.is_file() and rel.endswith((".py", ".cs", ".rs", ".toml", ".lock")):
                 line_count = len(p.read_text(encoding="utf-8", errors="ignore").splitlines())
                 changed.setdefault(rel, set()).update(range(1, line_count + 1))
     return changed
@@ -46,7 +47,9 @@ def _changed_lines_from_git(diff_target: str) -> dict[str, set[int]]:
 def _parse_unified_diff(diff_text: str, changed: dict[str, set[int]]) -> None:
     current: str | None = None
     for line in diff_text.splitlines():
-        if line.startswith("+++ b/"):
+        if line.startswith("--- a/tools/ephyra-harness/"):
+            changed.setdefault(line[6:], set())
+        elif line.startswith("+++ b/"):
             current = line[6:]
         elif line.startswith("@@ ") and current is not None:
             match = re.search(r"\+(\d+)(?:,(\d+))?", line)
@@ -519,6 +522,47 @@ def _resolve_base(base: str) -> str | None:
     return None
 
 
+def rust_complexity_findings(output: str) -> list[str]:
+    findings = []
+    for line in output.splitlines():
+        diagnostic = json.loads(line)
+        if diagnostic.get("reason") != "compiler-message":
+            continue
+        message = diagnostic["message"]
+        if (message.get("code") or {}).get("code") != "clippy::cognitive_complexity":
+            continue
+        # Clippy scores library parsing and Ephyra's macro-expanded tests differently.
+        limit = 21 if "test" in diagnostic["target"]["kind"] else 13
+        score = re.search(r"\((\d+)/\d+\)", message["message"])
+        if score is None or int(score[1]) > limit:
+            findings.append((message["rendered"] or message["message"]).rstrip())
+    return list(dict.fromkeys(findings))
+
+
+def check_ephyra_complexity() -> list[str]:
+    try:
+        result = subprocess.run(
+            ["cargo", "clippy", "--locked", "--all-targets", "--message-format=json",
+             "--", "-A", "clippy::all", "-W", "clippy::cognitive_complexity"],
+            cwd=ROOT / "tools/ephyra-harness", capture_output=True, text=True, timeout=180, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return [f"Ephyra complexity check failed: {error}"]
+    if result.returncode:
+        errors = [item["message"]["rendered"] for line in result.stdout.splitlines()
+                  if (item := json.loads(line)).get("reason") == "compiler-message"
+                  and item["message"]["level"] == "error" and item["message"]["rendered"]]
+        return [*errors, result.stderr.rstrip(), f"Ephyra Clippy exited {result.returncode}"]
+    return rust_complexity_findings(result.stdout)
+
+
+def check_rust_files(files) -> list[str]:
+    if any(rel.startswith("tools/ephyra-harness/") and rel.endswith((".rs", ".toml", ".lock"))
+           for rel in files):
+        return check_ephyra_complexity()
+    return []
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", default=os.environ.get("DEV_BASE_REF", "main"))
@@ -535,7 +579,7 @@ def main() -> int:
     else:
         file_map = _changed_lines_from_git(resolved)
 
-    findings: list[str] = []
+    findings = check_rust_files(file_map)
     for rel, touched in sorted(file_map.items()):
         path = ROOT / rel
         if not path.is_file():

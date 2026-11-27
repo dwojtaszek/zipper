@@ -4,6 +4,7 @@ from __future__ import annotations
 import http.client
 import importlib.util
 import io
+import json
 import sys
 import tempfile
 import unittest
@@ -27,6 +28,40 @@ class CheckComplexityTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.mod = _load_script("check-complexity.py")
+
+    def test_rust_gate_runs_when_a_source_file_is_deleted(self):
+        changed = {}
+        self.mod._parse_unified_diff(
+            "--- a/tools/ephyra-harness/src/unused.rs\n+++ /dev/null\n@@ -1 +0,0 @@\n-old\n",
+            changed,
+        )
+
+        with patch.object(self.mod, "check_ephyra_complexity", return_value=[]) as check:
+            self.assertEqual(self.mod.check_rust_files(changed), [])
+        check.assert_called_once_with()
+
+    def test_rust_gate_catches_three_scores_from_ephyra_sonar_regressions(self):
+        diagnostics = []
+        for target, score, label in (
+            ("lib", 14, "parse_delimited_records"),
+            ("lib", 14, "parse_delimited_records"),
+            ("test", 33, "prop_loadfile_only_invariants"),
+            ("test", 22, "prop_production_deep_invariants"),
+            ("lib", 13, "accepted_lib"),
+            ("test", 21, "accepted_test"),
+        ):
+            diagnostics.append(json.dumps({
+                "reason": "compiler-message",
+                "target": {"kind": [target]},
+                "message": {
+                    "code": {"code": "clippy::cognitive_complexity"},
+                    "message": f"the function has a cognitive complexity of ({score}/13)",
+                    "rendered": label,
+                },
+            }))
+        self.assertEqual(self.mod.rust_complexity_findings("\n".join(diagnostics)), [
+            "parse_delimited_records", "prop_loadfile_only_invariants", "prop_production_deep_invariants",
+        ])
 
     def test_python_complexity_catches_only_touched_complex_function(self):
         branches = "\n".join(f"    elif x == {i}:\n        return {i}" for i in range(18))
