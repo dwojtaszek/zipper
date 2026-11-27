@@ -140,6 +140,7 @@ internal static class EdiscoveryDeliveryZipVerifier
         Assert.True(parentDocIdIdx >= 0, "PARENTDOCID column missing from DAT header.");
 
         var familyRecords = new List<FamilyRecord>();
+        var parentNativePathsByDocId = new Dictionary<string, string>(StringComparer.Ordinal);
         var datDocIds = new HashSet<string>(StringComparer.Ordinal);
         var datNativePaths = new HashSet<string>(StringComparer.Ordinal);
         for (int i = 1; i < datLines.Count; i++)
@@ -158,6 +159,11 @@ internal static class EdiscoveryDeliveryZipVerifier
             Assert.False(string.IsNullOrEmpty(cols[textIdx]), $"DAT row {i} has no Extracted Text reference.");
             Assert.Equal(cols[docIdIdx], Path.GetFileNameWithoutExtension(cols[textIdx].Replace('\\', '/')));
             AssertResolves(cols[textIdx], "text", rootPrefix, diskFiles, archiveEntryNames);
+
+            if (string.IsNullOrEmpty(cols[parentDocIdIdx]))
+            {
+                parentNativePathsByDocId.Add(cols[docIdIdx], cols[nativeIdx].Replace('\\', '/'));
+            }
 
             familyRecords.Add(new FamilyRecord(
                 cols[docIdIdx],
@@ -218,13 +224,36 @@ internal static class EdiscoveryDeliveryZipVerifier
         Assert.Equal((long)request.Output.FileCount, parentNativeFileCount);
         Assert.Equal((long)familyChildren.Count, attachmentNativeFileCount);
 
-        // Actual Native Files on disk under NATIVES/.
+        // Actual Native Files on disk under NATIVES/; DAT references must name those files exactly.
         var actualNativeFiles = Directory.GetFiles(Path.Combine(productionDirectory, "NATIVES"), "*", SearchOption.AllDirectories);
         Assert.Equal(nativeFileCount, (long)actualNativeFiles.Length);
+        var actualNativePaths = actualNativeFiles
+            .Select(f => Path.GetRelativePath(productionDirectory, f).Replace('\\', '/'))
+            .ToHashSet(StringComparer.Ordinal);
+        var referencedNativePaths = datNativePaths
+            .Select(p => p.StartsWith(rootPrefix, StringComparison.Ordinal) ? p[rootPrefix.Length..] : p)
+            .ToHashSet(StringComparer.Ordinal);
+        Assert.True(
+            referencedNativePaths.SetEquals(actualNativePaths),
+            $"DAT NATIVE_PATH values do not match the NATIVES/ inventory. Missing from DAT: [{string.Join(", ", actualNativePaths.Except(referencedNativePaths))}]. Extra in DAT: [{string.Join(", ", referencedNativePaths.Except(actualNativePaths))}].");
 
         // Actual volume subdirectories.
         var actualVolumeDirs = Directory.GetDirectories(Path.Combine(productionDirectory, "NATIVES"), "VOL*");
         Assert.Equal(volumeCount, actualVolumeDirs.Length);
+
+        // Parent rows must split across volumes by the requested VolumeSize; attachment rows are excluded.
+        var expectedParentsByVolume = Enumerable.Range(0, (int)request.Output.FileCount)
+            .GroupBy(i => $"VOL{(i / request.Production.VolumeSize) + 1:D3}")
+            .ToDictionary(g => g.Key, g => g.Count());
+        var actualParentsByVolume = parentNativePathsByDocId.Values
+            .GroupBy(p => p.Split('/')[^2])
+            .ToDictionary(g => g.Key, g => g.Count());
+        Assert.Equal(expectedParentsByVolume.Count, actualParentsByVolume.Count);
+        foreach (var (volume, expectedCount) in expectedParentsByVolume)
+        {
+            Assert.True(actualParentsByVolume.TryGetValue(volume, out var actualCount), $"No parent DAT rows reference volume '{volume}'.");
+            Assert.Equal(expectedCount, actualCount);
+        }
 
         long totalDocuments = datLines.Count - 1;
         long parentDocuments = totalDocuments - familyChildren.Count;
@@ -496,6 +525,18 @@ internal static class EdiscoveryDeliveryZipVerifier
                 || name.EndsWith(".csv", StringComparison.OrdinalIgnoreCase)
                 || name.EndsWith(".xml", StringComparison.OrdinalIgnoreCase);
         }
+
+        var datPropertiesName = datEntry.FullName + "_properties.json";
+        var expectedRootArtifacts = new HashSet<string>(StringComparer.Ordinal)
+        {
+            datEntry.FullName,
+            datPropertiesName,
+        };
+        Assert.Contains(datPropertiesName, archiveEntryNames);
+        var actualRootArtifacts = archiveEntryNames.Where(name => !name.Contains('/')).ToHashSet(StringComparer.Ordinal);
+        Assert.True(
+            actualRootArtifacts.SetEquals(expectedRootArtifacts),
+            $"Unexpected root artifacts in Standard ZIP: [{string.Join(", ", actualRootArtifacts.Except(expectedRootArtifacts))}]; missing: [{string.Join(", ", expectedRootArtifacts.Except(actualRootArtifacts))}].");
 
         var deliveredArchiveNatives = archiveEntryNames
             .Where(name => !IsArchiveLoadFileArtifact(name) && !textPaths.Contains(name))

@@ -62,7 +62,6 @@ public static class ZipAssert
             if (entry.FullName.EndsWith('/'))
             {
                 directoryPaths.Add(entryPath);
-                continue;
             }
 
             var separatorIndex = entryPath.LastIndexOf('/');
@@ -131,6 +130,11 @@ public static class ZipAssert
                     {
                         Assert.Equal(expectedMethodCode, (int)entry.CompressionMethod);
                     }
+                    else
+                    {
+                        var method = (int)entry.CompressionMethod;
+                        Assert.True(method == 0 || method == expectedMethodCode, $"Unexpected compression method {method} for empty entry '{entry.Name}'.");
+                    }
                 }
             }
         }
@@ -146,7 +150,8 @@ public static class ZipAssert
             var archiveFileEntries = new HashSet<string>(StringComparer.Ordinal);
             foreach (ICSharpCode.SharpZipLib.Zip.ZipEntry entry in sharpZip)
             {
-                if (!entry.IsDirectory && !entry.Name.EndsWith('/'))
+                Assert.Equal(entry.Name.EndsWith('/'), entry.IsDirectory);
+                if (!entry.IsDirectory)
                 {
                     archiveFileEntries.Add(entry.Name);
                 }
