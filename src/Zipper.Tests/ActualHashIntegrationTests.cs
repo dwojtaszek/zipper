@@ -584,6 +584,88 @@ public sealed class ActualHashIntegrationTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public async Task ProductionSet_RedactedWithReplaceWithPlaceholder_EmitsPlaceholderPathAndEmittedNativeHashes()
+    {
+        const int expectedCount = 2;
+        var prodDir = Path.Combine(this.TempDir, $"ProdPlaceholderHash_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(prodDir);
+
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                OutputPath = prodDir,
+                FileCount = expectedCount,
+                FileType = "pdf",
+                Concurrency = 1,
+            },
+            Production = new ProductionConfig
+            {
+                ProductionSet = true,
+                VolumeSize = 5,
+                ProductionId = "PRODPLACEHOLDERHASH",
+                RedactedProduction = true,
+                WithheldNativePolicy = "replace-with-placeholder",
+            },
+            Metadata = new MetadataConfig { Seed = 42 },
+            Bates = new BatesNumberConfig
+            {
+                Prefix = "PROD",
+                Start = 1,
+                Digits = 6,
+                Increment = 1,
+            },
+            Hash = new HashConfig
+            {
+                Mode = HashMode.Actual,
+                Algorithms = new HashSet<Config.HashAlgorithm>
+                {
+                    Config.HashAlgorithm.MD5,
+                    Config.HashAlgorithm.SHA256,
+                },
+            },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+        };
+
+        var materializer = new CapturingDiskMaterializer();
+        var result = await ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer());
+
+        var datPath = Path.Combine(result.ProductionPath, "DATA", "loadfile.dat");
+        var lines = (await File.ReadAllLinesAsync(datPath)).Where(l => l.Length > 0).ToList();
+        Assert.Equal(expectedCount + 1, lines.Count);
+
+        var headers = Validation.ProductionSetPostValidator.ParseDatLine(lines[0].TrimEnd('\r'), '\x14', '\xfe');
+        int nativePathIdx = headers.IndexOf("NATIVE_PATH");
+        int nativeWithheldIdx = headers.IndexOf("NATIVE_WITHHELD");
+        int md5Idx = headers.IndexOf("MD5HASH");
+        int sha256Idx = headers.IndexOf("SHA256HASH");
+
+        Assert.True(nativePathIdx >= 0);
+        Assert.True(nativeWithheldIdx >= 0);
+        Assert.True(md5Idx >= 0);
+        Assert.True(sha256Idx >= 0);
+        Assert.False(Directory.Exists(Path.Combine(result.ProductionPath, "PLACEHOLDER")));
+
+        for (int i = 0; i < expectedCount; i++)
+        {
+            var fields = Validation.ProductionSetPostValidator.ParseDatLine(lines[i + 1].TrimEnd('\r'), '\x14', '\xfe');
+            Assert.StartsWith("PLACEHOLDER/", fields[nativePathIdx], StringComparison.Ordinal);
+            Assert.Equal("YES", fields[nativeWithheldIdx]);
+
+            var emittedNativeDiskPath = Path.Combine(result.ProductionPath, materializer.CapturedFileData[i].WorkItem.FilePathInZip);
+            Assert.True(File.Exists(emittedNativeDiskPath));
+            var onDiskBytes = await File.ReadAllBytesAsync(emittedNativeDiskPath);
+
+            Assert.Equal(ComputeIndependentDigest(onDiskBytes, Config.HashAlgorithm.MD5), fields[md5Idx]);
+            Assert.Equal(ComputeIndependentDigest(onDiskBytes, Config.HashAlgorithm.SHA256), fields[sha256Idx]);
+        }
+
+        var report = Validation.ProductionSetPostValidator.Validate(result.ProductionPath, request);
+        Assert.Equal("passed", report.Status);
+        Assert.Equal(0, report.ErrorCount);
+    }
+
+    [Fact]
     public async Task ProductionSet_SeededEmailWithFamilies_OnDiskChildBytesDistinctAndHashed()
     {
         var prodDir = Path.Combine(this.TempDir, $"ProdFam_{Guid.NewGuid():N}");

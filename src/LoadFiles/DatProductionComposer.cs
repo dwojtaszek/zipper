@@ -221,6 +221,9 @@ internal sealed class DatProductionComposer
             v.Add(threadParent);
         }
 
+        // replace-with-placeholder / omit-native-path only override the DAT NATIVE_PATH string
+        // (no replacement file is written); fileData.Hashes still reflects the emitted Native
+        // File bytes (or attach.Hashes for child rows) per REQ-165.
         DatComposerShared.AppendHashValues(v, fileData.Hashes, this.hashColumnKeys);
 
         return v;
