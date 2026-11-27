@@ -92,7 +92,7 @@ internal static class AesZipInteroperabilityFixtures
                     "aes256-ascii-standard", "7-Zip", "26.06 (x64)", "ascii",
                     "7z a -tzip -mem=AES256 -mx=0 -p<ascii-password> out.zip empty.txt store.bin && " +
                     "7z a -tzip -mem=AES256 -mx=9 -p<ascii-password> out.zip deflate.txt",
-                    634, "c20340901d81009462cfbfeb39f2b5b328a93445d73c6ad3886160e95914eb58",
+                    new("aes256-ascii-standard.zip", 634, "c20340901d81009462cfbfeb39f2b5b328a93445d73c6ad3886160e95914eb58"),
                     [
                         new AesZipFixtureEntrySpec(0, "deflate.txt", 512, "81dde2c525bf6b6a9e944db69c69828ab2363718bcadb7a4d744d5cd0b8bcc75", AesWireMethod, AesWireMethod, 8, "deflate", Aes256Strength),
                         new AesZipFixtureEntrySpec(1, "empty.txt", 0, EmptySha256, AesWireMethod, AesWireMethod, 0, "stored", Aes256Strength),
@@ -104,7 +104,7 @@ internal static class AesZipInteroperabilityFixtures
                     "aes256-space-padded", "7-Zip", "26.06 (x64)", "leading-trailing-space",
                     "7z a -tzip -mem=AES256 -mx=0 -p<space-padded-password> out.zip empty.txt store.bin && " +
                     "7z a -tzip -mem=AES256 -mx=9 -p<space-padded-password> out.zip deflate.txt",
-                    634, "6b928797af65cd64aad6d89de6ac006504895ee277af7360f6593b70e5772f7a",
+                    new("aes256-space-padded.zip", 634, "6b928797af65cd64aad6d89de6ac006504895ee277af7360f6593b70e5772f7a"),
                     [
                         new AesZipFixtureEntrySpec(0, "deflate.txt", 512, "ae6477fb388db84c47bb3b49fad8193ca1450751beb74e7851ea026c07f9d216", AesWireMethod, AesWireMethod, 8, "deflate", Aes256Strength),
                         new AesZipFixtureEntrySpec(1, "empty.txt", 0, EmptySha256, AesWireMethod, AesWireMethod, 0, "stored", Aes256Strength),
@@ -116,7 +116,7 @@ internal static class AesZipInteroperabilityFixtures
                     "aes256-non-ascii", "ICSharpCode.SharpZipLib", "1.4.2", "non-ascii-utf8",
                     "ICSharpCode.SharpZipLib 1.4.2 ZipOutputStream with AESKeySize=256 and UTF-8 non-ASCII password " +
                     "(7-Zip 26.06 rejects non-ASCII passwords on ZIP creation with E_INVALIDARG, while extracting/verifying them cleanly).",
-                    726, "00dbf71ccc625df2fb12e5083abe30d2f54c8fec61ba4b1d93e9b5c3be25b802",
+                    new("aes256-non-ascii.zip", 726, "00dbf71ccc625df2fb12e5083abe30d2f54c8fec61ba4b1d93e9b5c3be25b802"),
                     [
                         new AesZipFixtureEntrySpec(0, "empty.txt", 0, EmptySha256, AesWireMethod, AesWireMethod, 0, "stored", Aes256Strength),
                         new AesZipFixtureEntrySpec(1, "store.bin", 33, "93ec9d35d7f5237ab8e63cb559257a548feb9df299341db188a71bb5fcefff8d", AesWireMethod, AesWireMethod, 0, "stored", Aes256Strength),
@@ -131,8 +131,7 @@ internal static class AesZipInteroperabilityFixtures
         string producerVersion,
         string syntheticPasswordCase,
         string regenerationRecipe,
-        int size,
-        string sha256,
+        AesZipFixtureArchiveSpec archive,
         IReadOnlyList<AesZipFixtureEntrySpec> entries) =>
         new(
             SchemaVersion: 1,
@@ -145,7 +144,7 @@ internal static class AesZipInteroperabilityFixtures
             SyntheticPasswordCase: syntheticPasswordCase,
             RegenerationRecipe: regenerationRecipe,
             SaltReplayNote: SaltReplayExplanation,
-            Archive: new AesZipFixtureArchiveSpec(caseKey + ".zip", size, sha256),
+            Archive: archive,
             Entries: entries);
 
     internal static IReadOnlyList<string> AllCaseKeys { get; } =
