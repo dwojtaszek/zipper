@@ -18,7 +18,6 @@ import json
 import os
 import shutil
 import struct
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -1502,7 +1501,7 @@ class EncodingTrailByteTests(unittest.TestCase):
 
     def test_decode_failure_fails_closed(self):
         case = self.make_case("encoding-cp932-trail-backslash")
-        zip_bytes = self.make_zip("encoding-cp932-trail-backslash")
+        self.make_zip("encoding-cp932-trail-backslash")
         overrides = {
             "encoding-cp932-trail-backslash": ("cp932", "ef5c2e747874", "表.txt"),
             "encoding-big5-trail-backslash": ("not-a-codec", "b35c2e747874", "許.txt"),
@@ -3334,6 +3333,13 @@ class ProducerCompatibilityControlTests(TempDirTest):
                 struct.pack_into("<I", bad_local_crc, 14, 1)
                 self._assert_fails(case_key, wrong_zip, entries)
                 self._assert_fails(case_key, bytes(bad_local_crc), entries)
+                for key, wrong_name in (
+                    ("readableName", "other.txt"),
+                    ("localNameRaw", "6f746865722e747874"),
+                    ("centralNameRaw", "6f746865722e747874"),
+                ):
+                    with self.subTest(sidecar_field=key):
+                        self._assert_fails(case_key, zip_bytes, [{**entries[0], key: wrong_name}])
 
 
 if __name__ == "__main__":

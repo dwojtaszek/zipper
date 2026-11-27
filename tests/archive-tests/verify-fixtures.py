@@ -2678,7 +2678,8 @@ def _verify_extra_field(check, case, zip_bytes):
 def _verify_descriptor_form(check, case, zip_bytes):
     case_key = case["caseKey"]
     signed = case_key == "valid-descriptor-signature"
-    if len(case.get("entries", [])) != 1:
+    sidecar_entries = case.get("entries", [])
+    if len(sidecar_entries) != 1:
         raise VerificationError(check, "%s must contain exactly one entry" % case_key)
     _, cd_offset, _, parsed = _parse_length_anchored_entries(check, zip_bytes, 0, 1)
     entry = parsed[0]
@@ -2689,6 +2690,11 @@ def _verify_descriptor_form(check, case, zip_bytes):
     )
     if header_tuple != (b"d.txt", b"d.txt", True, True, 0, 0, 0, 0, 0):
         raise VerificationError(check, "%s headers do not carry expected bit-3 descriptor framing" % case_key)
+    sidecar = sidecar_entries[0]
+    if (sidecar.get("readableName") != entry["c_name"].decode("ascii")
+            or sidecar.get("localNameRaw") != entry["l_name"].hex()
+            or sidecar.get("centralNameRaw") != entry["c_name"].hex()):
+        raise VerificationError(check, "%s descriptor member names disagree with the sidecar" % case_key)
     descriptor = zip_bytes[entry["data_offset"] + entry["c_comp"]:cd_offset]
     core = struct.pack("<III", entry["c_crc"], entry["c_comp"], entry["c_uncomp"])
     expected_descriptor = (b"PK\x07\x08" + core) if signed else core
