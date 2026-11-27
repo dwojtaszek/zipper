@@ -140,9 +140,12 @@ internal static class ArchiveFixtureBuilder
 
             // The control's own comment expectation carries over to every re-read: a
             // comment-bearing control must not be misread mid-chain.
-            var controlExpectedCommentLength = controlDefinition.Construction is ArchiveControlConstruction.ArchiveComment
-                ? ArchiveTestCatalog.SignatureCommentLength
-                : 0;
+            var controlExpectedCommentLength = controlDefinition.Construction switch
+            {
+                ArchiveControlConstruction.ArchiveComment => ArchiveTestCatalog.SignatureCommentLength,
+                ArchiveControlConstruction.PinnedMaxEocdComment => ushort.MaxValue,
+                _ => 0,
+            };
             var current = Build(controlDefinition, seed, cancellationToken);
             var records = new List<ArchiveTestMutation>();
             for (var index = 0; index < chain.Count; index++)
@@ -181,44 +184,9 @@ internal static class ArchiveFixtureBuilder
             return current with { Mutations = records };
         }
 
-        if (definition.Construction is ArchiveControlConstruction.Zip64HandBuilt
-            or ArchiveControlConstruction.Zip64HandBuiltWithRealEocdValues)
+        if (BuildSpecializedControl(definition, seed, cancellationToken) is { } specialized)
         {
-            return BuildHandBuiltZip64(
-                definition,
-                seed,
-                cancellationToken,
-                useRealEocdValues: definition.Construction is ArchiveControlConstruction.Zip64HandBuiltWithRealEocdValues);
-        }
-
-        if (definition.Construction is ArchiveControlConstruction.OverlappingEntries)
-        {
-            return BuildHandBuiltOverlapping(definition, seed, cancellationToken);
-        }
-
-        if (definition.Construction is ArchiveControlConstruction.PinnedDeflate64LongMatch)
-        {
-            return BuildHandBuiltPinnedDeflate64(definition, cancellationToken);
-        }
-
-        if (definition.Construction is ArchiveControlConstruction.DeflateStoredBlock)
-        {
-            return BuildHandBuiltDeflateStoredBlock(definition, seed, cancellationToken);
-        }
-
-        if (definition.Construction is ArchiveControlConstruction.NestedCumulativeBudget)
-        {
-            return BuildHandBuiltNestedBudget(definition, cancellationToken);
-        }
-
-        if (definition.Construction is ArchiveControlConstruction.Zip64Descriptor)
-        {
-            return BuildHandBuiltZip64Descriptor(definition, seed, withSignature: true, cancellationToken);
-        }
-
-        if (definition.Construction is ArchiveControlConstruction.Zip64DescriptorNoSignature)
-        {
-            return BuildHandBuiltZip64Descriptor(definition, seed, withSignature: false, cancellationToken);
+            return specialized;
         }
 
         if (definition.Recipe.Entries.Any(e => ArchiveTestCodec.WireCode(e.PayloadCodec) is ArchiveTestCodec.Deflate64 or ArchiveTestCodec.Bzip2))
@@ -409,7 +377,7 @@ internal static class ArchiveFixtureBuilder
             archiveBytes, expectedCommentLength, allowLocalCentralNameDivergence);
         // Host-dependent Unix metadata (ticket #842, issue #1178): the standard writer
         // records the build host in the central version-made-by host byte, so pin it to
-        // the Unix host — or a recipe's declared host system (also Unix) — for every
+        // the Unix host — or a recipe's declared host system — for every
         // entry. Only that host byte changes; no captured layout field moves.
         PatchHostSystem(archiveBytes, definition.Recipe.Entries, layout);
         if (definition.Construction is ArchiveControlConstruction.Cp437Name)
@@ -440,6 +408,23 @@ internal static class ArchiveFixtureBuilder
             Mutations: []);
     }
 
+    private static ArchiveFixtureArtifact? BuildSpecializedControl(
+        ArchiveTestCaseDefinition definition, int seed, CancellationToken cancellationToken) =>
+        definition.Construction switch
+        {
+            ArchiveControlConstruction.Zip64HandBuilt or ArchiveControlConstruction.Zip64HandBuiltWithRealEocdValues =>
+                BuildHandBuiltZip64(definition, seed, cancellationToken,
+                    useRealEocdValues: definition.Construction is ArchiveControlConstruction.Zip64HandBuiltWithRealEocdValues),
+            ArchiveControlConstruction.OverlappingEntries => BuildHandBuiltOverlapping(definition, seed, cancellationToken),
+            ArchiveControlConstruction.PinnedDeflate64LongMatch => BuildHandBuiltPinnedDeflate64(definition, cancellationToken),
+            ArchiveControlConstruction.DeflateStoredBlock => BuildHandBuiltDeflateStoredBlock(definition, seed, cancellationToken),
+            ArchiveControlConstruction.NestedCumulativeBudget => BuildHandBuiltNestedBudget(definition, cancellationToken),
+            ArchiveControlConstruction.PinnedMaxEocdComment => BuildPinnedMaxEocdComment(definition),
+            ArchiveControlConstruction.Zip64Descriptor => BuildHandBuiltZip64Descriptor(definition, seed, withSignature: true, cancellationToken),
+            ArchiveControlConstruction.Zip64DescriptorNoSignature => BuildHandBuiltZip64Descriptor(definition, seed, withSignature: false, cancellationToken),
+            _ => null,
+        };
+
     /// <summary>
     /// Rewrites the central version-made-by host byte (upper byte at central + 4) to the
     /// Unix host for every entry, or to a recipe's declared host system when one aligns
@@ -457,8 +442,8 @@ internal static class ArchiveFixtureBuilder
     {
         for (var ordinal = 0; ordinal < layout.Entries.Count; ordinal++)
         {
-            var hostSystem = ordinal < recipeEntries.Count && recipeEntries[ordinal].HostSystem != 0
-                ? recipeEntries[ordinal].HostSystem
+            var hostSystem = ordinal < recipeEntries.Count && recipeEntries[ordinal].HostSystem is { } declaredHost
+                ? declaredHost
                 : ArchiveTestCatalog.UnixHostSystem;
 
             var entry = layout.Entries[ordinal];
@@ -861,6 +846,57 @@ internal static class ArchiveFixtureBuilder
             archiveBytes.AsSpan(localFlagsOffset, 2),
             (ushort)(localFlags & ~Utf8NameFlag));
         return archiveBytes;
+    }
+
+    private static ArchiveFixtureArtifact BuildPinnedMaxEocdComment(ArchiveTestCaseDefinition definition)
+    {
+        // CPython 3.14.10 output through the EOCD, followed by 65,535 ASCII X bytes.
+        // The regeneration recipe and complete Archive hash are in docs/archive-test-suites.md.
+        if (definition.Recipe.Entries.Count != 1 || definition.Recipe.Entries[0].IsDirectory)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test case '{definition.CaseKey}': the pinned max-EOCD baseline expects one file entry.");
+        }
+
+        var entry = definition.Recipe.Entries[0];
+        if (ArchiveTestCodec.WireCode(entry.PayloadCodec) != ArchiveTestCodec.Stored
+            || entry.PayloadPrefix is not { Length: 100 } content
+            || entry.Length != content.Length)
+        {
+            throw new InvalidOperationException(
+                $"Archive Test case '{definition.CaseKey}': pinned max-EOCD recipe must match the 100-byte stored entry.");
+        }
+
+        var prefix = Convert.FromBase64String(
+            "UEsDBBQAAAAAAAAAIQDMK8MoZAAAAGQAAAAFAAAAZC50eHSLgQOCTxUyU3C8Xz/2TqiZ" +
+            "St5pW5ul2Brjpt1N9S7rnA+wmwHTEqTsTt4vIUzVW6KHvaIVdoYqXkEahXC9ujJIRq6z" +
+            "+A8IxX/ZihaRXZ1D6gRTdbZKwYh3/nmiGr5rmGJyW1TKUEsBAhQDFAAAAAAAAAAhAMwr" +
+            "wyhkAAAAZAAAAAUAAAAAAAAAAAAAAIABAAAAAGQudHh0UEsFBgAAAAABAAEAMwAAAIcAAAD//w==");
+        var bytes = new byte[prefix.Length + ushort.MaxValue];
+        prefix.CopyTo(bytes, 0);
+        bytes.AsSpan(prefix.Length).Fill((byte)'X');
+
+        var archiveSha = Convert.ToHexStringLower(SHA256.HashData(bytes));
+        var contentSha = Convert.ToHexStringLower(SHA256.HashData(content));
+        if (!archiveSha.Equals("375c216e6e14e50b5905b87b905e1c9a470f77dadcdf4b44281ef8bf650a0969", StringComparison.Ordinal)
+            || !contentSha.Equals("b4b497d4a5a17c953cdf31226c8d28e330ad08b4250140dadd16088b7ed4d00f", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Archive Test case '{definition.CaseKey}': pinned max-EOCD bytes or recipe payload no longer match provenance.");
+        }
+
+        return new ArchiveFixtureArtifact(
+            ArchiveBytes: bytes,
+            ArchiveSha256: archiveSha,
+            Layout: ArchiveFixtureLayout.Read(bytes, ushort.MaxValue),
+            Entries:
+            [
+                new ArchiveFixtureEntryExpectation(
+                    Ordinal: 0, Name: entry.Name, IsDirectory: false, Method: ArchiveTestCodec.Stored,
+                    Content: content, ContentSha256: contentSha,
+                    PayloadCodec: entry.PayloadCodec),
+            ],
+            Mutations: []);
     }
 
     /// <summary>
@@ -1720,7 +1756,7 @@ internal static class ArchiveFixtureBuilder
                     $"Archive Test case '{definition.CaseKey}': the coded baseline expects stored directories only; found directory '{recipeEntry.Name}' with method \"{recipeEntry.PayloadCodec}\".");
             }
 
-            if (recipeEntry.ExternalAttributes != 0 || recipeEntry.HostSystem != 0)
+            if (recipeEntry.ExternalAttributes != 0 || recipeEntry.HostSystem is not null)
             {
                 throw new InvalidOperationException(
                     $"Archive Test case '{definition.CaseKey}': the coded baseline drops Unix metadata; found entry '{recipeEntry.Name}' with external attributes or a host system.");

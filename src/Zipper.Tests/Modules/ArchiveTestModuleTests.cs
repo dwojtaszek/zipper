@@ -1,4 +1,7 @@
+using System.Buffers.Binary;
 using System.Globalization;
+using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text.Json;
 using Xunit;
 using Zipper.ArchiveTests;
@@ -114,6 +117,40 @@ public class ArchiveTestModuleTests : WorkingDirectoryTestBase
             .Order(StringComparer.Ordinal)
             .ToArray();
         Assert.Equal(expectedCaseKeys, publishedCaseKeys);
+    }
+
+    [Fact]
+    public async Task RunAsync_ProducerCompatibilityControls_PublishExpectedArchivesAndMatchedPayloads()
+    {
+        var destination = Path.Combine(TempDir, "producer-controls-cli");
+        var exitCode = await RunAsync(
+            "--archive-test-suite", "compatibility",
+            "--archive-test-cases",
+            "valid-max-eocd-comment,valid-directory-attributes,valid-extra-field,valid-descriptor-signature,valid-descriptor-no-signature",
+            "--seed", "42",
+            "--output-path", destination);
+
+        Assert.Equal(0, exitCode);
+        var byCase = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        foreach (var jsonPath in Directory.GetFiles(destination, "*.json"))
+        {
+            using var doc = JsonDocument.Parse(await File.ReadAllBytesAsync(jsonPath));
+            var caseKey = doc.RootElement.GetProperty("caseKey").GetString()!;
+            byCase[caseKey] = await File.ReadAllBytesAsync(Path.ChangeExtension(jsonPath, ".zip"));
+        }
+
+        Assert.Equal(5, byCase.Count);
+        using var seekable = new ZipArchive(new MemoryStream(byCase["valid-max-eocd-comment"]));
+        using var streamed = new ZipArchive(new MemoryStream(byCase["valid-descriptor-signature"]));
+        var seekableEntry = Assert.Single(seekable.Entries);
+        var streamedEntry = Assert.Single(streamed.Entries);
+        Assert.Equal("d.txt", seekableEntry.FullName);
+        Assert.Equal("d.txt", streamedEntry.FullName);
+        Assert.Equal(0, BinaryPrimitives.ReadUInt16LittleEndian(byCase["valid-max-eocd-comment"].AsSpan(6)) & 8);
+        Assert.Equal(8, BinaryPrimitives.ReadUInt16LittleEndian(byCase["valid-descriptor-signature"].AsSpan(6)) & 8);
+        using var seekableStream = seekableEntry.Open();
+        using var streamedStream = streamedEntry.Open();
+        Assert.Equal(SHA256.HashData(seekableStream), SHA256.HashData(streamedStream));
     }
 
     [Fact]

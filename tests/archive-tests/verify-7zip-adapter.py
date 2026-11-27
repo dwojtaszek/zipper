@@ -25,7 +25,7 @@ def _remaining_fixture_time(deadline, case_key):
     return remaining
 
 
-def list_archive_entries(seven, archive, timeout=MAX_FIXTURE_CHECK_SECONDS):
+def list_archive_entries(seven, archive, timeout=MAX_FIXTURE_CHECK_SECONDS, *, directories=None):
     try:
         result = run_reader_command(
             [seven, "l", "-slt", "-ba", "-sccUTF-8", str(archive)], timeout=timeout)
@@ -35,11 +35,27 @@ def list_archive_entries(seven, archive, timeout=MAX_FIXTURE_CHECK_SECONDS):
         raise ValueError("7-Zip failed to list Archive entries")
 
     names = {}
+    name = None
     for line in result.stdout.decode("utf-8", errors="replace").splitlines():
         if line.startswith("Path = "):
             name = line[len("Path = "):]
             names[name] = names.get(name, 0) + 1
+        elif directories is not None and name is not None and line == "Folder = +":
+            directories.append(name)
     return names
+
+
+def verify_directory_classification(seven, archive, case_key, fixture_deadline, check_report):
+    if case_key != "valid-directory-attributes":
+        return None
+
+    directories = []
+    entries = list_archive_entries(
+        seven, archive, _remaining_fixture_time(fixture_deadline, case_key), directories=directories)
+    if sorted(directories) != ["dos-dir", "unix-dir"]:
+        raise ValueError(f"7-Zip directory classification differs: {directories!r}")
+    check_report["directoryNames"] = directories
+    return entries
 
 
 def check_entry(
@@ -258,7 +274,8 @@ def verify(fixtures, seven, report_path=None):
                             for candidate in entries)
                         for entry in entries
                     }
-                    archive_entries = None
+                    archive_entries = verify_directory_classification(
+                        seven, archive, data["caseKey"], fixture_deadline, check_report)
                     for entry in entries:
                         if entry["contentSize"] == 0 and archive_entries is None:
                             archive_entries = list_archive_entries(

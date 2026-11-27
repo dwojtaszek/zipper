@@ -1,3 +1,5 @@
+using System.Buffers.Binary;
+using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Xunit;
@@ -13,6 +15,78 @@ public class ArchiveTestSuiteGeneratorTests : WorkingDirectoryTestBase
         Func<string, CancellationToken, Task>? beforeFixtureBuild = null,
         TimeSpan? deadlineOverride = null) =>
         await ArchiveTestSuiteGenerator.GenerateAsync(request, cancellationToken, afterStaging, beforeFixtureBuild, deadlineOverride);
+
+    [Theory]
+    [InlineData("valid-max-eocd-comment", 65535, 1)]
+    [InlineData("valid-directory-attributes", 0, 2)]
+    public async Task GenerateAsync_PublishesProducerCompatibilityControls(string caseKey, int commentLength, int count)
+    {
+        var result = await GenerateAsync(ArchiveTestRequest.Create([caseKey], 42, Path.Combine(TempDir, "out")));
+        var basePath = Path.Combine(result.PublishedDirectory, Assert.Single(result.FixtureIds));
+        var bytes = await File.ReadAllBytesAsync(basePath + ".zip");
+        var eocd = bytes.Length - 22 - commentLength;
+        Assert.Equal(0x06054b50u, BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(eocd)));
+        Assert.Equal(commentLength, BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(eocd + 20)));
+
+        using var archive = new ZipArchive(new MemoryStream(bytes));
+        using var json = JsonDocument.Parse(await File.ReadAllBytesAsync(basePath + ".json"));
+        Assert.Equal(count, archive.Entries.Count);
+        var entries = json.RootElement.GetProperty("entries");
+        Assert.Equal(count, entries.GetArrayLength());
+        foreach (var (entry, expected) in archive.Entries.Zip(entries.EnumerateArray()))
+        {
+            Assert.DoesNotContain('/', entry.FullName);
+            Assert.Equal("file", expected.GetProperty("kind").GetString());
+            using var payload = entry.Open();
+            Assert.Equal(expected.GetProperty("contentSha256").GetString(),
+                Convert.ToHexStringLower(SHA256.HashData(payload)));
+        }
+
+        if (caseKey == "valid-max-eocd-comment")
+        {
+            Assert.Equal("375c216e6e14e50b5905b87b905e1c9a470f77dadcdf4b44281ef8bf650a0969",
+                Convert.ToHexStringLower(SHA256.HashData(bytes)));
+            Assert.Equal(0, BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(6)) & 8);
+
+            var streamed = await GenerateAsync(ArchiveTestRequest.Create(
+                ["valid-descriptor-signature"], 42, Path.Combine(TempDir, "streamed")));
+            var streamedBytes = await File.ReadAllBytesAsync(
+                Path.Combine(streamed.PublishedDirectory, Assert.Single(streamed.FixtureIds) + ".zip"));
+            Assert.Equal(8, BinaryPrimitives.ReadUInt16LittleEndian(streamedBytes.AsSpan(6)) & 8);
+            using var streamedArchive = new ZipArchive(new MemoryStream(streamedBytes));
+            var seekableEntry = Assert.Single(archive.Entries);
+            var streamedEntry = Assert.Single(streamedArchive.Entries);
+            Assert.Equal(seekableEntry.FullName, streamedEntry.FullName);
+            using var seekablePayload = seekableEntry.Open();
+            using var streamedPayload = streamedEntry.Open();
+            Assert.Equal(SHA256.HashData(seekablePayload), SHA256.HashData(streamedPayload));
+
+            var reseeded = await GenerateAsync(ArchiveTestRequest.Create([caseKey], 99, Path.Combine(TempDir, "out-seed99")));
+            var reseededId = Assert.Single(reseeded.FixtureIds);
+            Assert.NotEqual(result.FixtureIds[0], reseededId);
+            Assert.Equal(bytes, await File.ReadAllBytesAsync(Path.Combine(reseeded.PublishedDirectory, reseededId + ".zip")));
+        }
+
+        if (caseKey == "valid-directory-attributes")
+        {
+            var central = (int)BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(eocd + 16));
+            Assert.Collection(archive.Entries,
+                entry =>
+                {
+                    Assert.Equal("dos-dir", entry.FullName);
+                    Assert.Equal(0, entry.Length);
+                    Assert.Equal(0x10, entry.ExternalAttributes);
+                    Assert.Equal(0, bytes[central + 5]);
+                },
+                entry =>
+                {
+                    Assert.Equal("unix-dir", entry.FullName);
+                    Assert.Equal(0, entry.Length);
+                    Assert.Equal(0x41ed0000, entry.ExternalAttributes);
+                    Assert.Equal(3, bytes[central + 46 + "dos-dir".Length + 5]);
+                });
+        }
+    }
 
     [Fact]
     public void BuildExpectationFile_StoredPayloadBitflip_DeclaresCrcIntegrityProfile()
@@ -623,6 +697,7 @@ public class ArchiveTestSuiteGeneratorTests : WorkingDirectoryTestBase
     [InlineData("bzip2-high-ratio-bounded", "extract", "success", 4)]
     [InlineData("valid-zip64-descriptor-signature", "extract", "success", 2)]
     [InlineData("valid-zip64-descriptor-no-signature", "extract", "success", 2)]
+    [InlineData("valid-directory-attributes", "extract", "success", 1)]
     [InlineData("bzip2-corrupt-block-magic", "test", "failure", 3)]
     [InlineData("bzip2-truncated-stream", "test", "failure", 3)]
     [InlineData("bzip2-wrong-crc", "test", "failure", 3)]

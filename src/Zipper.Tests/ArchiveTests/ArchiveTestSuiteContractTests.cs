@@ -358,9 +358,9 @@ public class ArchiveTestSuiteContractTests
         // +1 for #1283 encoding codec divergence, +1 for #1285 undeclared trailing,
         // +1 for #1286 Zip64 EOCD offset disagreement, +1 for #1288 extra-field truncation,
         // +1 for #1289 the DEFLATE-control CRC mismatch, +1 for #1290 the
-        // normalization-sensitive hostile-name corpus
-        // data): any case dropped from the catalog
+        // normalization-sensitive hostile-name corpus, +2 for #1465 producer
+        // compatibility controls): any case dropped from the catalog
         // or unlisted from every suite fails here.
-        Assert.Equal(119, AllKeys().Count);
+        Assert.Equal(121, AllKeys().Count);
     }
 }

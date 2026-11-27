@@ -553,13 +553,15 @@ REQ-226	unit	ProductionMetadataValidationTests.Validate_WithMultipleViolations_R
 REQ-226	unit	ChaosAndComparisonPropertyTests.ProductionMetadataBudget_SanitizeAndValidate_ShouldEnforceAsciiAndByteBudget	Property: ProductionMetadataBudget validates sanitized blocks and enforces 8,192-byte budget
 REQ-208	unit	ArchiveCompatibilityCaseTests.Build_ValidZip64Small_RoundTripsThroughTwoImplementations	Compatibility suite Zip64 case selection and round-trip verification
 REQ-208	unit	ArchiveStructureCaseTests.ListSuite_Malformed_IncludesAllStructureCases	Malformed suite includes extra-field-truncated and crc-both-mismatch-deflate, and leaves the frozen smoke suite unchanged
-REQ-208	unit	ArchiveTestSuiteContractTests.Catalogue_ContainsExactlyTheFrozenCaseKeys	Archive Test Fixture catalog contains 119 unique Case Keys
+REQ-208	unit	ArchiveTestSuiteContractTests.Catalogue_ContainsExactlyTheFrozenCaseKeys	Archive Test Fixture catalog contains 121 unique Case Keys
+REQ-208	unit	ArchiveTestSuiteGeneratorTests.GenerateAsync_PublishesProducerCompatibilityControls	Generates ZIP producer compatibility controls and compares seekable vs streamed payloads
+REQ-208	unit	ArchiveTestModuleTests.RunAsync_ProducerCompatibilityControls_PublishExpectedArchivesAndMatchedPayloads	Normal CLI entry point publishes ZIP producer compatibility controls with matched seekable and streamed payloads
 REQ-208	unit	ArchiveTestSuiteContractTests.Catalogue_CrcBothMismatchDeflate_UsesDeflateControlAndStaysOutOfSmoke	DEFLATE CRC Case Key uses the valid-deflate control and remains outside the frozen smoke suite
 REQ-208	unit	ArchiveTestSuiteContractTests.ListSuite_Security_SiblingPrefixTraversalUsesHostileNameConstruction	Sibling-prefix traversal Case Key is policy-sensitive, constructed from name placeholders, and included in security
 REQ-208	unit	ArchiveFixtureBuilderTests.BuildControl_EncodingLocalCentralCodecDivergence_RewritesLocalNameWithCp932	New encoding Case Key carries same logical name as CP932 local and UTF-8 central bytes
 REQ-208	unit	ArchiveFixtureBuilderTests.BuildControl_NameSiblingPrefixTraversal_PreservesBothRawNames	Normalization-sensitive hostile-name Case Key preserves both raw names in both ZIP headers
 REQ-208	unit	ArchiveTestModuleTests.RunAsync_EncodingSuiteNoSelection_PublishesExpectedCaseKeys	Encoding suite publishes the local/central codec divergence Case Key
-REQ-208	e2e	test-archive-test-suites.sh	Encoding suite publishes four Archive Test Fixture pairs and the full catalog contains 119 Case Keys
+REQ-208	e2e	test-archive-test-suites.sh	Encoding suite publishes four Archive Test Fixture pairs and the full catalog contains 121 Case Keys
 REQ-208	unit	Deflate64LongMatchTests.Catalog_ContainsDeflate64LongMatchControl	Archive test catalog includes Deflate64 long match case key
 REQ-208	unit	ArchiveFixturePropertyTests.ArchiveTestModule_TryApplyAndTryBuild_ShouldAcceptAllCanonicalSuitesAndRejectUnknownSuites	Property: ArchiveTestModule parses CLI suite flags and resolves canonical suite names
 REQ-210	unit	ArchiveFixtureLayoutTests.Read_SingleStoredControl_CapturesExactOffsets	Layout reader parses local/central directory offsets for fixture ID computation
@@ -585,8 +587,8 @@ REQ-212	unit	ArchiveTestSuiteContractTests.ReaderAdapterProfiles_RegistersBuiltI
 REQ-212	e2e	test-archive-test-suites.sh	Archive Test E2E requires per-fixture .NET/Python results, runs available optional readers, gates declared 7-Zip Adapter Checks (including timeouts), and reports agreement/splits
 REQ-212	e2e	test-archive-test-suites.bat	Windows Archive Test E2E requires per-fixture .NET/Python results, runs available optional readers, gates declared 7-Zip Adapter Checks (including timeouts), and reports agreement/splits
 REQ-212	e2e	archive-tests/test_verify_reader_matrix.py	Reader matrix tests cover input binding, Python/Info-ZIP Adapter Check mismatches, non-gating execution errors, and failed 7-Zip timeout reports
-REQ-212	e2e	archive-tests/test_verify_7zip_adapter.py	7-Zip Adapter Checks enforce one fixture deadline; a timeout is recorded as a failed check and gates matrix success
-REQ-212	e2e	archive-tests/test_verify_fixtures.py	Independent Python verifier covers hostile sidecar tampering, extraction-check classification, and the declared central extra-field overrun
+REQ-212	e2e	archive-tests/test_verify_7zip_adapter.py	7-Zip Adapter Checks enforce one fixture deadline and verify valid-directory-attributes directory classification
+REQ-212	e2e	archive-tests/test_verify_fixtures.py	Independent Python verifier covers hostile sidecar tampering, extraction-check classification, producer-compatibility wire checks, and the declared central extra-field overrun
 REQ-212	unit	ArchiveTestCaseSemanticsTests.Validate_NonValidFixtureCannotDeclareReferenceExtractAdapterCheck	Rejects .NET and Python reference-reader extraction Adapter Checks for malformed and policy-sensitive fixtures
 REQ-212	e2e	archive-tests/test_verify_fixtures.py	Schema and semantic verifier reject .NET and Python extraction Adapter Checks for non-valid fixtures
 REQ-217	e2e	archive-tests/test_verify_fixtures.py	JSON Schema accepts declared Reader Adapter Profile action/outcome pairs and rejects unknown profiles, unsupported pairs, and invalid entryNames usage

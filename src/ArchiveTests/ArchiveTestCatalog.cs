@@ -18,7 +18,7 @@ internal sealed record ArchiveTestRecipeEntry(
     bool IsPolicyName = false,
     bool IsCloudCompatName = false,
     uint ExternalAttributes = 0,
-    byte HostSystem = 0)
+    byte? HostSystem = null)
 {
     internal static ArchiveTestRecipeEntry File(string name, int length, string payloadCodec = "deflate") =>
         new(name, length, payloadCodec, IsDirectory: false, PayloadPrefix: null);
@@ -36,7 +36,7 @@ internal sealed record ArchiveTestRecipeEntry(
     /// mark symlink entries (S_IFLNK type bits; building the Archive bytes never
     /// creates an OS symlink).
     /// </summary>
-    internal static ArchiveTestRecipeEntry PolicyFile(string name, string text, uint externalAttributes = 0, byte hostSystem = 0) =>
+    internal static ArchiveTestRecipeEntry PolicyFile(string name, string text, uint externalAttributes = 0, byte? hostSystem = null) =>
         new(
             name, text.Length, "stored", IsDirectory: false, PayloadPrefix: Encoding.ASCII.GetBytes(text),
             IsPolicyName: true, ExternalAttributes: externalAttributes, HostSystem: hostSystem);
@@ -141,6 +141,9 @@ internal enum ArchiveControlConstruction
     /// <summary>Appends an archive comment containing signature-like bytes; the comment
     /// length field, not a signature search, determines the layout.</summary>
     ArchiveComment,
+
+    /// <summary>Replays a seekable CPython Archive with a maximum-length EOCD comment.</summary>
+    PinnedMaxEocdComment,
 
     /// <summary>Serializes the tiny Zip64 records directly (sentinels, extended fields in
     /// specification order, Zip64 EOCD and locator); the standard writer cannot select
@@ -390,6 +393,29 @@ internal static class ArchiveTestCatalog
             Suites: [CompatibilitySuite],
             Recipe: StoredControlRecipe,
             Construction: ArchiveControlConstruction.LocalExtraField),
+        // #1465: Android CTS rejected installation at this ZIP comment boundary.
+        ["valid-max-eocd-comment"] = new(
+            "valid-max-eocd-comment", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite],
+            Recipe: new ArchiveTestRecipe(
+            [
+                new ArchiveTestRecipeEntry("d.txt", 100, "stored", IsDirectory: false,
+                    PayloadPrefix: Convert.FromHexString(
+                        "8b8103824f15325370bc5f3ff64ea8994ade695b9ba5d81ae3a6dd4df52eeb9c0f" +
+                        "b09b01d312a4ec4ede2f214cd55ba287bda21576862a5e411a8570bdba324846" +
+                        "aeb3f80f08c57fd98a16915d9d43ea045375b64ac18877fe79a21abe6b9862725b54ca")),
+            ]),
+            Construction: ArchiveControlConstruction.PinnedMaxEocdComment),
+        // #1465: CPython and 7-Zip disagree on these slashless empty entries.
+        ["valid-directory-attributes"] = new(
+            "valid-directory-attributes", CaseRevision: 1, ExpectationRevision: 1, Classification: "valid",
+            Suites: [CompatibilitySuite],
+            Recipe: new ArchiveTestRecipe(
+            [
+                ArchiveTestRecipeEntry.File("dos-dir", 0, "stored") with { ExternalAttributes = 0x10, HostSystem = 0 },
+                ArchiveTestRecipeEntry.File("unix-dir", 0, "stored") with { ExternalAttributes = 0x41ED_0000 },
+            ]),
+            AdapterChecks: SevenZipExtract),
         // Ticket #841 compatibility controls: descriptors (APPNOTE §4.3.9), name encodings
         // (bit 11 / CP437), signature-like comment bytes, and a tiny genuine Zip64 Archive.
         ["valid-descriptor-signature"] = new(

@@ -18,7 +18,6 @@ import json
 import os
 import shutil
 import struct
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -1502,7 +1501,7 @@ class EncodingTrailByteTests(unittest.TestCase):
 
     def test_decode_failure_fails_closed(self):
         case = self.make_case("encoding-cp932-trail-backslash")
-        zip_bytes = self.make_zip("encoding-cp932-trail-backslash")
+        self.make_zip("encoding-cp932-trail-backslash")
         overrides = {
             "encoding-cp932-trail-backslash": ("cp932", "ef5c2e747874", "表.txt"),
             "encoding-big5-trail-backslash": ("not-a-codec", "b35c2e747874", "許.txt"),
@@ -3158,6 +3157,232 @@ class InvariantEnforcementTests(TempDirTest):
         failure = report["fixtures"][0]["failure"]
         self.assertEqual("invariant", failure["check"])
         self.assertIn("no-files-created", failure["message"])
+
+
+class ProducerCompatibilityControlTests(TempDirTest):
+    @staticmethod
+    def _build_max_eocd_comment_zip():
+        payload = b"".join(
+            hashlib.sha256(
+                b"valid-descriptor-signature\n42\nd.txt\n" + i.to_bytes(4, "little")
+            ).digest()
+            for i in range(4)
+        )[:100]
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as zf:
+            info = zipfile.ZipInfo("d.txt", date_time=(2024, 1, 1, 0, 0, 0))
+            info.create_system = 3
+            info.external_attr = 0o600 << 16
+            zf.writestr(info, payload)
+            zf.comment = b"X" * 65535
+        return buf.getvalue(), payload
+
+    @staticmethod
+    def _build_directory_attributes_zip(dos_host=0, dos_attr=0x10, unix_host=3, unix_attr=0x41ED0000):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as zf:
+            for name, host, attr in (("dos-dir", dos_host, dos_attr), ("unix-dir", unix_host, unix_attr)):
+                info = zipfile.ZipInfo(name, date_time=(2024, 1, 1, 0, 0, 0))
+                info.create_system = host
+                info.external_attr = attr
+                zf.writestr(info, b"")
+        return buf.getvalue()
+
+    @staticmethod
+    def _build_extra_field_zip():
+        base = make_zip([("a.txt", b"hello"), ("b.bin", b"world")])
+        extra = b"\x99\x99\x04\x00\xaa\xbb\xcc\xdd"
+        local_name_len = struct.unpack_from("<H", base, 26)[0]
+        insert_at = 30 + local_name_len
+        patched = bytearray(base[:insert_at] + extra + base[insert_at:])
+        struct.pack_into("<H", patched, 28, len(extra))
+        eocd = len(patched) - 22
+        cd_offset = struct.unpack_from("<I", patched, eocd + 16)[0] + len(extra)
+        struct.pack_into("<I", patched, eocd + 16, cd_offset)
+        first_cd_name_len, first_cd_extra_len, first_cd_comm_len = struct.unpack_from("<HHH", patched, cd_offset + 28)
+        second_cd = cd_offset + 46 + first_cd_name_len + first_cd_extra_len + first_cd_comm_len
+        second_local_offset = struct.unpack_from("<I", patched, second_cd + 42)[0] + len(extra)
+        struct.pack_into("<I", patched, second_cd + 42, second_local_offset)
+        return bytes(patched), b"hello", b"world"
+
+    @staticmethod
+    def _build_descriptor_zip(signed=True):
+        import binascii
+        content = b"descriptor payload"
+        crc = binascii.crc32(content) & 0xFFFFFFFF
+        name = b"d.txt"
+        local = struct.pack(
+            "<IHHHHHIIIHH",
+            0x04034B50, 20, 0x0808, 0, 0, 0x5421, 0, 0, 0, len(name), 0,
+        ) + name + content
+        if signed:
+            descriptor = struct.pack("<IIII", 0x08074B50, crc, len(content), len(content))
+        else:
+            descriptor = struct.pack("<III", crc, len(content), len(content))
+        cd_offset = len(local) + len(descriptor)
+        central = struct.pack(
+            "<IHHHHHHIIIHHHHHII",
+            0x02014B50, 0x0314, 20, 0x0808, 0, 0, 0x5421, crc, len(content), len(content),
+            len(name), 0, 0, 0, 0, 0, 0,
+        ) + name
+        eocd = struct.pack("<IHHHHIIH", 0x06054B50, 0, 0, 1, 1, len(central), cd_offset, 0)
+        return local + descriptor + central + eocd, content
+
+    def _write_case(self, case_key, zip_bytes, entries, expanded_budget=None):
+        for existing in os.listdir(self.dir):
+            os.remove(os.path.join(self.dir, existing))
+        case = case_for(case_key, "valid", zip_bytes, entries, [], VALID_EXPECTATIONS)
+        if expanded_budget is not None:
+            case["limits"]["expandedBytesBudget"] = expanded_budget
+        write_pair(self.dir, case, zip_bytes)
+
+    def _assert_passes(self, case_key, zip_bytes, entries, expanded_budget=None):
+        self._write_case(case_key, zip_bytes, entries, expanded_budget)
+        report, exit_code = verify(self.dir)
+        self.assertEqual(0, exit_code, report)
+        checks = {c["check"] for c in report["fixtures"][0]["structureChecks"]}
+        self.assertIn("producer-compatibility", checks)
+
+    def _assert_fails(self, case_key, zip_bytes, entries, expanded_budget=None):
+        self._write_case(case_key, zip_bytes, entries, expanded_budget)
+        report, exit_code = verify(self.dir)
+        self.assertEqual(1, exit_code)
+        self.assertEqual("producer-compatibility", report["fixtures"][0]["failure"]["check"])
+
+    def test_valid_max_eocd_comment_passes_and_rejects_wire_drift(self):
+        zip_bytes, payload = self._build_max_eocd_comment_zip()
+        entries = [entry_record(0, "d.txt", payload)]
+        self._assert_passes("valid-max-eocd-comment", zip_bytes, entries)
+
+        # Truncate comment to 65534 bytes
+        short_zip = bytearray(zip_bytes[:-1])
+        struct.pack_into("<H", short_zip, len(short_zip) - 22 - 65534 + 20, 65534)
+        # Non-'X' comment byte at same 65,535 length
+        bad_char_zip = bytearray(zip_bytes)
+        bad_char_zip[-1] = ord("Y")
+        # Corrupt local header CRC while keeping payload valid
+        bad_local_crc = bytearray(zip_bytes)
+        struct.pack_into("<I", bad_local_crc, 14, 0)
+
+        for label, mutated in (
+            ("short_comment", bytes(short_zip)),
+            ("non_x_comment", bytes(bad_char_zip)),
+            ("zero_local_crc", bytes(bad_local_crc)),
+        ):
+            with self.subTest(label=label):
+                self._assert_fails("valid-max-eocd-comment", mutated, entries)
+
+    def test_valid_directory_attributes_passes_and_rejects_wrong_host_attr_or_kind(self):
+        zip_bytes = self._build_directory_attributes_zip()
+        entries = [entry_record(0, "dos-dir", b""), entry_record(1, "unix-dir", b"")]
+        self._assert_passes("valid-directory-attributes", zip_bytes, entries, expanded_budget=0)
+        self._assert_passes("valid-directory-attributes", zip_bytes, entries[::-1], expanded_budget=0)
+
+        dir_entry = {k: v for k, v in entries[0].items() if k != "payloadCodec"} | {"kind": "directory"}
+        bad_local_crc = bytearray(zip_bytes)
+        struct.pack_into("<I", bad_local_crc, 14, 1)
+        bad_disk_start = bytearray(zip_bytes)
+        central_offset = struct.unpack_from("<I", zip_bytes, len(zip_bytes) - 6)[0]
+        struct.pack_into("<H", bad_disk_start, central_offset + 34, 1)
+        for label, mutated_zip, mutated_entries in (
+            ("dos_host", self._build_directory_attributes_zip(dos_host=3), entries),
+            ("dos_attr", self._build_directory_attributes_zip(dos_attr=0), entries),
+            ("unix_host", self._build_directory_attributes_zip(unix_host=0), entries),
+            ("unix_attr", self._build_directory_attributes_zip(unix_attr=0), entries),
+            ("local_crc", bytes(bad_local_crc), entries),
+            ("disk_start", bytes(bad_disk_start), entries),
+            ("sidecar_kind", zip_bytes, [dir_entry, entries[1]]),
+            ("swapped_ordinals", zip_bytes, [entries[0] | {"ordinal": 1}, entries[1] | {"ordinal": 0}]),
+            ("missing_ordinal", zip_bytes, [entries[0], entries[1] | {"ordinal": 2}]),
+        ):
+            with self.subTest(label=label):
+                self._assert_fails("valid-directory-attributes", mutated_zip, mutated_entries, expanded_budget=0)
+
+    def test_valid_extra_field_passes_and_rejects_missing_or_central_extra(self):
+        zip_bytes, a_data, b_data = self._build_extra_field_zip()
+        entries = [entry_record(0, "a.txt", a_data), entry_record(1, "b.bin", b_data)]
+        self._assert_passes("valid-extra-field", zip_bytes, entries)
+        self._assert_passes("valid-extra-field", zip_bytes, entries[::-1])
+        self._assert_fails("valid-extra-field", zip_bytes, [entries[0], entries[1] | {"ordinal": 2}])
+
+        plain_zip = make_zip([("a.txt", a_data), ("b.bin", b_data)])
+        self._assert_fails("valid-extra-field", plain_zip, entries)
+
+        extra = b"\x99\x99\x04\x00\xaa\xbb\xcc\xdd"
+        eocd = len(zip_bytes) - 22
+        cd_size, central = struct.unpack_from("<II", zip_bytes, eocd + 12)
+        for ordinal in range(len(entries)):
+            with self.subTest(central_entry_ordinal=ordinal):
+                name_len = struct.unpack_from("<H", zip_bytes, central + 28)[0]
+                central_end = central + 46 + name_len
+                mutated = bytearray(zip_bytes)
+                mutated[central_end:central_end] = extra
+                struct.pack_into("<H", mutated, central + 30, len(extra))
+                struct.pack_into("<I", mutated, eocd + len(extra) + 12, cd_size + len(extra))
+                with zipfile.ZipFile(io.BytesIO(mutated)) as archive:
+                    self.assertEqual([a_data, b_data], [archive.read(name) for name in ("a.txt", "b.bin")])
+                self._assert_fails("valid-extra-field", bytes(mutated), entries)
+                central = central_end
+
+        for offset in (14, 18, 22):
+            with self.subTest(local_header_offset=offset):
+                mutated = bytearray(zip_bytes)
+                mutated[offset] ^= 1
+                self._assert_fails("valid-extra-field", bytes(mutated), entries)
+
+        # Inflated EOCD total_entries must fail fast without allocating unbounded entry tables
+        fake_eocd = struct.pack("<IHHHHIIH", 0x06054B50, 0, 0, 65535, 65535, 0, 0, 0)
+        with self.assertRaises(vf.VerificationError):
+            vf._parse_length_anchored_entries("producer-compatibility", fake_eocd, 0, 2)
+
+    def test_producer_controls_reject_wrong_sidecar_raw_names(self):
+        comment, payload = self._build_max_eocd_comment_zip()
+        extra, a_data, b_data = self._build_extra_field_zip()
+        for case_key, zip_bytes, entries in (
+            ("valid-max-eocd-comment", comment, [entry_record(0, "d.txt", payload)]),
+            ("valid-directory-attributes", self._build_directory_attributes_zip(),
+             [entry_record(0, "dos-dir", b""), entry_record(1, "unix-dir", b"")]),
+            ("valid-extra-field", extra, [entry_record(0, "a.txt", a_data), entry_record(1, "b.bin", b_data)]),
+        ):
+            for key in ("localNameRaw", "centralNameRaw"):
+                with self.subTest(case_key=case_key, key=key):
+                    changed = [*entries[:-1], entries[-1] | {key: b"other.txt".hex()}]
+                    self._assert_fails(case_key, zip_bytes, changed)
+
+    def test_descriptor_free_controls_reject_bit_three(self):
+        extra, a_data, b_data = self._build_extra_field_zip()
+        for case_key, zip_bytes, entries in (
+            ("valid-directory-attributes", self._build_directory_attributes_zip(),
+             [entry_record(0, "dos-dir", b""), entry_record(1, "unix-dir", b"")]),
+            ("valid-extra-field", extra, [entry_record(0, "a.txt", a_data), entry_record(1, "b.bin", b_data)]),
+        ):
+            cd_offset = struct.unpack_from("<I", zip_bytes, len(zip_bytes) - 6)[0]
+            for offsets in ((6,), (cd_offset + 8,), (6, cd_offset + 8)):
+                with self.subTest(case_key=case_key, offsets=offsets):
+                    changed = bytearray(zip_bytes)
+                    for offset in offsets:
+                        changed[offset] |= 8
+                    self._assert_fails(case_key, bytes(changed), entries)
+
+    def test_valid_descriptor_forms_pass_and_reject_mismatched_signature_or_local_crc(self):
+        for case_key, signed in (("valid-descriptor-signature", True), ("valid-descriptor-no-signature", False)):
+            with self.subTest(case_key=case_key):
+                zip_bytes, content = self._build_descriptor_zip(signed=signed)
+                entries = [entry_record(0, "d.txt", content)]
+                self._assert_passes(case_key, zip_bytes, entries)
+
+                wrong_zip, _ = self._build_descriptor_zip(signed=not signed)
+                bad_local_crc = bytearray(zip_bytes)
+                struct.pack_into("<I", bad_local_crc, 14, 1)
+                self._assert_fails(case_key, wrong_zip, entries)
+                self._assert_fails(case_key, bytes(bad_local_crc), entries)
+                for key, wrong_name in (
+                    ("readableName", "other.txt"),
+                    ("localNameRaw", "6f746865722e747874"),
+                    ("centralNameRaw", "6f746865722e747874"),
+                ):
+                    with self.subTest(sidecar_field=key):
+                        self._assert_fails(case_key, zip_bytes, [{**entries[0], key: wrong_name}])
 
 
 if __name__ == "__main__":

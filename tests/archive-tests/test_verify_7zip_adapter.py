@@ -707,6 +707,74 @@ class SevenZipAdapterTests(unittest.TestCase):
             [(check["action"], check["observedOutcome"])
              for check in report["fixtures"][0]["checks"]])
 
+    def test_verify_valid_directory_attributes_requires_both_directory_classifications(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            stem = "atc-" + "e" * 64
+            archive = directory / f"{stem}.zip"
+            with zipfile.ZipFile(archive, "w", zipfile.ZIP_STORED) as zf:
+                for name in ("dos-dir", "unix-dir"):
+                    zf.writestr(zipfile.ZipInfo(name, date_time=(2024, 1, 1, 0, 0, 0)), b"")
+            empty_sha = hashlib.sha256(b"").hexdigest()
+            (directory / f"{stem}.json").write_text(json.dumps({
+                "fixtureId": stem,
+                "caseKey": "valid-directory-attributes",
+                "entries": [
+                    {"kind": "file", "readableName": "dos-dir", "contentSize": 0, "contentSha256": empty_sha},
+                    {"kind": "file", "readableName": "unix-dir", "contentSize": 0, "contentSha256": empty_sha},
+                ],
+                "limits": {"expandedBytesBudget": 0, "deadlineSeconds": 10},
+                "adapterChecks": [
+                    {"adapter": "7zip", "action": "extract", "expectedOutcome": "success"},
+                ],
+            }), encoding="utf-8")
+            report_path = directory / "report.json"
+
+            invocations_path = directory / "calls.log"
+
+            def make_fake_7z(folder_flags):
+                script = directory / "fake_7z.py"
+                listing = "\n".join(
+                    f"Path = {name}\nFolder = {flag}\n" for name, flag in folder_flags
+                )
+                script.write_text(
+                    "import pathlib, sys\n"
+                    f"with pathlib.Path({str(invocations_path)!r}).open('a', encoding='utf-8') as f:\n"
+                    "    f.write(sys.argv[1] + '\\n')\n"
+                    "if sys.argv[1] == 'l':\n"
+                    f"    sys.stdout.write({listing!r})\n"
+                    "    sys.exit(0)\n"
+                    "sys.exit(0)\n",
+                    encoding="utf-8",
+                )
+                if sys.platform == "win32":
+                    adapter = directory / "fake_7z.cmd"
+                    adapter.write_text(f'@"{sys.executable}" "{script}" %*\n', encoding="utf-8")
+                else:
+                    adapter = directory / "fake_7z"
+                    adapter.write_text(f'#!/bin/sh\nexec {shlex.quote(sys.executable)} {shlex.quote(str(script))} "$@"\n', encoding="utf-8")
+                    adapter.chmod(0o755)
+                return str(adapter)
+
+            passing_adapter = make_fake_7z([("dos-dir", "+"), ("unix-dir", "+")])
+            checked = VERIFIER["verify"](directory, passing_adapter, report_path)
+            self.assertEqual(1, checked)
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                ["dos-dir", "unix-dir"],
+                report["fixtures"][0]["checks"][0]["directoryNames"])
+
+            invocations_path.unlink()
+            failing_adapter = make_fake_7z([("dos-dir", "+"), ("unix-dir", "-")])
+            with self.assertRaisesRegex(ValueError, "7-Zip directory classification differs"):
+                VERIFIER["verify"](directory, failing_adapter, report_path)
+            failed_report = json.loads(report_path.read_text(encoding="utf-8"))
+            self.assertEqual("fail", failed_report["fixtures"][0]["status"])
+            self.assertEqual(
+                "extract-fails",
+                failed_report["fixtures"][0]["operations"][0]["normalizedOutcome"])
+            self.assertEqual(["l"], invocations_path.read_text(encoding="utf-8").splitlines())
+
 
 if __name__ == "__main__":
     unittest.main()
