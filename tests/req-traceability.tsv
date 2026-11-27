@@ -65,6 +65,7 @@ REQ-025	unit	GenerationModeTests.Main_StandardModeWithTargetZipSizeFarFromActual
 REQ-026	unit	ParallelFileGeneratorTests.GenerateFilesAsync_WithImpossibleTargetSize_ThrowsInvalidOperationException	Pre-check minimum compressed size
 REQ-027	unit	CliModuleSetTests.Parse_AllBooleanFlags_SetCorrectly	--include-load-file boolean flag
 REQ-027	unit	ZipArchiveServiceTests.CreateArchiveAsync_WithLoadFileIncluded_IncludesLoadFileInArchive	--include-load-file embeds Load File in Archive
+REQ-027	unit	EdiscoveryDeliveryZipRoundTripTests.StandardMode_WithIncludeLoadFile_RoundTripZipVerification	--include-load-file round-trip ZIP generation with included load file
 REQ-028	unit	ZipArchiveServiceTests.CreateArchiveAsync_WithLoadFileIncluded_IncludesLoadFileInArchive	Load File included in Archive root
 REQ-029	unit	GenerationModeTests.Main_StandardModeWithIncludeLoadFile_EmbedsLoadFileInArchive	No separate Load File on disk
 REQ-030	e2e	test-build-version.sh	Semver MAJOR.MINOR.PATCH format verified via compiled metadata and CLI
@@ -304,6 +305,7 @@ REQ-117	unit	ProductionSetTests.ProductionSet_DatLoadFileIsValid	Always DAT + OP
 REQ-117	unit	LoadFileComposerAndEmitterPropertyTests.DatStandardComposer_Compose_HeaderColumnCountShouldAlwaysEqualEveryRecordValueCount	Property: DatStandardComposer header column count equals record value count across all flag combinations
 REQ-118	unit	ProductionSetTests.ProductionSet_ManifestJsonIsValid	_manifest.json at production root
 REQ-119	unit	ProductionSetTests.ProductionSet_WithZip_CreatesArchive	--production-zip compresses production set
+REQ-119	unit	EdiscoveryDeliveryZipRoundTripTests.ProductionSetMode_WithProductionZip_MultiVolume_RoundTripZipVerification	--production-zip round-trip ZIP generation with multi-volume delivery
 REQ-120	unit	ProductionSetTests.ProductionSet_RequiresBatesPrefix	Requires --bates-prefix, conflicts loadfile-only
 REQ-120	unit	ProductionSetTests.ProductionSet_ConflictsWithLoadfileOnly	--production-set conflicts with --loadfile-only
 REQ-121	unit	FieldNamingTests.ProfileDrivenDatWriter_ShouldRespectFieldNamingConvention	fieldNamingConvention property
