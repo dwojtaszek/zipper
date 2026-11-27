@@ -2012,7 +2012,7 @@ def probe_and_select_agents() -> list[tuple[str, str | None]]:
             healthy = True
         else:
             healthy = module.check_token_health()
-        probe_candidates = not healthy and bool(prefs) and name in {"codex", "agy"}
+        probe_candidates = not healthy and (name == "agy" or (name == "codex" and bool(prefs)))
         if not healthy and not probe_candidates:
             print(f"[select] {name!r}: installed but unhealthy, skipping")
             continue

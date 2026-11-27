@@ -240,6 +240,19 @@ class ProbeAndSelectAgentsModelSwitchingTests(unittest.TestCase):
         ):
             self.assertEqual(runner.probe_and_select_agents(), [("codex", fallback)])
 
+    def test_unhealthy_agy_default_allows_discovered_fallback_without_preferences(self):
+        primary = "gemini-4-hydrogen-high"
+        fallback = "gemini-3.8-flash-high"
+        plugin = MagicMock()
+        plugin.list_models.return_value = [primary, fallback]
+        plugin.check_token_health.side_effect = lambda model=None: model == fallback
+        with (
+            patch.dict(runner.AGENT_PLUGINS, {"agy": plugin}, clear=True),
+            patch.object(runner, "load_preferences", return_value={}),
+            patch.object(runner, "DRY_RUN", False),
+        ):
+            self.assertEqual(runner.probe_and_select_agents(), [("agy", fallback)])
+
     def test_probe_and_select_skips_exhausted_models(self):
         runner.ACTIVE_AGENT = None
         runner.ACTIVE_MODEL = None
