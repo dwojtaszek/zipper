@@ -140,17 +140,23 @@ internal static class EdiscoveryDeliveryZipVerifier
         Assert.True(parentDocIdIdx >= 0, "PARENTDOCID column missing from DAT header.");
 
         var familyRecords = new List<FamilyRecord>();
+        var datDocIds = new HashSet<string>(StringComparer.Ordinal);
+        var datNativePaths = new HashSet<string>(StringComparer.Ordinal);
         for (int i = 1; i < datLines.Count; i++)
         {
             var cols = DelimitedTestParser.ParseLine(datLines[i], colDelim, quoteDelim).ToArray();
             Assert.Equal(header.Length, cols.Length);
+            Assert.False(string.IsNullOrEmpty(cols[docIdIdx]), $"DAT row {i} has empty DOCID.");
+            Assert.True(datDocIds.Add(cols[docIdIdx]), $"DAT row {i} repeats DOCID '{cols[docIdIdx]}'.");
 
             Assert.False(string.IsNullOrEmpty(cols[nativeIdx]), $"DAT row {i} has empty NATIVE_PATH.");
+            Assert.True(datNativePaths.Add(cols[nativeIdx].Replace('\\', '/')), $"DAT row {i} repeats NATIVE_PATH '{cols[nativeIdx]}'.");
             Assert.Equal(cols[docIdIdx], Path.GetFileNameWithoutExtension(cols[nativeIdx].Replace('\\', '/')));
             AssertResolves(cols[nativeIdx], "native", rootPrefix, diskFiles, archiveEntryNames);
             Assert.False(string.IsNullOrEmpty(cols[imageIdx]), $"DAT row {i} has empty IMAGE_PATH.");
             AssertResolves(cols[imageIdx], "image", rootPrefix, diskFiles, archiveEntryNames);
             Assert.False(string.IsNullOrEmpty(cols[textIdx]), $"DAT row {i} has no Extracted Text reference.");
+            Assert.Equal(cols[docIdIdx], Path.GetFileNameWithoutExtension(cols[textIdx].Replace('\\', '/')));
             AssertResolves(cols[textIdx], "text", rootPrefix, diskFiles, archiveEntryNames);
 
             familyRecords.Add(new FamilyRecord(
@@ -303,7 +309,8 @@ internal static class EdiscoveryDeliveryZipVerifier
 
                         if (!entry.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
                         {
-                            var manifestKey = $"{Path.GetFileName(zipFilePath)}::{GoldenBaselineHarness.EscapeManifestKeyPart(entry.Name)}";
+                            var archiveName = GoldenBaselineHarness.EscapeManifestKeyPart(Path.GetFileName(zipFilePath));
+                            var manifestKey = $"{archiveName}::{GoldenBaselineHarness.EscapeManifestKeyPart(entry.Name)}";
                             Assert.True(
                                 archiveManifest.TryGetValue(manifestKey, out var manifestHash),
                                 $"Archive manifest is missing '{entry.Name}'.");
@@ -545,6 +552,13 @@ internal static class EdiscoveryDeliveryZipVerifier
 
     private static void AssertFamilyRanges(IReadOnlyList<FamilyRecord> familyRecords)
     {
+        foreach (var row in familyRecords.Where(r =>
+            string.IsNullOrEmpty(r.ParentDocId) && string.Equals(r.BegAttach, r.EndAttach, StringComparison.Ordinal)))
+        {
+            Assert.Equal(row.DocId, row.BegAttach);
+            Assert.Equal(row.DocId, row.EndAttach);
+        }
+
         var parents = familyRecords
             .Where(r => string.IsNullOrEmpty(r.ParentDocId) && !string.Equals(r.BegAttach, r.EndAttach, StringComparison.Ordinal))
             .ToDictionary(r => r.DocId, StringComparer.Ordinal);

@@ -33,7 +33,18 @@ public static class ZipAssert
                 normalizedName.StartsWith('/') ||
                 (normalizedName.Length >= 2 && char.IsLetter(normalizedName[0]) && normalizedName[1] == ':'),
                 $"ZIP entry name must be relative: '{entry.FullName}'.");
-            Assert.DoesNotContain(normalizedName.Split('/'), segment => segment == "..");
+            var segments = normalizedName.Split('/');
+            for (int i = 0; i < segments.Length; i++)
+            {
+                if (i == segments.Length - 1 && segments[i].Length == 0 && normalizedName.EndsWith('/'))
+                {
+                    continue;
+                }
+
+                Assert.False(
+                    segments[i] is ".." or "." || segments[i].Length == 0,
+                    $"ZIP entry name has an unsupported path segment: '{entry.FullName}'.");
+            }
         }
 
         var fileEntryNames = archive.Entries
@@ -41,6 +52,34 @@ public static class ZipAssert
             .Select(e => e.FullName)
             .ToList();
         Assert.Equal(fileEntryNames.Count, fileEntryNames.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+
+        // A path cannot be both a file and a directory: extraction fails on the collision,
+        // including directories implied by a child entry.
+        var directoryPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in archive.Entries)
+        {
+            var entryPath = entry.FullName.TrimEnd('/');
+            if (entry.FullName.EndsWith('/'))
+            {
+                directoryPaths.Add(entryPath);
+                continue;
+            }
+
+            var separatorIndex = entryPath.LastIndexOf('/');
+            while (separatorIndex > 0)
+            {
+                entryPath = entryPath[..separatorIndex];
+                directoryPaths.Add(entryPath);
+                separatorIndex = entryPath.LastIndexOf('/');
+            }
+        }
+
+        foreach (var fileName in fileEntryNames)
+        {
+            Assert.False(
+                directoryPaths.Contains(fileName),
+                $"ZIP entry path is used as both a file and a directory: '{fileName}'.");
+        }
 
         // Decompress every member through SharpZipLib so the assertion does not only prove
         // that the writer and System.IO.Compression agree with each other.

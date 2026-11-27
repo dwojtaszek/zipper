@@ -182,19 +182,19 @@ public static class GoldenBaselineHarness
                 var entryKeyPart = EscapeManifestKeyPart(entry.FullName);
                 if (entry.FullName.EndsWith('/'))
                 {
-                    if (entry.Length > 0 && !allowWholeFileFallback)
+                    if (!allowWholeFileFallback)
                     {
-                        throw new InvalidDataException($"Archive directory entry '{entry.FullName}' unexpectedly contains content bytes.");
+                        // Do not trust the declared length: read the stream so a Stored
+                        // directory that hides payload bytes is rejected in every mode.
+                        using var directoryStream = entry.Open();
+                        if (entry.Length > 0 || directoryStream.ReadByte() != -1)
+                        {
+                            throw new InvalidDataException($"Archive directory entry '{entry.FullName}' unexpectedly contains content bytes.");
+                        }
                     }
 
                     if (normalizeTimestamps && entry.Length == 0)
                     {
-                        // Open the member so an unreadable local header is rejected here too,
-                        // matching the raw path that hashes the stream.
-                        using (entry.Open())
-                        {
-                        }
-
                         // Empty directories have no content bytes to hash; canonicalize by
                         // relative-path-in-archive and full directory name to keep parity stable.
                         var dirKey = $"{keyPrefix}::{entryKeyPart}";

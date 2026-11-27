@@ -123,6 +123,45 @@ public class ZipAssertTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public void AssertValidZip_EquivalentExtractionPaths_ThrowsException()
+    {
+        var zipPath = this.GetTempFilePath();
+        using (var archive = ZipFile.Open(zipPath, ZipArchiveMode.Create))
+        {
+            archive.CreateEntry("reports/report.txt");
+            archive.CreateEntry("reports/./report.txt");
+        }
+
+        Assert.ThrowsAny<XunitException>(() => ZipAssert.AssertValidZip(zipPath, 2));
+    }
+
+    [Fact]
+    public void AssertValidZip_FileAndDirectoryAtSamePath_ThrowsException()
+    {
+        var zipPath = this.GetTempFilePath();
+        using (var archive = ZipFile.Open(zipPath, ZipArchiveMode.Create))
+        {
+            archive.CreateEntry("DATA/loadfile.dat/");
+            archive.CreateEntry("DATA/loadfile.dat");
+        }
+
+        Assert.ThrowsAny<XunitException>(() => ZipAssert.AssertValidZip(zipPath, 2));
+    }
+
+    [Fact]
+    public void AssertValidZip_FileConflictsWithImpliedDirectory_ThrowsException()
+    {
+        var zipPath = this.GetTempFilePath();
+        using (var archive = ZipFile.Open(zipPath, ZipArchiveMode.Create))
+        {
+            archive.CreateEntry("DATA/loadfile.dat/child.txt");
+            archive.CreateEntry("DATA/loadfile.dat");
+        }
+
+        Assert.ThrowsAny<XunitException>(() => ZipAssert.AssertValidZip(zipPath, 2));
+    }
+
+    [Fact]
     public void AssertValidZip_NonExistentFile_ThrowsException()
     {
         var nonExistent = Path.Combine(this.TempDir, "does-not-exist.zip");
