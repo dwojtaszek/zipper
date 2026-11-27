@@ -157,6 +157,7 @@ public class LoadFileOnlyGeneratorTests : IDisposable
         {
             var record = DatLineParser.Parse(lines[lineIndex], '\u0014', '\u00fe');
             Assert.Equal(header.Count, record.Count);
+            // DatLoadfileOnlyComposer emits fixed .pdf synthetic paths regardless of FileType.
             Assert.Matches(@"^NATIVES\\\d{3}\\DOC\d{8}(_A001)?\.pdf$", record[pathIndex]);
 
             if (record[controlIndex].EndsWith("_A001", StringComparison.Ordinal))
