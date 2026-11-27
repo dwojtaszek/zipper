@@ -283,6 +283,7 @@ All command-line flags recognized by Zipper:
 | `--hash-mode` | none | `actual`, `simulated`, `none` | Document hash computation mode |
 | `--hash-algorithms` | `md5` | `md5`, `sha1`, `sha256` | Comma-separated hash algorithms |
 | `--benchmark` | `false` | flag | Run performance benchmark suite and exit |
+| `--zip-workload` | — | standalone command | Generate a deterministic ZIP workload and exit |
 | `--archive-test-suite` | none | `smoke`, `compatibility`, `malformed`, `security`, `encoding`, `directory-workload`, `all` | Publish an Archive Test Fixture suite (the `security` suite includes `name-sibling-prefix-traversal`; the `encoding` suite includes local/central codec divergence; closed flag set: requires `--output-path` pointing to a new directory; accepts only `--archive-test-suite`, `--archive-test-cases`, `--seed`, `--output-path`; see [Archive Test Suites](docs/archive-test-suites.md)) |
 | `--archive-test-cases` | none | comma-separated Case Keys | Filter the suite to the named cases (closed flag set; requires `--archive-test-suite`) |
 | `--version` | `false` | flag | Print full embedded version string and exit |
@@ -340,6 +341,23 @@ zipper --benchmark
 ```
 
 The scalability verdict fails when the worst later-vs-prior-peak throughput ratio across increasing file counts falls below 0.25 (tolerates up to 4x machine noise; independent from the CI Perf Guard historical baseline).
+
+Generate a deterministic ZIP workload by starting the command with `--zip-workload`.
+Pass a new Archive path in an existing directory, an explicit non-negative 32-bit seed,
+and one or more `count:bytes:pattern:method` groups in entry order.
+
+```bash
+zipper --zip-workload workload.zip 42 2:65537:binary:store 1:3:repeat:deflate 1:0:repeat:store
+```
+
+Every group has a positive count and a non-negative uncompressed size in bytes.
+`binary` emits seeded binary data and `repeat` fills each entry with a single seeded byte.
+Choose `store` or `deflate` per group. Empty entries are Stored by the ZIP writer.
+Entry names are flat and numbered from `00000001.bin` across all groups.
+The summary reports the seed, recipe, entry count, total payload bytes, and Archive size.
+Write failures and cancellation discard the staged Archive. The command exits with 1
+for invalid input or I/O failures, and 130 when cancelled.
+
 
 ---
 

@@ -255,7 +255,7 @@ internal class ZipArchiveSink : IArchiveSink
         }
     }
 
-    private static CompressionLevel ResolveCompressionLevel(Config.ZipCompressionMethod method) => method switch
+    internal static CompressionLevel ResolveCompressionLevel(Config.ZipCompressionMethod method) => method switch
     {
         Config.ZipCompressionMethod.Store => CompressionLevel.NoCompression,
         Config.ZipCompressionMethod.Deflate => CompressionLevel.Optimal,

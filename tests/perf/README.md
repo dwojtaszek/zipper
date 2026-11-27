@@ -63,3 +63,13 @@ The perf-guard workflow posts a markdown table on the PR:
 - After upgrading .NET runtime version
 - After changing file generation algorithms
 - When the weekly refresh cron proposes a PR (review before merging)
+
+## Exact-size ZIP workloads
+
+Use `zipper --zip-workload workload.zip 42 2:65537:binary:store 1:3:repeat:deflate`
+to create an Archive for a benchmark. One group gives a uniform workload. Additional
+groups can append differently sized entries, such as a tiny sentinel after a large member.
+Rerun the same seed and recipe at a fresh path to reproduce the entry inventory and
+payload hashes. The writer buffers payloads in 64 KiB chunks and retains ZIP directory
+metadata for each entry. This command runs independently of the Archive Test suites
+and their fixture budgets.

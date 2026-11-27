@@ -1,4 +1,5 @@
 using System.Reflection;
+using Zipper.Cli.Modules;
 
 namespace Zipper;
 
@@ -19,6 +20,12 @@ public static class Program
             var version = !string.IsNullOrEmpty(infoVer) ? infoVer : (fileVer ?? asmVer ?? "2.0.0");
             Console.WriteLine($"Zipper v{version} https://github.com/dwojtaszek/zipper/");
             return 0;
+        }
+
+        if (args.Length > 0 && string.Equals(args[0], "--zip-workload", StringComparison.OrdinalIgnoreCase))
+        {
+            return await RunWithCancellationAsync(
+                ct => PerformanceBenchmarkRunner.RunZipWorkloadAsync(args[1..], ct)).ConfigureAwait(false);
         }
 
         // ADR-0008 / REQ-208: the Archive Test workflow is a closed flag set, but
@@ -51,7 +58,7 @@ public static class Program
             return 0;
         }
 
-        var modules = Cli.Modules.CliModules.Create();
+        var modules = CliModules.Create();
         if (args.Length == 0)
         {
             Cli.HelpTextGenerator.Show();
@@ -63,6 +70,11 @@ public static class Program
             return 1;
         }
 
+        return await RunWithCancellationAsync(ct => RunGenerationCliAsync(modules, ct)).ConfigureAwait(false);
+    }
+
+    private static async Task<int> RunWithCancellationAsync(Func<CancellationToken, Task<int>> run)
+    {
         using var cts = new CancellationTokenSource();
         using var sigInt = System.Runtime.InteropServices.PosixSignalRegistration.Create(
             System.Runtime.InteropServices.PosixSignal.SIGINT,
@@ -79,12 +91,17 @@ public static class Program
                 cts.Cancel();
             });
 
+        return await run(cts.Token).ConfigureAwait(false);
+    }
+
+    private static async Task<int> RunGenerationCliAsync(CliModuleSet modules, CancellationToken cancellationToken)
+    {
         // ADR-0008: the Archive Test workflow short-circuits before comparison and
         // Pipeline.Build. Its closed flag set is enforced inside the workflow, so a
         // mixed comparison/generation invocation is rejected before anything writes.
         if (modules.ArchiveTest.IsRequested)
         {
-            return await ArchiveTests.ArchiveTestCliWorkflow.RunAsync(modules, cts.Token).ConfigureAwait(false);
+            return await ArchiveTests.ArchiveTestCliWorkflow.RunAsync(modules, cancellationToken).ConfigureAwait(false);
         }
 
         if (!modules.Comparison.TryBuild(out var comparison))
@@ -114,7 +131,7 @@ public static class Program
         }
 
         IGenerationMode mode = SelectMode(request);
-        return await GenerationRunner.RunAsync(mode, request, cts.Token).ConfigureAwait(false);
+        return await GenerationRunner.RunAsync(mode, request, cancellationToken).ConfigureAwait(false);
     }
 
     private static bool ContainsFlag(string[] args, params string[] flags) =>

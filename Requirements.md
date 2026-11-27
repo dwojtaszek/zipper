@@ -145,7 +145,7 @@ The application operates in three distinct generation modes:
 
 - `--type <pdf|jpg|tiff|eml|docx|xlsx>`: (Required unless `--loadfile-only`, `--production-set`, `--types`, `--input-csv`, `--directory-template`, `--compare-production-manifests`, or `--archive-test-suite`) The type of Native File to generate. Defaults to `pdf` when optional.
 - `--count <number>`: (Required unless `--input-csv`, `--directory-template`, `--compare-production-manifests`, or `--archive-test-suite`) The total number of Native Files to generate (`0` is allowed only with `--chaos-scenario adversarial-values`).
-- `--output-path <directory>`: (Required for generation and `--archive-test-suite`; unused by `--compare-production-manifests`, `--benchmark`, `--chaos-list`, and `--version`) The directory where the output Archive and Load File will be saved.
+- `--output-path <directory>`: (Required for generation and `--archive-test-suite`; unused by `--compare-production-manifests`, `--benchmark`, `--zip-workload`, `--chaos-list`, and `--version`) The directory where the output Archive and Load File will be saved.
 - `--folders <number>`: (Optional) The number of Folders to distribute Native Files into. Defaults to 1. Must be between 1 and 100.
 - `--encoding <UTF-8|UTF-16|ANSI>`: (Optional) The text encoding for the Load File. Defaults to UTF-8. `ANSI` corresponds to the Windows-1252 code page.
 - `--distribution <proportional|gaussian|exponential>`: (Optional) The distribution pattern for Native Files across Folders. Defaults to `proportional`.
@@ -749,6 +749,13 @@ This section clarifies behavior when multiple arguments interact:
 - **REQ-103**: When `--benchmark` is specified, the application shall run a built-in performance benchmark suite and exit, bypassing normal file generation.
 - **REQ-104**: The benchmark suite shall measure: parallel vs sequential generation throughput, memory pool effectiveness, scalability across file counts, and allocation overhead. The scalability verdict shall fail when the worst later-vs-prior-peak throughput ratio across strictly increasing file counts falls below 0.25; steps with non-positive, non-finite, or zero-duration measurements are invalid and fail.
 - **REQ-105**: Benchmark results shall be printed to stdout with pass/fail indicators, including the measured throughput ratio and threshold for the scalability verdict.
+
+The benchmark tooling also accepts standalone `--zip-workload <archive.zip> <seed> <count:bytes:pattern:method> [...]`.
+Groups specify positive counts, non-negative uncompressed byte lengths, `binary` or `repeat` payloads,
+and `store` or `deflate` compression (empty entries are Stored). The tool uses a fixed-size payload
+buffer, checked 64-bit totals, and consecutive flat entry names across groups. It publishes to a
+new Archive path in an existing directory and reports the recipe, seed, entry count, uncompressed
+byte count, and Archive size. The Archive Test workflow retains its own budgets.
 
 ---
 
