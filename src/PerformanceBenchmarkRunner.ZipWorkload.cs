@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO.Compression;
+using Zipper.Cli;
 using Zipper.Config;
 
 namespace Zipper;
@@ -13,13 +14,28 @@ public static partial class PerformanceBenchmarkRunner
 
     private sealed record WorkloadGroup(long Count, long Bytes, bool Repeated, CompressionLevel Compression);
 
-    internal static async Task<int> RunZipWorkloadAsync(string[] args, CancellationToken cancellationToken)
+    internal static Task<int> RunZipWorkloadAsync(string[] args, CancellationToken cancellationToken) =>
+        RunZipWorkloadAsync(args, cancellationToken, onStagingProgress: null);
+
+    internal static async Task<int> RunZipWorkloadAsync(
+        string[] args, CancellationToken cancellationToken, Action<string>? onStagingProgress)
     {
         try
         {
             if (args.Length < 3 || !int.TryParse(args[1], NumberStyles.None, CultureInfo.InvariantCulture, out int seed))
             {
                 throw new ArgumentException($"Expected {ZipWorkloadUsage}. Seed must be a non-negative 32-bit integer.");
+            }
+
+            if (string.IsNullOrWhiteSpace(args[0]))
+            {
+                throw new ArgumentException($"Invalid destination archive path '{ArgumentHelpers.SanitizeForEcho(args[0])}'.");
+            }
+
+            var path = Path.GetFullPath(args[0]);
+            if (string.IsNullOrEmpty(Path.GetFileName(path)))
+            {
+                throw new ArgumentException($"Invalid destination archive path '{ArgumentHelpers.SanitizeForEcho(args[0])}'.");
             }
 
             var groups = args.Skip(2).Select(ParseWorkloadGroup).ToArray();
@@ -32,7 +48,7 @@ public static partial class PerformanceBenchmarkRunner
             }
 
             var archiveBytes = await WriteZipWorkloadAsync(
-                Path.GetFullPath(args[0]), seed, groups, cancellationToken).ConfigureAwait(false);
+                path, seed, groups, cancellationToken, onStagingProgress);
 
             Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
                 $"ZIP workload seed={seed} recipe={string.Join(',', args.Skip(2))} entries={count} payloadBytes={bytes} archiveBytes={archiveBytes}"));
@@ -45,7 +61,7 @@ public static partial class PerformanceBenchmarkRunner
         }
         catch (Exception ex) when (ex is ArgumentException or OverflowException or IOException or UnauthorizedAccessException or NotSupportedException)
         {
-            Console.Error.WriteLine($"ZIP workload error: {ex.Message}");
+            Console.Error.WriteLine($"ZIP workload error: {ArgumentHelpers.SanitizeForEcho(ex.Message)}");
             return 1;
         }
     }
@@ -60,29 +76,31 @@ public static partial class PerformanceBenchmarkRunner
             || fields[2] is not ("binary" or "repeat")
             || fields[3] is not ("store" or "deflate"))
         {
-            throw new ArgumentException($"Invalid ZIP workload group '{recipe}'. Expected {ZipWorkloadUsage}.");
+            throw new ArgumentException($"Invalid ZIP workload group '{ArgumentHelpers.SanitizeForEcho(recipe)}'. Expected {ZipWorkloadUsage}.");
         }
 
         var method = fields[3] == "store" ? ZipCompressionMethod.Store : ZipCompressionMethod.Deflate;
         return new WorkloadGroup(count, bytes, fields[2] == "repeat", ZipArchiveSink.ResolveCompressionLevel(method));
     }
 
+    // ZipArchiveSink buffers whole files via ChannelReader<FileData> and writes Load Files,
+    // so workload generation streams directly through ZipArchive using a fixed 64 KiB buffer
+    // while reusing ZipArchiveSink.ResolveCompressionLevel and exclusive staging/publication.
     private static async Task<long> WriteZipWorkloadAsync(
-        string path, int seed, WorkloadGroup[] groups, CancellationToken cancellationToken)
+        string path, int seed, WorkloadGroup[] groups, CancellationToken cancellationToken, Action<string>? onStagingProgress = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (File.Exists(path) || Directory.Exists(path))
-        {
-            throw new IOException($"Destination '{path}' already exists.");
-        }
+        EnsureDestinationDoesNotExist(path);
 
-        var staging = Path.Combine(Path.GetDirectoryName(path)!, $".zip-workload-{Guid.NewGuid():N}.tmp");
-        var buffer = new byte[64 * 1024];
+        var parentDirectory = Path.GetDirectoryName(path)
+            ?? throw new ArgumentException($"Invalid destination archive path '{ArgumentHelpers.SanitizeForEcho(path)}'.");
+        var staging = Path.Combine(parentDirectory, $".zip-workload-{Guid.NewGuid():N}.tmp");
+        var buffer = new byte[PerformanceConstants.DefaultBufferSize];
         var random = new Random(seed);
         var stream = new FileStream(staging, FileMode.CreateNew, FileAccess.Write, FileShare.None, buffer.Length, useAsync: true);
         try
         {
-            await using (stream.ConfigureAwait(false))
+            await using (stream)
             {
                 using var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true);
                 long index = 0;
@@ -91,15 +109,18 @@ public static partial class PerformanceBenchmarkRunner
                     for (long member = 0; member < group.Count; member++)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
-                        var entry = archive.CreateEntry(checked(++index).ToString("D8", CultureInfo.InvariantCulture) + ".bin", group.Compression);
+                        var entryName = string.Create(CultureInfo.InvariantCulture, $"{checked(++index):D8}.bin");
+                        var entry = archive.CreateEntry(entryName, group.Compression);
                         entry.LastWriteTime = WorkloadTimestamp;
-                        await WriteWorkloadPayloadAsync(entry, group, random, buffer, cancellationToken).ConfigureAwait(false);
+                        await WriteWorkloadPayloadAsync(
+                            entry, group, random, buffer, staging, onStagingProgress, cancellationToken);
                     }
                 }
             }
 
             long archiveBytes = new FileInfo(staging).Length;
             cancellationToken.ThrowIfCancellationRequested();
+            EnsureDestinationDoesNotExist(path);
             File.Move(staging, path, overwrite: false);
             return archiveBytes;
         }
@@ -119,12 +140,19 @@ public static partial class PerformanceBenchmarkRunner
     }
 
     private static async Task WriteWorkloadPayloadAsync(
-        ZipArchiveEntry entry, WorkloadGroup group, Random random, byte[] buffer, CancellationToken cancellationToken)
+        ZipArchiveEntry entry,
+        WorkloadGroup group,
+        Random random,
+        byte[] buffer,
+        string staging,
+        Action<string>? onStagingProgress,
+        CancellationToken cancellationToken)
     {
         await using var payload = entry.Open();
         if (group.Repeated && group.Bytes > 0)
         {
-            buffer.AsSpan().Fill((byte)random.Next(256));
+            int fillLength = (int)Math.Min(group.Bytes, buffer.Length);
+            buffer.AsSpan(0, fillLength).Fill((byte)random.Next(256));
         }
 
         for (long remaining = group.Bytes; remaining > 0;)
@@ -136,8 +164,22 @@ public static partial class PerformanceBenchmarkRunner
                 random.NextBytes(buffer.AsSpan(0, size));
             }
 
-            await payload.WriteAsync(buffer.AsMemory(0, size), cancellationToken).ConfigureAwait(false);
+            await payload.WriteAsync(buffer.AsMemory(0, size), cancellationToken);
             remaining -= size;
+            onStagingProgress?.Invoke(staging);
+        }
+
+        if (group.Bytes == 0)
+        {
+            onStagingProgress?.Invoke(staging);
+        }
+    }
+
+    private static void EnsureDestinationDoesNotExist(string path)
+    {
+        if (File.Exists(path) || Directory.Exists(path) || new FileInfo(path).LinkTarget is not null)
+        {
+            throw new IOException($"Destination '{ArgumentHelpers.SanitizeForEcho(path)}' already exists.");
         }
     }
 }

@@ -80,4 +80,25 @@ internal static class ArgumentHelpers
             _ => null,
         };
     }
+
+    internal static string SanitizeForEcho(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return value ?? string.Empty;
+        }
+
+        if (!value.Any(char.IsControl))
+        {
+            return value;
+        }
+
+        return string.Create(value.Length, value, static (span, state) =>
+        {
+            for (int i = 0; i < state.Length; i++)
+            {
+                span[i] = char.IsControl(state[i]) ? '?' : state[i];
+            }
+        });
+    }
 }
