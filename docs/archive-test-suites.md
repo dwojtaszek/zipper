@@ -89,6 +89,24 @@ with ZipFile("valid-max-eocd-comment.zip", "w") as archive:
 
 The full Archive SHA-256 is `375c216e6e14e50b5905b87b905e1c9a470f77dadcdf4b44281ef8bf650a0969`. The payload SHA-256 is `b4b497d4a5a17c953cdf31226c8d28e330ad08b4250140dadd16088b7ed4d00f`.
 
+### Opaque nested ZIP deliveries
+
+Generate two compatibility fixtures with the same payloads and opposite entry order.
+
+```bash
+zipper --archive-test-suite compatibility --archive-test-cases nested-opaque-forward,nested-opaque-reversed --seed 42 --output-path ./opaque-nested
+```
+
+Both outer Archives contain exactly `inner.zip` and `zip-looking.bin`. The first member in the forward fixture reuses the bounded `inner.zip` payload from `nested-archives-depth-two`. The second starts with the ZIP local-header signature and holds ordinary bytes. A one-level extraction should yield exactly those two files with the raw SHA-256 digests in the Expectation Files. Each payload hash is identical across both orderings.
+
+For an e-discovery delivery with ZIP-based Office Native Files, use Standard mode.
+
+```bash
+zipper --types docx:1,xlsx:1 --count 2 --folders 1 --seed 42 --output-path ./opaque-office
+```
+
+The Standard Archive contains `folder_001/00000001.docx` and `folder_001/00000002.xlsx` as complete Office packages. A one-level extraction yields the two Native Files.
+
 ## Limits (v1 budgets)
 
 | Budget | Value |

@@ -1,9 +1,11 @@
 using System.IO.Compression;
 using System.Security.Cryptography;
+using System.Text.Json;
 using Xunit;
 using Xunit.Abstractions;
 using Zipper.LoadFiles;
 using Zipper.Tests.TestHelpers;
+using IndependentZipFile = ICSharpCode.SharpZipLib.Zip.ZipFile;
 
 namespace Zipper.Tests;
 
@@ -26,6 +28,98 @@ public class EdiscoveryDeliveryZipRoundTripTests : WorkingDirectoryTestBase
     private static bool ScaleRecipesEnabled =>
         string.Equals(Environment.GetEnvironmentVariable("ZIPPER_SCALE_RECIPES"), "1", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(Environment.GetEnvironmentVariable("ZIPPER_SCALE_RECIPES"), "true", StringComparison.OrdinalIgnoreCase);
+
+    [Fact]
+    public async Task NestedArchiveDeliveries_PreserveOpaquePayloadsInBothOrders()
+    {
+        var destination = Path.Combine(this.TempDir, "nested");
+        await RunDeliveryAsync(
+            "--archive-test-suite", "compatibility",
+            "--archive-test-cases", "nested-archives-depth-two,nested-opaque-forward,nested-opaque-reversed",
+            "--seed", "42", "--output-path", destination);
+
+        var archives = Directory.GetFiles(destination, "*.json").ToDictionary(path =>
+        {
+            using var json = JsonDocument.Parse(File.ReadAllBytes(path));
+            return json.RootElement.GetProperty("caseKey").GetString()!;
+        }, path => Path.ChangeExtension(path, ".zip"), StringComparer.Ordinal);
+
+        using var control = new IndependentZipFile(archives["nested-archives-depth-two"]);
+        using var inner = control.GetInputStream(control.GetEntry("inner.zip"));
+        var expected = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["inner.zip"] = Convert.ToHexString(SHA256.HashData(inner)),
+            ["zip-looking.bin"] = Convert.ToHexString(SHA256.HashData("PK\u0003\u0004ordinary bytes"u8)),
+        };
+
+        VerifyOpaqueDelivery(archives["nested-opaque-forward"], "forward", ["inner.zip", "zip-looking.bin"], expected);
+        VerifyOpaqueDelivery(archives["nested-opaque-reversed"], "reversed", ["zip-looking.bin", "inner.zip"], expected);
+    }
+
+    [Fact]
+    public async Task StandardArchive_PreservesOfficeNativeFilesAsOpaquePayloads()
+    {
+        var destination = Path.Combine(this.TempDir, "office");
+        Directory.CreateDirectory(destination);
+        string[] args = ["--types", "docx:1,xlsx:1", "--count", "2", "--folders", "1",
+            "--seed", "42", "--output-path", destination];
+        await RunDeliveryAsync(args);
+
+        var request = Cli.Pipeline.Build(args)!;
+        var generators = FileGeneratorFactory.CreateMap(request);
+        var expected = new Dictionary<string, string>(StringComparer.Ordinal);
+        string[] members = ["folder_001/00000001.docx", "folder_001/00000002.xlsx"];
+        for (var index = 0; index < members.Length; index++)
+        {
+            var member = members[index];
+            var fileType = Path.GetExtension(member)[1..];
+            var workItem = new FileWorkItem
+            {
+                Index = index + 1,
+                FolderNumber = 1,
+                FolderName = "folder_001",
+                FileName = Path.GetFileName(member),
+                FilePathInZip = member,
+                FileType = fileType,
+            };
+            var native = generators[fileType].Generate(workItem, request).Content;
+            using var package = new ZipArchive(new MemoryStream(native));
+            Assert.NotNull(package.GetEntry(fileType == "docx" ? "word/document.xml" : "xl/workbook.xml"));
+            expected.Add(member, Convert.ToHexString(SHA256.HashData(native)));
+        }
+
+        VerifyOpaqueDelivery(Assert.Single(Directory.GetFiles(destination, "*.zip")), "office-extracted", members, expected, checkOrder: false);
+    }
+
+    private static async Task RunDeliveryAsync(params string[] args)
+    {
+        var (exitCode, stdout, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => Program.Main(args));
+        Assert.True(exitCode == 0, $"Program.Main failed with exit code {exitCode}. Stderr: {stderr}, Stdout: {stdout}");
+    }
+
+    private void VerifyOpaqueDelivery(
+        string zipPath, string directoryName, string[] members, Dictionary<string, string> expected, bool checkOrder = true)
+    {
+        using var archive = new IndependentZipFile(zipPath);
+        var entries = archive.Cast<ICSharpCode.SharpZipLib.Zip.ZipEntry>().ToArray();
+        var names = entries.Select(entry => entry.Name);
+        Assert.Equal(checkOrder ? members : members.Order(StringComparer.Ordinal), checkOrder ? names : names.Order(StringComparer.Ordinal));
+
+        var extracted = Path.Combine(this.TempDir, directoryName);
+        ZipFile.ExtractToDirectory(zipPath, extracted);
+        Assert.Equal(members.Order(StringComparer.Ordinal), Directory.GetFiles(extracted, "*", SearchOption.AllDirectories)
+            .Select(path => Path.GetRelativePath(extracted, path).Replace('\\', '/')).Order(StringComparer.Ordinal));
+
+        foreach (var entry in entries)
+        {
+            using var stream = archive.GetInputStream(entry);
+            var hash = Convert.ToHexString(SHA256.HashData(stream));
+            using var disk = File.OpenRead(Path.Combine(extracted, entry.Name));
+            Assert.Equal(expected[entry.Name], hash);
+            Assert.Equal(hash, Convert.ToHexString(SHA256.HashData(disk)));
+            this.output.WriteLine($"{Path.GetFileName(zipPath)} [{entry.ZipFileIndex}] {entry.Name} {entry.Size} bytes SHA-256 {hash}");
+        }
+    }
 
     [Fact]
     public async Task StandardRecipe_GeneratorDeterminism_ProducesIdenticalBytesAcrossFreshInstances()

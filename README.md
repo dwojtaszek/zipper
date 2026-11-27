@@ -131,6 +131,12 @@ Generate the ZIP producer compatibility controls at Seed 42 to compare seekable 
 zipper --archive-test-suite compatibility --archive-test-cases valid-max-eocd-comment,valid-directory-attributes,valid-extra-field,valid-descriptor-signature,valid-descriptor-no-signature --seed 42 --output-path ./zip-producer-controls
 ```
 
+Generate the same bounded nested ZIP payload and ZIP-looking bytes in opposite outer entry orders. See the [opaque delivery recipes](docs/archive-test-suites.md#opaque-nested-zip-deliveries) for these controls and a Standard Archive with DOCX and XLSX Native Files.
+
+```bash
+zipper --archive-test-suite compatibility --archive-test-cases nested-opaque-forward,nested-opaque-reversed --seed 42 --output-path ./opaque-nested
+```
+
 Expectation Files can declare Adapter Checks for named Reader Adapter Profiles. The E2E matrix requires Python `zipfile` and the .NET reference reader, compares Info-ZIP `unzip` when available, runs declared optional checks, and prints per-fixture agreement or splits; missing optional readers and platform-inapplicable Archive Test Fixtures are reported as skips. See [Archive Test Suites](docs/archive-test-suites.md).
 To generate the malformed `stored-payload-bitflip` Archive Test Fixture on its own:
 ```bash
