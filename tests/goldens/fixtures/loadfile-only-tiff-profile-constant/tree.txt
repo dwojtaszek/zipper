@@ -1,3 +1,4 @@
 ./loadfile.dat
 ./loadfile.opt
+./loadfile.opt_properties.json
 ./loadfile_properties.json

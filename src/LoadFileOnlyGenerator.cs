@@ -154,25 +154,15 @@ internal static class LoadFileOnlyGenerator
                     : Array.Empty<FileData>();
             var writerMode = sourceDriven ? WriterMode.Standard : WriterMode.LoadfileOnly;
 
-            ChaosEngine? chaosEngine = LoadFileAuditWriter.BuildChaosEngine(formatRequest, records, format);
-
-            ILoadFileWriter writer = createWriter(format, writerMode);
-
-            var fileStream = new FileStream(loadFilePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
-            createdFiles.Add(loadFilePath);
-            await using (fileStream.ConfigureAwait(false))
-            {
-                await writer.WriteAsync(fileStream, formatRequest, records, chaosEngine, cancellationToken).ConfigureAwait(false);
-            }
-
-            string propertiesPath = await LoadFileAuditWriter.WriteAsync(
-                loadFilePath,
-                formatRequest,
-                records,
-                chaosEngine?.Anomalies,
-                format).ConfigureAwait(false);
-            createdFiles.Add(propertiesPath);
-            AddExpectationSidecar(propertiesPath, createdFiles);
+            string propertiesBase = formatsToGenerate.Count == 1 || format is LoadFileFormat.Dat or LoadFileFormat.Concordance
+                ? Path.ChangeExtension(loadFilePath, null)
+                : loadFilePath;
+            string propertiesPath = propertiesBase + "_properties.json";
+            await LoadFileOrchestrator.EmitAllAsync(
+                formatRequest, records, [format], writerMode,
+                (_, _) => (loadFilePath, propertiesPath), OpenTarget, cancellationToken,
+                chaosEngineFactory: LoadFileAuditWriter.BuildChaosEngine,
+                writerFactory: createWriter).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
 
             if (format == formatsToGenerate[0] || string.IsNullOrEmpty(primaryLoadFilePath))
@@ -185,6 +175,13 @@ internal static class LoadFileOnlyGenerator
         }
 
         return (primaryLoadFilePath, primaryPropertiesPath, totalRecords);
+
+        Stream OpenTarget(string path)
+        {
+            var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, true);
+            createdFiles.Add(path);
+            return stream;
+        }
     }
 
     private static async Task<(string LoadFilePath, string PropertiesFilePath, long TotalRecords)> GenerateCrossFormatLoadFilesAsync(
@@ -224,15 +221,6 @@ internal static class LoadFileOnlyGenerator
         }
 
         return (datPath, datPropertiesPath, result.DatLines.Count - 1L);
-    }
-
-    private static void AddExpectationSidecar(string propertiesPath, List<string> createdFiles)
-    {
-        var sidecarPath = LoadFileAuditWriter.ExpectationSidecarPath(propertiesPath);
-        if (File.Exists(sidecarPath))
-        {
-            createdFiles.Add(sidecarPath);
-        }
     }
 
     /// <summary>

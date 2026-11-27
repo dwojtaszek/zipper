@@ -49,6 +49,44 @@ public class LoadFileOnlyGeneratorTests : IDisposable
         };
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GenerateAsync_MultipleFormats_WritesOneAuditPerLoadFile(bool withChaos)
+    {
+        var request = this.CreateRequest();
+        request.LoadFile = request.LoadFile with { Formats = [LoadFileFormat.Dat, LoadFileFormat.Opt, LoadFileFormat.Csv, LoadFileFormat.Concordance] };
+        request.Chaos = request.Chaos with { ChaosMode = withChaos, ChaosScenario = withChaos ? "full-chaos" : null, ChaosAmount = "1" };
+
+        var result = await LoadFileOnlyGenerator.GenerateAsync(request);
+
+        var baseName = Path.ChangeExtension(result.LoadFilePath, null);
+        Assert.Equal(baseName + "_properties.json", result.PropertiesFilePath);
+        Assert.Equal(4, Directory.GetFiles(this.tempDir, "*_properties.json").Length);
+        foreach (var (extension, auditSuffix, formatName) in new[]
+        {
+            (".dat", "", "DAT (Metadata)"),
+            (".opt", ".opt", "OPT (Image)"),
+            (".csv", ".csv", "CSV (Metadata)"),
+            (".concordance.dat", ".concordance", "Concordance (Metadata)")
+        })
+        {
+            var loadFilePath = baseName + extension;
+            Assert.True(File.Exists(loadFilePath));
+            using var audit = JsonDocument.Parse(await File.ReadAllTextAsync(baseName + auditSuffix + "_properties.json"));
+            Assert.Equal(Path.GetFileName(loadFilePath), audit.RootElement.GetProperty("fileName").GetString());
+            Assert.Equal(formatName, audit.RootElement.GetProperty("format").GetString());
+
+            var sidecar = baseName + auditSuffix + "_chaos_expectations.json";
+            Assert.Equal(withChaos, File.Exists(sidecar));
+            if (withChaos)
+            {
+                using var expectation = JsonDocument.Parse(await File.ReadAllTextAsync(sidecar));
+                Assert.Equal(Path.GetFileName(loadFilePath), expectation.RootElement.GetProperty("loadFile").GetString());
+            }
+        }
+    }
+
     [Fact]
     public async Task GenerateAsync_Dat_CreatesLoadFileWithCorrectLineCount()
     {

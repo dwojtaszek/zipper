@@ -60,8 +60,8 @@ graph TD
 
     LoadFileOnlyMode --> LOG["LoadFileOnlyGenerator"]
     LOG -->|"optional"| Chaos["ChaosEngine (Floyd's algorithm)"]
-    LOG --> LF2["Load Files + Audit Files<br/>(+ _chaos_expectations.json when Anomalies are injected)"]
-    LOG -->|"coordinated DAT/OPT"| LFO
+    LFO --> LF2["Load Files + Audit Files<br/>(+ _chaos_expectations.json when Anomalies are injected)"]
+    LOG -->|"ordinary or coordinated DAT/OPT"| LFO
 
     ProductionSetMode --> PSG["ProductionSetGenerator (thin facade)"]
     PSG --> PSO["ProductionSetOrchestrator"]
@@ -201,7 +201,7 @@ An advisory Jev architecture seam lint (`tools/typesafe-audit/checks/architectur
 
 ## Load File Composition Seam
 
-The four delimited formats (DAT, OPT, CSV, Concordance) are produced by three deep modules; EDRM-XML is the carve-out. `LoadFileOrchestrator` owns format dispatch for Standard and Production Set output and coordinated DAT/OPT emission in Loadfile-Only Mode — for each requested format it creates the writer, opens the output stream (ZIP entry or disk file), writes, and emits the Audit File. `ZipArchiveSink` (Standard mode) and `ProductionSetOrchestrator` (Production Set mode) delegate to it. Loadfile-Only Mode keeps its own loop for per-format chaos; coordinated DAT/OPT scenarios delegate to `LoadFileOrchestrator`, which uses `CrossFormatLoadFileRenderer` and passes final rendered lines to `LoadFileEmitter` for output. `LoadFileAuditWriter` owns Audit File and optional Chaos Expectation Sidecar emission through caller-supplied stream targets. See the [Architecture Invariants](#architecture-invariants-human-approval-required) — the composer/serializer/emitter shape must not be collapsed back into fat writers without human approval.
+The four delimited formats (DAT, OPT, CSV, Concordance) are produced by three deep modules; EDRM-XML is the carve-out. `LoadFileOrchestrator` owns format dispatch for Standard, Production Set, and Loadfile-Only output — for each requested format it creates the writer, opens the output stream (ZIP entry or disk file), writes, and emits the Audit File. `ZipArchiveSink` (Standard mode) and `ProductionSetOrchestrator` (Production Set mode) delegate to it. Loadfile-Only Mode supplies each format’s request, record shape, and target paths. For coordinated DAT/OPT scenarios, the orchestrator uses `CrossFormatLoadFileRenderer` and passes final rendered lines to `LoadFileEmitter` for output. `LoadFileAuditWriter` owns Audit File and optional Chaos Expectation Sidecar emission through caller-supplied stream targets. See the [Architecture Invariants](#architecture-invariants-human-approval-required) — the composer/serializer/emitter shape must not be collapsed back into fat writers without human approval.
 
 - **Composer** (`ILoadFileComposer`) — column authority: header columns + lazy `LoadFileRecord`s with raw values held as parallel arrays aligned by index (handles modes + column profiles internally).
 - **Serializer** (`ILoadFileSerializer`) — render authority: record/header → one escaped line. Pure (no stream, EOL, or chaos).

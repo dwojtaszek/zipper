@@ -1,13 +1,13 @@
 namespace Zipper.LoadFiles;
 
 /// <summary>
-/// Single owner of Load File format dispatch for Standard and Production Set modes: for
+/// Single owner of Load File format dispatch for Standard, Production Set, and Loadfile-Only modes: for
 /// every requested format it creates the writer, opens the output stream, writes the Load
 /// File, then emits the Audit File. ZipArchiveSink (entries inside the ZIP or next to it)
 /// and ProductionSetOrchestrator (files on disk) both delegate here so "which formats to write
 /// and how to invoke writers" has exactly one code path, preserving the
-/// composer → serializer → emitter seam behind ILoadFileWriter. Loadfile-Only Mode keeps
-/// its own loop for per-format chaos; coordinated DAT/OPT emission is shared here through
+/// composer → serializer → emitter seam behind ILoadFileWriter. Loadfile-Only Mode supplies
+/// its format-specific requests and records. Coordinated DAT/OPT emission is shared through
 /// <see cref="EmitCrossFormatAsync"/>.
 /// </summary>
 internal static class LoadFileOrchestrator
@@ -25,6 +25,7 @@ internal static class LoadFileOrchestrator
     /// <param name="anomalies">Pre-built anomalies list for the Audit File (used when chaos ran outside this loop, e.g. native-file anomalies).</param>
     /// <param name="chaosEngineFactory">Optional per-format chaos engine factory. When non-null, the engine is built per format and passed to the writer; its anomalies are forwarded to the Audit File emission. Mutually exclusive with <paramref name="anomalies"/>.</param>
     /// <param name="perFormatTransform">Optional per-format request transform (e.g. stable OPT page counts). Applied before writing each format.</param>
+    /// <param name="writerFactory">Optional writer factory for callers that supply a specialized writer.</param>
     /// <returns>The target of the last emitted Load File.</returns>
     public static async Task<string> EmitAllAsync(
         FileGenerationRequest request,
@@ -36,7 +37,8 @@ internal static class LoadFileOrchestrator
         CancellationToken cancellationToken = default,
         System.Collections.Generic.IReadOnlyList<ChaosAnomaly>? anomalies = null,
         Func<FileGenerationRequest, IReadOnlyList<FileData>, LoadFileFormat, ChaosEngine?>? chaosEngineFactory = null,
-        Func<FileGenerationRequest, LoadFileFormat, FileGenerationRequest>? perFormatTransform = null)
+        Func<FileGenerationRequest, LoadFileFormat, FileGenerationRequest>? perFormatTransform = null,
+        Func<LoadFileFormat, WriterMode, ILoadFileWriter>? writerFactory = null)
     {
         string lastLoadFileTarget = string.Empty;
 
@@ -46,7 +48,7 @@ internal static class LoadFileOrchestrator
                 ? perFormatTransform(request, format)
                 : request;
 
-            var writer = LoadFileWriterFactory.CreateWriter(format, mode);
+            var writer = writerFactory is null ? LoadFileWriterFactory.CreateWriter(format, mode) : writerFactory(format, mode);
             var (loadFileTarget, auditTarget) = getTargets(format, writer);
 
             ChaosEngine? chaosEngine = chaosEngineFactory?.Invoke(formatRequest, processedFiles, format);

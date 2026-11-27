@@ -4,7 +4,7 @@
   "totalRecords": 500,
   "properties": {
     "encoding": "UTF-8",
-    "lineEnding": "CRLF",
+    "lineEnding": "LF",
     "delimiters": {
       "column": "ascii:20",
       "quote": "ascii:254",
