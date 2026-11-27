@@ -1967,6 +1967,24 @@ def _report_missing_configured_models(missing: list[tuple[str, str]]) -> None:
     )
 
 
+def _healthy_model_candidates(name, module, prefs, known_models, probe_candidates):
+    candidates = []
+    for model in known_models:
+        if is_model_exhausted(name, model):
+            print(f"[select] {name}/{model}: already marked exhausted, skipping")
+            continue
+        prio, _ = get_model_priority(prefs, name, model)
+        if prio == 0:
+            print(f"[select] {name}/{model}: priority 0 (or not in prefs), skipping")
+            continue
+        if probe_candidates and not module.check_token_health(model=model):
+            print(f"[select] {name}/{model}: unhealthy, skipping")
+            continue
+        candidates.append((prio, name, model))
+        print(f"[select] {name}/{model}: priority {prio}, queued")
+    return candidates
+
+
 def probe_and_select_agents() -> list[tuple[str, str | None]]:
     """Probes all plugins and returns sorted list of healthy (agent, model) candidates.
 
@@ -2028,19 +2046,7 @@ def probe_and_select_agents() -> list[tuple[str, str | None]]:
                     if not any(_model_key(m).split("/")[-1] == pref_suffix for m in known_models):
                         known_models.append(pref_model)
 
-        for model in known_models:
-            if is_model_exhausted(name, model):
-                print(f"[select] {name}/{model}: already marked exhausted, skipping")
-                continue
-            prio, _ = get_model_priority(prefs, name, model)
-            if prio == 0:
-                print(f"[select] {name}/{model}: priority 0 (or not in prefs), skipping")
-                continue
-            if probe_candidates and not module.check_token_health(model=model):
-                print(f"[select] {name}/{model}: unhealthy, skipping")
-                continue
-            candidates.append((prio, name, model))
-            print(f"[select] {name}/{model}: priority {prio}, queued")
+        candidates.extend(_healthy_model_candidates(name, module, prefs, known_models, probe_candidates))
 
     _report_missing_configured_models(missing_configured)
 

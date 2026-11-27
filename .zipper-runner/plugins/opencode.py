@@ -410,6 +410,10 @@ def _invoke_opencode(cmd: list[str], abs_cwd: str) -> tuple[int, str, str]:
         return -1, "", str(e)
 
 
+def _mission_model(model: str | None) -> str:
+    return model if model and model != "default" else DEFAULT_MODEL
+
+
 def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | None = None) -> tuple[int, str, str]:
     """
     Runs a coding mission non-interactively using opencode.
@@ -423,7 +427,7 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
     Returns:
         (exit_code, stdout, stderr)
     """
-    model = model if model and model != "default" else DEFAULT_MODEL
+    model = _mission_model(model)
     abs_cwd = os.path.abspath(cwd)
     session_id = _find_latest_session_for_cwd(abs_cwd) if is_continue else None
     if is_continue:
