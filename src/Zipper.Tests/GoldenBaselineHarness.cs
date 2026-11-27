@@ -58,6 +58,41 @@ public static class GoldenBaselineHarness
         return GenerateManifestCore(rootDir, normalizeTimestamps: false);
     }
 
+    /// <summary>
+    /// Generates a deterministic SHA-256 manifest for every entry in <paramref name="archivePath"/>,
+    /// normalizing transient timestamp and wall-clock execution values in JSON artifacts in memory
+    /// before hashing. The archive itself is not modified.
+    /// </summary>
+    /// <param name="archivePath">The path to an archive file (.zip, .docx, .xlsx).</param>
+    /// <returns>A manifest string of <c>sha256  archive-file-name::entry-name</c> lines, path-sorted.</returns>
+    /// <exception cref="InvalidDataException">The file is not a readable archive.</exception>
+    public static string GenerateTimestampNormalizedSha256ManifestForArchive(string archivePath)
+    {
+        return GenerateManifestCoreForArchive(archivePath, normalizeTimestamps: true);
+    }
+
+    /// <summary>
+    /// Generates a raw SHA-256 manifest for every entry in <paramref name="archivePath"/>
+    /// without normalizing timestamps or transient fields.
+    /// </summary>
+    /// <param name="archivePath">The path to an archive file (.zip, .docx, .xlsx).</param>
+    /// <returns>A manifest string of <c>sha256  archive-file-name::entry-name</c> lines, path-sorted.</returns>
+    /// <exception cref="InvalidDataException">The file is not a readable archive.</exception>
+    public static string GenerateRawSha256ManifestForArchive(string archivePath)
+    {
+        return GenerateManifestCoreForArchive(archivePath, normalizeTimestamps: false);
+    }
+
+    private static string GenerateManifestCoreForArchive(string archivePath, bool normalizeTimestamps)
+    {
+        ArgumentNullException.ThrowIfNull(archivePath);
+        var entries = new List<(string Key, string Line)>();
+        var relPath = Path.GetFileName(archivePath);
+        CollectArchiveEntries(archivePath, relPath, normalizeTimestamps, entries, allowWholeFileFallback: false);
+        entries.Sort((a, b) => StringComparer.Ordinal.Compare(a.Key, b.Key));
+        return string.Join('\n', entries.Select(e => e.Line));
+    }
+
     private static string GenerateManifestCore(string rootDir, bool normalizeTimestamps)
     {
         ArgumentNullException.ThrowIfNull(rootDir);
@@ -89,7 +124,8 @@ public static class GoldenBaselineHarness
     {
         using var stream = File.OpenRead(fullPath);
         var hashHex = ComputeHash(relPath, stream, normalizeTimestamps);
-        entries.Add((relPath, $"{hashHex}  {relPath}"));
+        var manifestKey = EscapeManifestKeyPart(relPath);
+        entries.Add((manifestKey, $"{hashHex}  {manifestKey}"));
     }
 
     private static string NormalizeRelativePath(string rootDir, string fullPath)
@@ -97,6 +133,18 @@ public static class GoldenBaselineHarness
         var relPath = Path.GetRelativePath(rootDir, fullPath).Replace('\\', '/');
         return relPath.StartsWith("./", StringComparison.Ordinal) ? relPath[2..] : relPath;
     }
+
+    private static bool ContainsLineBreak(string value) => value.Contains('\r') || value.Contains('\n');
+
+    /// <summary>
+    /// Escapes characters that would break the <c>sha256  key</c> line format or make
+    /// <c>archive-name::member-name</c> component boundaries ambiguous.
+    /// </summary>
+    internal static string EscapeManifestKeyPart(string value) =>
+        value.Replace("\\", "\\\\", StringComparison.Ordinal)
+             .Replace(":", "\\:", StringComparison.Ordinal)
+             .Replace("\r", "\\r", StringComparison.Ordinal)
+             .Replace("\n", "\\n", StringComparison.Ordinal);
 
     private static bool IsArchive(string fullPath)
     {
@@ -110,42 +158,73 @@ public static class GoldenBaselineHarness
         string fullPath,
         string relPath,
         bool normalizeTimestamps,
-        List<(string Key, string Line)> entries)
+        List<(string Key, string Line)> entries,
+        bool allowWholeFileFallback = true)
     {
         try
         {
+            if (!allowWholeFileFallback && ContainsLineBreak(relPath))
+            {
+                throw new InvalidDataException($"Archive name '{relPath}' contains an unsupported newline character.");
+            }
+
+            var keyPrefix = EscapeManifestKeyPart(relPath);
             var archiveEntries = new List<(string Key, string Line)>();
             using var fileStream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             using var zip = new ZipArchive(fileStream, ZipArchiveMode.Read);
             foreach (var entry in zip.Entries.OrderBy(e => e.FullName, StringComparer.Ordinal))
             {
+                if (!allowWholeFileFallback && ContainsLineBreak(entry.FullName))
+                {
+                    throw new InvalidDataException($"Archive entry name '{entry.FullName}' contains an unsupported newline character.");
+                }
+
+                var entryKeyPart = EscapeManifestKeyPart(entry.FullName);
                 if (entry.FullName.EndsWith('/'))
                 {
-                    if (normalizeTimestamps)
+                    if (!allowWholeFileFallback)
                     {
-                        // Directories have no content bytes to hash; canonicalize by
+                        // Do not trust the declared length: inspect decompressed data independently
+                        // through SharpZipLib so that directory entries that conceal payload bytes
+                        // are rejected even if uncompressed size is declared 0 under Deflate or Store.
+                        using var sharpZip = new ICSharpCode.SharpZipLib.Zip.ZipFile(fullPath);
+                        var szEntry = sharpZip.GetEntry(entry.FullName);
+                        if (szEntry is not null)
+                        {
+                            using var szStream = sharpZip.GetInputStream(szEntry);
+                            if (szEntry.Size > 0 || szStream.ReadByte() != -1)
+                            {
+                                throw new InvalidDataException($"Archive directory entry '{entry.FullName}' unexpectedly contains content bytes.");
+                            }
+                        }
+                    }
+
+                    if (normalizeTimestamps && entry.Length == 0)
+                    {
+                        // Empty directories have no content bytes to hash; canonicalize by
                         // relative-path-in-archive and full directory name to keep parity stable.
-                        var dirKey = $"{relPath}::{entry.FullName}";
-                        var payload = Encoding.UTF8.GetBytes($"{relPath}\n{entry.FullName}");
+                        var dirKey = $"{keyPrefix}::{entryKeyPart}";
+                        var payload = Encoding.UTF8.GetBytes($"{keyPrefix}\n{entryKeyPart}");
                         archiveEntries.Add((dirKey, $"{HashBytes(payload)}  {dirKey}"));
+                        continue;
                     }
-                    else
-                    {
-                        var dirKey = $"{relPath}::{entry.FullName}";
-                        var payload = Encoding.UTF8.GetBytes($"{relPath}\n{entry.FullName}\nraw");
-                        archiveEntries.Add((dirKey, $"{HashBytes(payload)}  {dirKey}"));
-                    }
-                    continue;
                 }
 
                 using var entryStream = entry.Open();
                 var hashHex = ComputeHash(entry.FullName, entryStream, normalizeTimestamps);
-                var entryKey = $"{relPath}::{entry.FullName}";
+                var entryKey = $"{keyPrefix}::{entryKeyPart}";
                 archiveEntries.Add((entryKey, $"{hashHex}  {entryKey}"));
             }
 
             if (archiveEntries.Count == 0)
             {
+                // The direct archive APIs promise one line per actual entry, so an empty
+                // archive has an empty manifest rather than a synthetic whole-file marker.
+                if (!allowWholeFileFallback)
+                {
+                    return;
+                }
+
                 // A directory-only archive has no file entries to hash and its raw bytes
                 // embed per-entry LastWriteTime (ZipArchive.CreateEntry stamps the current
                 // time with 2-second DOS granularity), which would break timestamp
@@ -154,15 +233,15 @@ public static class GoldenBaselineHarness
                 // directory name set; raw mode keeps hashing the bytes as-is.
                 if (normalizeTimestamps)
                 {
-                    var directoryNames = string.Join('\n', zip.Entries.Select(static e => e.FullName).OrderBy(static n => n, StringComparer.Ordinal));
-                    var payload = Encoding.UTF8.GetBytes($"{relPath}\n{directoryNames}");
-                    entries.Add((relPath, $"{HashBytes(payload)}  {relPath}"));
+                    var directoryNames = string.Join('\n', zip.Entries.Select(e => EscapeManifestKeyPart(e.FullName)).OrderBy(static n => n, StringComparer.Ordinal));
+                    var payload = Encoding.UTF8.GetBytes($"{keyPrefix}\n{directoryNames}");
+                    entries.Add((keyPrefix, $"{HashBytes(payload)}  {keyPrefix}"));
                 }
                 else
                 {
                     using var fs = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                     var hashHex = ComputeHash(relPath, fs, normalizeTimestamps: false);
-                    entries.Add((relPath, $"{hashHex}  {relPath}"));
+                    entries.Add((keyPrefix, $"{hashHex}  {keyPrefix}"));
                 }
             }
             else
@@ -172,6 +251,11 @@ public static class GoldenBaselineHarness
         }
         catch (Exception ex) when (ex is InvalidDataException or NotSupportedException)
         {
+            if (!allowWholeFileFallback)
+            {
+                throw;
+            }
+
             AddFileEntry(fullPath, relPath, normalizeTimestamps, entries);
         }
     }

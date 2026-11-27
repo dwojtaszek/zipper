@@ -95,10 +95,11 @@ internal class ChaosEngine
         long targetableLines = GetTargetableLines(totalLines, this.onlyOptEncoding, this.onlyCsvBom, this.hasDatRecordOnlyTypes);
         this.sampler = new ChaosSampler(targetableLines, chaosAmount, random);
 
-        // If quote-delim is "none", disable the quotes chaos type
+        // If quote-delim is "none", disable quote-dropping chaos types
         if (string.IsNullOrEmpty(quoteDelimiter))
         {
             this.enabledTypes.Remove("quotes");
+            this.enabledTypes.Remove("concordance-quote-escape");
         }
 
         // Initialize Applier
@@ -274,7 +275,7 @@ internal class ChaosEngine
         if (format == LoadFileFormat.Concordance)
         {
             char fieldDelim = string.IsNullOrEmpty(columnDelimiter) ? '\u0014' : columnDelimiter[0];
-            char quoteDelim = string.IsNullOrEmpty(quoteDelimiter) ? '\u00fe' : quoteDelimiter[0];
+            char? quoteDelim = string.IsNullOrEmpty(quoteDelimiter) ? null : quoteDelimiter[0];
             return new ConcordanceAnomalyApplier(random, fieldDelim, quoteDelim);
         }
 

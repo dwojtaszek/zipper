@@ -402,13 +402,13 @@ Based on the above research, the following requirements apply to the Zipper Load
 - **REQ-052**: EDRM-XML format shall generate well-formed XML conforming to EDRM schema version 1.2.
 - **REQ-053**: **DEPRECATED** — Original requirement for CSV delimiter customization. Superseded by REQ-124.
 - **REQ-054**: **DEPRECATED** — Original requirement for OPT encoding override. Superseded by REQ-059.
-- **REQ-101**: `edrm-xml` and `xml` shall be treated as aliases: `xml` maps to the same EDRM XML v1.2 output as `edrm-xml`. `concordance` is NOT an alias of `dat`; it is a distinct format with its own writer producing fully quote-wrapped, ASCII 20-delimited database-import output with a different column set (see Section 8.7).
+- **REQ-101**: `edrm-xml` and `xml` shall be treated as aliases: `xml` maps to the same EDRM XML v1.2 output as `edrm-xml`. `concordance` is NOT an alias of `dat`; it is a distinct format with its own writer producing database-import output with a different column set. It defaults to fully quote-wrapped fields and ASCII 20 delimiters (see Section 8.7).
 - **REQ-124**: The `csv` format shall respect the `--encoding` argument for its output encoding, defaulting to UTF-8.
 
 #### FR-011: Multi-Format Output
 
 - **REQ-055**: A new argument `--load-file-formats <format1,format2,...>` (plural) shall allow generating multiple Load File formats simultaneously.
-- **REQ-056**: When `--load-file-formats` is specified, all requested formats shall be generated to the output directory.
+- **REQ-056**: When `--load-file-formats` is specified, all distinct requested formats shall be generated to the output directory, or into the Archive when `--include-load-file` is enabled in Standard Mode. In Standard Mode, when both DAT and Concordance are selected, Concordance uses `.concordance.dat`.
 
 #### FR-012: OPT File Generation
 
@@ -533,18 +533,18 @@ Based on the above research, the following requirements apply to the Zipper Load
   - Column delimiter: ASCII 20 (Concordance standard)
   - Quote delimiter: ASCII 254 (Concordance standard)
   - Newline delimiter: ASCII 174 (Concordance standard)
-- **REQ-086**: The application shall replace any newline characters (`\n`, `\r`, `\r\n`) within field values with the configured newline delimiter character to prevent Load File corruption in DAT format (`dat`). In Concordance format (`concordance`), fields are fully quote-wrapped and embedded newlines (`\r`, `\n`, `\r\n`) are preserved intact within field values without newline replacement.
+- **REQ-086**: The application shall replace any newline characters (`\n`, `\r`, `\r\n`) within field values with the configured newline delimiter character to prevent Load File corruption in DAT format (`dat`). In Concordance format (`concordance`), fields are fully quote-wrapped by default and embedded newlines (`\r`, `\n`, `\r\n`) are preserved intact within field values without newline replacement.
 
 ### 8.7 Concordance (Database Import) Format Specification
 
 The `concordance` format (`--load-file-format concordance`) is a **distinct** database-import variant, NOT an alias of `dat` (see REQ-101). It targets legacy Concordance database loaders that expect every field quote-wrapped and a fixed leading attachment-range column pair.
 
 #### Structure
-- **Extension**: `.dat`
+- **Extension**: `.dat` when selected without DAT in Standard Mode and `.concordance.dat` in Loadfile-Only Mode or when paired with DAT in Standard Mode
 - **Encoding**: Same as `--encoding` (UTF-8 default)
 - **Field Delimiter**: Configured column delimiter, default ASCII 20 (DC4)
-- **Quote/Text Qualifier**: ASCII 254 (þ), applied to **every** field (unlike `dat`, which qualifies selectively)
-- **Header Row**: Present; field names UPPERCASE, no spaces, each quote-wrapped
+- **Quote/Text Qualifier**: Defaults to ASCII 254 (þ), applied to every field. Use `--quote-delim none` to omit qualifiers. Use values without embedded line breaks and choose a column delimiter absent from headers and values when writing unquoted fields.
+- **Header Row**: Present; field names UPPERCASE, no spaces, quote-wrapped when qualifiers are enabled
 - **In-field quote escaping**: Embedded quote characters are doubled (DAT-style escaping)
 - **Embedded Newlines**: Preserved intact within quote-wrapped field values (`\r`, `\n`, `\r\n` are not replaced with a newline delimiter; Concordance loaders support multiline fields within text qualifiers)
 

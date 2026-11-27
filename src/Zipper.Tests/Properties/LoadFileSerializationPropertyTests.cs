@@ -300,6 +300,13 @@ public sealed class LoadFileSerializationPropertyTests
             input.Values,
             "CONC_SHORT",
             line => DatLineParser.Parse(line, input.ColumnDelimiter, input.QuoteDelimiter));
+
+        var unquoted = new ConcordanceSerializer(new FileGenerationRequest
+        {
+            Delimiters = request.Delimiters with { QuoteDelimiter = string.Empty },
+        });
+        Assert.Equal(string.Join(input.ColumnDelimiter, quotedAndEmptyColumns), unquoted.RenderHeader(quotedAndEmptyColumns));
+        Assert.Equal(string.Join(input.ColumnDelimiter, input.Values), unquoted.RenderRecord(fullRecord));
     }
 
     [Property]

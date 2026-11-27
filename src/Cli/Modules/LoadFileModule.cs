@@ -65,6 +65,7 @@ public sealed class LoadFileModule : CliModule
                     .Select(f => ArgumentHelpers.GetLoadFileFormat(f.Trim()))
                     .Where(f => f.HasValue)
                     .Select(f => f!.Value)
+                    .Distinct()
                     .ToList();
             }
 
@@ -132,6 +133,7 @@ public sealed class LoadFileModule : CliModule
                 .Select(f => ArgumentHelpers.GetLoadFileFormat(f.Trim()))
                 .Where(f => f.HasValue)
                 .Select(f => f!.Value)
+                .Distinct()
                 .ToList();
         }
         else

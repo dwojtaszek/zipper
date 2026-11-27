@@ -119,6 +119,55 @@ public class ProductionFileMaterializerTests
         Assert.True(materializer.ShouldValidate);
     }
 
+    [Theory]
+    [InlineData(Config.ZipCompressionMethod.Deflate)]
+    [InlineData(Config.ZipCompressionMethod.Store)]
+    public async Task CreateZipAsync_EdiscoveryProductionSet_MatchesStreamingHashAndIndependentReader(Config.ZipCompressionMethod method)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "ZipProdEdiscovery_" + Guid.NewGuid().ToString("N"));
+        var prodDir = Path.Combine(root, "PRODUCTION_001");
+        var zipPath = Path.Combine(root, "PRODUCTION_001.zip");
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(prodDir, "DATA"));
+            Directory.CreateDirectory(Path.Combine(prodDir, "NATIVES", "VOL001"));
+            Directory.CreateDirectory(Path.Combine(prodDir, "NATIVES", "VOL002"));
+            Directory.CreateDirectory(Path.Combine(prodDir, "IMAGES", "VOL001"));
+            Directory.CreateDirectory(Path.Combine(prodDir, "IMAGES", "VOL002"));
+            Directory.CreateDirectory(Path.Combine(prodDir, "TEXT", "VOL001"));
+            Directory.CreateDirectory(Path.Combine(prodDir, "TEXT", "VOL002"));
+
+            await File.WriteAllTextAsync(Path.Combine(prodDir, "_manifest.json"), "{}");
+            await File.WriteAllTextAsync(Path.Combine(prodDir, "_validation_report.json"), "{}");
+            await File.WriteAllTextAsync(Path.Combine(prodDir, "DATA", "loadfile.dat"), "header");
+            await File.WriteAllTextAsync(Path.Combine(prodDir, "DATA", "loadfile.opt"), "opt");
+            await File.WriteAllTextAsync(Path.Combine(prodDir, "NATIVES", "VOL001", "PROD0001.pdf"), "PDF-BYTES");
+            await File.WriteAllTextAsync(Path.Combine(prodDir, "NATIVES", "VOL002", "PROD0002.docx"), "DOCX-BYTES");
+            await File.WriteAllTextAsync(Path.Combine(prodDir, "IMAGES", "VOL001", "PROD0001.tif"), "TIF1");
+            await File.WriteAllTextAsync(Path.Combine(prodDir, "IMAGES", "VOL002", "PROD0002.tif"), "TIF2");
+            await File.WriteAllTextAsync(Path.Combine(prodDir, "TEXT", "VOL001", "PROD0001.txt"), "TXT1");
+            await File.WriteAllTextAsync(Path.Combine(prodDir, "TEXT", "VOL002", "PROD0002.txt"), "TXT2");
+            await File.WriteAllTextAsync(Path.Combine(prodDir, "TEXT", "VOL001", "EMPTY.txt"), string.Empty);
+
+            await new ProductionFileMaterializer().CreateZipAsync(
+                prodDir,
+                zipPath,
+                method,
+                CancellationToken.None);
+
+            // Reuses ZipAssert independent reader and streaming integrity assertions
+            TestHelpers.ZipAssert.AssertProductionZipMatchesDisk(zipPath, prodDir, method);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
     private static IReadOnlyList<string> ReadEntryNames(string zipPath)
     {
         using var archive = ZipFile.OpenRead(zipPath);

@@ -1165,6 +1165,24 @@ public class ChaosEngineTests
     }
 
     [Fact]
+    public void Intercept_ConcordanceWithEmptyQuoteDelimiter_SkipsQuoteEscapeAnomalies()
+    {
+        var engine = new ChaosEngine(5, "5", null, LoadFileFormat.Concordance, "\t", string.Empty, "\n", 42);
+        const string line = "Value\u00fe\tOther";
+
+        for (int i = 1; i <= 5; i++)
+        {
+            if (engine.ShouldIntercept(i))
+            {
+                Assert.Equal("Value\u00fe,Other", engine.Intercept(i, line, $"DOC{i:D8}"));
+            }
+        }
+
+        Assert.NotEmpty(engine.Anomalies);
+        Assert.All(engine.Anomalies, anomaly => Assert.Equal("concordance-delimiter", anomaly.ErrorType));
+    }
+
+    [Fact]
     public void ApplyXmlChaos_WithUnclosedTag_ProducesMalformedXml_AndAuditsAnomaly()
     {
         var engine = new ChaosEngine(2, "1", "xml-unclosed-tag", LoadFileFormat.EdrmXml, "|", "\"", "\r\n", 42);

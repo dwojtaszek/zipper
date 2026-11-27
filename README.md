@@ -216,7 +216,7 @@ All command-line flags recognized by Zipper:
 | `--include-load-file` | `false` | flag | Include Load File inside ZIP Archive |
 | `--compression` | `deflate` | `store`, `deflate` (`deflate64`, `bzip2` planned — currently rejected) | ZIP compression method for output Archives (Standard mode, `--include-load-file`, `--production-zip`) |
 | `--load-file-format` | `dat` | `dat`, `opt`, `csv`, `edrm-xml`, `xml`, `concordance` | Single Load File format |
-| `--load-file-formats` | none | comma-separated list (e.g. `dat,opt,csv`) | Multiple simultaneous Load File formats |
+| `--load-file-formats` | none | comma-separated list (e.g. `dat,opt,csv`) | Multiple simultaneous Load File formats. In Standard Mode, selecting DAT and Concordance together gives Concordance the suffix `.concordance.dat`. |
 | `--loadfile-format` | `dat` | `dat`, `opt`, `csv`, `edrm-xml`, `xml`, `concordance` | Alias for `--load-file-format` in Loadfile-Only mode |
 | `--dat-delimiters` | `standard` | `standard`, `csv` | Preset delimiter style for DAT format |
 | `--delimiter-column` | ASCII 20 | ASCII code or single character | Custom column delimiter |
@@ -242,7 +242,7 @@ All command-line flags recognized by Zipper:
 | `--loadfile-only` | `false` | flag | Standalone Load File generation (no Archive) |
 | `--eol` | `CRLF` | `CRLF`, `LF`, `CR` | Line ending format for Load Files |
 | `--col-delim` | ASCII 20 | `ascii:N` or `char:C` | Column delimiter (strict-prefix format) |
-| `--quote-delim` | ASCII 254 | `ascii:N`, `char:C`, or `none` | Quote delimiter (strict-prefix format) |
+| `--quote-delim` | ASCII 254 | `ascii:N`, `char:C`, or `none` | Quote delimiter. `none` omits quotes in DAT and Concordance. |
 | `--newline-delim` | ASCII 174 | `ascii:N` or `char:C` | Newline replacement (strict-prefix format) |
 | `--multi-delim` | `;` | `ascii:N` or `char:C` | Multi-value separator |
 | `--nested-delim` | `\` | `ascii:N` or `char:C` | Nested value separator |

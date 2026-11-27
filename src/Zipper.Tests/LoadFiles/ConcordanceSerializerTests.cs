@@ -203,6 +203,27 @@ public class ConcordanceSerializerTests
     }
 
     [Fact]
+    public void RenderHeaderAndRecord_EmptyQuoteDelimiter_OmitsQuotes()
+    {
+        var serializer = new ConcordanceSerializer(new FileGenerationRequest
+        {
+            Delimiters = new DelimiterConfig
+            {
+                ColumnDelimiter = "\t",
+                QuoteDelimiter = string.Empty,
+            },
+        });
+        var record = new LoadFileRecord
+        {
+            Columns = new List<string> { "COL1", "COL2" },
+            Values = new[] { "val1", "valþ2" },
+        };
+
+        Assert.Equal("COL1\tCOL2", serializer.RenderHeader(record.Columns));
+        Assert.Equal("val1\tvalþ2", serializer.RenderRecord(record));
+    }
+
+    [Fact]
     public void FormatProperties_ReturnExpectedValues()
     {
         var serializer = new ConcordanceSerializer(new FileGenerationRequest());
