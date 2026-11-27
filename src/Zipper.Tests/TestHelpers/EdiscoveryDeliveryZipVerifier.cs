@@ -142,6 +142,7 @@ internal static class EdiscoveryDeliveryZipVerifier
         Assert.True(parentDocIdIdx >= 0, "PARENTDOCID column missing from DAT header.");
 
         var familyRecords = new List<FamilyRecord>();
+        var nativePathsByDocId = new Dictionary<string, string>(StringComparer.Ordinal);
         var parentNativePathsByDocId = new Dictionary<string, string>(StringComparer.Ordinal);
         var datDocIds = new HashSet<string>(StringComparer.Ordinal);
         var datNativePaths = new HashSet<string>(StringComparer.Ordinal);
@@ -173,9 +174,11 @@ internal static class EdiscoveryDeliveryZipVerifier
             Assert.Equal(cols[docIdIdx], Path.GetFileNameWithoutExtension(cols[textIdx].Replace('\\', '/')));
             AssertResolves(cols[textIdx], "text", rootPrefix, diskFiles, archiveEntryNames);
 
+            var normalizedNativePath = cols[nativeIdx].Replace('\\', '/');
+            nativePathsByDocId.Add(cols[docIdIdx], normalizedNativePath);
             if (string.IsNullOrEmpty(cols[parentDocIdIdx]))
             {
-                parentNativePathsByDocId.Add(cols[docIdIdx], cols[nativeIdx].Replace('\\', '/'));
+                parentNativePathsByDocId.Add(cols[docIdIdx], normalizedNativePath);
             }
 
             familyRecords.Add(new FamilyRecord(
@@ -195,6 +198,18 @@ internal static class EdiscoveryDeliveryZipVerifier
         {
             Assert.Equal(child.BegAttach, child.ParentDocId);
             Assert.Contains(child.ParentDocId, familyParentIds);
+
+            // Verify that each attachment native stays in its parent's volume.
+            Assert.True(
+                nativePathsByDocId.TryGetValue(child.DocId, out var childNativePath),
+                $"Missing child '{child.DocId}' native path.");
+            Assert.True(
+                nativePathsByDocId.TryGetValue(child.ParentDocId, out var parentNativePath),
+                $"Missing parent '{child.ParentDocId}' native path for child '{child.DocId}'.");
+
+            var childVolume = childNativePath.Split('/')[^2];
+            var parentVolume = parentNativePath.Split('/')[^2];
+            Assert.Equal(parentVolume, childVolume);
         }
 
         AssertFamilyRanges(familyRecords);
@@ -520,11 +535,19 @@ internal static class EdiscoveryDeliveryZipVerifier
             Assert.NotEmpty(familyChildren);
         }
 
-        // Locate included OPT load file if present, and verify format structure and image resolution.
+        // Derive expected root artifacts from requested formats, not archive contents.
+        var formats = request.LoadFile.Formats.Count > 0
+            ? request.LoadFile.Formats
+            : new List<LoadFileFormat> { LoadFileFormat.Dat };
+        var baseStem = Path.GetFileNameWithoutExtension(datEntry.FullName);
+
+        // Locate included OPT load file if requested, and verify format structure and image resolution.
+        bool optRequested = formats.Contains(LoadFileFormat.Opt);
         var optEntry = archive.Entries.FirstOrDefault(e => !e.FullName.Contains('/') && e.FullName.EndsWith(".opt", StringComparison.OrdinalIgnoreCase));
-        if (optEntry is not null)
+        if (optRequested)
         {
-            using var optReader = new StreamReader(optEntry.Open(), Encoding.UTF8);
+            Assert.NotNull(optEntry);
+            using var optReader = new StreamReader(optEntry!.Open(), Encoding.UTF8);
             var optContent = await optReader.ReadToEndAsync();
             var optLines = optContent.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries);
             Assert.NotEmpty(optLines);
@@ -536,6 +559,10 @@ internal static class EdiscoveryDeliveryZipVerifier
                 var imageRel = parts[2].Trim().Replace('\\', '/');
                 Assert.Contains(imageRel, archiveEntryNames);
             }
+        }
+        else
+        {
+            Assert.Null(optEntry);
         }
 
         // Compare DAT native references against the independently established recipe inventory.
@@ -563,10 +590,6 @@ internal static class EdiscoveryDeliveryZipVerifier
                 || name.EndsWith(".xml", StringComparison.OrdinalIgnoreCase);
         }
 
-        var formats = request.LoadFile.Formats.Count > 0
-            ? request.LoadFile.Formats
-            : new List<LoadFileFormat> { LoadFileFormat.Dat };
-        var baseStem = Path.GetFileNameWithoutExtension(datEntry.FullName);
         bool disambiguateConcordance = formats.Contains(LoadFileFormat.Dat) && formats.Contains(LoadFileFormat.Concordance);
         var expectedRootArtifacts = new HashSet<string>(StringComparer.Ordinal);
         foreach (var format in formats)
@@ -583,11 +606,6 @@ internal static class EdiscoveryDeliveryZipVerifier
             var fileName = baseStem + ext;
             expectedRootArtifacts.Add(fileName);
             expectedRootArtifacts.Add(fileName + "_properties.json");
-        }
-        if (optEntry is not null)
-        {
-            expectedRootArtifacts.Add(optEntry.FullName);
-            expectedRootArtifacts.Add(optEntry.FullName + "_properties.json");
         }
         Assert.Contains(datEntry.FullName + "_properties.json", archiveEntryNames);
         var actualRootArtifacts = archiveEntryNames.Where(name => !name.Contains('/')).ToHashSet(StringComparer.Ordinal);

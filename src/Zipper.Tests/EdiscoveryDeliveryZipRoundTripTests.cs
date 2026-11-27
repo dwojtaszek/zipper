@@ -58,6 +58,11 @@ public class EdiscoveryDeliveryZipRoundTripTests : WorkingDirectoryTestBase
             var zipFile = Assert.Single(zipFiles);
 
             var expected = BuildStandardExpectations(request!);
+            Assert.True(expected.Rows.ContainsKey("DOC00000003_A001"), "Expected child row DOC00000003_A001 must exist.");
+            Assert.Equal("folder_001/3_attachment.jpg", expected.Rows["DOC00000003_A001"].NativePath);
+            Assert.Equal("folder_001/3_attachment.txt", expected.Rows["DOC00000003_A001"].TextPath);
+            Assert.Equal("DOC00000003", expected.Rows["DOC00000003_A001"].ParentDocId);
+
             var report = await EdiscoveryDeliveryZipVerifier.VerifyStandardModeZipDeliveryAsync(
                 zipFile, request!, this.output, expected.Hashes, expected.Rows);
 
@@ -270,19 +275,22 @@ public class EdiscoveryDeliveryZipRoundTripTests : WorkingDirectoryTestBase
             AddExpectedRow(rows, controlNumber, workItem.FilePathInZip, textPath, string.Empty);
 
             var attachments = generated.GetAttachments();
-            var attachmentNames = attachments.Select(a => a.filename).ToList();
             for (int attachmentIndex = 0; attachmentIndex < attachments.Count; attachmentIndex++)
             {
                 var attachmentNumber = attachmentIndex + 1;
                 var attachment = attachments[attachmentIndex];
-                var isDuplicate = FamilyPlan.IsDuplicateAttachmentName(attachmentNames, attachmentIndex);
-                var attachmentPath = FamilyPlan.GetAttachmentPath(workItem, attachment.filename, attachmentNumber, isDuplicate);
-                var attachmentTextPath = FamilyPlan.GetAttachmentTextPath(workItem, attachment.filename, attachmentNumber);
+                // Pin expected layout and child ID independently of FamilyPlan / ZIP writer logic.
+                var childControlNumber = $"{controlNumber}_A{attachmentNumber:D3}";
+                var attachmentFileName = Path.GetFileName(attachment.filename.Replace('\\', '/'));
+                var attachmentStem = Path.GetFileNameWithoutExtension(attachmentFileName);
+                var attachmentPath = $"{folderPrefix}{i}_{attachmentFileName}";
+                var attachmentTextPath = $"{folderPrefix}{i}_{attachmentStem}.txt";
+
                 AddExpectedHash(hashes, attachmentPath, attachment.content);
                 AddExpectedHash(hashes, attachmentTextPath, PlaceholderFiles.ExtractedText);
                 AddExpectedRow(
                     rows,
-                    FamilyPlan.GetChildId(controlNumber, attachmentNumber),
+                    childControlNumber,
                     attachmentPath,
                     attachmentTextPath,
                     controlNumber);

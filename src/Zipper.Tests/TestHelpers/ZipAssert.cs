@@ -6,6 +6,12 @@ namespace Zipper.Tests.TestHelpers;
 
 public static class ZipAssert
 {
+    private static readonly HashSet<string> ReservedDeviceNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    };
     public static void AssertValidZip(string zipPath, Action<ZipArchive>? extraAsserts = null)
     {
         AssertValidZip(zipPath, expectedCount: null, extraAsserts);
@@ -47,6 +53,12 @@ public static class ZipAssert
                 Assert.False(
                     segments[i].EndsWith('.') || segments[i].EndsWith(' '),
                     $"ZIP entry '{entry.FullName}' has path segment '{segments[i]}' ending in a period or space, which is invalid on Windows.");
+
+                var stemEnd = segments[i].IndexOf('.');
+                var stem = (stemEnd >= 0 ? segments[i][..stemEnd] : segments[i]).TrimEnd(' ', '.');
+                Assert.False(
+                    ReservedDeviceNames.Contains(stem),
+                    $"ZIP entry '{entry.FullName}' has path segment '{segments[i]}' which is a reserved Windows device name.");
             }
         }
 

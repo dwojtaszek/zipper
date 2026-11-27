@@ -140,6 +140,43 @@ public class ZipAssertTests : TempDirectoryTestBase
         Assert.ThrowsAny<XunitException>(() => ZipAssert.AssertValidZip(zipPath, 1));
     }
 
+    [Theory]
+    [InlineData("reports/NUL.txt")]
+    [InlineData("CON.txt")]
+    [InlineData("AUX.dat")]
+    [InlineData("folder/PRN.csv")]
+    [InlineData("COM1.tif")]
+    [InlineData("LPT9.txt")]
+    [InlineData("NUL")]
+    [InlineData("con/file.txt")]
+    public void AssertValidZip_ReservedWindowsDeviceName_ThrowsException(string entryName)
+    {
+        var zipPath = this.GetTempFilePath();
+        using (var archive = ZipFile.Open(zipPath, ZipArchiveMode.Create))
+        {
+            archive.CreateEntry(entryName);
+        }
+
+        Assert.ThrowsAny<XunitException>(() => ZipAssert.AssertValidZip(zipPath, 1));
+    }
+
+    [Theory]
+    [InlineData("reports/null.txt")]
+    [InlineData("connect.txt")]
+    [InlineData("auxiliary.txt")]
+    public void AssertValidZip_DeviceLookalikeValidName_Passes(string entryName)
+    {
+        var zipPath = this.GetTempFilePath();
+        using (var archive = ZipFile.Open(zipPath, ZipArchiveMode.Create))
+        {
+            var entry = archive.CreateEntry(entryName, CompressionLevel.NoCompression);
+            using var writer = new StreamWriter(entry.Open());
+            writer.Write("valid payload");
+        }
+
+        ZipAssert.AssertValidZip(zipPath, 1);
+    }
+
     [Fact]
     public void AssertValidZip_EquivalentExtractionPaths_ThrowsException()
     {
