@@ -124,6 +124,16 @@ class VerifyAesFixturesTests(unittest.TestCase):
         self.assertEqual(result["missingCapability"], "aes-256-fixture-profile")
         reader.assert_called_once()
 
+    def test_non_utf8_windows_code_page_reports_unsupported_unicode_passwords(self):
+        manifest = {"syntheticPasswordCase": "non-ascii-utf8"}
+        with (
+            mock.patch.object(VERIFY_AES, "_is_legacy_p7zip", return_value=False),
+            mock.patch.object(VERIFY_AES, "_seven_zip_uses_utf8_passwords", return_value=False),
+        ):
+            result = VERIFY_AES.check_seven_zip_capable_reader("7z", Path("fixture.zip"), manifest, "café")
+        self.assertEqual(result["status"], "unsupported-capability")
+        self.assertEqual(result["missingCapability"], "utf8-zip-password")
+
     def test_verify_directory_require_7zip_fails_when_missing(self):
         with tempfile.TemporaryDirectory() as td:
             with self.assertRaisesRegex(ValueError, "7-Zip"):

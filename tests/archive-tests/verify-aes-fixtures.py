@@ -301,6 +301,15 @@ def _is_legacy_p7zip(seven_zip):
     return re.search(r"^7-Zip \[64\] 17\.05\b", banner, re.MULTILINE) is not None
 
 
+def _seven_zip_uses_utf8_passwords():
+    if sys.platform != "win32":
+        return True
+    # 7-Zip's Windows ZIP reader converts passwords via CP_ACP.
+    import ctypes
+
+    return ctypes.windll.kernel32.GetACP() == 65001
+
+
 def check_seven_zip_capable_reader(seven_zip, archive_path, manifest, password):
     if not seven_zip:
         return {
@@ -315,6 +324,13 @@ def check_seven_zip_capable_reader(seven_zip, archive_path, manifest, password):
             "status": "unsupported-capability",
             "missingCapability": "aes-256-fixture-profile",
             "detail": "Legacy p7zip 17.05 failed to extract the pinned AES-256 fixture entries.",
+        }
+    if manifest.get("syntheticPasswordCase") == "non-ascii-utf8" and not _seven_zip_uses_utf8_passwords():
+        return {
+            "reader": "7zip",
+            "status": "unsupported-capability",
+            "missingCapability": "utf8-zip-password",
+            "detail": "7-Zip on Windows uses the system ANSI code page for ZIP passwords.",
         }
     _assert_seven_zip_listing(seven_zip, archive_path, manifest["entries"])
     for entry in manifest["entries"]:
