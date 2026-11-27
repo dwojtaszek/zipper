@@ -258,6 +258,11 @@ def verify(fixtures, seven, report_path=None):
                         entries = [entry for entry in entries if entry["readableName"] in names]
                         if len(entries) != len(names) or len({e["readableName"] for e in entries}) != len(names):
                             raise ValueError(f"missing or duplicate selected entries for {data['caseKey']}")
+                    if action == "extract" and data["caseKey"] == "valid-directory-attributes":
+                        expected_names = {"dos-dir", "unix-dir"}
+                        if len(entries) != 2 or {e["readableName"] for e in entries} != expected_names:
+                            raise ValueError(
+                                "valid-directory-attributes must declare exactly one record per directory")
                     if not entries:
                         raise ValueError(f"no entries selected for {data['caseKey']}")
                     budget = data["limits"]["expandedBytesBudget"]

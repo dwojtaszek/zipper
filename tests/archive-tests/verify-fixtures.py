@@ -2624,9 +2624,11 @@ def _verify_max_eocd_comment(check, case, zip_bytes):
     if comment_bytes != b"X" * MAX_EOCD_COMMENT_LENGTH:
         raise VerificationError(check, "max EOCD comment does not carry 65,535 'X' bytes")
     entry, sidecar = parsed[0], sidecar_entries[0]
+    if sidecar.get("ordinal") != 0:
+        raise VerificationError(check, "valid-max-eocd-comment sidecar entry must have ordinal 0")
     header_fields = (
         entry["c_name"], entry["l_name"], entry["host_system"], entry["external_attr"],
-        entry["l_flags"] & 0x0008, entry["c_flags"] & 0x0008,
+        entry["l_flags"], entry["c_flags"],
         entry["l_method"], entry["c_method"], entry["l_extra"], entry["c_extra_len"],
         entry["l_crc"], entry["l_comp"], entry["l_uncomp"],
         entry["c_comp"], entry["c_uncomp"],
@@ -2683,6 +2685,8 @@ def _verify_extra_field(check, case, zip_bytes):
     if parsed[0]["l_extra"] != b"\x99\x99\x04\x00\xaa\xbb\xcc\xdd":
         raise VerificationError(check, "valid-extra-field local 0x9999 extra field mismatches")
     entries_by_ordinal = {entry["ordinal"]: entry for entry in sidecar_entries}
+    budget = case.get("limits", {}).get("expandedBytesBudget")
+    remaining_budget = budget if isinstance(budget, int) and not isinstance(budget, bool) else None
     for ordinal, entry in enumerate(parsed):
         sidecar = entries_by_ordinal.get(ordinal)
         if sidecar is None:
@@ -2701,6 +2705,10 @@ def _verify_extra_field(check, case, zip_bytes):
         central = (entry["c_crc"], entry["c_comp"], entry["c_uncomp"])
         if local != central:
             raise VerificationError(check, "valid-extra-field entry %d local CRC or sizes disagree with central header" % ordinal)
+        if remaining_budget is not None:
+            remaining_budget -= entry["c_uncomp"]
+            if remaining_budget < 0:
+                raise VerificationError(check, "valid-extra-field entry %d exceeds the expanded bytes budget" % ordinal)
         payload = _verify_stored_payload_crc(check, zip_bytes, entry)
         if sidecar.get("contentSha256") != sha256_hex(payload):
             raise VerificationError(check, "valid-extra-field entry %d payload hash disagrees with the sidecar" % ordinal)
@@ -2723,6 +2731,8 @@ def _verify_descriptor_form(check, case, zip_bytes):
     if header_tuple != (b"d.txt", b"d.txt", True, True, 0, 0, 0, 0, 0):
         raise VerificationError(check, "%s headers do not carry expected bit-3 descriptor framing" % case_key)
     sidecar = sidecar_entries[0]
+    if sidecar.get("ordinal") != 0:
+        raise VerificationError(check, "%s sidecar entry must have ordinal 0" % case_key)
     if (sidecar.get("readableName") != entry["c_name"].decode("ascii")
             or sidecar.get("localNameRaw") != entry["l_name"].hex()
             or sidecar.get("centralNameRaw") != entry["c_name"].hex()):

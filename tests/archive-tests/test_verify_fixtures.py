@@ -3279,6 +3279,9 @@ class ProducerCompatibilityControlTests(TempDirTest):
         struct.pack_into("<I", bad_attr, cd_offset + 38, 0o644 << 16)
         bad_flags = bytearray(zip_bytes)
         struct.pack_into("<H", bad_flags, 6, struct.unpack_from("<H", bad_flags, 6)[0] | 8)
+        bad_utf8 = bytearray(zip_bytes)
+        struct.pack_into("<H", bad_utf8, 6, 0x0800)
+        struct.pack_into("<H", bad_utf8, cd_offset + 8, 0x0800)
 
         for label, mutated in (
             ("short_comment", bytes(short_zip)),
@@ -3288,9 +3291,12 @@ class ProducerCompatibilityControlTests(TempDirTest):
             ("host_system", bytes(bad_host)),
             ("external_attributes", bytes(bad_attr)),
             ("descriptor_flag", bytes(bad_flags)),
+            ("utf8_flag", bytes(bad_utf8)),
         ):
             with self.subTest(label=label):
                 self._assert_fails("valid-max-eocd-comment", mutated, entries)
+
+        self._assert_fails("valid-max-eocd-comment", zip_bytes, [entry_record(1, "d.txt", payload)])
 
     def test_valid_directory_attributes_passes_and_rejects_wrong_host_attr_or_kind(self):
         zip_bytes = self._build_directory_attributes_zip()
@@ -3352,9 +3358,15 @@ class ProducerCompatibilityControlTests(TempDirTest):
 
         local_method = bytearray(zip_bytes)
         struct.pack_into("<H", local_method, 8, 8)
-        with self.assertRaises(vf.VerificationError):
+        case = {"entries": entries, "limits": {"expandedBytesBudget": len(a_data) + len(b_data)}}
+        with self.assertRaisesRegex(vf.VerificationError, "not Stored in both headers"):
             vf._verify_extra_field(
-                "producer-compatibility", {"entries": entries}, bytes(local_method))
+                "producer-compatibility", case, bytes(local_method))
+        with self.assertRaisesRegex(vf.VerificationError, "expanded bytes budget"):
+            vf._verify_extra_field(
+                "producer-compatibility",
+                case | {"limits": {"expandedBytesBudget": len(a_data) + len(b_data) - 1}},
+                zip_bytes)
 
         # Flip the payload and both declared CRCs together: only the sidecar hash can reject it.
         import binascii
@@ -3418,6 +3430,7 @@ class ProducerCompatibilityControlTests(TempDirTest):
                 struct.pack_into("<I", bad_local_crc, 14, 1)
                 self._assert_fails(case_key, wrong_zip, entries)
                 self._assert_fails(case_key, bytes(bad_local_crc), entries)
+                self._assert_fails(case_key, zip_bytes, [{**entries[0], "ordinal": 1}])
 
                 # Flip the payload and every declared CRC together: only the sidecar hash can reject it.
                 import binascii

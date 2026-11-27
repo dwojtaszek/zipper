@@ -131,15 +131,24 @@ public class ArchiveTestModuleTests : WorkingDirectoryTestBase
             "--output-path", destination);
 
         Assert.Equal(0, exitCode);
+        var expectedCaseKeys = new[]
+        {
+            "valid-max-eocd-comment",
+            "valid-directory-attributes",
+            "valid-extra-field",
+            "valid-descriptor-signature",
+            "valid-descriptor-no-signature",
+        }.Order(StringComparer.Ordinal).ToArray();
         var byCase = new Dictionary<string, byte[]>(StringComparer.Ordinal);
         foreach (var jsonPath in Directory.GetFiles(destination, "*.json"))
         {
             using var doc = JsonDocument.Parse(await File.ReadAllBytesAsync(jsonPath));
             var caseKey = doc.RootElement.GetProperty("caseKey").GetString()!;
-            byCase[caseKey] = await File.ReadAllBytesAsync(Path.ChangeExtension(jsonPath, ".zip"));
+            Assert.True(byCase.TryAdd(caseKey, await File.ReadAllBytesAsync(
+                Path.ChangeExtension(jsonPath, ".zip"))), $"duplicate Case Key {caseKey}");
         }
 
-        Assert.Equal(5, byCase.Count);
+        Assert.Equal(expectedCaseKeys, byCase.Keys.Order(StringComparer.Ordinal).ToArray());
         using var seekable = new ZipArchive(new MemoryStream(byCase["valid-max-eocd-comment"]));
         using var streamed = new ZipArchive(new MemoryStream(byCase["valid-descriptor-signature"]));
         var seekableEntry = Assert.Single(seekable.Entries);
