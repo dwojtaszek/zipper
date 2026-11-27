@@ -20,7 +20,7 @@ public class ArchiveDirectoryWorkloadTests : WorkingDirectoryTestBase
     [InlineData("directory-tree-explicit", true, true)]
     [InlineData("directory-tree-implicit", false, true)]
     [InlineData("directory-tree-only", true, false)]
-    public async Task Tree_ListsExactNamesAndKindsByOrdinal(string key, bool explicitDirectories, bool hasFile)
+    public async Task Publish_WithDirectoryTree_ShouldListExactNamesAndKindsByOrdinal(string key, bool explicitDirectories, bool hasFile)
     {
         var (path, fixture) = Assert.Single(await PublishAsync("compatibility", key));
         var expected = new List<(string Name, bool IsDirectory)>();
@@ -53,7 +53,7 @@ public class ArchiveDirectoryWorkloadTests : WorkingDirectoryTestBase
     [InlineData("directory-tree-explicit", true, true)]
     [InlineData("directory-tree-implicit", false, true)]
     [InlineData("directory-tree-only", true, false)]
-    public async Task Tree_MaterializesItsDestinationProjection(string key, bool explicitDirectories, bool hasFile)
+    public async Task Extract_WithDirectoryTree_ShouldMaterializeItsDestinationProjection(string key, bool explicitDirectories, bool hasFile)
     {
         var directories = explicitDirectories ? TreeDirectories : ["café/", "café/文/"];
         AssertDestinationCanStore(directories.Select(name => name + "probe").ToArray());
@@ -77,7 +77,7 @@ public class ArchiveDirectoryWorkloadTests : WorkingDirectoryTestBase
     [Theory]
     [InlineData("case-collision", "node.txt", "Node.txt")]
     [InlineData("unicode-normalization-collision", "café.txt", "cafe\u0301.txt")]
-    public async Task CollidingNames_PreserveExactZipNamesAndDistinctHashes(string key, string first, string second)
+    public async Task Publish_WithCollidingNames_ShouldPreserveExactZipNamesAndDistinctHashes(string key, string first, string second)
     {
         var (path, fixture) = Assert.Single(await PublishAsync("security", key));
         using var archive = new IndependentZipFile(path);
@@ -96,7 +96,7 @@ public class ArchiveDirectoryWorkloadTests : WorkingDirectoryTestBase
     [SkippableTheory]
     [InlineData("case-collision", "node.txt", "Node.txt")]
     [InlineData("unicode-normalization-collision", "café.txt", "cafe\u0301.txt")]
-    public async Task CollidingNames_MaterializeWhereBothSpellingsAreSupported(string key, string first, string second)
+    public async Task Extract_WithSupportedCollidingNames_ShouldMaterializeBothSpellings(string key, string first, string second)
     {
         AssertDestinationCanStore([first, second]);
 
@@ -118,7 +118,7 @@ public class ArchiveDirectoryWorkloadTests : WorkingDirectoryTestBase
     [InlineData("compatibility", "valid-name-length-boundaries", 2, 1026, 1025, 5)]
     [InlineData("security", "path-adls-segments-boundary", 0, 258, 258, 63)]
     [InlineData("security", "path-adls-segments-exceeded", 0, 262, 262, 64)]
-    public async Task PathBoundaries_MeasureBytesScalarsAndDepthIncludingFilename(
+    public async Task Publish_WithPathBoundaries_ShouldMeasureBytesScalarsAndDepthIncludingFilename(
         string suite, string key, int ordinal, int bytes, int scalars, int segments)
     {
         var (path, fixture) = Assert.Single(await PublishAsync(suite, key));
@@ -140,7 +140,7 @@ public class ArchiveDirectoryWorkloadTests : WorkingDirectoryTestBase
     [SkippableTheory]
     [InlineData("compatibility", "valid-name-length-boundaries")]
     [InlineData("security", "path-adls-segments-boundary,path-adls-segments-exceeded")]
-    public async Task PathBoundaries_MaterializeWhereTheDestinationSupportsThem(string suite, string keys)
+    public async Task Extract_WithSupportedPathBoundaries_ShouldMaterializeExactPaths(string suite, string keys)
     {
         var pairs = await PublishAsync(suite, keys);
         AssertDestinationCanStore(pairs.SelectMany(pair => pair.Fixture.Entries.Select(entry => entry.ReadableName)).ToArray());
@@ -160,7 +160,7 @@ public class ArchiveDirectoryWorkloadTests : WorkingDirectoryTestBase
     }
 
     [Fact]
-    public async Task OptInWorkload_PublishesTenBoundedFixturesWithTenThousandUniqueEmptyDirectories()
+    public async Task Publish_WithOptInWorkload_ShouldProduceTenBoundedFixturesWithTenThousandUniqueEmptyDirectories()
     {
         var pairs = await PublishAsync("directory-workload", null);
         var names = new HashSet<string>(StringComparer.Ordinal);
