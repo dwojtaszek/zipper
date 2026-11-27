@@ -3302,18 +3302,23 @@ class ProducerCompatibilityControlTests(TempDirTest):
         self._assert_fails("valid-extra-field", zip_bytes, [entries[0], entries[1] | {"ordinal": 2}])
 
         plain_zip = make_zip([("a.txt", a_data), ("b.bin", b_data)])
-        # Append 1 byte to first central entry extra field and update EOCD cd_size/offset
-        with_central_extra = bytearray(zip_bytes)
-        eocd = len(with_central_extra) - 22
-        cd_offset = struct.unpack_from("<I", with_central_extra, eocd + 16)[0]
-        with_central_extra[eocd:eocd] = b"\x00"
-        struct.pack_into("<H", with_central_extra, cd_offset + 30, 1)
-        struct.pack_into("<I", with_central_extra, len(with_central_extra) - 22 + 12,
-                         struct.unpack_from("<I", with_central_extra, len(with_central_extra) - 22 + 12)[0] + 1)
+        self._assert_fails("valid-extra-field", plain_zip, entries)
 
-        for label, mutated in (("missing_local_extra", plain_zip), ("nonzero_central_extra", bytes(with_central_extra))):
-            with self.subTest(label=label):
-                self._assert_fails("valid-extra-field", mutated, entries)
+        extra = b"\x99\x99\x04\x00\xaa\xbb\xcc\xdd"
+        eocd = len(zip_bytes) - 22
+        cd_size, central = struct.unpack_from("<II", zip_bytes, eocd + 12)
+        for ordinal in range(len(entries)):
+            with self.subTest(central_entry_ordinal=ordinal):
+                name_len = struct.unpack_from("<H", zip_bytes, central + 28)[0]
+                central_end = central + 46 + name_len
+                mutated = bytearray(zip_bytes)
+                mutated[central_end:central_end] = extra
+                struct.pack_into("<H", mutated, central + 30, len(extra))
+                struct.pack_into("<I", mutated, eocd + len(extra) + 12, cd_size + len(extra))
+                with zipfile.ZipFile(io.BytesIO(mutated)) as archive:
+                    self.assertEqual([a_data, b_data], [archive.read(name) for name in ("a.txt", "b.bin")])
+                self._assert_fails("valid-extra-field", bytes(mutated), entries)
+                central = central_end
 
         for offset in (14, 18, 22):
             with self.subTest(local_header_offset=offset):
@@ -3322,8 +3327,8 @@ class ProducerCompatibilityControlTests(TempDirTest):
                 self._assert_fails("valid-extra-field", bytes(mutated), entries)
 
         # Inflated EOCD total_entries must fail fast without allocating unbounded entry tables
+        fake_eocd = struct.pack("<IHHHHIIH", 0x06054B50, 0, 0, 65535, 65535, 0, 0, 0)
         with self.assertRaises(vf.VerificationError):
-            fake_eocd = struct.pack("<IHHHHIIH", 0x06054B50, 0, 0, 65535, 65535, 0, 0, 0)
             vf._parse_length_anchored_entries("producer-compatibility", fake_eocd, 0, 2)
 
     def test_producer_controls_reject_wrong_sidecar_raw_names(self):

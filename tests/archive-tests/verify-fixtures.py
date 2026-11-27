@@ -2671,14 +2671,15 @@ def _verify_extra_field(check, case, zip_bytes):
     if not sidecar_entries:
         raise VerificationError(check, "valid-extra-field must contain at least one entry")
     _, _, _, parsed = _parse_length_anchored_entries(check, zip_bytes, 0, len(sidecar_entries))
-    entry = parsed[0]
-    if entry["l_extra"] != b"\x99\x99\x04\x00\xaa\xbb\xcc\xdd" or entry["c_extra_len"] != 0:
-        raise VerificationError(check, "valid-extra-field local 0x9999 extra field or central extra length mismatches")
+    if parsed[0]["l_extra"] != b"\x99\x99\x04\x00\xaa\xbb\xcc\xdd":
+        raise VerificationError(check, "valid-extra-field local 0x9999 extra field mismatches")
     entries_by_ordinal = {entry["ordinal"]: entry for entry in sidecar_entries}
     for ordinal, entry in enumerate(parsed):
         sidecar = entries_by_ordinal.get(ordinal)
         if sidecar is None:
             raise VerificationError(check, "Expectation File is missing entry ordinal %d" % ordinal)
+        if entry["c_extra_len"] != 0:
+            raise VerificationError(check, "valid-extra-field entry %d has a central extra field" % ordinal)
         if (entry["l_flags"] | entry["c_flags"]) & 0x0008:
             raise VerificationError(check, "valid-extra-field entry %d declares a data descriptor" % ordinal)
         if (sidecar.get("localNameRaw") != entry["l_name"].hex()
