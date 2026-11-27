@@ -518,6 +518,7 @@ fi
 AES_INTEROP_DIR="$TEST_OUTPUT_DIR/aes-interop"
 rm -rf "$AES_INTEROP_DIR"
 mkdir -p "$AES_INTEROP_DIR"
+AES_INTEROP_DIR="$(cd "$AES_INTEROP_DIR" && pwd)"
 if python3 tests/archive-tests/test_verify_aes_fixtures.py >"$TEST_OUTPUT_DIR/aes-interop-selftest.log" 2>&1; then
   check 0 "AES interoperability verifier self-test passed"
 else
