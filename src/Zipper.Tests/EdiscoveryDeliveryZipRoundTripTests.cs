@@ -181,7 +181,8 @@ public class EdiscoveryDeliveryZipRoundTripTests : WorkingDirectoryTestBase
 
             var zipFile = Assert.Single(Directory.GetFiles(testDir, "*.zip"));
             var expected = BuildStandardExpectations(request!);
-            var pdfMember = Assert.Single(expected.Hashes.Keys, k => k.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase));
+            var pdfMember = expected.Rows["DOC00000001"].NativePath;
+            Assert.EndsWith(".pdf", pdfMember, StringComparison.OrdinalIgnoreCase);
             var tamperedZip = Path.Combine(testDir, "tampered.zip");
 
             // The intact archive passes the pre-packaging hash inventory.
