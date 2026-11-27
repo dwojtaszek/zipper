@@ -135,6 +135,10 @@ public class ArchiveDirectoryWorkloadTests : WorkingDirectoryTestBase
         var rawName = Encoding.UTF8.GetBytes(entry.Name);
         Assert.Equal(rawName, Convert.FromHexString(fixture.Entries[ordinal].LocalNameRaw));
         Assert.Equal(rawName, Convert.FromHexString(fixture.Entries[ordinal].CentralNameRaw));
+        if (key == ArchiveTestCatalog.NameLengthBoundariesCaseKey)
+        {
+            Assert.All(fixture.Expectations, expectation => Assert.Equal("long-path-filesystem", expectation.Platform));
+        }
     }
 
     [SkippableTheory]

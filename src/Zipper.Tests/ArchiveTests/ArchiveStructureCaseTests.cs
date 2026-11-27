@@ -1003,11 +1003,9 @@ public class ArchiveStructureCaseTests : WorkingDirectoryTestBase
     [Fact]
     public void Build_AdlSegmentDepthControls_PinContainerRelativeSegmentCounts()
     {
-        // Ticket #878: the cloud-compat recipes carry container-relative member
+        // Ticket #878: the bounded deep-path recipes carry container-relative member
         // paths of exactly 63 segments (the ADLS Gen2 hierarchical-namespace
-        // boundary, legal) and 64 (the first violation). The depth-2 recipe
-        // budget (REQ-213) is untouched; the dedicated 64-segment cloud-compat
-        // guard is the only exemption.
+        // boundary, legal) and 64 (the first violation) under the 64-segment guard.
         var boundary = ArchiveFixtureBuilder.BuildControl("path-adls-segments-boundary", 42, CancellationToken.None);
         var exceeded = ArchiveFixtureBuilder.BuildControl("path-adls-segments-exceeded", 42, CancellationToken.None);
 
@@ -1025,15 +1023,21 @@ public class ArchiveStructureCaseTests : WorkingDirectoryTestBase
     public void ValidateDeepPathBudget_WithOverrunOrRelativeSegments_ShouldReject()
     {
         // The guard caps construction one past the violated platform limit (64 is
-        // deliberately constructible for the exceeded fixture); 65+ and relative
+        // deliberately constructible for the exceeded fixture); 65+ and empty/relative
         // markers must throw.
         Assert.Throws<InvalidDataException>(
             () => ArchiveFixtureBuilder.ValidateDeepPathBudget(
                 "path-adls-segments-boundary",
-                string.Join("/", Enumerable.Range(0, 65).Select(index => $"d{index:00}")) + "/target.txt"));
+                string.Join("/", Enumerable.Range(0, 64).Select(index => $"d{index:00}")) + "/target.txt"));
         Assert.Throws<InvalidDataException>(
             () => ArchiveFixtureBuilder.ValidateDeepPathBudget(
                 "path-adls-segments-boundary", "d01/../target.txt"));
+        Assert.Throws<InvalidDataException>(
+            () => ArchiveFixtureBuilder.ValidateDeepPathBudget(
+                "path-adls-segments-boundary", "d01/./target.txt"));
+        Assert.Throws<InvalidDataException>(
+            () => ArchiveFixtureBuilder.ValidateDeepPathBudget(
+                "path-adls-segments-boundary", "d01//target.txt"));
     }
 
     [Fact]

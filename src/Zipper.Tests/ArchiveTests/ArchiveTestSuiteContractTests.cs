@@ -344,6 +344,17 @@ public class ArchiveTestSuiteContractTests
     }
 
     [Fact]
+    public void ListSuite_DirectoryWorkload_ContainsTenShardsExcludedFromAll()
+    {
+        var expected = Enumerable.Range(1, 10)
+            .Select(shard => FormattableString.Invariant($"empty-directories-{shard:00}"))
+            .ToList();
+        var workload = SuiteKeys(ArchiveTestCatalog.DirectoryWorkloadSuite);
+        Assert.Equal(expected, workload);
+        Assert.DoesNotContain(workload, key => AllKeys().Contains(key, StringComparer.Ordinal));
+    }
+
+    [Fact]
     public void Catalogue_ContainsExactlyTheFrozenCaseKeys()
     {
         // The frozen complete-catalogue size (#834, +1 for #869, +1 for #871, +1 for
