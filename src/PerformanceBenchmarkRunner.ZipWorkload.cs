@@ -56,12 +56,13 @@ public static partial class PerformanceBenchmarkRunner
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            await Console.Error.WriteLineAsync("ZIP workload cancelled.");
+            await Console.Error.WriteLineAsync("ZIP workload cancelled.".AsMemory(), CancellationToken.None);
             return 130;
         }
         catch (Exception ex) when (ex is ArgumentException or OverflowException or IOException or UnauthorizedAccessException or NotSupportedException)
         {
-            await Console.Error.WriteLineAsync($"ZIP workload error: {ArgumentHelpers.SanitizeForEcho(ex.Message)}");
+            await Console.Error.WriteLineAsync(
+                $"ZIP workload error: {ArgumentHelpers.SanitizeForEcho(ex.Message)}".AsMemory(), CancellationToken.None);
             return 1;
         }
     }
