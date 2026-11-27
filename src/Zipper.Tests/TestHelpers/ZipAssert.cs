@@ -28,13 +28,19 @@ public static class ZipAssert
         foreach (var entry in archive.Entries)
         {
             Assert.DoesNotContain('\\', entry.FullName);
+            var normalizedName = entry.FullName.Replace('\\', '/');
+            Assert.False(
+                normalizedName.StartsWith('/') ||
+                (normalizedName.Length >= 2 && char.IsLetter(normalizedName[0]) && normalizedName[1] == ':'),
+                $"ZIP entry name must be relative: '{entry.FullName}'.");
+            Assert.DoesNotContain(normalizedName.Split('/'), segment => segment == "..");
         }
 
         var fileEntryNames = archive.Entries
             .Where(e => !e.FullName.EndsWith('/'))
             .Select(e => e.FullName)
             .ToList();
-        Assert.Equal(fileEntryNames.Count, fileEntryNames.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(fileEntryNames.Count, fileEntryNames.Distinct(StringComparer.OrdinalIgnoreCase).Count());
 
         // Decompress every member through SharpZipLib so the assertion does not only prove
         // that the writer and System.IO.Compression agree with each other.

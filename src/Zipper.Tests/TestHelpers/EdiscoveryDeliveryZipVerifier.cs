@@ -264,6 +264,10 @@ internal static class EdiscoveryDeliveryZipVerifier
             .Select(e => e.FullName)
             .ToHashSet(StringComparer.Ordinal);
 
+        // Golden hash-manifest tooling on the archive, checked against independent stream hashes below.
+        var archiveManifest = ParseManifest(GoldenBaselineHarness.GenerateTimestampNormalizedSha256ManifestForArchive(zipFilePath));
+        Assert.NotEmpty(archiveManifest);
+
         // Independent reader matches ZIP inventory and streaming content hashes to disk artifacts.
         var tempExtractDir = Path.Combine(Path.GetDirectoryName(zipFilePath)!, "extracted_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempExtractDir);
@@ -291,14 +295,23 @@ internal static class EdiscoveryDeliveryZipVerifier
                         Assert.Equal(diskStream.Length, entry.Size);
 
                         var entryHash = System.Security.Cryptography.SHA256.HashData(entryStream);
+                        var entryHashHex = Convert.ToHexString(entryHash).ToLowerInvariant();
                         var diskHash = System.Security.Cryptography.SHA256.HashData(diskStream);
                         Assert.True(
                             diskHash.AsSpan().SequenceEqual(entryHash),
                             $"Streaming hash mismatch for '{entry.Name}' against disk artifact.");
 
+                        if (!entry.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var manifestKey = $"{Path.GetFileName(zipFilePath)}::{GoldenBaselineHarness.EscapeManifestKeyPart(entry.Name)}";
+                            Assert.True(
+                                archiveManifest.TryGetValue(manifestKey, out var manifestHash),
+                                $"Archive manifest is missing '{entry.Name}'.");
+                            Assert.Equal(manifestHash, entryHashHex);
+                        }
+
                         if (expectedContentHashesByMember is not null && expectedContentHashesByMember.TryGetValue(entry.Name, out var expectedHash))
                         {
-                            var entryHashHex = Convert.ToHexString(entryHash).ToLowerInvariant();
                             Assert.True(
                                 string.Equals(expectedHash, entryHashHex, StringComparison.Ordinal),
                                 $"Pre-packaging hash mismatch for '{entry.Name}': expected {expectedHash}, got {entryHashHex}.");
@@ -322,10 +335,6 @@ internal static class EdiscoveryDeliveryZipVerifier
                 Directory.Delete(tempExtractDir, true);
             }
         }
-
-        // Golden hash-manifest tooling on the archive.
-        var archiveManifest = ParseManifest(GoldenBaselineHarness.GenerateTimestampNormalizedSha256ManifestForArchive(zipFilePath));
-        Assert.NotEmpty(archiveManifest);
 
         // Locate included DAT load file in archive root.
         var datEntry = archive.Entries.FirstOrDefault(e => !e.FullName.Contains('/') && e.FullName.EndsWith(".dat", StringComparison.OrdinalIgnoreCase));
