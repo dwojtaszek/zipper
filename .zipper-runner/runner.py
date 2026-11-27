@@ -7449,7 +7449,7 @@ def main():
             if not DRY_RUN:
                 shutil.rmtree(wt_path, ignore_errors=True)
 
-            wt_code, wt_out, wt_err = run_cmd(["git", "worktree", "add", wt_path, "-b", branch_name, MAIN_REMOTE_REF], cwd=REPO_PATH)
+            wt_code, wt_out, wt_err = run_cmd(["git", "worktree", "add", "--no-track", wt_path, "-b", branch_name, MAIN_REMOTE_REF], cwd=REPO_PATH)
             if wt_code != 0:
                 subject = f"[Runner] Worktree Creation Failed: Issue #{num}"
                 if _should_send_rate_limited(subject):
@@ -7628,7 +7628,7 @@ def main():
                                 print(f"Worktree {wt_path} has uncommitted changes from failed agent — preserving work, retrying in-place.")
                             else:
                                 if _remove_worktree(wt_path, branch_name):
-                                    wt_code, wt_out, wt_err = run_cmd(["git", "worktree", "add", wt_path, "-b", branch_name, MAIN_REMOTE_REF], cwd=REPO_PATH)
+                                    wt_code, wt_out, wt_err = run_cmd(["git", "worktree", "add", "--no-track", wt_path, "-b", branch_name, MAIN_REMOTE_REF], cwd=REPO_PATH)
                                     if wt_code != 0:
                                         subject = f"[Runner] Worktree Recreation Failed: Issue #{num}"
                                         if _should_send_rate_limited(subject):
