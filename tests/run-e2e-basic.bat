@@ -26,7 +26,7 @@ if exist "%TEST_OUTPUT_DIR%" rmdir /s /q "%TEST_OUTPUT_DIR%"
 mkdir "%TEST_OUTPUT_DIR%"
 
 set TESTS_PASSED=0
-set TESTS_TOTAL=6
+set TESTS_TOTAL=7
 
 REM ─────────────────────────────────────────────
 REM Test 1: Basic PDF generation (core happy path)
@@ -299,6 +299,15 @@ echo [ SUCCESS ] Test 6: High-volume smoke test — PASSED
 set /a TESTS_PASSED+=1
 
 REM ─────────────────────────────────────────────
+
+echo [ INFO ] Test 7: Exact-size ZIP workload
+set "workload=%TEST_OUTPUT_DIR%\workload.zip"
+%BINARY% --zip-workload "%workload%" 42 2:65537:binary:store 1:3:repeat:deflate 1:0:repeat:store
+if errorlevel 1 goto :cleanup
+powershell -NoProfile -Command "Add-Type -Assembly System.IO.Compression.FileSystem; $zip = [System.IO.Compression.ZipFile]::OpenRead($env:workload); try { if ((($zip.Entries | ForEach-Object { $_.Length }) -join ',') -ne '65537,65537,3,0') { exit 1 } } finally { $zip.Dispose() }"
+if errorlevel 1 goto :cleanup
+echo [ SUCCESS ] Test 7: Exact-size ZIP workload
+set /a TESTS_PASSED+=1
 
 :cleanup
 echo [ INFO ] Cleaning up...

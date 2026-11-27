@@ -28,7 +28,7 @@ public sealed record BenchmarkReport(
 /// <summary>
 /// Performance benchmark runner for REQ-104 and REQ-105 validation.
 /// </summary>
-public static class PerformanceBenchmarkRunner
+public static partial class PerformanceBenchmarkRunner
 {
     public sealed record ScalabilityStepResult(int FileCount, long ElapsedMs, double FilesPerSecond, double AvgTimePerFileMs);
 

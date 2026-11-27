@@ -215,9 +215,16 @@ run_test "High-volume smoke test" --type pdf --count 5000 --output-path "$TEST_O
 verify_output "$TEST_OUTPUT_DIR/pdf_high_volume" 5000 "$EXPECTED_HEADER" "pdf" "false"
 print_success "Test 6: High-volume smoke test — PASSED"
 
+# 7. Exact-size ZIP workload
+workload="$TEST_OUTPUT_DIR/workload.zip"
+run_test "Exact-size ZIP workload" --zip-workload "$workload" 42 2:65537:binary:store 1:3:repeat:deflate 1:0:repeat:store
+unzip -tq "$workload"
+unzip -l "$workload" | grep -Eq '^[[:space:]]*131077[[:space:]]+4 files$'
+print_success "Test 7: Exact-size ZIP workload — PASSED"
+
 # --- Cleanup ---
 
 print_info "Cleaning up..."
 rm -rf "$TEST_OUTPUT_DIR"
 
-print_success "All basic E2E smoke tests passed! (6/6)"
+print_success "All basic E2E smoke tests passed! (7/7)"
