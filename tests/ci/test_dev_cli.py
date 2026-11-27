@@ -45,7 +45,10 @@ class DevCliAndLocalWorkflowTests(unittest.TestCase):
         result = self._run_dev("check", "--dry-run", "--files", "tools/ephyra-harness/src/lib.rs")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Check diff complexity", result.stdout)
-        self.assertNotIn("Build solution", result.stdout)
+        self.assertIn("Run CI workflow contract tests", result.stdout)
+        self.assertIn("Run workflow artifact handling check", result.stdout)
+        self.assertIn("Run DocsDriftTests", result.stdout)
+        self.assertNotIn("Run unit + property tests", result.stdout)
 
     def test_dev_cli_docs_only_runs_only_docs_drift_tests(self):
         res = self._run_dev("check", "--dry-run", "--files", "README.md,docs/cicd.md")
