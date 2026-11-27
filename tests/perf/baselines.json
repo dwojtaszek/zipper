@@ -68,5 +68,6 @@
   "loadfile_200k": {
     "wall_s": 3.68,
     "rss_kb": 172280
-  }
+  },
+  "_justification": "Paired GitHub Actions run 45957152537 rebuilt 648bca6 and 281febb with SDK 10.0.404 on the same ubuntu26 20261116.88.1 runner. Five alternating Seed 42 samples per revision measured median peak RSS changes of -0.10% for PDF, +0.19% for Email, and -0.09% for Loadfile-Only. The old source revision also measured 188052, 168280, and 172564 KB on this environment. The prior 50–66% comparison crossed environments and does not appear in the paired source comparison."
 }
