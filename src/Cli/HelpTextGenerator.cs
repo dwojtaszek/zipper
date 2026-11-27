@@ -20,7 +20,7 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine("Optional Arguments:");
         Console.Error.WriteLine("  --types <list>           File Type Mix alternative to --type (e.g., \"pdf:50,eml:30,tiff:20\")");
         Console.Error.WriteLine("  --folders <number>       Number of folders (1-100, default: 1)");
-        Console.Error.WriteLine("  --encoding <string>      Encoding: UTF-8, UTF-16, ANSI (default: UTF-8)");
+        Console.Error.WriteLine($"  --encoding <string>      Encoding: {EncodingHelper.SupportedNames} (default: UTF-8)");
         Console.Error.WriteLine("  --distribution <string>  Distribution: proportional, gaussian, exponential");
         Console.Error.WriteLine("  --with-metadata          Include metadata columns in load file");
         Console.Error.WriteLine("  --with-collection-metadata Include collection metadata columns in load file");
@@ -45,13 +45,13 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine("  --delimiter-column <c>   Custom column delimiter (char or ASCII code)");
         Console.Error.WriteLine("  --delimiter-quote <c>    Custom quote delimiter (char or ASCII code)");
         Console.Error.WriteLine("  --delimiter-newline <c>  Custom newline replacement (char or ASCII code)");
+        Console.Error.WriteLine("  --eol <CRLF|LF|CR>      Line Ending for Loadfile-Only or Production Set (default: CRLF)");
         Console.Error.WriteLine("  --hash-mode <mode>       Cryptographic hash mode: actual, simulated, none (default: none)");
-        Console.Error.WriteLine("  --hash-algorithms <list> Hash algorithms: md5, sha1, sha256 (default: md5)");
+        Console.Error.WriteLine("  --hash-algorithms <list> Hash algorithms: md5, sha1, sha256 (default: md5 when hashes are enabled)");
         Console.Error.WriteLine();
         Console.Error.WriteLine("Loadfile-Only Options:");
         Console.Error.WriteLine("  --loadfile-only          Skip ZIP/native generation, stream directly to load file");
         Console.Error.WriteLine("  --loadfile-format <f>    Load file schema: dat, opt, csv, edrm-xml, xml, concordance (default: dat)");
-        Console.Error.WriteLine("  --eol <CRLF|LF|CR>      End-of-line format (default: CRLF)");
         Console.Error.WriteLine("  --col-delim <value>      Column delimiter (ascii:<N> or char:<c>)");
         Console.Error.WriteLine("  --quote-delim <value>    Quote delimiter (ascii:<N>, char:<c>, or none)");
         Console.Error.WriteLine("  --newline-delim <value>  In-cell newline replacement (ascii:<N> or char:<c>)");
@@ -115,7 +115,10 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine("  --custodian-count <n>    Override custodian count (max: 1000)");
         Console.Error.WriteLine("  --with-families          Generate parent-child document relationships");
         Console.Error.WriteLine("  --with-threading         Add RFC 5322 Message-ID, In-Reply-To, and References headers plus thread metadata Columns");
+        Console.Error.WriteLine("  --with-email-threading   Alias for --with-threading");
         Console.Error.WriteLine("  --mime-realism <level>   Enable MIME realism emission modes (standard, full, or comma-separated tokens)");
+        Console.Error.WriteLine("  --email-mime-realism <level> Alias for --mime-realism");
+        Console.Error.WriteLine("  --with-mime-realism      Enable standard MIME realism");
         Console.Error.WriteLine();
         Console.Error.WriteLine("Archive Test Options:");
         Console.Error.WriteLine("  --archive-test-suite <s>  Generate Archive Test Fixture pairs for one suite:");

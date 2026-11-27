@@ -290,7 +290,7 @@ public sealed class OutputModule : CliModule
     {
         if (!string.IsNullOrEmpty(this._encoding) && ArgumentHelpers.GetEncodingFromName(this._encoding) is null)
         {
-            Console.Error.WriteLine($"Error: Invalid encoding '{this._encoding}'. Supported values are UTF-8, UTF-16, ANSI.");
+            Console.Error.WriteLine($"Error: Invalid encoding '{this._encoding}'. Supported values are {EncodingHelper.SupportedNames}.");
             return false;
         }
 

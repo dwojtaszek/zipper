@@ -235,7 +235,7 @@ public class CliPipelineTests : WorkingDirectoryTestBase
 
         // Assert
         Assert.Null(result);
-        Assert.Contains("Error: Invalid encoding 'INVALID'. Supported values are UTF-8, UTF-16, ANSI.", stderr, StringComparison.Ordinal);
+        Assert.Contains("Error: Invalid encoding 'INVALID'. Supported values are UTF-8, UTF-16, UTF-16LE, UNICODE, ANSI, WINDOWS-1252, WESTERN EUROPEAN (WINDOWS), ASCII.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -20,7 +20,7 @@ internal static class LoadFileWriterFactory
             LoadFileFormat.Csv => new CsvComposingWriter(),
             LoadFileFormat.EdrmXml => new XmlLoadFileWriter(), // EDRM XML uses same writer
             LoadFileFormat.Concordance => new ConcordanceComposingWriter(),
-            _ => new DatComposingWriter(mode),
+            _ => throw new ArgumentOutOfRangeException(nameof(format), format, "Unknown Load File Format."),
         };
     }
 }
