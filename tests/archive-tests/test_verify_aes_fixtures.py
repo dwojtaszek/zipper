@@ -86,6 +86,7 @@ class VerifyAesFixturesTests(unittest.TestCase):
             with mock.patch.object(VERIFY_AES, "verify_zip_aes_headers"), \
                  mock.patch.object(VERIFY_AES, "check_python_zipfile_capability", return_value={"reader": "python-zipfile", "status": "unsupported-capability", "missingCapability": "aes-256"}), \
                  mock.patch.object(VERIFY_AES, "check_infozip_capability", return_value={"reader": "infozip-unzip", "status": "skipped", "missingCapability": "aes-256"}), \
+                 mock.patch.object(VERIFY_AES, "_is_legacy_p7zip", return_value=False), \
                  mock.patch.object(VERIFY_AES, "_assert_seven_zip_listing", side_effect=fake_listing), \
                  mock.patch.object(VERIFY_AES, "_extract_entry_sha256_seven_zip", side_effect=fake_extract), \
                  mock.patch.object(VERIFY_AES, "_assert_seven_zip_wrong_password", side_effect=fake_wrong):
@@ -114,6 +115,14 @@ class VerifyAesFixturesTests(unittest.TestCase):
             (root / "present.json").write_text("{}", encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "Missing fixture manifests: absent"):
                 VERIFY_AES.verify_directory(root, {"present": "x", "absent": "y"})
+
+    def test_legacy_p7zip_reports_unsupported_fixture_profile(self):
+        with mock.patch.object(VERIFY_AES, "run_reader_command") as reader:
+            reader.return_value.stdout = b"7-Zip [64] 17.05 : Copyright (c) 1999-2021 Igor Pavlov"
+            result = VERIFY_AES.check_seven_zip_capable_reader("7z", Path("fixture.zip"), {}, "synthetic")
+        self.assertEqual(result["status"], "unsupported-capability")
+        self.assertEqual(result["missingCapability"], "aes-256-fixture-profile")
+        reader.assert_called_once()
 
     def test_verify_directory_require_7zip_fails_when_missing(self):
         with tempfile.TemporaryDirectory() as td:

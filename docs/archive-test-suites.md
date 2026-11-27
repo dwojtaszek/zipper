@@ -147,7 +147,7 @@ Fixture-only WinZip AES-256 compatibility cases (`AesZipInteroperabilityFixtures
 
 `7-Zip 26.06` rejects non-ASCII passwords when creating `-tzip` archives (`E_INVALIDARG`), so `aes256-non-ascii` is produced with `ICSharpCode.SharpZipLib 1.4.2` (UTF-8 password encoding) and verified with both `SharpZipLib` and `7-Zip 26.06`. Because WinZip AES producers generate a random 16-byte salt and 2-byte password verification value on every write, the fixture builder pins the complete encrypted archive bytes (validated by SHA-256 on read and publication) so replays into fresh directories remain byte-identical while each sidecar records the container, producer/version, encryption strength, entry methods, and regeneration recipe.
 
-Capable readers (`SharpZipLib` and `7-Zip`) verify exact content hashes with the right password and report a clean `incorrect-password-rejected` failure for wrong or whitespace-trimmed passwords. Readers without WinZip AES-256 support (`System.IO.Compression.ZipArchive`, CPython `zipfile`, and Info-ZIP `unzip`) are reported as `unsupported-capability` (`aes-256`).
+Capable readers (`SharpZipLib` and `7-Zip`) verify exact content hashes with the right password and report a clean `incorrect-password-rejected` failure for wrong or whitespace-trimmed passwords. Readers without WinZip AES-256 support (`System.IO.Compression.ZipArchive`, CPython `zipfile`, and Info-ZIP `unzip`) are reported as `unsupported-capability` (`aes-256`). Legacy p7zip 17.05 on macOS is reported as unsupported for this fixture profile because it fails to extract the pinned entries. SharpZipLib still verifies the encrypted content on that platform.
 
 ## Limits (v1 budgets)
 

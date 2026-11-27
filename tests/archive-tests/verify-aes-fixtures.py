@@ -4,6 +4,7 @@
 import argparse
 import hashlib
 import json
+import re
 import shutil
 import struct
 import subprocess
@@ -278,7 +279,7 @@ def _extract_entry_sha256_seven_zip(seven_zip, archive_path, name, expected_size
             if timed_out.is_set():
                 raise ValueError(f"7-Zip timed out extracting '{name}'")
             if returncode != 0:
-                raise ValueError(f"7-Zip failed extracting '{name}' (rc={returncode})")
+                raise ValueError(f"7-Zip failed extracting '{name}' from {archive_path.name} (rc={returncode})")
             return size, digest.hexdigest()
         finally:
             timer.cancel()
@@ -294,6 +295,12 @@ def _assert_seven_zip_wrong_password(seven_zip, archive_path, bad_password):
         raise ValueError(f"7-Zip did not report a clean incorrect-password failure (rc={result.returncode})")
 
 
+def _is_legacy_p7zip(seven_zip):
+    result = run_reader_command([seven_zip, "i"], timeout=MAX_READER_TIMEOUT_SECONDS)
+    banner = result.stdout.decode("utf-8", errors="replace")
+    return re.search(r"^7-Zip \[64\] 17\.05\b", banner, re.MULTILINE) is not None
+
+
 def check_seven_zip_capable_reader(seven_zip, archive_path, manifest, password):
     if not seven_zip:
         return {
@@ -301,6 +308,13 @@ def check_seven_zip_capable_reader(seven_zip, archive_path, manifest, password):
             "status": "skipped",
             "missingCapability": None,
             "detail": "7zz/7z not installed",
+        }
+    if _is_legacy_p7zip(seven_zip):
+        return {
+            "reader": "7zip",
+            "status": "unsupported-capability",
+            "missingCapability": "aes-256-fixture-profile",
+            "detail": "Legacy p7zip 17.05 failed to extract the pinned AES-256 fixture entries.",
         }
     _assert_seven_zip_listing(seven_zip, archive_path, manifest["entries"])
     for entry in manifest["entries"]:

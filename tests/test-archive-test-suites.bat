@@ -621,7 +621,7 @@ if errorlevel 1 (
 )
 set "ZIPPER_AES_INTEROP_DIR=%AES_INTEROP_DIR%"
 set "AES_DOTNET_EXIT=0"
-dotnet test src\Zipper.Tests\Zipper.Tests.csproj --filter "FullyQualifiedName~AesZipInteroperabilityTests.VerifyWithCapableReader_ExactPassword_VerifiesAllEntriesAndHashes" %DOTNET_VERSION_FLAG% --nologo >"%TEST_OUTPUT_DIR%\aes-interop-dotnet.log" 2>&1
+dotnet test src\Zipper.Tests\Zipper.Tests.csproj --filter "FullyQualifiedName~AesZipInteroperabilityFixturesTests.VerifyWithCapableReader_ExactPassword_VerifiesAllEntriesAndHashes" %DOTNET_VERSION_FLAG% --nologo >"%TEST_OUTPUT_DIR%\aes-interop-dotnet.log" 2>&1
 if errorlevel 1 set "AES_DOTNET_EXIT=1"
 set "ZIPPER_AES_INTEROP_DIR="
 if "!AES_DOTNET_EXIT!"=="1" (

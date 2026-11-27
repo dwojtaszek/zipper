@@ -6,7 +6,7 @@ using Zipper.ArchiveTests;
 namespace Zipper.Tests;
 
 [Collection("ConsoleTests")]
-public class AesZipInteroperabilityTests : WorkingDirectoryTestBase
+public class AesZipInteroperabilityFixturesTests : WorkingDirectoryTestBase
 {
     private static readonly IReadOnlyDictionary<string, string> SyntheticPasswords =
         new Dictionary<string, string>(StringComparer.Ordinal)
@@ -33,6 +33,10 @@ public class AesZipInteroperabilityTests : WorkingDirectoryTestBase
             Assert.False(string.IsNullOrWhiteSpace(manifest.Producer));
             Assert.False(string.IsNullOrWhiteSpace(manifest.ProducerVersion));
             Assert.False(string.IsNullOrWhiteSpace(manifest.RegenerationRecipe));
+            if (manifest.Producer == "7-Zip")
+            {
+                Assert.Contains(" && 7z ", manifest.RegenerationRecipe);
+            }
             Assert.False(string.IsNullOrWhiteSpace(manifest.SaltReplayNote));
 
             Assert.Contains(manifest.Entries, entry => entry.ContentSize == 0 && entry.InnerCompressionMethod == 0);
@@ -70,6 +74,7 @@ public class AesZipInteroperabilityTests : WorkingDirectoryTestBase
             var firstJson = await File.ReadAllBytesAsync(Path.Combine(firstDir, caseKey + ".json"));
             var secondJson = await File.ReadAllBytesAsync(Path.Combine(secondDir, caseKey + ".json"));
             Assert.Equal(firstJson, secondJson);
+            Assert.Contains("\n  \"schemaVersion\"", System.Text.Encoding.UTF8.GetString(firstJson));
         }
     }
 

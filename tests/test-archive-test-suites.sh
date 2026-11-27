@@ -528,7 +528,7 @@ fi
 # shellcheck disable=SC2086  # deliberate word-splitting: an empty flag must expand to zero arguments.
 if ZIPPER_AES_INTEROP_DIR="$AES_INTEROP_DIR" \
      dotnet test src/Zipper.Tests/Zipper.Tests.csproj \
-       --filter 'FullyQualifiedName~AesZipInteroperabilityTests.VerifyWithCapableReader_ExactPassword_VerifiesAllEntriesAndHashes' \
+       --filter 'FullyQualifiedName~AesZipInteroperabilityFixturesTests.VerifyWithCapableReader_ExactPassword_VerifiesAllEntriesAndHashes' \
        $DOTNET_VERSION_FLAG \
        --nologo >"$TEST_OUTPUT_DIR/aes-interop-dotnet.log" 2>&1; then
   check 0 "AES interoperability fixtures generated and verified in .NET"
