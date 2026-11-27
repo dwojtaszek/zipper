@@ -90,6 +90,7 @@ graph LR
 
     subgraph Config
         FGR["FileGenerationRequest"]
+        FGR --> SourceRecords["SourceRecords"]
         FGR --> Output["OutputConfig"]
         FGR --> Metadata["MetadataConfig"]
         FGR --> LoadFile["LoadFileConfig"]
@@ -224,7 +225,7 @@ graph TD
 
     Emit -->|"no chaos"| Stream["stream lines<br/>(buffered StreamWriter)"]
     Emit -->|"single-format chaos<br/>(Loadfile-Only)"| ChaosP["stream line → intercept<br/>+ inter-line anomaly bytes"]
-    Ser -->|"coordinated DAT/OPT"| LineBuffers["rendered DAT + OPT<br/>line buffers"]
+    CFR -->|"collects serialized DAT/OPT lines"| LineBuffers["rendered DAT + OPT<br/>line buffers"]
     LineBuffers --> CrossApplier["CrossFormatAnomalyApplier"]
     CrossApplier --> ReEmit["LoadFileEmitter.EmitRenderedLinesAsync"]
 

@@ -4,7 +4,7 @@ namespace Zipper.LoadFiles;
 /// Single owner of Load File format dispatch for Standard and Production Set modes: for
 /// every requested format it creates the writer, opens the output stream, writes the Load
 /// File, then emits the Audit File. ZipArchiveSink (entries inside the ZIP or next to it)
-/// and ProductionSetGenerator (files on disk) both delegate here so "which formats to write
+/// and ProductionSetOrchestrator (files on disk) both delegate here so "which formats to write
 /// and how to invoke writers" has exactly one code path, preserving the
 /// composer → serializer → emitter seam behind ILoadFileWriter. Loadfile-Only Mode keeps
 /// its own loop for per-format chaos; coordinated DAT/OPT emission is shared here through
