@@ -285,7 +285,7 @@ The Concordance DAT format is the most widely used Load File format in e-discove
 - **Loadfile-Only (no profile):** Control Number, File Path, Custodian, Date Sent, Author, File Size, Compression Method, EmailSubject, EmailFrom, EmailTo, EmailCC, EmailSentDate, ExtractedText, [if `--with-families`] BEGATTACH, ENDATTACH, PARENTDOCID, [if `--with-threading`] Thread ID, Inclusive, Thread Parent, [if `--hash-mode simulated`] MD5HASH / SHA1HASH / SHA256HASH
 
 > [!NOTE]
-> When `--column-profile` is specified on a DAT run, the profile defines the emitted DAT Columns; hash Columns appear only when the profile declares them. Without a Column Profile, Loadfile-Only child Attachment rows emit empty hash values because no Native File bytes exist for them.
+> When `--column-profile` is specified on a Standard or Loadfile-Only DAT run (`--production-set` rejects `--column-profile` per `§10`), the profile defines the emitted DAT Columns; hash Columns appear only when the profile declares them. Without a Column Profile, Loadfile-Only child Attachment rows emit empty hash values because no Native File bytes exist for them.
 
 ### 8.3 Opticon (OPT) Format Specification
 
@@ -857,7 +857,7 @@ byte count, and Archive size. The Archive Test workflow retains its own budgets.
 
 - **REQ-165**: Zipper shall support `--hash-mode <actual|simulated|none>` to control cryptographic hash generation for Native Files. `actual` computes real hashes from emitted Native File content bytes; `simulated` generates deterministic seeded pseudo-hashes; `none` disables hash generation (default). `--hash-mode actual` is not supported with `--loadfile-only` mode and shall fail validation if combined.
 - **REQ-166**: Zipper shall support `--hash-algorithms <md5|sha1|sha256>` as a comma-separated list of algorithms to compute and emit in Load Files when `--hash-mode` is `actual` or `simulated`. When omitted, if `--hash-mode` is set to `actual` or `simulated`, the default algorithm shall be `md5`.
-- **REQ-167**: When `--hash-mode` is enabled (`actual` or `simulated`), generated Load Files (DAT, CSV, Concordance, EDRM-XML) shall include corresponding hash columns (`MD5HASH`, `SHA1HASH`, `SHA256HASH`) for each specified algorithm. When `--column-profile` is specified on a DAT run, the profile defines the emitted DAT Columns and hash Columns appear only when the profile declares them.
+- **REQ-167**: When `--hash-mode` is enabled (`actual` or `simulated`), generated Load Files (DAT, CSV, Concordance, EDRM-XML) shall include corresponding hash columns (`MD5HASH`, `SHA1HASH`, `SHA256HASH`) for each specified algorithm. When `--column-profile` is specified on a Standard or Loadfile-Only DAT run (`--production-set` rejects `--column-profile` per `§10`), the profile defines the emitted DAT Columns and hash Columns appear only when the profile declares them.
 - **REQ-168**: Invalid `--hash-mode` values (values other than `actual`, `simulated`, or `none`, case-insensitive) or invalid `--hash-algorithms` values (unrecognized algorithm names or empty selections) shall fail validation immediately with a clear error message and non-zero exit code.
 - **REQ-169**: Specifying `--hash-algorithms` when `--hash-mode` is `none` or omitted shall fail validation with a clear error message.
 

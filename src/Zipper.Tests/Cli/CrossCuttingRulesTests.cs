@@ -160,6 +160,20 @@ public class CrossCuttingRulesTests
     }
 
     [Fact]
+    public void Validate_ColumnProfile_WithProductionSetAndHashMode_ReturnsFalse()
+    {
+        AssertValidationError(m =>
+        {
+            ApplyValidBase(m);
+            m.Production.TryApply("--production-set", null);
+            m.Bates.TryApply("--bates-prefix", "PREFIX");
+            m.Metadata.TryApply("--column-profile", "minimal");
+            m.Hash.TryApply("--hash-mode", "actual");
+            m.Hash.TryApply("--hash-algorithms", "md5");
+        }, "Error: --column-profile is not supported with --production-set.");
+    }
+
+    [Fact]
     public void Validate_ChaosTypeInvalidForEverySelectedFormat_ReturnsFalse()
     {
         AssertValidationError(m =>
