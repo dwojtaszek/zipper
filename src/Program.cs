@@ -30,7 +30,7 @@ public static class Program
 
         if (ContainsFlag(args, "--zip-workload") && ContainsFlag(args, "--benchmark", "--chaos-list"))
         {
-            Console.Error.WriteLine("Error: --zip-workload must be a standalone command.");
+            await Console.Error.WriteLineAsync("Error: --zip-workload must be a standalone command.");
             return 1;
         }
 

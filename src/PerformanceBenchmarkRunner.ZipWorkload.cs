@@ -56,12 +56,12 @@ public static partial class PerformanceBenchmarkRunner
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            Console.Error.WriteLine("ZIP workload cancelled.");
+            await Console.Error.WriteLineAsync("ZIP workload cancelled.");
             return 130;
         }
         catch (Exception ex) when (ex is ArgumentException or OverflowException or IOException or UnauthorizedAccessException or NotSupportedException)
         {
-            Console.Error.WriteLine($"ZIP workload error: {ArgumentHelpers.SanitizeForEcho(ex.Message)}");
+            await Console.Error.WriteLineAsync($"ZIP workload error: {ArgumentHelpers.SanitizeForEcho(ex.Message)}");
             return 1;
         }
     }
@@ -96,7 +96,9 @@ public static partial class PerformanceBenchmarkRunner
             ?? throw new ArgumentException($"Invalid destination archive path '{ArgumentHelpers.SanitizeForEcho(path)}'.");
         var staging = Path.Combine(parentDirectory, $".zip-workload-{Guid.NewGuid():N}.tmp");
         var buffer = new byte[PerformanceConstants.DefaultBufferSize];
+#pragma warning disable S2245 // Seeded randomness makes synthetic ZIP payloads reproducible.
         var random = new Random(seed);
+#pragma warning restore S2245
         var stream = new FileStream(staging, FileMode.CreateNew, FileAccess.Write, FileShare.None, buffer.Length, useAsync: true);
         try
         {
@@ -148,7 +150,7 @@ public static partial class PerformanceBenchmarkRunner
         Action<string>? onStagingProgress,
         CancellationToken cancellationToken)
     {
-        await using var payload = entry.Open();
+        await using var payload = await entry.OpenAsync(cancellationToken);
         if (group.Repeated && group.Bytes > 0)
         {
             int fillLength = (int)Math.Min(group.Bytes, buffer.Length);
