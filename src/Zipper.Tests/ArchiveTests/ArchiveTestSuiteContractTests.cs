@@ -329,10 +329,10 @@ public class ArchiveTestSuiteContractTests
     // ---- all: the distinct union ----
 
     [Fact]
-    public void ListSuite_All_IsTheDistinctUnionOfEverySuite()
+    public void ListSuite_All_IsTheDistinctUnionOfNonOptInSuites()
     {
         var union = ArchiveTestCatalog.SupportedSuites
-            .Where(suite => suite != ArchiveTestCatalog.AllSuites)
+            .Where(suite => suite is not (ArchiveTestCatalog.AllSuites or ArchiveTestCatalog.DirectoryWorkloadSuite))
             .SelectMany(SuiteKeys)
             .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal)
@@ -359,8 +359,9 @@ public class ArchiveTestSuiteContractTests
         // +1 for #1286 Zip64 EOCD offset disagreement, +1 for #1288 extra-field truncation,
         // +1 for #1289 the DEFLATE-control CRC mismatch, +1 for #1290 the
         // normalization-sensitive hostile-name corpus, +2 for #1465 producer
-        // compatibility controls, +2 for #1467 opaque nested controls): any case dropped from the catalog
+        // compatibility controls, +2 for #1467 opaque nested controls, +4 for #1466
+        // directory and name controls): any non-opt-in case dropped from the catalog
         // or unlisted from every suite fails here.
-        Assert.Equal(123, AllKeys().Count);
+        Assert.Equal(127, AllKeys().Count);
     }
 }

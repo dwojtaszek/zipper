@@ -16,7 +16,7 @@ mkdir -p "$TEST_OUTPUT_DIR"
 
 SMOKE_CASES=5    # the frozen smoke set (#834): valid-empty, valid-stored,
                  # valid-deflate, crc-both-mismatch, missing-eocd
-ALL_CASES=123    # the frozen complete-catalogue size (#834, +1 #869, +1 #871, +1 #872, +2 #873, +3 #874, +2 #876, +1 #880, +1 #882, +1 #877, +1 #897, +1 #898, +1 consolidated #885/#886/#879, +2 #875, +1 #884, +1 #889, +5 #899, +6 #900, +1 #931, +5 #933, +2 #934 Zip64 descriptors, +7 #934 matrix, +1 #934 clean Unicode Path, +1 #935 nested budget, +2 #935 mixed, +1 #888, +1 #870, +2 #878, +3 #887, +1 #1276, +2 #1277, +1 #1279, +1 #1280, +1 #1281, +1 #1282, +1 #1283, +1 #1285, +1 #1286, +1 #1288, +1 #1289, +1 #1290, +2 #1465, +2 #1467): every unique Case Key
+ALL_CASES=127    # the frozen complete-catalogue size (#834, +1 #869, +1 #871, +1 #872, +2 #873, +3 #874, +2 #876, +1 #880, +1 #882, +1 #877, +1 #897, +1 #898, +1 consolidated #885/#886/#879, +2 #875, +1 #884, +1 #889, +5 #899, +6 #900, +1 #931, +5 #933, +2 #934 Zip64 descriptors, +7 #934 matrix, +1 #934 clean Unicode Path, +1 #935 nested budget, +2 #935 mixed, +1 #888, +1 #870, +2 #878, +3 #887, +1 #1276, +2 #1277, +1 #1279, +1 #1280, +1 #1281, +1 #1282, +1 #1283, +1 #1285, +1 #1286, +1 #1288, +1 #1289, +1 #1290, +2 #1465, +2 #1467, +4 #1466): non-opt-in Case Keys
 
 # Stored/header-only byte goldens (#846): stored entries plus fixed timestamps
 # are byte-stable across runtimes, so the Fixture IDs are frozen and asserted on
@@ -237,7 +237,7 @@ fi
 
 # 10. Independent verifier: the published pairs pass cross-implementation
 #     verification (schema, identity, mutation audit, reader operations; ticket
-#     #845). The complete catalogue must publish exactly one pair per unique
+#     #845). The non-opt-in catalogue must publish exactly one pair per unique
 #     Case Key and verify every pair — unsafe policy fixtures are never extracted.
 if python3 tests/archive-tests/verify-fixtures.py "$TEST_OUTPUT_DIR/smoke" \
      --report "$TEST_OUTPUT_DIR/smoke-verification.json" >/dev/null 2>&1; then
@@ -285,9 +285,9 @@ fi
 
 if python3 tests/archive-tests/verify-fixtures.py "$ALL_OUT" \
      --report "$TEST_OUTPUT_DIR/all-verification.json" >/dev/null 2>&1; then
-  check 0 "independent verifier passed the complete catalogue"
+  check 0 "independent verifier passed the non-opt-in catalogue"
 else
-  check 1 "independent verifier must pass the complete catalogue"
+  check 1 "independent verifier must pass the non-opt-in catalogue"
 fi
 
 # 10.1. Cancellation (REQ-215/REQ-219): cancel the longest suite only after
@@ -509,9 +509,9 @@ rm -rf "$OFFLINE_CACHE"
 mkdir -p "$OFFLINE_CACHE"
 if npm_config_cache="$OFFLINE_CACHE" npm_config_registry=http://127.0.0.1:9/ python3 tests/archive-tests/verify-fixtures.py "$ALL_OUT" \
      --report "$TEST_OUTPUT_DIR/all-offline-verification.json" >/dev/null 2>&1; then
-  check 0 "offline verification passed the complete catalogue without downloads"
+  check 0 "offline verification passed the non-opt-in catalogue without downloads"
 else
-  check 1 "offline verification must pass the complete catalogue without downloads"
+  check 1 "offline verification must pass the non-opt-in catalogue without downloads"
 fi
 
 if [[ "$failures" -ne 0 ]]; then

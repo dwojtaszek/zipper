@@ -503,6 +503,7 @@ REQ-207	unit	SourceCsvReaderTests.TryRead_RowCapExceeded_ReturnsFalse	Source Rec
 REQ-208	unit	ArchiveTestModuleTests.RunAsync_UnknownCaseKey_Fails	Suite/case flags: parsing (TryApply_ArchiveTestFlags_ParsesRawValues), selection + sort (RunAsync_CaseSelection_FiltersToSelectedKeys), unknown/duplicate/out-of-suite keys, omitted --output-path, and generation-flag rejection (RunAsync_DisallowedRegisteredFlag_Fails)
 REQ-208	unit	ArchiveTestSuiteContractTests.ListSuite_Security_Zip64ExtraWithoutSentinelsIsPolicySensitiveAndSevenZipExtracts	New Zip64 source-disagreement Case Key is selectable in malformed/security with a 7-Zip extract/success Adapter Check
 REQ-208	unit	ArchiveTestSuiteContractTests.ListSuite_Security_Zip64EocdOffsetDisagreementIsPolicySensitiveAndSevenZipExtracts	Zip64 EOCD offset disagreement is policy-sensitive, selectable in malformed/security, and declares 7-Zip extract/success
+REQ-208	unit	ArchiveDirectoryWorkloadTests.OptInWorkload_PublishesTenBoundedFixturesWithTenThousandUniqueEmptyDirectories	directory-workload publishes 10000 empty directories within per-fixture budgets
 REQ-209	unit	ArchiveTestSuiteGeneratorTests.GenerateAsync_SmokeCases_PublishFlatPairsWithMatchingIds	Flat fixtureId.zip/fixtureId.json pairs with matching IDs verified from disk bytes
 REQ-210	unit	ArchiveTestIdentityTests.ComputeFixtureId_FrozenValidEmptyVector_MatchesPublishedId	Fixture ID algorithm implemented in src/ArchiveTests/ArchiveTestIdentity.cs; frozen vector recomputed; schema-level checks in ArchiveTestCaseSchemaTests
 REQ-211	unit	ArchiveTestModuleTests.RunAsync_OmittedSeedDefaultsToFortyTwo_PublishesByteIdenticalPairs	Seed determinism: identity (ArchiveTestIdentityTests) and fixture bytes (ArchiveFixtureBuilderTests); default-seed wiring and seed-change identity change (RunAsync_DifferentSeed_ProducesDifferentFixtureIds) via the CLI workflow
@@ -553,7 +554,7 @@ REQ-226	unit	ProductionMetadataValidationTests.Validate_WithMultipleViolations_R
 REQ-226	unit	ChaosAndComparisonPropertyTests.ProductionMetadataBudget_SanitizeAndValidate_ShouldEnforceAsciiAndByteBudget	Property: ProductionMetadataBudget validates sanitized blocks and enforces 8,192-byte budget
 REQ-208	unit	ArchiveCompatibilityCaseTests.Build_ValidZip64Small_RoundTripsThroughTwoImplementations	Compatibility suite Zip64 case selection and round-trip verification
 REQ-208	unit	ArchiveStructureCaseTests.ListSuite_Malformed_IncludesAllStructureCases	Malformed suite includes extra-field-truncated and crc-both-mismatch-deflate, and leaves the frozen smoke suite unchanged
-REQ-208	unit	ArchiveTestSuiteContractTests.Catalogue_ContainsExactlyTheFrozenCaseKeys	Archive Test Fixture catalog contains 123 unique Case Keys
+REQ-208	unit	ArchiveTestSuiteContractTests.Catalogue_ContainsExactlyTheFrozenCaseKeys	Archive Test Fixture all suite contains 127 unique Case Keys
 REQ-208	unit	ArchiveTestSuiteGeneratorTests.GenerateAsync_PublishesProducerCompatibilityControls	Generates ZIP producer compatibility controls and compares seekable vs streamed payloads
 REQ-208	unit	ArchiveTestModuleTests.RunAsync_ProducerCompatibilityControls_PublishExpectedArchivesAndMatchedPayloads	Normal CLI entry point publishes ZIP producer compatibility controls with matched seekable and streamed payloads
 REQ-208	unit	ArchiveTestSuiteContractTests.Catalogue_CrcBothMismatchDeflate_UsesDeflateControlAndStaysOutOfSmoke	DEFLATE CRC Case Key uses the valid-deflate control and remains outside the frozen smoke suite
@@ -561,7 +562,7 @@ REQ-208	unit	ArchiveTestSuiteContractTests.ListSuite_Security_SiblingPrefixTrave
 REQ-208	unit	ArchiveFixtureBuilderTests.BuildControl_EncodingLocalCentralCodecDivergence_RewritesLocalNameWithCp932	New encoding Case Key carries same logical name as CP932 local and UTF-8 central bytes
 REQ-208	unit	ArchiveFixtureBuilderTests.BuildControl_NameSiblingPrefixTraversal_PreservesBothRawNames	Normalization-sensitive hostile-name Case Key preserves both raw names in both ZIP headers
 REQ-208	unit	ArchiveTestModuleTests.RunAsync_EncodingSuiteNoSelection_PublishesExpectedCaseKeys	Encoding suite publishes the local/central codec divergence Case Key
-REQ-208	e2e	test-archive-test-suites.sh	Encoding suite publishes four Archive Test Fixture pairs and the full catalog contains 123 Case Keys
+REQ-208	e2e	test-archive-test-suites.sh	Encoding suite publishes four Archive Test Fixture pairs and the all suite contains 127 Case Keys
 REQ-208	unit	Deflate64LongMatchTests.Catalog_ContainsDeflate64LongMatchControl	Archive test catalog includes Deflate64 long match case key
 REQ-208	unit	ArchiveFixturePropertyTests.ArchiveTestModule_TryApplyAndTryBuild_ShouldAcceptAllCanonicalSuitesAndRejectUnknownSuites	Property: ArchiveTestModule parses CLI suite flags and resolves canonical suite names
 REQ-210	unit	ArchiveFixtureLayoutTests.Read_SingleStoredControl_CapturesExactOffsets	Layout reader parses local/central directory offsets for fixture ID computation

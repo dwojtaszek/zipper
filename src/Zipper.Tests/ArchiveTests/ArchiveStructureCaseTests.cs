@@ -1022,17 +1022,17 @@ public class ArchiveStructureCaseTests : WorkingDirectoryTestBase
     }
 
     [Fact]
-    public void ValidateAdlsSegmentBudget_WithOverrunOrRelativeSegments_ShouldReject()
+    public void ValidateDeepPathBudget_WithOverrunOrRelativeSegments_ShouldReject()
     {
         // The guard caps construction one past the violated platform limit (64 is
         // deliberately constructible for the exceeded fixture); 65+ and relative
         // markers must throw.
         Assert.Throws<InvalidDataException>(
-            () => ArchiveFixtureBuilder.ValidateAdlsSegmentBudget(
+            () => ArchiveFixtureBuilder.ValidateDeepPathBudget(
                 "path-adls-segments-boundary",
                 string.Join("/", Enumerable.Range(0, 65).Select(index => $"d{index:00}")) + "/target.txt"));
         Assert.Throws<InvalidDataException>(
-            () => ArchiveFixtureBuilder.ValidateAdlsSegmentBudget(
+            () => ArchiveFixtureBuilder.ValidateDeepPathBudget(
                 "path-adls-segments-boundary", "d01/../target.txt"));
     }
 
@@ -1068,7 +1068,7 @@ public class ArchiveStructureCaseTests : WorkingDirectoryTestBase
     public async Task GenerateAsync_AllSuites_PublishesUniqueValidatedPairsForEachCase()
     {
         var all = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.AllSuites);
-        Assert.Equal(123, all.Count);
+        Assert.Equal(127, all.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(all.Select(c => c.CaseKey).ToList(), 42, Path.Combine(TempDir, "all")),

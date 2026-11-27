@@ -137,6 +137,8 @@ Generate the same bounded nested ZIP payload and ZIP-looking bytes in opposite o
 zipper --archive-test-suite compatibility --archive-test-cases nested-opaque-forward,nested-opaque-reversed --seed 42 --output-path ./opaque-nested
 ```
 
+The [directory trees and name boundaries](docs/archive-test-suites.md#directory-trees-and-name-boundaries) include explicit, implicit, and directory-only ZIPs. Select `--archive-test-suite directory-workload` to publish 10,000 empty directory entries as ten fixture pairs within the standard budgets. The `all` suite excludes this workload.
+
 Expectation Files can declare Adapter Checks for named Reader Adapter Profiles. The E2E matrix requires Python `zipfile` and the .NET reference reader, compares Info-ZIP `unzip` when available, runs declared optional checks, and prints per-fixture agreement or splits; missing optional readers and platform-inapplicable Archive Test Fixtures are reported as skips. See [Archive Test Suites](docs/archive-test-suites.md).
 To generate the malformed `stored-payload-bitflip` Archive Test Fixture on its own:
 ```bash
@@ -281,7 +283,7 @@ All command-line flags recognized by Zipper:
 | `--hash-mode` | none | `actual`, `simulated`, `none` | Document hash computation mode |
 | `--hash-algorithms` | `md5` | `md5`, `sha1`, `sha256` | Comma-separated hash algorithms |
 | `--benchmark` | `false` | flag | Run performance benchmark suite and exit |
-| `--archive-test-suite` | none | `smoke`, `compatibility`, `malformed`, `security`, `encoding`, `all` | Publish an Archive Test Fixture suite (the `security` suite includes `name-sibling-prefix-traversal`; the `encoding` suite includes local/central codec divergence; closed flag set: requires `--output-path` pointing to a new directory; accepts only `--archive-test-suite`, `--archive-test-cases`, `--seed`, `--output-path`; see [Archive Test Suites](docs/archive-test-suites.md)) |
+| `--archive-test-suite` | none | `smoke`, `compatibility`, `malformed`, `security`, `encoding`, `directory-workload`, `all` | Publish an Archive Test Fixture suite (the `security` suite includes `name-sibling-prefix-traversal`; the `encoding` suite includes local/central codec divergence; closed flag set: requires `--output-path` pointing to a new directory; accepts only `--archive-test-suite`, `--archive-test-cases`, `--seed`, `--output-path`; see [Archive Test Suites](docs/archive-test-suites.md)) |
 | `--archive-test-cases` | none | comma-separated Case Keys | Filter the suite to the named cases (closed flag set; requires `--archive-test-suite`) |
 | `--version` | `false` | flag | Print full embedded version string and exit |
 

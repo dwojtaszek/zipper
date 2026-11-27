@@ -45,7 +45,7 @@ The malformed `crc-both-mismatch-deflate` Case Key (#1289) flips both CRC-32 hea
 ## Suites and case filtering (CLI)
 
 ```
-zipper --archive-test-suite <smoke|compatibility|malformed|security|encoding|all>
+zipper --archive-test-suite <smoke|compatibility|malformed|security|encoding|directory-workload|all>
        [--archive-test-cases <key,key,...>]
        --output-path <new-directory>
        [--seed <n>]
@@ -53,17 +53,45 @@ zipper --archive-test-suite <smoke|compatibility|malformed|security|encoding|all
 
 - `--archive-test-suite` selects a predefined suite (the catalogue explicitly owns membership; the frozen contract is #834):
   - `smoke` — exactly the five frozen Case Keys: `valid-empty`, `valid-stored`, `valid-deflate`, `crc-both-mismatch`, `missing-eocd` (healthy controls plus the two reader-hostile cases every consumer pipeline must survive).
-  - `compatibility` — every valid control/compatibility case, including `valid-deflate-stored-block`, a method-8 DEFLATE stream serialized as stored blocks.
+  - `compatibility` — valid cases outside the opt-in workload, including `valid-deflate-stored-block`, a method-8 DEFLATE stream serialized as stored blocks.
   - `malformed` — malformed atomic/combined cases, including `stored-payload-bitflip` (one payload byte in a Stored entry is flipped while its CRC-32, sizes, headers, and central directory declarations remain unchanged) and `deflate-payload-bitflip` (one literal byte in a stored-block DEFLATE stream is flipped while the stream remains decodable and the original CRC-32 and sizes stay declared), plus the pinned structure cases `unsupported-method`, `unsupported-method-deflate64`, `multidisk-eocd-declared`, `multidisk-central-entry-declared`, `mixed-methods-one-unsupported-member`, `declared-size-oversized`, the #1281 `declared-size-undersized` (both headers under-declare compressed and uncompressed sizes by 16 bytes while the payload remains intact), the #1282 `version-local-central-mismatch` (the local header declares version-needed 2.0 while the central header claims the Zip64 4.5 version the Archive does not use), `zip64-extra-without-sentinels`, the #1286 `zip64-eocd-offset-disagreement` (the regular EOCD keeps the true central-directory offset while its Zip64 counterpart points 16 bytes past it), the #1288 `extra-field-truncated` (the first central header declares 1,024 extra-field bytes where none exist, extending past physical EOF), the #870 parser differential `eocdr-ambiguity-comment`, the #1280 Zip64 detection differential `zip64-locator-ambiguity`, and the #1285 policy-sensitive `trailing-data-undeclared`.
   - `security` — policy-sensitive path, collision, and path-depth cases, including the #1290 `name-sibling-prefix-traversal` hostile-name corpus; the #870 parser differential `eocdr-ambiguity-comment`, the #1280 Zip64 detection differential `zip64-locator-ambiguity`, the #1285 `trailing-data-undeclared` parser-policy case, the #1286 Zip64 EOCD offset-source case (`zip64-eocd-offset-disagreement`), the #878 ADLS Gen2 segment-depth boundary pair (`path-adls-segments-boundary`, `path-adls-segments-exceeded`), the unsupported-feature cases (`unsupported-method`, `unsupported-method-deflate64`, `mixed-methods-one-unsupported-member`), the split-archive declaration cases (`multidisk-eocd-declared`, `multidisk-central-entry-declared`), the #1279 Zip64 header-vs-extra size source case (`zip64-extra-without-sentinels`), and the bounded resource cases (`high-ratio-bounded`, `nested-archives-depth-two`, `nested-archives-cumulative-budget-boundary`, `many-small-entries`, `declared-size-oversized`, `declared-size-undersized`, `zip-bomb-overlapping-deflate`, `bzip2-high-ratio-bounded`).
   - `encoding` — three legacy-codec 0x5C trail-byte controls (ticket #887: `encoding-cp932-trail-backslash`, `encoding-big5-trail-backslash`, `encoding-gbk-trail-backslash`) and the #1283 `encoding-local-central-codec-divergence` control. The trail-byte Archives have bit 11 clear and carry `0x5C` only as a CP932/Big5/GBK character's trail byte (`表` = `0x95 0x5C`, `許` = `0xB3 0x5C`, `乗` = `0x81 0x5C`). The #1283 Archive carries the same logical name (`§.txt`) as CP932 bytes (`81 98 2e 74 78 74`) in the local header with bit 11 clear and UTF-8 bytes (`c2 a7 2e 74 78 74`) in the central header with bit 11 set; equal byte lengths keep every following offset fixed. These controls remain outside the default compatibility suite because only a named codec consumer evaluates them. The verifier decodes the trail-byte names with CP932/Big5/GBK and asserts no spurious directory split after decoding; for #1283 it decodes each header with its own codec and requires both to render `§.txt`. Verifying the #1283 Case Key requires Python 3.11+ because the verifier uses `metadata_encoding="cp932"` for the local header, while bit 11 keeps the central name UTF-8.
-  - `all` — the distinct union of every case.
+  - `directory-workload` — opt-in workload with 10,000 empty directory entries distributed across ten fixtures.
+  - `all` — the distinct union of the non-opt-in suites.
 - Generation order is ordinal Case Key. `--archive-test-cases` filters to named Case Keys; unknown, empty, duplicate, or out-of-suite keys fail validation.
 - `--seed` accepts only non-negative integers and defaults to 42.
 - `--output-path` must be a **new** directory inside the working directory. Only these flags may be combined; all generation flags are rejected (ADR-0008).
 - Exit codes: `0` success, `1` validation or generation failure (no partial publication), `130` cancellation.
 
-### ZIP producer compatibility controls
+### Directory trees and name boundaries
+
+```bash
+zipper --archive-test-suite compatibility --archive-test-cases directory-tree-explicit,directory-tree-implicit,directory-tree-only,valid-name-length-boundaries --seed 42 --output-path ./directory-controls
+zipper --archive-test-suite directory-workload --seed 42 --output-path ./empty-directory-workload
+```
+
+| Case Key | ZIP directory entries | Files and materialized directories |
+| --- | --- | --- |
+| `directory-tree-explicit` | `café/`, `café/文/`, and the empty branch through `café/空/a/b/`, with parents first | All five directories and `café/文/file.txt` |
+| `directory-tree-implicit` | None | `café/文/file.txt` creates its two ancestors. The empty branch has no ZIP entry and produces no destination directory. |
+| `directory-tree-only` | The same five directory entries as the explicit tree | All five directories, with no files |
+
+The explicit and implicit cases carry identical bytes for the shared file. Directory entries have zero expanded size and no payload. The scale suite publishes `empty-directories-01` through `empty-directories-10`, with 1,000 globally unique named directory entries per fixture. It emits the entries directly because Directory Templates enumerate files. Choose one shard with `--archive-test-cases` or omit that option to publish all ten.
+
+The boundary measurements are for the whole ZIP member name. The byte and scalar totals include slash separators. Segment depth includes the filename, with the Archive root excluded.
+
+| Case Key / ordinal | UTF-8 bytes | Unicode scalars | Segments |
+| --- | ---: | ---: | ---: |
+| `valid-name-length-boundaries` / 0 | 1,024 | 1,023 | 5 |
+| `valid-name-length-boundaries` / 1 | 1,025 | 1,024 | 5 |
+| `valid-name-length-boundaries` / 2 | 1,026 | 1,025 | 5 |
+| `path-adls-segments-boundary` / 0 | 258 | 258 | 63 |
+| `path-adls-segments-exceeded` / 0 | 262 | 262 | 64 |
+
+The name-length fixture crosses 1,024/1,025 in both units using four 240-character ASCII directory components and a filename containing `é`. The built-in fixture verification profiles always check the Archive entries. To enable the long-path extraction expectation, set `ZIPPER_ATC_PLATFORMS=long-path-filesystem` on a destination that supports all three paths, including the extraction-root prefix. The ADLS pair reuses the container-relative paths. An ADLS profile accounts for the account and container separately when applying its own limits. Zipper tests probe their destination and report an explicit skip when it cannot preserve the paths, including for the reused `case-collision` and `unicode-normalization-collision` fixtures. ZIP verification checks both spellings and distinct per-entry content hashes even when a destination cannot store both.
+
+## ZIP producer compatibility controls
 
 - `valid-max-eocd-comment` pins a seekable CPython 3.14.10 Archive with one Stored member and an EOCD comment of exactly 65,535 bytes. The Android CTS recorded package installation rejection at this length. The independent APK verifier tests acceptance at the same length. This control isolates the ZIP comment from APK signing and installation policy. [CTS rejection record](https://android.googlesource.com/platform/cts/%2B/8a73803e7db19c75a436071e7ebd51a88784c2e3%5E2..8a73803e7db19c75a436071e7ebd51a88784c2e3/) · [APK verifier test](https://android.googlesource.com/platform/tools/apksig/%2B/2bbf5d704da8667803af95d8c8625ec98bd7cef4/src/test/java/com/android/apksig/ApkVerifierTest.java)
 - `valid-directory-attributes` isolates the observed reader split with two empty, slashless entries. The DOS entry has FAT host 0 and attributes `0x00000010`. The Unix entry has Unix host 3 and attributes `0x41ed0000`. The Expectation File and the `dotnet-reference` and `python-zipfile` profiles treat both as files with the empty-content hash. The optional `7zip` check records both names as directories in its technical listing and checks that reading the selected entries yields empty content. Info-ZIP 6.00 also displays directory modes for both entries in its technical listing. The split was verified with CPython 3.14.10 and 7-Zip 26.06. [CPython directory classification](https://docs.python.org/3/library/zipfile.html#zipfile.ZipInfo.is_dir)
