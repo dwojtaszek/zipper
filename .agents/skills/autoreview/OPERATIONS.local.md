@@ -433,3 +433,11 @@
 - **telemetry**: host=droid mode=local specialists=6 bundle=9187c
 - **lessons**: none
 - **suppressions**: none
+
+### 2026-11-27 opencode:branch:issue-1465-producer-controls
+
+- **findings**: initial 13 (7 ACTION wire-binding gaps, 6 INFO cleanup/coverage); final 3 INFO-only coverage gaps
+- **outcome**: accepted the ACTION fixes (sidecar name/kind binding, payload CRC/hash checks, descriptor size/flag checks, recipe-name pin). Rejected INFO cleanup/coverage gaps as non-actionable under review policy. Final correctness and testing reviewers found no ACTION items.
+- **telemetry**: host=opencode mode=branch specialists=9 initial + 2 final bundle=58Kc initial, 91Kc final
+- **lessons**: parallel review subagents mutated the shared tree despite read-only prompts; tree-integrity gate caught it, and the committed fixes were retained after full .NET/Python verification.
+- **suppressions**: none
