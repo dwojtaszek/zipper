@@ -208,6 +208,19 @@ public class ArchiveFixtureBuilderTests
     }
 
     [Fact]
+    public void Build_PinnedMaxEocdComment_WithMismatchedRecipeName_ThrowsDescriptively()
+    {
+        var baseline = ArchiveTestCatalog.GetCase("valid-max-eocd-comment");
+        var renamed = baseline.Recipe.Entries[0] with { Name = "other.txt" };
+        var definition = baseline with { Recipe = new ArchiveTestRecipe([renamed]) };
+
+        var error = Assert.Throws<InvalidOperationException>(
+            () => ArchiveFixtureBuilder.Build(definition, 42, CancellationToken.None));
+
+        Assert.Contains("100-byte stored 'd.txt' entry", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildControl_ValidDirectories_KeepsDirectoryAndFileEntries()
     {
         var artifact = ArchiveFixtureBuilder.BuildControl("valid-directories", 42, CancellationToken.None);

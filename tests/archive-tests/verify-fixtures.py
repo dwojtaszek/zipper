@@ -74,6 +74,7 @@ ZIP64_LOCATOR_AMBIGUITY_ARCHIVE_COMMENT = b"PK\x03\x04PK\x01\x02PK\x07\x08atc-co
 ZIP_EOCD_FIXED_SIZE = 22
 ZIP_LOCAL_HEADER_FIXED_SIZE = 30
 ZIP_CENTRAL_HEADER_FIXED_SIZE = 46
+MAX_EOCD_COMMENT_LENGTH = 0xFFFF
 ZIP64_LOCATOR_FIXED_SIZE = 20
 ZIP64_EOCD_FIXED_SIZE = 56
 ZIP64_VERSION = 45
@@ -2521,15 +2522,6 @@ def verify_compression_methods(case, zip_bytes):
     return "entries=%d" % len(entries)
 
 
-PRODUCER_COMPATIBILITY_CASE_KEYS = frozenset((
-    "valid-max-eocd-comment",
-    "valid-directory-attributes",
-    "valid-extra-field",
-    "valid-descriptor-signature",
-    "valid-descriptor-no-signature",
-))
-
-
 def _read_length_anchored_entry(check, zip_bytes, ordinal, cursor, eocd_offset, cd_offset):
     if cursor + ZIP_CENTRAL_HEADER_FIXED_SIZE > eocd_offset or zip_bytes[cursor:cursor + 4] != b"PK\x01\x02":
         raise VerificationError(check, "central header %d is missing or truncated" % ordinal)
@@ -2609,12 +2601,27 @@ def _parse_length_anchored_entries(check, zip_bytes, comment_length, expected_en
     return eocd_offset, cd_offset, comment_bytes, parsed
 
 
+def _verify_stored_payload_crc(check, zip_bytes, entry):
+    """Recomputes the Stored payload CRC-32 and sizes from the Archive bytes."""
+    import binascii
+    if entry["c_comp"] != entry["c_uncomp"]:
+        raise VerificationError(check, "stored payload sizes disagree")
+    end = entry["data_offset"] + entry["c_comp"]
+    if end > len(zip_bytes):
+        raise VerificationError(check, "stored payload extends past EOF")
+    payload = zip_bytes[entry["data_offset"]:end]
+    if binascii.crc32(payload) & 0xFFFFFFFF != entry["c_crc"]:
+        raise VerificationError(check, "payload CRC-32 disagrees with the central header")
+    return payload
+
+
 def _verify_max_eocd_comment(check, case, zip_bytes):
     sidecar_entries = case.get("entries", [])
     if len(sidecar_entries) != 1:
         raise VerificationError(check, "valid-max-eocd-comment must contain exactly one entry")
-    _, _, comment_bytes, parsed = _parse_length_anchored_entries(check, zip_bytes, 65535, 1)
-    if comment_bytes != b"X" * 65535:
+    _, _, comment_bytes, parsed = _parse_length_anchored_entries(
+        check, zip_bytes, MAX_EOCD_COMMENT_LENGTH, 1)
+    if comment_bytes != b"X" * MAX_EOCD_COMMENT_LENGTH:
         raise VerificationError(check, "max EOCD comment does not carry 65,535 'X' bytes")
     entry, sidecar = parsed[0], sidecar_entries[0]
     header_fields = (
@@ -2627,13 +2634,13 @@ def _verify_max_eocd_comment(check, case, zip_bytes):
     expected_fields = (b"d.txt", b"d.txt", 3, 0o600 << 16, 0, 0, 0, 0, b"", 0, entry["c_crc"], 100, 100, 100, 100)
     if header_fields != expected_fields:
         raise VerificationError(check, "valid-max-eocd-comment wire headers do not match pinned seekable sample")
-    payload_sha = sha256_hex(zip_bytes[entry["data_offset"]:entry["data_offset"] + 100])
+    payload_sha = sha256_hex(_verify_stored_payload_crc(check, zip_bytes, entry))
     if (sidecar.get("kind") != "file" or sidecar.get("readableName") != "d.txt"
             or sidecar.get("localNameRaw") != entry["l_name"].hex()
             or sidecar.get("centralNameRaw") != entry["c_name"].hex()
             or sidecar.get("contentSize") != 100 or payload_sha != sidecar.get("contentSha256")):
         raise VerificationError(check, "valid-max-eocd-comment entry sidecar or payload hash disagrees")
-    return "eocd-comment=65535 seekable-flags=0 d.txt-verified"
+    return "eocd-comment=%d seekable-flags=0 d.txt-verified" % MAX_EOCD_COMMENT_LENGTH
 
 
 def _verify_directory_attributes(check, case, zip_bytes):
@@ -2684,13 +2691,17 @@ def _verify_extra_field(check, case, zip_bytes):
             raise VerificationError(check, "valid-extra-field entry %d has a central extra field" % ordinal)
         if (entry["l_flags"] | entry["c_flags"]) & 0x0008:
             raise VerificationError(check, "valid-extra-field entry %d declares a data descriptor" % ordinal)
-        if (sidecar.get("localNameRaw") != entry["l_name"].hex()
+        if (sidecar.get("readableName") != entry["c_name"].decode("utf-8", "replace")
+                or sidecar.get("localNameRaw") != entry["l_name"].hex()
                 or sidecar.get("centralNameRaw") != entry["c_name"].hex()):
             raise VerificationError(check, "valid-extra-field entry %d names disagree with the sidecar" % ordinal)
         local = (entry["l_crc"], entry["l_comp"], entry["l_uncomp"])
         central = (entry["c_crc"], entry["c_comp"], entry["c_uncomp"])
         if local != central:
             raise VerificationError(check, "valid-extra-field entry %d local CRC or sizes disagree with central header" % ordinal)
+        payload = _verify_stored_payload_crc(check, zip_bytes, entry)
+        if sidecar.get("contentSha256") != sha256_hex(payload):
+            raise VerificationError(check, "valid-extra-field entry %d payload hash disagrees with the sidecar" % ordinal)
     return "local-extra=0x9999+4bytes central-extra=0"
 
 
@@ -2714,6 +2725,9 @@ def _verify_descriptor_form(check, case, zip_bytes):
             or sidecar.get("localNameRaw") != entry["l_name"].hex()
             or sidecar.get("centralNameRaw") != entry["c_name"].hex()):
         raise VerificationError(check, "%s descriptor member names disagree with the sidecar" % case_key)
+    payload = _verify_stored_payload_crc(check, zip_bytes, entry)
+    if sidecar.get("contentSha256") != sha256_hex(payload):
+        raise VerificationError(check, "%s descriptor payload hash disagrees with the sidecar" % case_key)
     descriptor = zip_bytes[entry["data_offset"] + entry["c_comp"]:cd_offset]
     core = struct.pack("<III", entry["c_crc"], entry["c_comp"], entry["c_uncomp"])
     expected_descriptor = (b"PK\x07\x08" + core) if signed else core
@@ -2729,6 +2743,8 @@ PRODUCER_COMPATIBILITY_VERIFIERS = {
     "valid-descriptor-signature": _verify_descriptor_form,
     "valid-descriptor-no-signature": _verify_descriptor_form,
 }
+
+PRODUCER_COMPATIBILITY_CASE_KEYS = frozenset(PRODUCER_COMPATIBILITY_VERIFIERS)
 
 
 def verify_producer_compatibility(case, zip_bytes):

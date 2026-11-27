@@ -69,6 +69,7 @@ public class ArchiveTestSuiteGeneratorTests : WorkingDirectoryTestBase
 
         if (caseKey == "valid-directory-attributes")
         {
+            Assert.Equal(0, json.RootElement.GetProperty("limits").GetProperty("expandedBytesBudget").GetInt32());
             var central = (int)BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(eocd + 16));
             Assert.Collection(archive.Entries,
                 entry =>
@@ -85,6 +86,13 @@ public class ArchiveTestSuiteGeneratorTests : WorkingDirectoryTestBase
                     Assert.Equal(0x41ed0000, entry.ExternalAttributes);
                     Assert.Equal(3, bytes[central + 46 + "dos-dir".Length + 5]);
                 });
+
+            var reseeded = await GenerateAsync(ArchiveTestRequest.Create(
+                [caseKey], 99, Path.Combine(TempDir, "out-dir-seed99")));
+            var reseededId = Assert.Single(reseeded.FixtureIds);
+            Assert.NotEqual(result.FixtureIds[0], reseededId);
+            Assert.Equal(bytes, await File.ReadAllBytesAsync(
+                Path.Combine(reseeded.PublishedDirectory, reseededId + ".zip")));
         }
     }
 

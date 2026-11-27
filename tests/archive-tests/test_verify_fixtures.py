@@ -3162,6 +3162,9 @@ class InvariantEnforcementTests(TempDirTest):
 class ProducerCompatibilityControlTests(TempDirTest):
     @staticmethod
     def _build_max_eocd_comment_zip():
+        """One stored 'd.txt' with a 65,535-byte 'X' comment. The verifier does not
+        check the DOS timestamp, so this helper uses the file-wide 2024 date; only the
+        pinned 1980-01-01 timestamp and the exact Archive hash belong to the generator."""
         payload = b"".join(
             hashlib.sha256(
                 b"valid-descriptor-signature\n42\nd.txt\n" + i.to_bytes(4, "little")
@@ -3263,11 +3266,28 @@ class ProducerCompatibilityControlTests(TempDirTest):
         # Corrupt local header CRC while keeping payload valid
         bad_local_crc = bytearray(zip_bytes)
         struct.pack_into("<I", bad_local_crc, 14, 0)
+        eocd = len(zip_bytes) - 22 - 65535
+        cd_offset = struct.unpack_from("<I", zip_bytes, eocd + 16)[0]
+        # Consistently wrong CRC in both headers must fail the payload recompute
+        bad_both_crc = bytearray(zip_bytes)
+        struct.pack_into("<I", bad_both_crc, 14, 0)
+        struct.pack_into("<I", bad_both_crc, cd_offset + 16, 0)
+        # Drift each pinned header identity field the verifier compares
+        bad_host = bytearray(zip_bytes)
+        bad_host[cd_offset + 5] = 0
+        bad_attr = bytearray(zip_bytes)
+        struct.pack_into("<I", bad_attr, cd_offset + 38, 0o644 << 16)
+        bad_flags = bytearray(zip_bytes)
+        struct.pack_into("<H", bad_flags, 6, struct.unpack_from("<H", bad_flags, 6)[0] | 8)
 
         for label, mutated in (
             ("short_comment", bytes(short_zip)),
             ("non_x_comment", bytes(bad_char_zip)),
             ("zero_local_crc", bytes(bad_local_crc)),
+            ("zero_both_crc", bytes(bad_both_crc)),
+            ("host_system", bytes(bad_host)),
+            ("external_attributes", bytes(bad_attr)),
+            ("descriptor_flag", bytes(bad_flags)),
         ):
             with self.subTest(label=label):
                 self._assert_fails("valid-max-eocd-comment", mutated, entries)
@@ -3330,6 +3350,18 @@ class ProducerCompatibilityControlTests(TempDirTest):
                 mutated[offset] ^= 1
                 self._assert_fails("valid-extra-field", bytes(mutated), entries)
 
+        # Flip the payload and both declared CRCs together: only the sidecar hash can reject it.
+        import binascii
+        payload_flip = bytearray(zip_bytes)
+        eocd = len(payload_flip) - 22
+        cd_offset = struct.unpack_from("<I", payload_flip, eocd + 16)[0]
+        data_offset = 30 + struct.unpack_from("<H", payload_flip, 26)[0] + struct.unpack_from("<H", payload_flip, 28)[0]
+        payload_flip[data_offset] ^= 0xFF
+        new_crc = binascii.crc32(bytes(payload_flip[data_offset:data_offset + len(a_data)])) & 0xFFFFFFFF
+        struct.pack_into("<I", payload_flip, 14, new_crc)
+        struct.pack_into("<I", payload_flip, cd_offset + 16, new_crc)
+        self._assert_fails("valid-extra-field", bytes(payload_flip), entries)
+
         # Inflated EOCD total_entries must fail fast without allocating unbounded entry tables
         fake_eocd = struct.pack("<IHHHHIIH", 0x06054B50, 0, 0, 65535, 65535, 0, 0, 0)
         with self.assertRaises(vf.VerificationError):
@@ -3344,9 +3376,13 @@ class ProducerCompatibilityControlTests(TempDirTest):
              [entry_record(0, "dos-dir", b""), entry_record(1, "unix-dir", b"")]),
             ("valid-extra-field", extra, [entry_record(0, "a.txt", a_data), entry_record(1, "b.bin", b_data)]),
         ):
-            for key in ("localNameRaw", "centralNameRaw"):
+            for key, wrong_name in (
+                ("readableName", "other.txt"),
+                ("localNameRaw", b"other.txt".hex()),
+                ("centralNameRaw", b"other.txt".hex()),
+            ):
                 with self.subTest(case_key=case_key, key=key):
-                    changed = [*entries[:-1], entries[-1] | {key: b"other.txt".hex()}]
+                    changed = [*entries[:-1], entries[-1] | {key: wrong_name}]
                     self._assert_fails(case_key, zip_bytes, changed)
 
     def test_descriptor_free_controls_reject_bit_three(self):
@@ -3376,6 +3412,17 @@ class ProducerCompatibilityControlTests(TempDirTest):
                 struct.pack_into("<I", bad_local_crc, 14, 1)
                 self._assert_fails(case_key, wrong_zip, entries)
                 self._assert_fails(case_key, bytes(bad_local_crc), entries)
+
+                # Flip the payload and every declared CRC together: only the sidecar hash can reject it.
+                import binascii
+                payload_flip = bytearray(zip_bytes)
+                cd_offset = struct.unpack_from("<I", payload_flip, len(payload_flip) - 6)[0]
+                data_offset = 30 + struct.unpack_from("<H", payload_flip, 26)[0]
+                payload_flip[data_offset] ^= 0xFF
+                new_crc = binascii.crc32(bytes(payload_flip[data_offset:data_offset + len(content)])) & 0xFFFFFFFF
+                struct.pack_into("<I", payload_flip, cd_offset + 16, new_crc)
+                struct.pack_into("<I", payload_flip, data_offset + len(content) + (4 if signed else 0), new_crc)
+                self._assert_fails(case_key, bytes(payload_flip), entries)
                 for key, wrong_name in (
                     ("readableName", "other.txt"),
                     ("localNameRaw", "6f746865722e747874"),

@@ -858,13 +858,16 @@ internal static class ArchiveFixtureBuilder
                 $"Archive Test case '{definition.CaseKey}': the pinned max-EOCD baseline expects one file entry.");
         }
 
+        // The pinned bytes carry the Unix host and external attributes; the recipe
+        // supplies only the member name and the payload prefix checked against the pin.
         var entry = definition.Recipe.Entries[0];
-        if (ArchiveTestCodec.WireCode(entry.PayloadCodec) != ArchiveTestCodec.Stored
+        if (entry.Name != "d.txt"
+            || ArchiveTestCodec.WireCode(entry.PayloadCodec) != ArchiveTestCodec.Stored
             || entry.PayloadPrefix is not { Length: 100 } content
             || entry.Length != content.Length)
         {
             throw new InvalidOperationException(
-                $"Archive Test case '{definition.CaseKey}': pinned max-EOCD recipe must match the 100-byte stored entry.");
+                $"Archive Test case '{definition.CaseKey}': pinned max-EOCD recipe must match the 100-byte stored 'd.txt' entry.");
         }
 
         var prefix = Convert.FromBase64String(

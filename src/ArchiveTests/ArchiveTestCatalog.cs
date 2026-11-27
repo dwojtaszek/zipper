@@ -8,6 +8,8 @@ namespace Zipper.ArchiveTests;
 /// verbatim prefix for scenarios that need specific bytes), and the compression method.
 /// <see cref="Directory"/> entries end with '/' and carry no payload; slash-named
 /// policy entries (ticket #875) are files with a trailing-slash name and keep theirs.
+/// <see cref="HostSystem"/> null means the builder pins the Unix host; 0 is an explicit
+/// MS-DOS host (the slashless-directory control), never "unset".
 /// </summary>
 internal sealed record ArchiveTestRecipeEntry(
     string Name,
