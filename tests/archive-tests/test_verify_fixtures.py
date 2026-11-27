@@ -3276,6 +3276,7 @@ class ProducerCompatibilityControlTests(TempDirTest):
         zip_bytes = self._build_directory_attributes_zip()
         entries = [entry_record(0, "dos-dir", b""), entry_record(1, "unix-dir", b"")]
         self._assert_passes("valid-directory-attributes", zip_bytes, entries, expanded_budget=0)
+        self._assert_passes("valid-directory-attributes", zip_bytes, entries[::-1], expanded_budget=0)
 
         dir_entry = {k: v for k, v in entries[0].items() if k != "payloadCodec"} | {"kind": "directory"}
         bad_local_crc = bytearray(zip_bytes)
@@ -3287,6 +3288,8 @@ class ProducerCompatibilityControlTests(TempDirTest):
             ("unix_attr", self._build_directory_attributes_zip(unix_attr=0), entries),
             ("local_crc", bytes(bad_local_crc), entries),
             ("sidecar_kind", zip_bytes, [dir_entry, entries[1]]),
+            ("swapped_ordinals", zip_bytes, [entries[0] | {"ordinal": 1}, entries[1] | {"ordinal": 0}]),
+            ("missing_ordinal", zip_bytes, [entries[0], entries[1] | {"ordinal": 2}]),
         ):
             with self.subTest(label=label):
                 self._assert_fails("valid-directory-attributes", mutated_zip, mutated_entries, expanded_budget=0)
@@ -3295,6 +3298,8 @@ class ProducerCompatibilityControlTests(TempDirTest):
         zip_bytes, a_data, b_data = self._build_extra_field_zip()
         entries = [entry_record(0, "a.txt", a_data), entry_record(1, "b.bin", b_data)]
         self._assert_passes("valid-extra-field", zip_bytes, entries)
+        self._assert_passes("valid-extra-field", zip_bytes, entries[::-1])
+        self._assert_fails("valid-extra-field", zip_bytes, [entries[0], entries[1] | {"ordinal": 2}])
 
         plain_zip = make_zip([("a.txt", a_data), ("b.bin", b_data)])
         # Append 1 byte to first central entry extra field and update EOCD cd_size/offset

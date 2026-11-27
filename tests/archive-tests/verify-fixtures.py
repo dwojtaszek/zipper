@@ -2640,9 +2640,12 @@ def _verify_directory_attributes(check, case, zip_bytes):
     if len(sidecar_entries) != len(expected_specs):
         raise VerificationError(check, "valid-directory-attributes must declare exactly two entries")
     _, _, _, parsed = _parse_length_anchored_entries(check, zip_bytes, 0, len(expected_specs))
+    entries_by_ordinal = {entry["ordinal"]: entry for entry in sidecar_entries}
     empty_sha = sha256_hex(b"")
     for ordinal, (expected_name, expected_host, expected_attr) in enumerate(expected_specs):
-        entry, sidecar = parsed[ordinal], sidecar_entries[ordinal]
+        entry, sidecar = parsed[ordinal], entries_by_ordinal.get(ordinal)
+        if sidecar is None:
+            raise VerificationError(check, "Expectation File is missing entry ordinal %d" % ordinal)
         wire_tuple = (
             entry["c_name"], entry["l_name"], entry["host_system"], entry["external_attr"],
             entry["c_method"], entry["l_method"], entry["c_crc"], entry["l_crc"],
@@ -2671,7 +2674,11 @@ def _verify_extra_field(check, case, zip_bytes):
     entry = parsed[0]
     if entry["l_extra"] != b"\x99\x99\x04\x00\xaa\xbb\xcc\xdd" or entry["c_extra_len"] != 0:
         raise VerificationError(check, "valid-extra-field local 0x9999 extra field or central extra length mismatches")
-    for ordinal, (entry, sidecar) in enumerate(zip(parsed, sidecar_entries)):
+    entries_by_ordinal = {entry["ordinal"]: entry for entry in sidecar_entries}
+    for ordinal, entry in enumerate(parsed):
+        sidecar = entries_by_ordinal.get(ordinal)
+        if sidecar is None:
+            raise VerificationError(check, "Expectation File is missing entry ordinal %d" % ordinal)
         if (entry["l_flags"] | entry["c_flags"]) & 0x0008:
             raise VerificationError(check, "valid-extra-field entry %d declares a data descriptor" % ordinal)
         if (sidecar.get("localNameRaw") != entry["l_name"].hex()
