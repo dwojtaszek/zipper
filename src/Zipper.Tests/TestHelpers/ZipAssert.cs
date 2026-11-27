@@ -10,7 +10,9 @@ public static class ZipAssert
     {
         "CON", "PRN", "AUX", "NUL",
         "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "COM¹", "COM²", "COM³",
         "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+        "LPT¹", "LPT²", "LPT³",
     };
     public static void AssertValidZip(string zipPath, Action<ZipArchive>? extraAsserts = null)
     {
@@ -154,15 +156,19 @@ public static class ZipAssert
             }
         }
 
-        // Compare complete Archive file-entry namespace against on-disk tree using the independent reader.
+        // Compare complete Archive file-entry and directory namespace against on-disk tree using the independent reader.
         var parentDir = Path.GetDirectoryName(normalizedProductionDir)!;
         var diskFiles = Directory.GetFiles(productionDir, "*", SearchOption.AllDirectories)
             .Select(f => Path.GetRelativePath(parentDir, f).Replace('\\', '/'))
+            .ToHashSet(StringComparer.Ordinal);
+        var diskDirs = Directory.GetDirectories(productionDir, "*", SearchOption.AllDirectories)
+            .Select(d => Path.GetRelativePath(parentDir, d).Replace('\\', '/'))
             .ToHashSet(StringComparer.Ordinal);
 
         using (var sharpZip = new ICSharpCode.SharpZipLib.Zip.ZipFile(zipPath))
         {
             var archiveFileEntries = new HashSet<string>(StringComparer.Ordinal);
+            var archiveDirs = new HashSet<string>(StringComparer.Ordinal);
             foreach (ICSharpCode.SharpZipLib.Zip.ZipEntry entry in sharpZip)
             {
                 Assert.Equal(entry.Name.EndsWith('/'), entry.IsDirectory);
@@ -170,12 +176,33 @@ public static class ZipAssert
                 {
                     archiveFileEntries.Add(entry.Name);
                 }
+
+                var entryName = entry.Name.TrimEnd('/');
+                if (entry.IsDirectory || entry.Name.EndsWith('/'))
+                {
+                    if (!string.Equals(entryName, prodName, StringComparison.Ordinal))
+                    {
+                        archiveDirs.Add(entryName);
+                    }
+                }
+
+                var slashIdx = entryName.LastIndexOf('/');
+                while (slashIdx > prodName.Length)
+                {
+                    var dir = entryName[..slashIdx];
+                    archiveDirs.Add(dir);
+                    slashIdx = dir.LastIndexOf('/');
+                }
             }
 
             // Missing entries or extra entries must fail.
             Assert.True(
                 diskFiles.SetEquals(archiveFileEntries),
                 $"Archive entries do not match on-disk tree. Missing from archive: [{string.Join(", ", diskFiles.Except(archiveFileEntries))}]. Extra in archive: [{string.Join(", ", archiveFileEntries.Except(diskFiles))}].");
+
+            Assert.True(
+                diskDirs.SetEquals(archiveDirs),
+                $"Archive directories do not match on-disk tree. Missing from archive: [{string.Join(", ", diskDirs.Except(archiveDirs))}]. Extra in archive: [{string.Join(", ", archiveDirs.Except(diskDirs))}].");
 
             // Verify DATA load files and manifest are present.
             Assert.Contains(archiveFileEntries, e => e.EndsWith("/_manifest.json", StringComparison.Ordinal));

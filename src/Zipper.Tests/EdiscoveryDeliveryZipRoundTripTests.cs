@@ -28,6 +28,60 @@ public class EdiscoveryDeliveryZipRoundTripTests : WorkingDirectoryTestBase
         string.Equals(Environment.GetEnvironmentVariable("ZIPPER_SCALE_RECIPES"), "true", StringComparison.OrdinalIgnoreCase);
 
     [Fact]
+    public async Task StandardRecipe_GeneratorDeterminism_ProducesIdenticalBytesAcrossFreshInstances()
+    {
+        var args = new[]
+        {
+            "--types", "pdf:1,docx:1,eml:1,tiff:1",
+            "--count", "4",
+            "--output-path", this.TempDir,
+            "--include-load-file",
+            "--loadfile-format", "dat",
+            "--with-families",
+            "--attachment-rate", "100",
+            "--with-text",
+            "--seed", "42",
+        };
+
+        var request1 = Cli.Pipeline.Build(args)!;
+        var request2 = Cli.Pipeline.Build(args)!;
+        var generators1 = FileGeneratorFactory.CreateMap(request1);
+
+        await Task.Delay(10);
+        var generators2 = FileGeneratorFactory.CreateMap(request2);
+
+        for (long i = 1; i <= request1.Output.FileCount; i++)
+        {
+            var fileType = request1.Output.ResolveFileType(i);
+            var folderNumber = Distributions.GetFolderNumber(i, request1.Output.FileCount, request1.Output.Folders, request1.LoadFile.Distribution);
+            var fileName = $"{i:D8}.{fileType}";
+            var workItem = new FileWorkItem
+            {
+                Index = i,
+                FolderNumber = folderNumber,
+                FolderName = $"folder_{folderNumber:D3}",
+                FileName = fileName,
+                FilePathInZip = $"folder_{folderNumber:D3}/{fileName}",
+                FileType = fileType,
+            };
+
+            var content1 = generators1[fileType].Generate(workItem, request1);
+            var content2 = generators2[fileType].Generate(workItem, request2);
+
+            Assert.Equal(content1.Content, content2.Content);
+
+            var attach1 = content1.GetAttachments();
+            var attach2 = content2.GetAttachments();
+            Assert.Equal(attach1.Count, attach2.Count);
+            for (int a = 0; a < attach1.Count; a++)
+            {
+                Assert.Equal(attach1[a].filename, attach2[a].filename);
+                Assert.Equal(attach1[a].content, attach2[a].content);
+            }
+        }
+    }
+
+    [Fact]
     public async Task StandardMode_WithIncludeLoadFile_RoundTripZipVerification()
     {
         var testDir = Path.Combine(this.TempDir, $"std_rt_{Guid.NewGuid():N}");

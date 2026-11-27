@@ -147,6 +147,12 @@ public class ZipAssertTests : TempDirectoryTestBase
     [InlineData("folder/PRN.csv")]
     [InlineData("COM1.tif")]
     [InlineData("LPT9.txt")]
+    [InlineData("reports/COM¹.txt")]
+    [InlineData("COM².txt")]
+    [InlineData("COM³")]
+    [InlineData("folder/LPT¹.csv")]
+    [InlineData("LPT².tif")]
+    [InlineData("LPT³.txt")]
     [InlineData("NUL")]
     [InlineData("con/file.txt")]
     public void AssertValidZip_ReservedWindowsDeviceName_ThrowsException(string entryName)
@@ -258,6 +264,88 @@ public class ZipAssertTests : TempDirectoryTestBase
         });
 
         Assert.True(invoked);
+    }
+
+    [Fact]
+    public void AssertProductionZipMatchesDisk_EmptyDirectoryOnDiskMissingInZip_ThrowsException()
+    {
+        var prodDir = Path.Combine(this.TempDir, "PROD_MISSING_DIR");
+        Directory.CreateDirectory(prodDir);
+        var dataDir = Path.Combine(prodDir, "DATA");
+        Directory.CreateDirectory(dataDir);
+        File.WriteAllText(Path.Combine(dataDir, "load.dat"), "data");
+        File.WriteAllText(Path.Combine(prodDir, "_manifest.json"), "{}");
+        Directory.CreateDirectory(Path.Combine(prodDir, "EMPTY_DIR"));
+
+        var zipPath = Path.Combine(this.TempDir, "PROD_MISSING_DIR.zip");
+        using (var archive = ZipFile.Open(zipPath, ZipArchiveMode.Create))
+        {
+            var entry1 = archive.CreateEntry("PROD_MISSING_DIR/DATA/load.dat", CompressionLevel.NoCompression);
+            using (var writer = new StreamWriter(entry1.Open())) { writer.Write("data"); }
+
+            var entry2 = archive.CreateEntry("PROD_MISSING_DIR/_manifest.json", CompressionLevel.NoCompression);
+            using (var writer = new StreamWriter(entry2.Open())) { writer.Write("{}"); }
+        }
+
+        Assert.ThrowsAny<XunitException>(() =>
+        {
+            ZipAssert.AssertProductionZipMatchesDisk(zipPath, prodDir, ZipCompressionMethod.Store);
+        });
+    }
+
+    [Fact]
+    public void AssertProductionZipMatchesDisk_ExtraEmptyDirectoryInZip_ThrowsException()
+    {
+        var prodDir = Path.Combine(this.TempDir, "PROD_EXTRA_DIR");
+        Directory.CreateDirectory(prodDir);
+        var dataDir = Path.Combine(prodDir, "DATA");
+        Directory.CreateDirectory(dataDir);
+        File.WriteAllText(Path.Combine(dataDir, "load.dat"), "data");
+        File.WriteAllText(Path.Combine(prodDir, "_manifest.json"), "{}");
+
+        var zipPath = Path.Combine(this.TempDir, "PROD_EXTRA_DIR.zip");
+        using (var archive = ZipFile.Open(zipPath, ZipArchiveMode.Create))
+        {
+            var entry1 = archive.CreateEntry("PROD_EXTRA_DIR/DATA/load.dat", CompressionLevel.NoCompression);
+            using (var writer = new StreamWriter(entry1.Open())) { writer.Write("data"); }
+
+            var entry2 = archive.CreateEntry("PROD_EXTRA_DIR/_manifest.json", CompressionLevel.NoCompression);
+            using (var writer = new StreamWriter(entry2.Open())) { writer.Write("{}"); }
+
+            // Extra directory entry in ZIP
+            archive.CreateEntry("PROD_EXTRA_DIR/EXTRA_DIR/");
+        }
+
+        Assert.ThrowsAny<XunitException>(() =>
+        {
+            ZipAssert.AssertProductionZipMatchesDisk(zipPath, prodDir, ZipCompressionMethod.Store);
+        });
+    }
+
+    [Fact]
+    public void AssertProductionZipMatchesDisk_EmptyDirectoryInBoth_Passes()
+    {
+        var prodDir = Path.Combine(this.TempDir, "PROD_MATCHING_DIR");
+        Directory.CreateDirectory(prodDir);
+        var dataDir = Path.Combine(prodDir, "DATA");
+        Directory.CreateDirectory(dataDir);
+        File.WriteAllText(Path.Combine(dataDir, "load.dat"), "data");
+        File.WriteAllText(Path.Combine(prodDir, "_manifest.json"), "{}");
+        Directory.CreateDirectory(Path.Combine(prodDir, "EMPTY_DIR"));
+
+        var zipPath = Path.Combine(this.TempDir, "PROD_MATCHING_DIR.zip");
+        using (var archive = ZipFile.Open(zipPath, ZipArchiveMode.Create))
+        {
+            var entry1 = archive.CreateEntry("PROD_MATCHING_DIR/DATA/load.dat", CompressionLevel.NoCompression);
+            using (var writer = new StreamWriter(entry1.Open())) { writer.Write("data"); }
+
+            var entry2 = archive.CreateEntry("PROD_MATCHING_DIR/_manifest.json", CompressionLevel.NoCompression);
+            using (var writer = new StreamWriter(entry2.Open())) { writer.Write("{}"); }
+
+            archive.CreateEntry("PROD_MATCHING_DIR/EMPTY_DIR/");
+        }
+
+        ZipAssert.AssertProductionZipMatchesDisk(zipPath, prodDir, ZipCompressionMethod.Store);
     }
 
     [Fact]
