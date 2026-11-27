@@ -4,13 +4,13 @@
   "totalRecords": 50,
   "properties": {
     "encoding": "UTF-8",
-    "lineEnding": "CRLF",
+    "lineEnding": "LF",
     "delimiters": {
-      "column": "ascii:20",
-      "quote": "ascii:254",
-      "newline": "ascii:174",
-      "multiValue": "char:;",
-      "nestedValue": "char:\\"
+      "column": "char:,",
+      "quote": "char:\u0022",
+      "newline": "none",
+      "multiValue": "none",
+      "nestedValue": "none"
     }
   },
   "chaosMode": {

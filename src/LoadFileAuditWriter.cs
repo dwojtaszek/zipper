@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Zipper.LoadFiles;
 
 namespace Zipper;
 
@@ -276,12 +277,12 @@ internal static class LoadFileAuditWriter
         var formatName = FormatDisplayName(activeFormat);
 
         AuditDelimiters delimiters;
-        if (activeFormat == LoadFileFormat.Opt)
+        if (activeFormat is LoadFileFormat.Opt or LoadFileFormat.Csv or LoadFileFormat.EdrmXml)
         {
             delimiters = new AuditDelimiters
             {
-                Column = "char:,",
-                Quote = "none",
+                Column = activeFormat == LoadFileFormat.EdrmXml ? "none" : "char:,",
+                Quote = activeFormat == LoadFileFormat.Csv ? "char:\"" : "none",
                 Newline = "none",
                 MultiValue = "none",
                 NestedValue = "none",
@@ -299,7 +300,7 @@ internal static class LoadFileAuditWriter
             };
         }
 
-        var encodingName = request.LoadFile.Encoding;
+        var encodingName = activeFormat == LoadFileFormat.EdrmXml ? "UTF-8" : request.LoadFile.Encoding;
         if (activeFormat == LoadFileFormat.Opt)
         {
             if (!request.LoadFile.IsEncodingExplicit && string.Equals(request.LoadFile.Encoding, "UTF-8", StringComparison.Ordinal))
@@ -316,7 +317,7 @@ internal static class LoadFileAuditWriter
             Properties = new AuditProperties
             {
                 Encoding = encodingName,
-                LineEnding = request.Delimiters.EndOfLine,
+                LineEnding = ResolveAuditLineEnding(request, activeFormat),
                 Delimiters = delimiters,
             },
             ChaosMode = CreateAuditChaosMode(request, anomalies),
@@ -383,6 +384,25 @@ internal static class LoadFileAuditWriter
         LoadFileFormat.Concordance => "concordance",
         _ => "dat",
     };
+
+    private static string ResolveAuditLineEnding(FileGenerationRequest request, LoadFileFormat format)
+    {
+        if (format == LoadFileFormat.Opt)
+        {
+            return request.Delimiters.EndOfLine;
+        }
+
+        var mode = request.LoadfileOnly ? WriterMode.LoadfileOnly :
+            request.Production.ProductionSet ? WriterMode.ProductionSet : WriterMode.Standard;
+        // Standard Native File chaos does not change the Load File emitter's line endings.
+        var lineEnding = TextOutputPolicy.ResolveEndOfLine(request, format, mode, hasChaos: false);
+        return lineEnding switch
+        {
+            "\r\n" => "CRLF",
+            "\n" => "LF",
+            _ => "CR",
+        };
+    }
 
     private static string FormatDelimiter(string delimiter)
     {

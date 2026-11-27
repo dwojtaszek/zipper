@@ -1,16 +1,16 @@
 {
-  "fileName": "loadfile.opt",
-  "format": "OPT (Image)",
-  "totalRecords": 13,
+  "fileName": "loadfile.dat",
+  "format": "DAT (Metadata)",
+  "totalRecords": 3,
   "properties": {
-    "encoding": "ANSI",
+    "encoding": "UTF-8",
     "lineEnding": "CRLF",
     "delimiters": {
-      "column": "char:,",
-      "quote": "none",
-      "newline": "none",
-      "multiValue": "none",
-      "nestedValue": "none"
+      "column": "ascii:20",
+      "quote": "ascii:254",
+      "newline": "ascii:174",
+      "multiValue": "char:;",
+      "nestedValue": "char:\\"
     }
   },
   "chaosMode": {

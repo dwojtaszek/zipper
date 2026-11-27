@@ -617,6 +617,13 @@ if errorlevel 1 (
 
 echo [ SUCCESS ] Test Case 12: Negative and malformed output validation passed
 
+echo [ INFO ] Test Case 13: Loadfile-Only Audit Files match each format
+%ZIPPER_CMD% --loadfile-only --count 2 --seed 42 --load-file-formats dat,csv,edrm-xml --encoding UTF-16 --output-path "%TEST_OUTPUT_DIR%\test13_audits"
+if errorlevel 1 exit /b 1
+%PYCMD% -c "import json,pathlib,sys; root=pathlib.Path(sys.argv[1]); docs=[json.loads(p.read_text(encoding='utf-8')) for p in root.glob('*_properties.json')]; names={doc['fileName'] for doc in docs}; assert len(docs)==3 and len(names)==3 and all((root/name).is_file() for name in names); props={pathlib.Path(doc['fileName']).suffix:doc['properties'] for doc in docs}; assert props['.csv']['delimiters']['column']=='char:,' and props['.xml']['encoding']=='UTF-8'" "%TEST_OUTPUT_DIR%\test13_audits"
+if errorlevel 1 exit /b 1
+echo [ SUCCESS ] Test Case 13: Loadfile-Only Audit Files passed
+
 :: --- All Tests Passed ---
 
 echo [ SUCCESS ] All Load File Formats E2E tests passed!

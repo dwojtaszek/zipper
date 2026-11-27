@@ -64,7 +64,7 @@ internal sealed class TextOutputPolicy
         return resolvedEncoding;
     }
 
-    private static string ResolveEndOfLine(FileGenerationRequest request, LoadFileFormat format, WriterMode mode, bool hasChaos)
+    internal static string ResolveEndOfLine(FileGenerationRequest request, LoadFileFormat format, WriterMode mode, bool hasChaos)
     {
         if (format == LoadFileFormat.Csv || format == LoadFileFormat.Concordance)
         {

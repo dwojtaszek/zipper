@@ -550,6 +550,12 @@ fi
 
 print_success "Test Case 12: Negative and malformed output validation passed"
 
+print_info "Test Case 13: Loadfile-Only Audit Files match each format"
+zipper --loadfile-only --count 2 --seed 42 --load-file-formats dat,csv,edrm-xml \
+  --encoding UTF-16 --output-path "$TEST_OUTPUT_DIR/test13_audits"
+"$PYTHON_BIN" -c "import json,pathlib,sys; root=pathlib.Path(sys.argv[1]); docs=[json.loads(p.read_text(encoding='utf-8')) for p in root.glob('*_properties.json')]; names={doc['fileName'] for doc in docs}; assert len(docs)==3 and len(names)==3 and all((root/name).is_file() for name in names); props={pathlib.Path(doc['fileName']).suffix:doc['properties'] for doc in docs}; assert props['.csv']['delimiters']['column']=='char:,' and props['.xml']['encoding']=='UTF-8'" "$TEST_OUTPUT_DIR/test13_audits"
+print_success "Test Case 13: Loadfile-Only Audit Files passed"
+
 # --- All Tests Passed ---
 
 print_success "All Load File Formats E2E tests passed!"

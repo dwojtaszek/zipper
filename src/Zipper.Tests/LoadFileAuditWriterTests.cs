@@ -6,6 +6,24 @@ namespace Zipper.Tests;
 
 public class LoadFileAuditWriterTests : TempDirectoryTestBase
 {
+    [Theory]
+    [InlineData(LoadFileFormat.Csv, "UTF-16", "char:,", "char:\"")]
+    [InlineData(LoadFileFormat.EdrmXml, "UTF-8", "none", "none")]
+    public void GenerateAuditJson_FormatSpecificProperties_MatchWriter(
+        LoadFileFormat format, string encoding, string column, string quote)
+    {
+        var request = new FileGenerationRequest { LoadFile = new LoadFileConfig { Encoding = "UTF-16" } };
+        using var json = JsonDocument.Parse(LoadFileAuditWriter.GenerateAuditJson("loadfile", request, [], format: format));
+        var properties = json.RootElement.GetProperty("properties");
+        var delimiters = properties.GetProperty("delimiters");
+        Assert.Equal(encoding, properties.GetProperty("encoding").GetString());
+        Assert.Equal(column, delimiters.GetProperty("column").GetString());
+        Assert.Equal(quote, delimiters.GetProperty("quote").GetString());
+        Assert.Equal("none", delimiters.GetProperty("newline").GetString());
+        Assert.Equal("none", delimiters.GetProperty("multiValue").GetString());
+        Assert.Equal("none", delimiters.GetProperty("nestedValue").GetString());
+    }
+
     [Fact]
     public void GenerateAuditJson_OptFormat_SetsCorrectDefaultDelimitersAndEncoding()
     {
@@ -140,7 +158,7 @@ public class LoadFileAuditWriterTests : TempDirectoryTestBase
 
         var properties = root.GetProperty("properties");
         Assert.Equal("UTF-8", properties.GetProperty("encoding").GetString());
-        Assert.Equal("CRLF", properties.GetProperty("lineEnding").GetString());
+        Assert.Equal(Environment.NewLine == "\r\n" ? "CRLF" : "LF", properties.GetProperty("lineEnding").GetString());
 
         var delimiters = properties.GetProperty("delimiters");
         Assert.Equal("char:|", delimiters.GetProperty("column").GetString());
