@@ -400,7 +400,8 @@ internal static class ArchiveTestCatalog
             ArchiveTestRecipeEntry.DeepPathFile(LengthBoundaryName(54), "atc-name-boundary"),
             ArchiveTestRecipeEntry.DeepPathFile(LengthBoundaryName(55), "atc-byte-length-exceeded"),
             ArchiveTestRecipeEntry.DeepPathFile(LengthBoundaryName(56), "atc-scalar-length-exceeded"),
-        ]),
+        ]) with
+        { ExpectationRevision = 2 },
         // A valid control whose stored payload begins with local-header-signature-like
         // bytes (PK\x03\x04): readers must treat them as data, never as a header.
         ["valid-signature-payload"] = new(

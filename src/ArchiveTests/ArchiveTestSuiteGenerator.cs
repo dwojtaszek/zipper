@@ -362,13 +362,14 @@ internal static class ArchiveTestSuiteGenerator
                 return PolicyExpectations(definition);
             }
 
+            // REQ-212 requires the whole fixture to be scoped when extraction needs a specific host.
+            var platform = definition.CaseKey == ArchiveTestCatalog.NameLengthBoundariesCaseKey ? "long-path-filesystem" : null;
             return
             [
-                Expectation(ListOperation, StrictProfile, ["listed-count-matches-entries"], [NoPartialWrites, "listed-count == entry-count"]),
-                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches"], [NoPartialWrites]),
-                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-passes"], [NoPartialWrites]),
-                Expectation(ExtractOperation, StrictProfile, ["extract-completes"], [NoPartialWrites, "extracted-bytes-match-content-hashes"],
-                    platform: definition.CaseKey == ArchiveTestCatalog.NameLengthBoundariesCaseKey ? "long-path-filesystem" : null),
+                Expectation(ListOperation, StrictProfile, ["listed-count-matches-entries"], [NoPartialWrites, "listed-count == entry-count"], platform: platform),
+                Expectation(ReadEntryOperation, StrictProfile, ["read-entry-content-matches"], [NoPartialWrites], platform: platform),
+                Expectation(IntegrityCheckOperation, StrictProfile, ["integrity-passes"], [NoPartialWrites], platform: platform),
+                Expectation(ExtractOperation, StrictProfile, ["extract-completes"], [NoPartialWrites, "extracted-bytes-match-content-hashes"], platform: platform),
             ];
         }
 
