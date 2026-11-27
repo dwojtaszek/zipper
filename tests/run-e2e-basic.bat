@@ -26,7 +26,7 @@ if exist "%TEST_OUTPUT_DIR%" rmdir /s /q "%TEST_OUTPUT_DIR%"
 mkdir "%TEST_OUTPUT_DIR%"
 
 set TESTS_PASSED=0
-set TESTS_TOTAL=7
+set TESTS_TOTAL=8
 
 REM ─────────────────────────────────────────────
 REM Test 1: Basic PDF generation (core happy path)
@@ -307,6 +307,34 @@ if errorlevel 1 goto :cleanup
 powershell -NoProfile -Command "Add-Type -Assembly System.IO.Compression.FileSystem; $zip = [System.IO.Compression.ZipFile]::OpenRead($env:workload); try { if ((($zip.Entries | ForEach-Object { $_.Length }) -join ',') -ne '65537,65537,3,0') { exit 1 } } finally { $zip.Dispose() }"
 if errorlevel 1 goto :cleanup
 echo [ SUCCESS ] Test 7: Exact-size ZIP workload
+set /a TESTS_PASSED+=1
+
+REM ─────────────────────────────────────────────
+REM Test 8: DAT hash columns (REQ-167 without a Column Profile)
+REM ─────────────────────────────────────────────
+echo [ INFO ] Test 8: DAT hash columns
+%BINARY% --type pdf --count 3 --output-path "%TEST_OUTPUT_DIR%\pdf_hash" --hash-mode actual --hash-algorithms md5,sha1,sha256
+if errorlevel 1 (
+    echo [ ERROR ] Test 8 failed: DAT hash columns
+    goto :cleanup
+)
+
+set "dat_file="
+for %%F in ("%TEST_OUTPUT_DIR%\pdf_hash\*.dat") do set "dat_file=%%F"
+if not defined dat_file (
+    echo [ ERROR ] Test 8: No .dat file found
+    goto :cleanup
+)
+
+for %%C in (MD5HASH SHA1HASH SHA256HASH) do (
+    findstr /c:"%%C" "%dat_file%" >nul
+    if errorlevel 1 (
+        echo [ ERROR ] Test 8: Hash header missing: %%C
+        goto :cleanup
+    )
+)
+
+echo [ SUCCESS ] Test 8: DAT hash columns — PASSED
 set /a TESTS_PASSED+=1
 
 :cleanup

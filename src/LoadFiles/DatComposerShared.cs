@@ -88,20 +88,42 @@ internal static class DatComposerShared
     /// Returns null when the column is not a hash column or the hash is not present.
     /// </summary>
     internal static string? ResolveHashColumn(string upperColumnName, FileData fileData)
+        => ResolveHashColumn(upperColumnName, fileData.Hashes);
+
+    /// <summary>
+    /// Resolves a hash-column name to its value from a hash dictionary.
+    /// Returns null when the column is not a hash column or the hash is not present.
+    /// </summary>
+    internal static string? ResolveHashColumn(string upperColumnName, IReadOnlyDictionary<Config.HashAlgorithm, string>? hashes)
     {
-        if (fileData.Hashes is null)
+        if (hashes is null)
         {
             return null;
         }
 
         var algo = Config.HashUtility.GetColumnAlgorithm(upperColumnName);
 
-        if (algo.HasValue && fileData.Hashes.TryGetValue(algo.Value, out var hashValue))
+        if (algo.HasValue && hashes.TryGetValue(algo.Value, out var hashValue))
         {
             return hashValue;
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Appends one value per hash column, in the same order as the header columns.
+    /// Missing hashes become empty strings.
+    /// </summary>
+    internal static void AppendHashValues(
+        List<string> values,
+        IReadOnlyDictionary<Config.HashAlgorithm, string>? hashes,
+        IReadOnlyList<string> hashColumnKeys)
+    {
+        foreach (var key in hashColumnKeys)
+        {
+            values.Add(ResolveHashColumn(key, hashes) ?? string.Empty);
+        }
     }
 
     /// <summary>

@@ -122,6 +122,108 @@ public sealed class ActualHashIntegrationTests : TempDirectoryTestBase
         }
     }
 
+    [Fact]
+    public async Task StandardMode_DatWithoutColumnProfile_EmitsAllConfiguredHashColumnsMatchingArchiveBytes()
+    {
+        const int expectedCount = 3;
+        var request = CreateBaseStandardRequest(fileCount: expectedCount, fileType: "pdf", seed: 42);
+        request.LoadFile = request.LoadFile with { Formats = new List<LoadFileFormat> { LoadFileFormat.Dat } };
+        request.Output = request.Output with { WithText = true };
+        request.Metadata = request.Metadata with { WithCollectionMetadata = true };
+        request.Hash = new HashConfig
+        {
+            Mode = HashMode.Actual,
+            Algorithms = new HashSet<Config.HashAlgorithm>
+            {
+                Config.HashAlgorithm.MD5,
+                Config.HashAlgorithm.SHA1,
+                Config.HashAlgorithm.SHA256,
+            },
+        };
+
+        var result = await new ParallelFileGenerator().GenerateFilesAsync(request);
+
+        Assert.True(File.Exists(result.ZipFilePath), "Archive ZIP file must exist.");
+        using var archive = ZipFile.OpenRead(result.ZipFilePath);
+
+        var header = File.ReadLines(result.LoadFilePath).First();
+        Assert.Contains("MD5HASH", header, StringComparison.Ordinal);
+        Assert.Contains("SHA1HASH", header, StringComparison.Ordinal);
+        Assert.Contains("SHA256HASH", header, StringComparison.Ordinal);
+        Assert.Equal(1, header.Split("MD5HASH", StringSplitOptions.None).Length - 1);
+        Assert.Equal(1, header.Split("SHA1HASH", StringSplitOptions.None).Length - 1);
+        Assert.Equal(1, header.Split("SHA256HASH", StringSplitOptions.None).Length - 1);
+        var headerColumns = header.Split('\u0014')
+            .Select(c => c.Trim('\u00fe', '\uFEFF', '\r', '\n'))
+            .ToList();
+        Assert.Equal(new[] { "MD5HASH", "SHA1HASH", "SHA256HASH" }, headerColumns.TakeLast(3));
+
+        var md5Records = ParseEmittedLoadFileRecords(result.LoadFilePath, LoadFileFormat.Dat, Config.HashAlgorithm.MD5);
+        var sha1Records = ParseEmittedLoadFileRecords(result.LoadFilePath, LoadFileFormat.Dat, Config.HashAlgorithm.SHA1);
+        var sha256Records = ParseEmittedLoadFileRecords(result.LoadFilePath, LoadFileFormat.Dat, Config.HashAlgorithm.SHA256);
+        Assert.Equal(expectedCount, md5Records.Count);
+        Assert.Equal(expectedCount, sha1Records.Count);
+        Assert.Equal(expectedCount, sha256Records.Count);
+
+        for (int i = 0; i < expectedCount; i++)
+        {
+            Assert.Equal(md5Records[i].FilePath, sha1Records[i].FilePath);
+            Assert.Equal(md5Records[i].FilePath, sha256Records[i].FilePath);
+
+            var entry = archive.GetEntry(md5Records[i].FilePath);
+            Assert.NotNull(entry);
+            var entryBytes = ReadArchiveEntryBytes(entry);
+
+            Assert.Equal(ComputeIndependentDigest(entryBytes, Config.HashAlgorithm.MD5), md5Records[i].EmittedHash);
+            Assert.Equal(ComputeIndependentDigest(entryBytes, Config.HashAlgorithm.SHA1), sha1Records[i].EmittedHash);
+            Assert.Equal(ComputeIndependentDigest(entryBytes, Config.HashAlgorithm.SHA256), sha256Records[i].EmittedHash);
+        }
+    }
+
+    [Fact]
+    public async Task StandardMode_SeededEmailWithFamilies_DatHashMatchesEachArchiveEntryBytes()
+    {
+        const int parentCount = 3;
+        var request = CreateBaseStandardRequest(fileCount: parentCount, fileType: "eml", seed: 42);
+        request.Metadata = request.Metadata with { WithFamilies = true };
+        request.LoadFile = request.LoadFile with
+        {
+            AttachmentRate = 100,
+            Formats = new List<LoadFileFormat> { LoadFileFormat.Dat },
+        };
+        request.Hash = new HashConfig
+        {
+            Mode = HashMode.Actual,
+            Algorithms = new HashSet<Config.HashAlgorithm>
+            {
+                Config.HashAlgorithm.MD5,
+                Config.HashAlgorithm.SHA256,
+            },
+        };
+
+        var result = await new ParallelFileGenerator().GenerateFilesAsync(request);
+
+        Assert.True(File.Exists(result.ZipFilePath), "Archive ZIP file must exist.");
+        using var archive = ZipFile.OpenRead(result.ZipFilePath);
+
+        var md5Records = ParseEmittedLoadFileRecords(result.LoadFilePath, LoadFileFormat.Dat, Config.HashAlgorithm.MD5);
+        var sha256Records = ParseEmittedLoadFileRecords(result.LoadFilePath, LoadFileFormat.Dat, Config.HashAlgorithm.SHA256);
+        Assert.True(md5Records.Count > parentCount, "Family run must emit child Attachment rows.");
+        Assert.Equal(md5Records.Count, sha256Records.Count);
+
+        for (int i = 0; i < md5Records.Count; i++)
+        {
+            Assert.Equal(md5Records[i].FilePath, sha256Records[i].FilePath);
+
+            var entry = archive.GetEntry(md5Records[i].FilePath);
+            Assert.NotNull(entry);
+            var entryBytes = ReadArchiveEntryBytes(entry);
+
+            Assert.Equal(ComputeIndependentDigest(entryBytes, Config.HashAlgorithm.MD5), md5Records[i].EmittedHash);
+            Assert.Equal(ComputeIndependentDigest(entryBytes, Config.HashAlgorithm.SHA256), sha256Records[i].EmittedHash);
+        }
+    }
+
     [Theory]
     [InlineData(Config.HashAlgorithm.MD5)]
     [InlineData(Config.HashAlgorithm.SHA1)]
@@ -403,6 +505,167 @@ public sealed class ActualHashIntegrationTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public async Task ProductionSet_DatWithoutColumnProfile_EmitsHashColumnsMatchingOnDiskBytes()
+    {
+        const int expectedCount = 2;
+        var prodDir = Path.Combine(this.TempDir, $"ProdDatHash_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(prodDir);
+
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                OutputPath = prodDir,
+                FileCount = expectedCount,
+                FileType = "pdf",
+                Concurrency = 1,
+            },
+            Production = new ProductionConfig
+            {
+                ProductionSet = true,
+                VolumeSize = 5,
+                ProductionId = "PRODDATHASH",
+                RedactedProduction = true,
+            },
+            Metadata = new MetadataConfig { Seed = 42, WithThreading = true },
+            Bates = new BatesNumberConfig
+            {
+                Prefix = "PROD",
+                Start = 1,
+                Digits = 6,
+                Increment = 1,
+            },
+            Hash = new HashConfig
+            {
+                Mode = HashMode.Actual,
+                Algorithms = new HashSet<Config.HashAlgorithm>
+                {
+                    Config.HashAlgorithm.MD5,
+                    Config.HashAlgorithm.SHA1,
+                    Config.HashAlgorithm.SHA256,
+                },
+            },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+        };
+
+        var result = await ProductionSetOrchestrator.GenerateAsync(request, new CapturingDiskMaterializer(), new HashComputer());
+
+        Assert.NotNull(result);
+        var datPath = Path.Combine(result.ProductionPath, "DATA", "loadfile.dat");
+        Assert.True(File.Exists(datPath), "DATA/loadfile.dat must exist on disk.");
+
+        var header = File.ReadLines(datPath).First();
+        Assert.Contains("MD5HASH", header, StringComparison.Ordinal);
+        Assert.Contains("SHA1HASH", header, StringComparison.Ordinal);
+        Assert.Contains("SHA256HASH", header, StringComparison.Ordinal);
+        Assert.Equal(1, header.Split("MD5HASH", StringSplitOptions.None).Length - 1);
+        Assert.Equal(1, header.Split("SHA1HASH", StringSplitOptions.None).Length - 1);
+        Assert.Equal(1, header.Split("SHA256HASH", StringSplitOptions.None).Length - 1);
+
+        var md5Records = ParseEmittedLoadFileRecords(datPath, LoadFileFormat.Dat, Config.HashAlgorithm.MD5);
+        var sha1Records = ParseEmittedLoadFileRecords(datPath, LoadFileFormat.Dat, Config.HashAlgorithm.SHA1);
+        var sha256Records = ParseEmittedLoadFileRecords(datPath, LoadFileFormat.Dat, Config.HashAlgorithm.SHA256);
+        Assert.Equal(expectedCount, md5Records.Count);
+        Assert.Equal(expectedCount, sha1Records.Count);
+        Assert.Equal(expectedCount, sha256Records.Count);
+
+        for (int i = 0; i < expectedCount; i++)
+        {
+            var onDiskPath = Path.Combine(
+                result.ProductionPath,
+                md5Records[i].FilePath.Replace('\\', Path.DirectorySeparatorChar));
+            Assert.True(File.Exists(onDiskPath), $"On-disk Native File must exist at {onDiskPath}");
+
+            var onDiskBytes = await File.ReadAllBytesAsync(onDiskPath);
+            Assert.Equal(ComputeIndependentDigest(onDiskBytes, Config.HashAlgorithm.MD5), md5Records[i].EmittedHash);
+            Assert.Equal(ComputeIndependentDigest(onDiskBytes, Config.HashAlgorithm.SHA1), sha1Records[i].EmittedHash);
+            Assert.Equal(ComputeIndependentDigest(onDiskBytes, Config.HashAlgorithm.SHA256), sha256Records[i].EmittedHash);
+        }
+    }
+
+    [Fact]
+    public async Task ProductionSet_RedactedWithReplaceWithPlaceholder_EmitsPlaceholderPathAndEmittedNativeHashes()
+    {
+        const int expectedCount = 2;
+        var prodDir = Path.Combine(this.TempDir, $"ProdPlaceholderHash_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(prodDir);
+
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                OutputPath = prodDir,
+                FileCount = expectedCount,
+                FileType = "pdf",
+                Concurrency = 1,
+            },
+            Production = new ProductionConfig
+            {
+                ProductionSet = true,
+                VolumeSize = 5,
+                ProductionId = "PRODPLACEHOLDERHASH",
+                RedactedProduction = true,
+                WithheldNativePolicy = "replace-with-placeholder",
+            },
+            Metadata = new MetadataConfig { Seed = 42 },
+            Bates = new BatesNumberConfig
+            {
+                Prefix = "PROD",
+                Start = 1,
+                Digits = 6,
+                Increment = 1,
+            },
+            Hash = new HashConfig
+            {
+                Mode = HashMode.Actual,
+                Algorithms = new HashSet<Config.HashAlgorithm>
+                {
+                    Config.HashAlgorithm.MD5,
+                    Config.HashAlgorithm.SHA256,
+                },
+            },
+            LoadFile = new LoadFileConfig { Encoding = "UTF-8" },
+        };
+
+        var materializer = new CapturingDiskMaterializer();
+        var result = await ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer());
+
+        var datPath = Path.Combine(result.ProductionPath, "DATA", "loadfile.dat");
+        var lines = (await File.ReadAllLinesAsync(datPath)).Where(l => l.Length > 0).ToList();
+        Assert.Equal(expectedCount + 1, lines.Count);
+
+        var headers = Validation.ProductionSetPostValidator.ParseDatLine(lines[0].TrimEnd('\r'), '\x14', '\xfe');
+        int nativePathIdx = headers.IndexOf("NATIVE_PATH");
+        int nativeWithheldIdx = headers.IndexOf("NATIVE_WITHHELD");
+        int md5Idx = headers.IndexOf("MD5HASH");
+        int sha256Idx = headers.IndexOf("SHA256HASH");
+
+        Assert.True(nativePathIdx >= 0);
+        Assert.True(nativeWithheldIdx >= 0);
+        Assert.True(md5Idx >= 0);
+        Assert.True(sha256Idx >= 0);
+        Assert.False(Directory.Exists(Path.Combine(result.ProductionPath, "PLACEHOLDER")));
+
+        for (int i = 0; i < expectedCount; i++)
+        {
+            var fields = Validation.ProductionSetPostValidator.ParseDatLine(lines[i + 1].TrimEnd('\r'), '\x14', '\xfe');
+            Assert.StartsWith("PLACEHOLDER/", fields[nativePathIdx], StringComparison.Ordinal);
+            Assert.Equal("YES", fields[nativeWithheldIdx]);
+
+            var emittedNativeDiskPath = Path.Combine(result.ProductionPath, materializer.CapturedFileData[i].WorkItem.FilePathInZip);
+            Assert.True(File.Exists(emittedNativeDiskPath));
+            var onDiskBytes = await File.ReadAllBytesAsync(emittedNativeDiskPath);
+
+            Assert.Equal(ComputeIndependentDigest(onDiskBytes, Config.HashAlgorithm.MD5), fields[md5Idx]);
+            Assert.Equal(ComputeIndependentDigest(onDiskBytes, Config.HashAlgorithm.SHA256), fields[sha256Idx]);
+        }
+
+        var report = Validation.ProductionSetPostValidator.Validate(result.ProductionPath, request);
+        Assert.Equal("passed", report.Status);
+        Assert.Equal(0, report.ErrorCount);
+    }
+
+    [Fact]
     public async Task ProductionSet_SeededEmailWithFamilies_OnDiskChildBytesDistinctAndHashed()
     {
         var prodDir = Path.Combine(this.TempDir, $"ProdFam_{Guid.NewGuid():N}");
@@ -486,6 +749,13 @@ public sealed class ActualHashIntegrationTests : TempDirectoryTestBase
             var datContent = await File.ReadAllTextAsync(datPath);
             var childRelNative = Path.GetRelativePath(result.ProductionPath, childDiskPath).Replace('/', '\\');
             Assert.Contains(childRelNative, datContent, StringComparison.OrdinalIgnoreCase);
+
+            var md5Records = ParseEmittedLoadFileRecords(datPath, LoadFileFormat.Dat, Config.HashAlgorithm.MD5);
+            var sha256Records = ParseEmittedLoadFileRecords(datPath, LoadFileFormat.Dat, Config.HashAlgorithm.SHA256);
+            var emittedChildMd5 = Assert.Single(md5Records, r => string.Equals(r.FilePath, childRelNative, StringComparison.OrdinalIgnoreCase));
+            var emittedChildSha256 = Assert.Single(sha256Records, r => string.Equals(r.FilePath, childRelNative, StringComparison.OrdinalIgnoreCase));
+            Assert.Equal(expectedChildMd5, emittedChildMd5.EmittedHash);
+            Assert.Equal(expectedChildSha256, emittedChildSha256.EmittedHash);
         }
     }
 
@@ -680,7 +950,7 @@ public sealed class ActualHashIntegrationTests : TempDirectoryTestBase
         Assert.NotEmpty(lines);
 
         var headerCols = lines[0].Split('\u0014').Select(h => h.Trim('\u00fe', '\r', '\n')).ToArray();
-        var pathIdx = Array.FindIndex(headerCols, h => string.Equals(h, "PATH", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "File Path", StringComparison.OrdinalIgnoreCase));
+        var pathIdx = Array.FindIndex(headerCols, h => string.Equals(h, "PATH", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "File Path", StringComparison.OrdinalIgnoreCase) || string.Equals(h, "NATIVE_PATH", StringComparison.OrdinalIgnoreCase));
         var hashColName = algorithm switch
         {
             Config.HashAlgorithm.MD5 => "MD5HASH",

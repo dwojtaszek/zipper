@@ -222,6 +222,16 @@ unzip -tq "$workload"
 unzip -l "$workload" | grep -Eq '^[[:space:]]*131077[[:space:]]+4 files$'
 print_success "Test 7: Exact-size ZIP workload — PASSED"
 
+# 8. Hash columns on Concordance DAT without a Column Profile (REQ-167)
+run_test "DAT hash columns" --type pdf --count 3 --output-path "$TEST_OUTPUT_DIR/pdf_hash" --hash-mode actual --hash-algorithms md5,sha1,sha256
+dat_file=$(find "$TEST_OUTPUT_DIR/pdf_hash" -name "*.dat" -print -quit)
+[[ -z "$dat_file" ]] && print_error "No .dat file found for hash test"
+header=$(head -1 "$dat_file")
+for col in MD5HASH SHA1HASH SHA256HASH; do
+    echo "$header" | grep -q "$col" || print_error "Hash header missing: '$col'"
+done
+print_success "Test 8: DAT hash columns — PASSED"
+
 # --- Cleanup ---
 
 print_info "Cleaning up..."

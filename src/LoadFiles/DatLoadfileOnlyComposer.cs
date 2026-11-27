@@ -9,6 +9,7 @@ internal sealed class DatLoadfileOnlyComposer
     private readonly FileGenerationRequest request;
     private readonly BatesSequence? batesSequence;
     private readonly IReadOnlyList<string> headerColumns;
+    private readonly IReadOnlyList<string> hashColumnKeys;
 
     public DatLoadfileOnlyComposer(
         FileGenerationRequest request,
@@ -18,6 +19,7 @@ internal sealed class DatLoadfileOnlyComposer
         this.request = request;
         this.batesSequence = batesSequence;
         this.headerColumns = headerColumns;
+        this.hashColumnKeys = StandardRowComposer.GetHashColumnKeys(request);
     }
 
     /// <summary>
@@ -42,6 +44,7 @@ internal sealed class DatLoadfileOnlyComposer
         {
             lfCols.AddRange(new[] { "Thread ID", "Inclusive", "Thread Parent" });
         }
+        lfCols.AddRange(StandardRowComposer.GetHashColumnKeys(request));
         return lfCols.Select(c => DatComposerShared.ApplyConvention(c, namingConvention)).ToList();
     }
 
@@ -71,8 +74,23 @@ internal sealed class DatLoadfileOnlyComposer
             var recipientAddr = $"recipient{i}@example.com";
             var ccAddr = $"cc{i}@example.com";
             var sentTime = now.AddDays(-random.Next(1, 30)).ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
-            var filePath = $"NATIVES\\{(i % 50) + 1:D3}\\{parentId}.pdf";
+            int folderNumber = (int)(i % 50) + 1;
+            // Synthetic rows carry no bytes, so paths use .pdf regardless of --type.
+            var filePath = $"NATIVES\\{folderNumber:D3}\\{parentId}.pdf";
             var extractedText = $"Sample extracted text content for document {parentId}.";
+            // The CLI rejects --hash-mode actual for Loadfile-Only, so only simulated hashes exist here.
+            var hashes = this.request.Hash.Mode == Config.HashMode.Simulated
+                ? HashComputer.ComputeSimulatedHashesIfEnabled(
+                    new FileWorkItem
+                    {
+                        Index = i,
+                        FolderNumber = folderNumber,
+                        FolderName = $"{folderNumber:D3}",
+                        FileName = $"{parentId}.pdf",
+                        FilePathInZip = filePath,
+                    },
+                    this.request)
+                : null;
 
             var parentRecordValues = new List<string>
             {
@@ -105,6 +123,8 @@ internal sealed class DatLoadfileOnlyComposer
                 }
             }
 
+            DatComposerShared.AppendHashValues(parentRecordValues, hashes, this.hashColumnKeys);
+
             yield return DatComposerShared.MakeRecord(this.headerColumns, parentId, parentRecordValues);
 
             if (hasAttachment)
@@ -134,6 +154,9 @@ internal sealed class DatLoadfileOnlyComposer
                     childRecordValues.Add(string.Empty);
                     childRecordValues.Add(string.Empty);
                 }
+
+                // Loadfile-Only child rows have no bytes, so their hash columns stay empty.
+                DatComposerShared.AppendHashValues(childRecordValues, null, this.hashColumnKeys);
 
                 yield return DatComposerShared.MakeRecord(this.headerColumns, childId, childRecordValues);
             }

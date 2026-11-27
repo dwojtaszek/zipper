@@ -22,7 +22,7 @@ internal abstract class StandardRowComposer : ILoadFileComposer
     }
 
     /// <summary>Gets the hash column keys to emit based on request configuration.</summary>
-    protected static IReadOnlyList<string> GetHashColumnKeys(FileGenerationRequest request)
+    internal static IReadOnlyList<string> GetHashColumnKeys(FileGenerationRequest request)
     {
         if (!request.Hash.IsEnabled)
         {

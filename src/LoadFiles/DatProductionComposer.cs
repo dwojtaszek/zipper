@@ -12,6 +12,7 @@ internal sealed class DatProductionComposer
     private readonly FileGenerationRequest request;
     private readonly BatesSequence? batesSequence;
     private readonly IReadOnlyList<string> headerColumns;
+    private readonly IReadOnlyList<string> hashColumnKeys;
 
     public DatProductionComposer(
         FileGenerationRequest request,
@@ -21,6 +22,7 @@ internal sealed class DatProductionComposer
         this.request = request;
         this.batesSequence = batesSequence;
         this.headerColumns = headerColumns;
+        this.hashColumnKeys = StandardRowComposer.GetHashColumnKeys(request);
     }
 
     /// <summary>
@@ -49,6 +51,8 @@ internal sealed class DatProductionComposer
         {
             headers.AddRange(new[] { "Thread ID", "Inclusive", "Thread Parent" });
         }
+
+        headers.AddRange(StandardRowComposer.GetHashColumnKeys(request));
 
         return headers.Select(h => DatComposerShared.ApplyConvention(h, namingConvention)).ToList();
     }
@@ -216,6 +220,11 @@ internal sealed class DatProductionComposer
             v.Add(inclusive);
             v.Add(threadParent);
         }
+
+        // replace-with-placeholder / omit-native-path only override the DAT NATIVE_PATH string
+        // (no replacement file is written); fileData.Hashes still reflects the emitted Native
+        // File bytes (or attach.Hashes for child rows) per REQ-165.
+        DatComposerShared.AppendHashValues(v, fileData.Hashes, this.hashColumnKeys);
 
         return v;
     }
