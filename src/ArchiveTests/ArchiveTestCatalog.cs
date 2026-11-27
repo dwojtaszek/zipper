@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 
@@ -829,9 +830,10 @@ internal static class ArchiveTestCatalog
         const int EntriesPerFixture = 1_000;
         for (var shard = 0; shard < 10; shard++)
         {
-            var key = FormattableString.Invariant($"empty-directories-{shard + 1:00}");
+            var key = string.Create(CultureInfo.InvariantCulture, $"empty-directories-{shard + 1:00}");
             var entries = Enumerable.Range(shard * EntriesPerFixture + 1, EntriesPerFixture)
-                .Select(index => ArchiveTestRecipeEntry.Directory(FormattableString.Invariant($"empty-{index:00000}/")))
+                .Select(index => ArchiveTestRecipeEntry.Directory(
+                    string.Create(CultureInfo.InvariantCulture, $"empty-{index:00000}/")))
                 .ToArray();
             Cases.Add(key, DirectoryControl(key, entries, DirectoryWorkloadSuite));
         }
