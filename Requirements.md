@@ -36,7 +36,7 @@ The application operates in three distinct generation modes:
 - **REQ_E-016**: The application must generate a single `.dat` Load File corresponding to the Archive.
 - **REQ_E-017**: The Load File must use ASCII character 20 as the column delimiter.
 - **REQ_E-018**: The Load File must use ASCII character 254 as the quote/text qualifier.
-- **REQ_E-019**: The Load File must be saved with a user-specifiable encoding (`UTF-8`, `UTF-16`, `ANSI`), defaulting to `UTF-8`. Note: `UTF-8` output includes a byte-order mark (BOM); some e-discovery loaders expect UTF-8 without a BOM (see Section 8.2) and may require the BOM to be stripped on import.
+- **REQ_E-019**: The Load File must be saved with a user-specifiable encoding (`UTF-8`, `UTF-16` or aliases `UTF-16LE` and `UNICODE`, `ANSI` or aliases `WINDOWS-1252` and `WESTERN EUROPEAN (WINDOWS)`, or seven-bit `ASCII`), defaulting to `UTF-8` for DAT. OPT defaults to `ANSI` when omitted (REQ-051, REQ-059). Note: `UTF-8` output includes a byte-order mark (BOM); some e-discovery loaders expect UTF-8 without a BOM (see Section 8.2) and may require the BOM to be stripped on import.
 - **REQ_E-020**: The Load File must contain a unique `Control Number` column for each Native File.
 - **REQ_E-021**: The Load File must contain a `File Path` column pointing to the Native File's relative location within the Archive.
 

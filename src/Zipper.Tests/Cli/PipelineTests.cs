@@ -89,13 +89,16 @@ public class PipelineTests : WorkingDirectoryTestBase
         Assert.Contains(LoadFileFormat.Csv, result!.LoadFile.Formats);
     }
 
-    [Fact]
-    public void Build_LoadfileOnlyEncoding_UsesExtendedSet()
+    [Theory]
+    [InlineData("WINDOWS-1252")]
+    [InlineData("UTF-16LE")]
+    [InlineData("ASCII")]
+    public void Build_LoadfileOnlyEncoding_UsesExtendedSet(string encoding)
     {
-        var (ok, modules) = PipelineTestHelper.Parse(new[] { "--type", "pdf", "--count", "100", "--output-path", Directory.GetCurrentDirectory(), "--loadfile-only", "--encoding", "WINDOWS-1252" });
+        var (ok, modules) = PipelineTestHelper.Parse(new[] { "--type", "pdf", "--count", "100", "--output-path", Directory.GetCurrentDirectory(), "--loadfile-only", "--encoding", encoding });
         Assert.True(ok);
         var result = PipelineTestHelper.Build(modules: modules);
-        Assert.Equal("WINDOWS-1252", result!.LoadFile.Encoding);
+        Assert.Equal(encoding, result!.LoadFile.Encoding);
     }
 
     [Fact]

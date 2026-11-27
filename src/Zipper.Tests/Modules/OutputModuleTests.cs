@@ -265,7 +265,7 @@ public class OutputModuleTests
         {
             Assert.False(TryBuild(new[] { "--type", "pdf", "--count", "10", "--output-path", Directory.GetCurrentDirectory(), "--encoding", "INVALID_ENCODING" }, out _));
         });
-        Assert.Contains("Error: Invalid encoding 'INVALID_ENCODING'. Supported values are UTF-8, UTF-16, ANSI.", error, StringComparison.Ordinal);
+        Assert.Contains("Error: Invalid encoding 'INVALID_ENCODING'. Supported values are UTF-8, UTF-16, UTF-16LE, UNICODE, ANSI, WINDOWS-1252, WESTERN EUROPEAN (WINDOWS), ASCII.", error, StringComparison.Ordinal);
     }
 
     [Fact]

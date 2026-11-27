@@ -377,7 +377,7 @@ call :verify_output "%TEST_OUTPUT_DIR%\pdf_basic" 10 "Control Number,File Path" 
 call :print_success "Test Case 1 passed."
 
 REM Test Case 2: JPG generation with different encoding
-call :run_test_case "Test Case 2: JPG generation with UTF-16 encoding" --type jpg --count 10 --output-path "%TEST_OUTPUT_DIR%\jpg_encoding" --encoding UTF-16
+call :run_test_case "Test Case 2: JPG generation with the UTF-16LE encoding alias" --type jpg --count 10 --output-path "%TEST_OUTPUT_DIR%\jpg_encoding" --encoding UTF-16LE
 call :verify_output "%TEST_OUTPUT_DIR%\jpg_encoding" 10 "Control Number,File Path" "jpg" "false" "UTF-16"
 call :print_success "Test Case 2 passed."
 

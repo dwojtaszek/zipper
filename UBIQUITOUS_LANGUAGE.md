@@ -49,7 +49,7 @@
 | **Thread ID** | The document identifier of the root **Email** of a conversation thread (`DOC00000001` or root Bates number), populated in the `Thread ID` / `THREAD ID` / `THREAD_ID` **Column** for all members of the thread. | Conversation ID, thread group |
 | **Inclusive Email** | An **Email** in a thread containing unique content not subsumed by any subsequent reply (a leaf node in the thread tree), indicated by `"Y"` (or `"N"` for subsumed ancestor messages) in the `Inclusive` / `INCLUSIVE` **Column**. | Inclusive message, thread leaf |
 | **Thread Parent** | The document identifier of the immediate parent **Email** within a conversation thread, populated in the `Thread Parent` / `THREAD PARENT` / `THREAD_PARENT` **Column** (empty for root messages and attachment family children). | Parent doc, parent thread ID |
-| **MIME Realism** | An opt-in generation mode (`--mime-realism`, aliases `--email-mime-realism`, `--with-mime-realism`) that emits realistic MIME structures (RFC 2047 encoded-words, header folding, Quoted-Printable/Base64 body encodings, `multipart/alternative`, multi-attachment parts, and bounded nested `message/rfc822` emails) on generated **Email** files. | MIME diversity, realistic MIME |
+| **MIME Realism** | An opt-in generation mode that emits realistic MIME structures (RFC 2047 encoded-words, header folding, Quoted-Printable/Base64 body encodings, `multipart/alternative`, multi-attachment parts, and bounded nested `message/rfc822` emails) on generated **Email** files. Select a level with `--mime-realism` or `--email-mime-realism`. The no-value `--with-mime-realism` flag selects `standard`. | MIME diversity, realistic MIME |
 | **RFC 2047 Encoded-Word** | A MIME-encoded ASCII token sequence (`=?utf-8?B?...?=` or `=?utf-8?Q?...?=`) used to represent non-ASCII text in email header fields, bounded to ≤ 75 characters per encoded-word. | Encoded word, MIME word |
 | **Header Folding** | The RFC 5322 continuation of long header fields across multiple lines separated by CRLF and linear whitespace (space or tab). | MIME folding, line folding |
 | **Multipart Diversity** | The emission of structured MIME multipart structures (`multipart/alternative` for text/plain and text/html bodies, `multipart/mixed` for messages with multiple attachments). | Multipart email, alternate body |
@@ -236,8 +236,8 @@ The delimited **Load File Formats** (DAT, OPT, CSV, Concordance) are produced by
 
 | Term | Definition | Aliases to avoid |
 |------|-----------|-----------------|
-| **Encoding** | The character encoding for the **Load File** output (`--encoding`). Supported: `UTF-8` (default for most modes), `UTF-16` / `UTF-16LE`, `ANSI` (Windows-1252; default for OPT across modes per REQ-051/REQ-059), and `ASCII`. | Character set, code page |
-| **Line Ending** | The newline format for the **Load File**. Controlled by `--eol` in **Loadfile-Only and Production Set modes**. Options: CRLF, LF, CR. Note: in **Standard** (archive) mode, line endings follow the platform default rather than `--eol`, so output bytes may differ between Windows and Linux/macOS. This is a known preserved quirk (see ADR-0007). | EOL, newline format, line separator |
+| **Encoding** | The character encoding for the **Load File** output (`--encoding`). Supported: `UTF-8` (default for most modes), `UTF-16` (aliases `UTF-16LE` and `UNICODE`), `ANSI` (aliases `WINDOWS-1252` and `WESTERN EUROPEAN (WINDOWS)`; default for OPT across modes per REQ-051/REQ-059), and seven-bit `ASCII`. | Character set, code page |
+| **Line Ending** | The newline format for the **Load File**. Controlled by `--eol` in **Loadfile-Only and Production Set modes**. Options: CRLF, LF, CR. Note: **Standard** (archive) mode rejects `--eol` and uses the platform default for line endings, so output bytes may differ between Windows and Linux/macOS. This is a known preserved quirk (see ADR-0007). | EOL, newline format, line separator |
 | **Placeholder Content** | The minimal valid content generated for each **Native File** to ensure maximum compression. Identical across all **Native Files** of the same **File Type**. | Template content, default content |
 | **Placeholder Text** | The fixed block of text used in **Extracted Text** files to ensure compressibility. | Template text, default text |
 | **Validation Report** | The post-generation verification summary (and `_validation_report.json` artifact in a **Production Set**) produced by `ValidationOrchestrator`, `PostGenerationValidator`, `ProductionSetPostValidator`, `ChaosExpectationValidator`, and `SupplementalValidator` checking **Load File** column alignment, **Line Endings**, OPT page boundaries, path reconciliation, **Redacted Production** paths, **Production Metadata Budget**, and **Chaos Expectation Sidecars**. | Validation log, check report |
@@ -308,6 +308,6 @@ The delimited **Load File Formats** (DAT, OPT, CSV, Concordance) are produced by
    - Use "**Load File** **Columns**" for breadth; name the specific metadata category (`--with-metadata` **Columns**, **Email Metadata**, **Collection Metadata**, **Source Metadata**, or **Production Metadata**) when precision matters.
 
 4. **"Encoding" vs "Line Ending"**:
-   - **Encoding** is the character set (`UTF-8`, `UTF-16`/`UTF-16LE`, `ANSI`, `ASCII`) for the entire **Load File**.
+   - **Encoding** is the character set for the entire **Load File**.
    - **Line Ending** is the newline format (`CRLF`, `LF`, `CR`) within a **Load File**.
    - These are independent settings.

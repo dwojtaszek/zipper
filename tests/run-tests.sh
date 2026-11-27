@@ -544,7 +544,7 @@ verify_output "$TEST_OUTPUT_DIR/pdf_basic" 10 "Control Number,File Path" "pdf" "
 print_success "Test Case 1 passed."
 
 # Test Case 2: JPG generation with different encoding
-run_test_case "Test Case 2: JPG generation with UTF-16 encoding" --type jpg --count 10 --output-path "$TEST_OUTPUT_DIR/jpg_encoding" --encoding UTF-16
+run_test_case "Test Case 2: JPG generation with the UTF-16LE encoding alias" --type jpg --count 10 --output-path "$TEST_OUTPUT_DIR/jpg_encoding" --encoding UTF-16LE
 verify_output "$TEST_OUTPUT_DIR/jpg_encoding" 10 "Control Number,File Path" "jpg" "false" "UTF-16"
 print_success "Test Case 2 passed."
 

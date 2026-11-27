@@ -7,6 +7,14 @@ namespace Zipper.Tests;
 public class AllWritersTests : TempDirectoryTestBase
 {
     [Fact]
+    public void CreateWriter_UnknownFormat_Throws()
+    {
+        var error = Assert.Throws<ArgumentOutOfRangeException>(() =>
+            LoadFileWriterFactory.CreateWriter((LoadFileFormat)999, WriterMode.Standard));
+        Assert.Equal("format", error.ParamName);
+    }
+
+    [Fact]
     public void WriterFactory_WithAllFormats_ShouldReturnCorrectWriters()
     {
         var datWriter = LoadFileWriterFactory.CreateWriter(LoadFileFormat.Dat);

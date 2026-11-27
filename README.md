@@ -213,14 +213,14 @@ All command-line flags recognized by Zipper:
 
 | Argument | Default | Accepted Values / Range | Description |
 |----------|---------|-------------------------|-------------|
-| `--type` | `pdf` | `pdf`, `jpg`, `tiff`, `eml`, `docx`, `xlsx` | File type to generate |
+| `--type` | Required in Standard unless a File Type Mix or Source-Driven Generation supplies File Types | `pdf`, `jpg`, `tiff`, `eml`, `docx`, `xlsx` | File Type to generate. Production Set and Loadfile-Only can omit this flag and use the `pdf` fallback when no File Type Mix or Source-Driven Generation is supplied. |
 | `--types` | none | comma-separated `type:weight` (e.g. `pdf:70,eml:30`) | File type mix weights |
 | `--input-csv` | none | file path | Source-driven generation from CSV |
 | `--directory-template` | none | directory path | Source-driven generation mirroring directory structure |
 | `--count` | **required** | non-negative integer for `adversarial-values`; otherwise positive | Total number of files/records to generate |
 | `--output-path` | **required** | directory path | Target output directory |
 | `--folders` | `1` | `1` to `100` | Number of subfolders for file distribution |
-| `--encoding` | `UTF-8` | `UTF-8`, `UTF-16`, `ANSI` | Text encoding for Load Files |
+| `--encoding` | `UTF-8` (`ANSI` for OPT when omitted) | `UTF-8`, `UTF-16` (`UTF-16LE`, `UNICODE`), `ANSI` (`WINDOWS-1252`, `WESTERN EUROPEAN (WINDOWS)`), `ASCII` | Text encoding for Load Files. For seven-bit `ASCII` with DAT, select ASCII-compatible delimiters such as `--dat-delimiters csv`. |
 | `--distribution` | `proportional` | `proportional`, `gaussian`, `exponential` | Folder distribution algorithm |
 | `--with-metadata` | `false` | flag | Include standard metadata columns (incl. Compression Method reflecting `--compression`) |
 | `--with-collection-metadata` | `false` | flag | Include e-discovery collection metadata columns |
@@ -252,9 +252,9 @@ All command-line flags recognized by Zipper:
 | `--custodian-count` | `10` | `1` to `1000` | Number of custodians in data pool |
 | `--with-families` | `false` | flag | Generate one child record for each emitted Email Attachment |
 | `--with-threading` | `false` | flag | Generate RFC 5322 Message-ID, In-Reply-To, and References Email thread chains with thread metadata Columns (alias `--with-email-threading`) |
-| `--mime-realism` | none | `standard`, `full`, or comma-separated tokens (`encoded-words`, `header-folding`, `quoted-printable`, `base64-body`, `multipart-alternative`, `multi-attachment`, `nested-rfc822`, `non-rfc`) | Configure MIME realism emission modes on generated EML emails (aliases `--email-mime-realism`, `--with-mime-realism`) |
+| `--mime-realism` | none | `standard`, `full`, or comma-separated tokens (`encoded-words`, `header-folding`, `quoted-printable`, `base64-body`, `multipart-alternative`, `multi-attachment`, `nested-rfc822`, `non-rfc`) | Configure MIME realism emission modes on generated EML emails (alias `--email-mime-realism`). Use the no-value flag `--with-mime-realism` to select `standard`. |
 | `--loadfile-only` | `false` | flag | Standalone Load File generation (no Archive) |
-| `--eol` | `CRLF` | `CRLF`, `LF`, `CR` | Line ending format for Load Files |
+| `--eol` | `CRLF` | `CRLF`, `LF`, `CR` | Line Ending for Loadfile-Only or Production Set. Standard rejects this flag. |
 | `--col-delim` | ASCII 20 | `ascii:N` or `char:C` | Column delimiter (strict-prefix format) |
 | `--quote-delim` | ASCII 254 | `ascii:N`, `char:C`, or `none` | Quote delimiter. `none` omits quotes in DAT and Concordance. |
 | `--newline-delim` | ASCII 174 | `ascii:N` or `char:C` | Newline replacement (strict-prefix format) |
@@ -281,7 +281,7 @@ All command-line flags recognized by Zipper:
 | `--comparison-mode` | none | `replacement`, `supplemental`, `reproduction` | Production Manifest comparison ruleset; `replacement` and `reproduction` share the same matching/classification rules and differ only in reported mode |
 | `--comparison-output` | none | file path | Report JSON output path |
 | `--hash-mode` | none | `actual`, `simulated`, `none` | Document hash computation mode |
-| `--hash-algorithms` | `md5` | `md5`, `sha1`, `sha256` | Comma-separated hash algorithms |
+| `--hash-algorithms` | `md5` when `--hash-mode` is `actual` or `simulated` | `md5`, `sha1`, `sha256` | Comma-separated hash algorithms |
 | `--benchmark` | `false` | flag | Run performance benchmark suite and exit |
 | `--zip-workload` | — | standalone command | Generate a deterministic ZIP workload and exit |
 | `--archive-test-suite` | none | `smoke`, `compatibility`, `malformed`, `security`, `encoding`, `directory-workload`, `all` | Publish an Archive Test Fixture suite (the `security` suite includes `name-sibling-prefix-traversal`; the `encoding` suite includes local/central codec divergence; closed flag set: requires `--output-path` pointing to a new directory; accepts only `--archive-test-suite`, `--archive-test-cases`, `--seed`, `--output-path`; see [Archive Test Suites](docs/archive-test-suites.md)) |

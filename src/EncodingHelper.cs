@@ -7,6 +7,8 @@ namespace Zipper;
 /// </summary>
 internal static class EncodingHelper
 {
+    internal const string SupportedNames = "UTF-8, UTF-16, UTF-16LE, UNICODE, ANSI, WINDOWS-1252, WESTERN EUROPEAN (WINDOWS), ASCII";
+
     /// <summary>
     /// Gets an Encoding instance from an encoding name.
     /// </summary>
