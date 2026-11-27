@@ -170,6 +170,16 @@ public class ZipWorkloadTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public async Task Main_ChaosListCombinedWithZipWorkload_RejectsMixedCommand()
+    {
+        var (exitCode, stdout, _) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() =>
+            Program.Main(["--chaos-list", "--zip-workload"]));
+
+        Assert.Equal(1, exitCode);
+        Assert.Empty(stdout);
+    }
+
+    [Fact]
     public async Task Main_WhitespaceDestinationPath_ReturnsOneWithoutWriting()
     {
         var (exitCode, stdout, stderr) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() =>

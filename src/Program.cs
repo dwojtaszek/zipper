@@ -28,6 +28,12 @@ public static class Program
                 ct => PerformanceBenchmarkRunner.RunZipWorkloadAsync(args[1..], ct)).ConfigureAwait(false);
         }
 
+        if (ContainsFlag(args, "--zip-workload") && ContainsFlag(args, "--benchmark", "--chaos-list"))
+        {
+            Console.Error.WriteLine("Error: --zip-workload must be a standalone command.");
+            return 1;
+        }
+
         // ADR-0008 / REQ-208: the Archive Test workflow is a closed flag set, but
         // --benchmark and --chaos-list short-circuit before parsing — detect their
         // combination with the Archive Test flags here, before either early exit wins.
