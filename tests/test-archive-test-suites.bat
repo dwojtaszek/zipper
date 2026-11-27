@@ -608,6 +608,39 @@ if errorlevel 1 (
 set "npm_config_cache="
 set "npm_config_registry="
 
+REM 15. AES-256 ZIP interoperability fixtures (#1472): unit test + independent verifier.
+set "AES_INTEROP_DIR=%CD%\results\archive-test-suites\aes-interop"
+if exist "%AES_INTEROP_DIR%" rmdir /s /q "%AES_INTEROP_DIR%"
+mkdir "%AES_INTEROP_DIR%" >nul 2>&1
+%PYCMD% tests\archive-tests\test_verify_aes_fixtures.py >"%TEST_OUTPUT_DIR%\aes-interop-selftest.log" 2>&1
+if errorlevel 1 (
+    type "%TEST_OUTPUT_DIR%\aes-interop-selftest.log"
+    call :fail "AES interoperability verifier self-test must pass"
+) else (
+    call :pass "AES interoperability verifier self-test passed"
+)
+set "ZIPPER_AES_INTEROP_DIR=%AES_INTEROP_DIR%"
+set "AES_DOTNET_EXIT=0"
+dotnet test src\Zipper.Tests\Zipper.Tests.csproj --filter "FullyQualifiedName~AesZipInteroperabilityTests.VerifyWithCapableReader_ExactPassword_VerifiesAllEntriesAndHashes" %DOTNET_VERSION_FLAG% --nologo >"%TEST_OUTPUT_DIR%\aes-interop-dotnet.log" 2>&1
+if errorlevel 1 set "AES_DOTNET_EXIT=1"
+set "ZIPPER_AES_INTEROP_DIR="
+if "!AES_DOTNET_EXIT!"=="1" (
+    type "%TEST_OUTPUT_DIR%\aes-interop-dotnet.log"
+    call :fail "AES interoperability fixtures must generate and verify in .NET"
+) else (
+    call :pass "AES interoperability fixtures generated and verified in .NET"
+)
+if defined SEVEN_ZIP (
+    %PYCMD% tests\archive-tests\verify-aes-fixtures.py "%AES_INTEROP_DIR%" --passwords-json "%AES_INTEROP_DIR%\passwords.json" --seven-zip "!SEVEN_ZIP!" --require-7zip --report "%TEST_OUTPUT_DIR%\aes-interop-verification.json"
+) else (
+    %PYCMD% tests\archive-tests\verify-aes-fixtures.py "%AES_INTEROP_DIR%" --passwords-json "%AES_INTEROP_DIR%\passwords.json" --report "%TEST_OUTPUT_DIR%\aes-interop-verification.json"
+)
+if errorlevel 1 (
+    call :fail "independent AES interoperability verifier must pass"
+) else (
+    call :pass "independent AES interoperability verifier passed"
+)
+
 :summary
 call :cleanup_cancel_process
 if defined CANCEL_PARENT (

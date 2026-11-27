@@ -514,6 +514,37 @@ else
   check 1 "offline verification must pass the non-opt-in catalogue without downloads"
 fi
 
+# 15. AES-256 ZIP interoperability fixtures (#1472): unit test + independent verifier.
+AES_INTEROP_DIR="$TEST_OUTPUT_DIR/aes-interop"
+rm -rf "$AES_INTEROP_DIR"
+mkdir -p "$AES_INTEROP_DIR"
+if python3 tests/archive-tests/test_verify_aes_fixtures.py >"$TEST_OUTPUT_DIR/aes-interop-selftest.log" 2>&1; then
+  check 0 "AES interoperability verifier self-test passed"
+else
+  cat "$TEST_OUTPUT_DIR/aes-interop-selftest.log" >&2
+  check 1 "AES interoperability verifier self-test must pass"
+fi
+# shellcheck disable=SC2086  # deliberate word-splitting: an empty flag must expand to zero arguments.
+if ZIPPER_AES_INTEROP_DIR="$AES_INTEROP_DIR" \
+     dotnet test src/Zipper.Tests/Zipper.Tests.csproj \
+       --filter 'FullyQualifiedName~AesZipInteroperabilityTests.VerifyWithCapableReader_ExactPassword_VerifiesAllEntriesAndHashes' \
+       $DOTNET_VERSION_FLAG \
+       --nologo >"$TEST_OUTPUT_DIR/aes-interop-dotnet.log" 2>&1; then
+  check 0 "AES interoperability fixtures generated and verified in .NET"
+else
+  cat "$TEST_OUTPUT_DIR/aes-interop-dotnet.log" >&2
+  check 1 "AES interoperability fixtures must generate and verify in .NET"
+fi
+AES_VERIFY_ARGS=(--passwords-json "$AES_INTEROP_DIR/passwords.json" --report "$TEST_OUTPUT_DIR/aes-interop-verification.json")
+if [[ -n "$SEVEN_ZIP" ]]; then
+  AES_VERIFY_ARGS+=(--seven-zip "$SEVEN_ZIP" --require-7zip)
+fi
+if python3 tests/archive-tests/verify-aes-fixtures.py "$AES_INTEROP_DIR" "${AES_VERIFY_ARGS[@]}"; then
+  check 0 "independent AES interoperability verifier passed"
+else
+  check 1 "independent AES interoperability verifier must pass"
+fi
+
 if [[ "$failures" -ne 0 ]]; then
   echo -e "\e[41m[ ERROR ]\e[0m Archive Test E2E failed with $failures errors." >&2
   exit 1
