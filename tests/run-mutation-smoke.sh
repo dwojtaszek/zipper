@@ -170,8 +170,8 @@ PATTERNS=(
     's/!=/==/'
     's/&&/||/'
     's/\|\|/\&\&/'
-    's/\btrue\b/false/'
-    's/\bfalse\b/true/'
+    's/(^|[^[:alnum:]_])true([^[:alnum:]_]|$)/\1false\2/'
+    's/(^|[^[:alnum:]_])false([^[:alnum:]_]|$)/\1true\2/'
     's/>=/>/'
     's/<=/</'
 )

@@ -185,7 +185,11 @@ for marker in ignored-scheduling ignored-named-scheduling; do
     fi
 done
 line=$(grep -n ordinary-boolean "$WORK/src/Program.cs" | cut -d: -f1)
-grep -q "Program.cs:$line false → true" <<<"$OUT30"
+grep -q "Program.cs:$line false → true" <<<"$OUT30" || {
+    echo "FAIL: ordinary boolean beside ConfigureAwait was not selected. Output:"
+    echo "$OUT30"
+    exit 1
+}
 
 echo "Testing listing does not modify source..."
 SHA_AFTER=$(cksum "$WORK/src/LoadFiles/SyntheticRowValues.cs" | awk '{print $1 ":" $2}')
