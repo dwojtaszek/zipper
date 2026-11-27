@@ -19,6 +19,7 @@ import tempfile
 # agy stops itself and reports partial output, so this kill is a backstop rather
 # than the primary bound: PRINT_TIMEOUT_SECONDS must fire first. Both are named so
 # the relationship is testable instead of being two loose literals.
+DEFAULT_MODEL = "gemini-4-hydrogen-high"
 PRINT_TIMEOUT_SECONDS = 2400
 MISSION_TIMEOUT = 2700
 _HUNG_KILL_MESSAGE = (
@@ -128,24 +129,8 @@ def _probe_model(model: str) -> bool:
 
 
 def check_token_health(model: str | None = None) -> bool:
-    """
-    Returns True if agy has active API tokens.
-
-    If a specific model is requested, probes that model directly.
-    Otherwise probes models in priority order, falling back to other candidate models
-    if the primary model hits quota.
-    """
-    if model and model != "default":
-        return _probe_model(model)
-    # Fallback probe order when no model is pinned. Kept to models agy actually
-    # offers: gemini-3.7-flash-high was removed upstream, and probing a dead
-    # model only burns a subprocess before falling through.
-    candidates = ["gemini-3.8-flash-high", "claude-sonnet-4-6", "claude-opus-4-6-thinking"]
-    for m in candidates:
-        if _probe_model(m):
-            return True
-    print("[agy] API health check: all candidate models failed")
-    return False
+    """Probe the same model that a mission would use."""
+    return _probe_model(model if model and model != "default" else DEFAULT_MODEL)
 
 
 def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | None = None) -> tuple[int, str, str]:
@@ -164,8 +149,7 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
     base = ["agy"]
     if is_continue:
         base += ["--continue"]
-    if model and model != "default":
-        base += ["--model", model]
+    base += ["--model", model if model and model != "default" else DEFAULT_MODEL]
     # agy's own print timeout must fire before the MISSION_TIMEOUT kill below, so
     # the agent gets to flush its partial output instead of being SIGKILLed
     # mid-turn. 30m truncated long missions routinely; 40m leaves 5 minutes of

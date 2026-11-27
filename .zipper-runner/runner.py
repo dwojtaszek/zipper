@@ -1141,6 +1141,11 @@ def _repo_is_clean(cwd: str) -> bool:
     return code == 0 and not out.strip()
 
 
+def _branch_baseline() -> str:
+    code, _, _ = run_cmd(["git", "rev-parse", "--verify", MAIN_REMOTE_REF], cwd=REPO_PATH)
+    return MAIN_REMOTE_REF if code == 0 else "main"
+
+
 def _is_branch_safe_to_delete(branch: str) -> bool:
     """Returns True if branch is merged into main or safely present on origin.
 
@@ -1156,13 +1161,14 @@ def _is_branch_safe_to_delete(branch: str) -> bool:
 
     local_sha = local_sha.strip()
 
+    baseline = _branch_baseline()
     # 1. Is branch merged into main?
-    merged_code, _, _ = run_cmd(["git", "merge-base", "--is-ancestor", branch, "main"], cwd=REPO_PATH)
+    merged_code, _, _ = run_cmd(["git", "merge-base", "--is-ancestor", branch, baseline], cwd=REPO_PATH)
     if merged_code == 0:
         return True
 
     # 2. Check if squashed/cherry-picked into main (all commits accounted for)
-    cherry_code, cherry_out, _ = run_cmd(["git", "cherry", "main", branch], cwd=REPO_PATH)
+    cherry_code, cherry_out, _ = run_cmd(["git", "cherry", baseline, branch], cwd=REPO_PATH)
     if cherry_code == 0:
         lines = [l.strip() for l in cherry_out.splitlines() if l.strip()]
         if lines and all(l.startswith("-") for l in lines):
@@ -1961,6 +1967,24 @@ def _report_missing_configured_models(missing: list[tuple[str, str]]) -> None:
     )
 
 
+def _healthy_model_candidates(name, module, prefs, known_models, probe_candidates):
+    candidates = []
+    for model in known_models:
+        if is_model_exhausted(name, model):
+            print(f"[select] {name}/{model}: already marked exhausted, skipping")
+            continue
+        prio, _ = get_model_priority(prefs, name, model)
+        if prio == 0:
+            print(f"[select] {name}/{model}: priority 0 (or not in prefs), skipping")
+            continue
+        if probe_candidates and not module.check_token_health(model=model):
+            print(f"[select] {name}/{model}: unhealthy, skipping")
+            continue
+        candidates.append((prio, name, model))
+        print(f"[select] {name}/{model}: priority {prio}, queued")
+    return candidates
+
+
 def probe_and_select_agents() -> list[tuple[str, str | None]]:
     """Probes all plugins and returns sorted list of healthy (agent, model) candidates.
 
@@ -1988,7 +2012,8 @@ def probe_and_select_agents() -> list[tuple[str, str | None]]:
             healthy = True
         else:
             healthy = module.check_token_health()
-        if not healthy:
+        probe_candidates = not healthy and (name == "agy" or (name == "codex" and bool(prefs)))
+        if not healthy and not probe_candidates:
             print(f"[select] {name!r}: installed but unhealthy, skipping")
             continue
 
@@ -2021,16 +2046,7 @@ def probe_and_select_agents() -> list[tuple[str, str | None]]:
                     if not any(_model_key(m).split("/")[-1] == pref_suffix for m in known_models):
                         known_models.append(pref_model)
 
-        for model in known_models:
-            if is_model_exhausted(name, model):
-                print(f"[select] {name}/{model}: already marked exhausted, skipping")
-                continue
-            prio, _ = get_model_priority(prefs, name, model)
-            if prio == 0:
-                print(f"[select] {name}/{model}: priority 0 (or not in prefs), skipping")
-                continue
-            candidates.append((prio, name, model))
-            print(f"[select] {name}/{model}: priority {prio}, queued")
+        candidates.extend(_healthy_model_candidates(name, module, prefs, known_models, probe_candidates))
 
     _report_missing_configured_models(missing_configured)
 
@@ -2207,7 +2223,7 @@ def _gh_is_functional() -> bool:
 
 
 def _branch_has_commits(branch: str) -> bool:
-    code, out, _ = run_cmd(["git", "log", "--oneline", f"main..{branch}"], cwd=REPO_PATH)
+    code, out, _ = run_cmd(["git", "log", "--oneline", f"{_branch_baseline()}..{branch}"], cwd=REPO_PATH)
     return code == 0 and bool(out.strip())
 
 
@@ -7449,7 +7465,7 @@ def main():
             if not DRY_RUN:
                 shutil.rmtree(wt_path, ignore_errors=True)
 
-            wt_code, wt_out, wt_err = run_cmd(["git", "worktree", "add", wt_path, "-b", branch_name, "main"], cwd=REPO_PATH)
+            wt_code, wt_out, wt_err = run_cmd(["git", "worktree", "add", "--no-track", wt_path, "-b", branch_name, MAIN_REMOTE_REF], cwd=REPO_PATH)
             if wt_code != 0:
                 subject = f"[Runner] Worktree Creation Failed: Issue #{num}"
                 if _should_send_rate_limited(subject):
@@ -7628,7 +7644,7 @@ def main():
                                 print(f"Worktree {wt_path} has uncommitted changes from failed agent — preserving work, retrying in-place.")
                             else:
                                 if _remove_worktree(wt_path, branch_name):
-                                    wt_code, wt_out, wt_err = run_cmd(["git", "worktree", "add", wt_path, "-b", branch_name, "main"], cwd=REPO_PATH)
+                                    wt_code, wt_out, wt_err = run_cmd(["git", "worktree", "add", "--no-track", wt_path, "-b", branch_name, MAIN_REMOTE_REF], cwd=REPO_PATH)
                                     if wt_code != 0:
                                         subject = f"[Runner] Worktree Recreation Failed: Issue #{num}"
                                         if _should_send_rate_limited(subject):

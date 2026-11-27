@@ -753,6 +753,21 @@ class WipCommitTests(unittest.TestCase):
 
 
 class OpenCodeSessionScopingTests(unittest.TestCase):
+    def test_opencodeRunMission_usesDeepSeekByDefaultAndHonorsBigPickle(self):
+        opencode = runner.AGENT_PLUGINS["opencode"]
+        for configured, expected in (
+            (None, "opencode/deepseek-v4.1-flash-free"),
+            ("default", "opencode/deepseek-v4.1-flash-free"),
+            ("opencode/big-pickle", "opencode/big-pickle"),
+        ):
+            with self.subTest(model=configured), patch.object(
+                opencode, "_invoke_opencode", return_value=(0, "ok", "")
+            ) as invoke:
+                opencode.run_mission("prompt", "/tmp", model=configured)
+                invoke.assert_called_once_with(
+                    ["opencode", "run", "--model", expected, "--auto", "prompt"], "/tmp"
+                )
+
     def test_opencodeRunMission_scopesContinueToWorktreeSessionAndSetsPwd(self):
         opencode = runner.AGENT_PLUGINS["opencode"]
         with tempfile.TemporaryDirectory() as tmpdir:

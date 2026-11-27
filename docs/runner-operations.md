@@ -12,7 +12,7 @@ bash .zipper-runner/cron-wrapper.sh --preflight
 
 The launcher sets the repository working directory and normal tool PATH. Preflight verifies Git, the configured .NET SDK, GitHub authentication/API access, and an enabled healthy agent. It returns nonzero on failure and performs no issue pickup, Git mutation, or timer changes. `runner.py --status` adds lock, worktree, and PR diagnostics and also reports a failing runtime with a nonzero status. `--status --dry-run` remains a diagnostic preview without live health checks.
 
-For controlled launches, use this same wrapper with `--agent codex --model openai/gpt-6.1-sol`. Keep the production state and lock locations when testing a different plugin checkout. Stop only the relevant timers after preflight passes, preserve active services, and arrange timer restoration on every exit. Verify timer state afterward. The parent runner owns CI monitoring after implementation returns.
+For controlled launches, use this same wrapper with `--agent codex --model openai/gpt-6.2-sol`. Keep the production state and lock locations when testing a different plugin checkout. Stop only the relevant timers after preflight passes, preserve active services, and arrange timer restoration on every exit. Verify timer state afterward. The parent runner owns CI monitoring after implementation returns.
 
 ## Maintenance
 

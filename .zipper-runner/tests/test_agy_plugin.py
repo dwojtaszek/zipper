@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for the agy plugin's mission timeout and health-probe fallbacks.
+"""Tests for the agy plugin's mission timeout and health probes.
 
 Run from the .zipper-runner directory:
     python3 -m unittest discover -s tests
@@ -46,9 +46,10 @@ class AgyMissionTimeoutTests(unittest.TestCase):
             fake.chmod(0o755)
             with patch.dict(os.environ, {"PATH": directory + os.pathsep + os.environ["PATH"]}):
                 code, out, err = plugin.run_mission(
-                    "prompt", directory, is_continue=False, model="gemini-3.8-flash-high")
+                    "prompt", directory, is_continue=False)
             self.assertEqual(code, 0, err)
             args = json.loads(out.splitlines()[0])
+            self.assertEqual(args[args.index("--model") + 1], "gemini-4-hydrogen-high")
             self.assertIn("--print-timeout", args)
             stated = _seconds(args[args.index("--print-timeout") + 1])
             self.assertEqual(stated, plugin.PRINT_TIMEOUT_SECONDS,
@@ -58,9 +59,8 @@ class AgyMissionTimeoutTests(unittest.TestCase):
             self.assertGreaterEqual(stated, PLUGIN_KILL_SECONDS - 600)
 
 
-class AgyHealthProbeFallbackTests(unittest.TestCase):
-    def test_fallbackProbes_onlyModelsAgyStillOffers(self):
-        """A removed model in the fallback list only burns a subprocess."""
+class AgyHealthProbeTests(unittest.TestCase):
+    def test_defaultProbe_matchesMissionModel(self):
         probed: list[str] = []
 
         def record(model):
@@ -69,8 +69,7 @@ class AgyHealthProbeFallbackTests(unittest.TestCase):
 
         with patch.object(plugin, "_probe_model", side_effect=record):
             self.assertFalse(plugin.check_token_health())
-        self.assertEqual(probed, ["gemini-3.8-flash-high", "claude-sonnet-4-6", "claude-opus-4-6-thinking"])
-        self.assertNotIn("gemini-3.7-flash-high", probed)
+        self.assertEqual(probed, [plugin.DEFAULT_MODEL])
 
     def test_pinnedModel_probesOnlyThatModel(self):
         probed: list[str] = []

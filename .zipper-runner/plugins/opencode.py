@@ -21,6 +21,8 @@ import shutil
 import tempfile
 import time
 
+DEFAULT_MODEL = "opencode/deepseek-v4.1-flash-free"
+
 # opencode emits no liveness output, so this bound is the only thing between a
 # silent hang and a wasted mission. 45 minutes was far too long: measured on the
 # host, one hang produced `Running mission` immediately followed by the kill 45
@@ -408,6 +410,10 @@ def _invoke_opencode(cmd: list[str], abs_cwd: str) -> tuple[int, str, str]:
         return -1, "", str(e)
 
 
+def _mission_model(model: str | None) -> str:
+    return model if model and model != "default" else DEFAULT_MODEL
+
+
 def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | None = None) -> tuple[int, str, str]:
     """
     Runs a coding mission non-interactively using opencode.
@@ -421,6 +427,7 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
     Returns:
         (exit_code, stdout, stderr)
     """
+    model = _mission_model(model)
     abs_cwd = os.path.abspath(cwd)
     session_id = _find_latest_session_for_cwd(abs_cwd) if is_continue else None
     if is_continue:
@@ -429,12 +436,11 @@ def run_mission(prompt: str, cwd: str, is_continue: bool = False, model: str | N
         else:
             print(f"[opencode] No existing session found for {abs_cwd}; starting fresh session in worktree.")
 
-    def _build_cmd(sid: str | None, mdl: str | None) -> list[str]:
+    def _build_cmd(sid: str | None, mdl: str) -> list[str]:
         cmd = ["opencode", "run"]
         if sid:
             cmd += ["--session", sid]
-        if mdl and mdl != "default":
-            cmd += ["--model", mdl]
+        cmd += ["--model", mdl]
         cmd += ["--auto", prompt]
         return cmd
 
