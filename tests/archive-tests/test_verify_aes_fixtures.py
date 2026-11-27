@@ -27,9 +27,10 @@ class VerifyAesFixturesTests(unittest.TestCase):
             zpath = Path(td) / "plain.zip"
             with zipfile.ZipFile(zpath, "w") as zf:
                 zf.writestr("empty.txt", b"")
+            archive_bytes = zpath.read_bytes()
             with self.assertRaises(ValueError):
                 VERIFY_AES.verify_zip_aes_headers(
-                    zpath.read_bytes(),
+                    archive_bytes,
                     [{"name": "empty.txt", "innerCompressionMethod": 0}],
                     "plain",
                 )

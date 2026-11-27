@@ -88,24 +88,11 @@ internal static class AesZipInteroperabilityFixtures
         new Dictionary<string, PinnedAesFixtureDefinition>(StringComparer.Ordinal)
         {
             ["aes256-ascii-standard"] = new(
-                new AesZipFixtureManifest(
-                    SchemaVersion: 1,
-                    CaseKey: "aes256-ascii-standard",
-                    Container: ContainerFormat,
-                    Producer: "7-Zip",
-                    ProducerVersion: "26.06 (x64)",
-                    EncryptionStrength: Aes256Strength,
-                    AesVendorVersion: AesVendorVersion,
-                    SyntheticPasswordCase: "ascii",
-                    RegenerationRecipe:
-                        "7z a -tzip -mem=AES256 -mx=0 -p<ascii-password> out.zip empty.txt store.bin && " +
-                        "7z a -tzip -mem=AES256 -mx=9 -p<ascii-password> out.zip deflate.txt",
-                    SaltReplayNote: SaltReplayExplanation,
-                    Archive: new AesZipFixtureArchiveSpec(
-                        "aes256-ascii-standard.zip",
-                        634,
-                        "c20340901d81009462cfbfeb39f2b5b328a93445d73c6ad3886160e95914eb58"),
-                    Entries:
+                CreateManifest(
+                    "aes256-ascii-standard", "7-Zip", "26.06 (x64)", "ascii",
+                    "7z a -tzip -mem=AES256 -mx=0 -p<ascii-password> out.zip empty.txt store.bin && " +
+                    "7z a -tzip -mem=AES256 -mx=9 -p<ascii-password> out.zip deflate.txt",
+                    634, "c20340901d81009462cfbfeb39f2b5b328a93445d73c6ad3886160e95914eb58",
                     [
                         new AesZipFixtureEntrySpec(0, "deflate.txt", 512, "81dde2c525bf6b6a9e944db69c69828ab2363718bcadb7a4d744d5cd0b8bcc75", AesWireMethod, AesWireMethod, 8, "deflate", Aes256Strength),
                         new AesZipFixtureEntrySpec(1, "empty.txt", 0, EmptySha256, AesWireMethod, AesWireMethod, 0, "stored", Aes256Strength),
@@ -113,24 +100,11 @@ internal static class AesZipInteroperabilityFixtures
                     ]),
                 "UEsDBDMAAQBjAIade10AAAAAQgAAAAACAAALAAsAZGVmbGF0ZS50eHQBmQcAAgBBRQMIAKS0S2xWf6mZHN/tCYhXSVqAVCQZ5Wl3KvEC3k20obJJoKX+V5XyRt7SzguE4atHkBxeSmINQAv5pjj0wi1Twrv8JlBLAwQzAAEAYwCGnXtdAAAAABwAAAAAAAAACQALAGVtcHR5LnR4dAGZBwACAEFFAwAA7vIYlAIMdUnt4mgxUGQk59yvQ5wzr6/ZXoZ8/FBLAwQzAAEAYwCGnXtdAAAAADoAAAAeAAAACQALAHN0b3JlLmJpbgGZBwACAEFFAwAAbVXXzKaCY3JDYwxariIs0dexm9HOCtU+LGntbV8u4v4kwk+AiI0CGetda56+b/OJlFqNW+FJFCfZAlBLAQI/AzMAAQBjAIade10AAAAAQgAAAAACAAALAC8AAAAAAAAAIICkgQAAAABkZWZsYXRlLnR4dAoAIAAAAAAAAQAYAC6xzEqfft0BAAAAAAAAAAAAAAAAAAAAAAGZBwACAEFFAwgAUEsBAj8DMwABAGMAhp17XQAAAAAcAAAAAAAAAAkALwAAAAAAAAAggKSBdgAAAGVtcHR5LnR4dAoAIAAAAAAAAQAYAFOazEqfft0BAAAAAAAAAAAAAAAAAAAAAAGZBwACAEFFAwAAUEsBAj8DMwABAGMAhp17XQAAAAA6AAAAHgAAAAkALwAAAAAAAAAggKSBxAAAAHN0b3JlLmJpbgoAIAAAAAAAAQAYAAevzEqfft0BAAAAAAAAAAAAAAAAAAAAAAGZBwACAEFFAwAAUEsFBgAAAAADAAMANAEAADABAAAAAA=="),
             ["aes256-space-padded"] = new(
-                new AesZipFixtureManifest(
-                    SchemaVersion: 1,
-                    CaseKey: "aes256-space-padded",
-                    Container: ContainerFormat,
-                    Producer: "7-Zip",
-                    ProducerVersion: "26.06 (x64)",
-                    EncryptionStrength: Aes256Strength,
-                    AesVendorVersion: AesVendorVersion,
-                    SyntheticPasswordCase: "leading-trailing-space",
-                    RegenerationRecipe:
-                        "7z a -tzip -mem=AES256 -mx=0 -p<space-padded-password> out.zip empty.txt store.bin && " +
-                        "7z a -tzip -mem=AES256 -mx=9 -p<space-padded-password> out.zip deflate.txt",
-                    SaltReplayNote: SaltReplayExplanation,
-                    Archive: new AesZipFixtureArchiveSpec(
-                        "aes256-space-padded.zip",
-                        634,
-                        "6b928797af65cd64aad6d89de6ac006504895ee277af7360f6593b70e5772f7a"),
-                    Entries:
+                CreateManifest(
+                    "aes256-space-padded", "7-Zip", "26.06 (x64)", "leading-trailing-space",
+                    "7z a -tzip -mem=AES256 -mx=0 -p<space-padded-password> out.zip empty.txt store.bin && " +
+                    "7z a -tzip -mem=AES256 -mx=9 -p<space-padded-password> out.zip deflate.txt",
+                    634, "6b928797af65cd64aad6d89de6ac006504895ee277af7360f6593b70e5772f7a",
                     [
                         new AesZipFixtureEntrySpec(0, "deflate.txt", 512, "ae6477fb388db84c47bb3b49fad8193ca1450751beb74e7851ea026c07f9d216", AesWireMethod, AesWireMethod, 8, "deflate", Aes256Strength),
                         new AesZipFixtureEntrySpec(1, "empty.txt", 0, EmptySha256, AesWireMethod, AesWireMethod, 0, "stored", Aes256Strength),
@@ -138,24 +112,11 @@ internal static class AesZipInteroperabilityFixtures
                     ]),
                 "UEsDBDMAAQBjAIade10AAAAAQgAAAAACAAALAAsAZGVmbGF0ZS50eHQBmQcAAgBBRQMIALwi9KMWZ1iqkoV7yET37SC8JP83riUHAQTBLp7K900qcSUHeXsWYS8gRyfmqss9OMNbrWID8MF1O6B8caNxTRharVBLAwQzAAEAYwCGnXtdAAAAABwAAAAAAAAACQALAGVtcHR5LnR4dAGZBwACAEFFAwAALAlzp1FwtLF/2wYoPk6RM6Ev6TtBa3x4GyGKoVBLAwQzAAEAYwCGnXtdAAAAADoAAAAeAAAACQALAHN0b3JlLmJpbgGZBwACAEFFAwAA5SG0SgtzQrA2sTcQ4G1Kuu94sZgLJhgX0nOgN+t5DQadyz5lhR1r585j66YIixd+sPgx2z4b3yuMslBLAQI/AzMAAQBjAIade10AAAAAQgAAAAACAAALAC8AAAAAAAAAIICkgQAAAABkZWZsYXRlLnR4dAoAIAAAAAAAAQAYAOAh1Eqfft0BAAAAAAAAAAAAAAAAAAAAAAGZBwACAEFFAwgAUEsBAj8DMwABAGMAhp17XQAAAAAcAAAAAAAAAAkALwAAAAAAAAAggKSBdgAAAGVtcHR5LnR4dAoAIAAAAAAAAQAYAG3t00qfft0BAAAAAAAAAAAAAAAAAAAAAAGZBwACAEFFAwAAUEsBAj8DMwABAGMAhp17XQAAAAA6AAAAHgAAAAkALwAAAAAAAAAggKSBxAAAAHN0b3JlLmJpbgoAIAAAAAAAAQAYACIc1Eqfft0BAAAAAAAAAAAAAAAAAAAAAAGZBwACAEFFAwAAUEsFBgAAAAADAAMANAEAADABAAAAAA=="),
             ["aes256-non-ascii"] = new(
-                new AesZipFixtureManifest(
-                    SchemaVersion: 1,
-                    CaseKey: "aes256-non-ascii",
-                    Container: ContainerFormat,
-                    Producer: "ICSharpCode.SharpZipLib",
-                    ProducerVersion: "1.4.2",
-                    EncryptionStrength: Aes256Strength,
-                    AesVendorVersion: AesVendorVersion,
-                    SyntheticPasswordCase: "non-ascii-utf8",
-                    RegenerationRecipe:
-                        "ICSharpCode.SharpZipLib 1.4.2 ZipOutputStream with AESKeySize=256 and UTF-8 non-ASCII password " +
-                        "(7-Zip 26.06 rejects non-ASCII passwords on ZIP creation with E_INVALIDARG, while extracting/verifying them cleanly).",
-                    SaltReplayNote: SaltReplayExplanation,
-                    Archive: new AesZipFixtureArchiveSpec(
-                        "aes256-non-ascii.zip",
-                        726,
-                        "00dbf71ccc625df2fb12e5083abe30d2f54c8fec61ba4b1d93e9b5c3be25b802"),
-                    Entries:
+                CreateManifest(
+                    "aes256-non-ascii", "ICSharpCode.SharpZipLib", "1.4.2", "non-ascii-utf8",
+                    "ICSharpCode.SharpZipLib 1.4.2 ZipOutputStream with AESKeySize=256 and UTF-8 non-ASCII password " +
+                    "(7-Zip 26.06 rejects non-ASCII passwords on ZIP creation with E_INVALIDARG, while extracting/verifying them cleanly).",
+                    726, "00dbf71ccc625df2fb12e5083abe30d2f54c8fec61ba4b1d93e9b5c3be25b802",
                     [
                         new AesZipFixtureEntrySpec(0, "empty.txt", 0, EmptySha256, AesWireMethod, AesWireMethod, 0, "stored", Aes256Strength),
                         new AesZipFixtureEntrySpec(1, "store.bin", 33, "93ec9d35d7f5237ab8e63cb559257a548feb9df299341db188a71bb5fcefff8d", AesWireMethod, AesWireMethod, 0, "stored", Aes256Strength),
@@ -163,6 +124,29 @@ internal static class AesZipInteroperabilityFixtures
                     ]),
                 "UEsDBDMACQhjAAAAe10AAAAA//////////8JAB8AZW1wdHkudHh0AQAQAAAAAAAAAAAAHAAAAAAAAAABmQcAAgBBRQMAADk4teGucrM4vf4+MGtDC4QqDEi6wAxfpN6K6nhQSwcIAAAAABwAAAAAAAAAAAAAAAAAAABQSwMEMwAJCGMAAAB7XQAAAAD//////////wkAHwBzdG9yZS5iaW4BABAAIQAAAAAAAAA9AAAAAAAAAAGZBwACAEFFAwAAPw4m2XFwWRHa0penvwNvb3wowOEURgSHLyvanWRO+jVuVGTqbPwhzsxRH9KsEFkY7831aT2Z5SCHA5KtsFBLBwgAAAAAPQAAAAAAAAAhAAAAAAAAAFBLAwQzAAkIYwAAAHtdAAAAAP//////////CwAfAGRlZmxhdGUudHh0AQAQADACAAAAAAAARwAAAAAAAAABmQcAAgBBRQMIALlrdLk8Ap5LkGo9Cz7R+v54cUQxgiT7S7ylhS+f+Yr407bIRwMNccBSh3G8F+cesxNFlQGtz2PG+joVT0xvfLbTBMB+PQo3UEsHCAAAAABHAAAAAAAAADACAAAAAAAAUEsBAjMAMwAJCGMAAAB7XQAAAAD//////////wkAHwAAAAAAAAAAAAAAAAAAAGVtcHR5LnR4dAEAEAAAAAAAAAAAABwAAAAAAAAAAZkHAAIAQUUDAABQSwECMwAzAAkIYwAAAHtdAAAAAP//////////CQAfAAAAAAAAAAAAAAB6AAAAc3RvcmUuYmluAQAQACEAAAAAAAAAPQAAAAAAAAABmQcAAgBBRQMAAFBLAQIzADMACQhjAAAAe10AAAAA//////////8LAB8AAAAAAAAAAAAAABUBAABkZWZsYXRlLnR4dAEAEAAwAgAAAAAAAEcAAAAAAAAAAZkHAAIAQUUDCABQSwUGAAAAAAMAAwAEAQAAvAEAAAAA"),
         };
+
+    private static AesZipFixtureManifest CreateManifest(
+        string caseKey,
+        string producer,
+        string producerVersion,
+        string syntheticPasswordCase,
+        string regenerationRecipe,
+        int size,
+        string sha256,
+        IReadOnlyList<AesZipFixtureEntrySpec> entries) =>
+        new(
+            SchemaVersion: 1,
+            CaseKey: caseKey,
+            Container: ContainerFormat,
+            Producer: producer,
+            ProducerVersion: producerVersion,
+            EncryptionStrength: Aes256Strength,
+            AesVendorVersion: AesVendorVersion,
+            SyntheticPasswordCase: syntheticPasswordCase,
+            RegenerationRecipe: regenerationRecipe,
+            SaltReplayNote: SaltReplayExplanation,
+            Archive: new AesZipFixtureArchiveSpec(caseKey + ".zip", size, sha256),
+            Entries: entries);
 
     internal static IReadOnlyList<string> AllCaseKeys { get; } =
     [
