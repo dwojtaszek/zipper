@@ -1141,6 +1141,11 @@ def _repo_is_clean(cwd: str) -> bool:
     return code == 0 and not out.strip()
 
 
+def _branch_baseline() -> str:
+    code, _, _ = run_cmd(["git", "rev-parse", "--verify", MAIN_REMOTE_REF], cwd=REPO_PATH)
+    return MAIN_REMOTE_REF if code == 0 else "main"
+
+
 def _is_branch_safe_to_delete(branch: str) -> bool:
     """Returns True if branch is merged into main or safely present on origin.
 
@@ -1156,13 +1161,14 @@ def _is_branch_safe_to_delete(branch: str) -> bool:
 
     local_sha = local_sha.strip()
 
+    baseline = _branch_baseline()
     # 1. Is branch merged into main?
-    merged_code, _, _ = run_cmd(["git", "merge-base", "--is-ancestor", branch, "main"], cwd=REPO_PATH)
+    merged_code, _, _ = run_cmd(["git", "merge-base", "--is-ancestor", branch, baseline], cwd=REPO_PATH)
     if merged_code == 0:
         return True
 
     # 2. Check if squashed/cherry-picked into main (all commits accounted for)
-    cherry_code, cherry_out, _ = run_cmd(["git", "cherry", "main", branch], cwd=REPO_PATH)
+    cherry_code, cherry_out, _ = run_cmd(["git", "cherry", baseline, branch], cwd=REPO_PATH)
     if cherry_code == 0:
         lines = [l.strip() for l in cherry_out.splitlines() if l.strip()]
         if lines and all(l.startswith("-") for l in lines):
@@ -1988,7 +1994,8 @@ def probe_and_select_agents() -> list[tuple[str, str | None]]:
             healthy = True
         else:
             healthy = module.check_token_health()
-        if not healthy:
+        probe_candidates = not healthy and bool(prefs) and name in {"codex", "agy"}
+        if not healthy and not probe_candidates:
             print(f"[select] {name!r}: installed but unhealthy, skipping")
             continue
 
@@ -2028,6 +2035,9 @@ def probe_and_select_agents() -> list[tuple[str, str | None]]:
             prio, _ = get_model_priority(prefs, name, model)
             if prio == 0:
                 print(f"[select] {name}/{model}: priority 0 (or not in prefs), skipping")
+                continue
+            if probe_candidates and not module.check_token_health(model=model):
+                print(f"[select] {name}/{model}: unhealthy, skipping")
                 continue
             candidates.append((prio, name, model))
             print(f"[select] {name}/{model}: priority {prio}, queued")
@@ -2207,7 +2217,7 @@ def _gh_is_functional() -> bool:
 
 
 def _branch_has_commits(branch: str) -> bool:
-    code, out, _ = run_cmd(["git", "log", "--oneline", f"main..{branch}"], cwd=REPO_PATH)
+    code, out, _ = run_cmd(["git", "log", "--oneline", f"{_branch_baseline()}..{branch}"], cwd=REPO_PATH)
     return code == 0 and bool(out.strip())
 
 

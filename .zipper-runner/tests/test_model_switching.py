@@ -227,6 +227,19 @@ class ProbeAndSelectAgentsModelSwitchingTests(unittest.TestCase):
         runner.ACTIVE_AGENT = self.orig_active_agent
         runner.ACTIVE_MODEL = self.orig_active_model
 
+    def test_unhealthy_codex_default_allows_healthy_configured_fallback(self):
+        primary = "openai/gpt-6.2-sol"
+        fallback = "openai/gpt-6.1-sol"
+        plugin = MagicMock()
+        plugin.list_models.return_value = [primary, fallback]
+        plugin.check_token_health.side_effect = lambda model=None: model == fallback
+        with (
+            patch.dict(runner.AGENT_PLUGINS, {"codex": plugin}, clear=True),
+            patch.object(runner, "load_preferences", return_value={("codex", primary): 1, ("codex", fallback): 3}),
+            patch.object(runner, "DRY_RUN", False),
+        ):
+            self.assertEqual(runner.probe_and_select_agents(), [("codex", fallback)])
+
     def test_probe_and_select_skips_exhausted_models(self):
         runner.ACTIVE_AGENT = None
         runner.ACTIVE_MODEL = None
