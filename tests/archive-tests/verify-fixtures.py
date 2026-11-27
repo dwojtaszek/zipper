@@ -2535,7 +2535,9 @@ def _read_length_anchored_entry(check, zip_bytes, ordinal, cursor, eocd_offset, 
         raise VerificationError(check, "central header %d is missing or truncated" % ordinal)
     version_made_by, _ver_needed, c_flags, c_method = struct.unpack_from("<HHHH", zip_bytes, cursor + 4)
     c_crc, c_comp, c_uncomp = struct.unpack_from("<III", zip_bytes, cursor + 16)
-    c_name_len, c_extra_len, c_comm_len = struct.unpack_from("<HHH", zip_bytes, cursor + 28)
+    c_name_len, c_extra_len, c_comm_len, disk_start = struct.unpack_from("<HHHH", zip_bytes, cursor + 28)
+    if disk_start != 0:
+        raise VerificationError(check, "central header %d starts on a nonzero disk" % ordinal)
     external_attr, local_offset = struct.unpack_from("<II", zip_bytes, cursor + 38)
     c_name = zip_bytes[cursor + 46:cursor + 46 + c_name_len]
     next_cursor = cursor + ZIP_CENTRAL_HEADER_FIXED_SIZE + c_name_len + c_extra_len + c_comm_len

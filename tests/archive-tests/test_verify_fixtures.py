@@ -3281,12 +3281,16 @@ class ProducerCompatibilityControlTests(TempDirTest):
         dir_entry = {k: v for k, v in entries[0].items() if k != "payloadCodec"} | {"kind": "directory"}
         bad_local_crc = bytearray(zip_bytes)
         struct.pack_into("<I", bad_local_crc, 14, 1)
+        bad_disk_start = bytearray(zip_bytes)
+        central_offset = struct.unpack_from("<I", zip_bytes, len(zip_bytes) - 6)[0]
+        struct.pack_into("<H", bad_disk_start, central_offset + 34, 1)
         for label, mutated_zip, mutated_entries in (
             ("dos_host", self._build_directory_attributes_zip(dos_host=3), entries),
             ("dos_attr", self._build_directory_attributes_zip(dos_attr=0), entries),
             ("unix_host", self._build_directory_attributes_zip(unix_host=0), entries),
             ("unix_attr", self._build_directory_attributes_zip(unix_attr=0), entries),
             ("local_crc", bytes(bad_local_crc), entries),
+            ("disk_start", bytes(bad_disk_start), entries),
             ("sidecar_kind", zip_bytes, [dir_entry, entries[1]]),
             ("swapped_ordinals", zip_bytes, [entries[0] | {"ordinal": 1}, entries[1] | {"ordinal": 0}]),
             ("missing_ordinal", zip_bytes, [entries[0], entries[1] | {"ordinal": 2}]),
