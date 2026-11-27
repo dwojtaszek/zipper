@@ -155,7 +155,18 @@ internal static class EdiscoveryDeliveryZipVerifier
             Assert.Equal(cols[docIdIdx], Path.GetFileNameWithoutExtension(cols[nativeIdx].Replace('\\', '/')));
             AssertResolves(cols[nativeIdx], "native", rootPrefix, diskFiles, archiveEntryNames);
             Assert.False(string.IsNullOrEmpty(cols[imageIdx]), $"DAT row {i} has empty IMAGE_PATH.");
-            AssertResolves(cols[imageIdx], "image", rootPrefix, diskFiles, archiveEntryNames);
+            var imageRel = cols[imageIdx].Replace('\\', '/');
+            var imageDeliveryPath = $"{rootPrefix}{imageRel}";
+            if (!diskFiles.Contains(imageDeliveryPath))
+            {
+                // Multi-page TIFF generator emits _001.tif, which ProductionSetPostValidator accepts as page-one fallback.
+                var pageOneRel = Path.ChangeExtension(imageRel, null) + "_001" + Path.GetExtension(imageRel);
+                AssertResolves(pageOneRel, "image (page-one fallback)", rootPrefix, diskFiles, archiveEntryNames);
+            }
+            else
+            {
+                AssertResolves(cols[imageIdx], "image", rootPrefix, diskFiles, archiveEntryNames);
+            }
             Assert.False(string.IsNullOrEmpty(cols[textIdx]), $"DAT row {i} has no Extracted Text reference.");
             Assert.Equal(cols[docIdIdx], Path.GetFileNameWithoutExtension(cols[textIdx].Replace('\\', '/')));
             AssertResolves(cols[textIdx], "text", rootPrefix, diskFiles, archiveEntryNames);
@@ -242,17 +253,17 @@ internal static class EdiscoveryDeliveryZipVerifier
         Assert.Equal(volumeCount, actualVolumeDirs.Length);
 
         // Parent rows must split across volumes by the requested VolumeSize; attachment rows are excluded.
-        var expectedParentsByVolume = Enumerable.Range(0, (int)request.Output.FileCount)
-            .GroupBy(i => $"VOL{(i / request.Production.VolumeSize) + 1:D3}")
-            .ToDictionary(g => g.Key, g => g.Count());
-        var actualParentsByVolume = parentNativePathsByDocId.Values
-            .GroupBy(p => p.Split('/')[^2])
-            .ToDictionary(g => g.Key, g => g.Count());
-        Assert.Equal(expectedParentsByVolume.Count, actualParentsByVolume.Count);
-        foreach (var (volume, expectedCount) in expectedParentsByVolume)
+        for (int i = 0; i < (int)request.Output.FileCount; i++)
         {
-            Assert.True(actualParentsByVolume.TryGetValue(volume, out var actualCount), $"No parent DAT rows reference volume '{volume}'.");
-            Assert.Equal(expectedCount, actualCount);
+            var expectedDocId = request.Bates is not null
+                ? BatesSequence.FromConfig(request.Bates).Format(i).ToString()
+                : $"DOC{i + 1:D8}";
+            var expectedVolume = $"VOL{(i / request.Production.VolumeSize) + 1:D3}";
+            Assert.True(
+                parentNativePathsByDocId.TryGetValue(expectedDocId, out var nativePath),
+                $"Missing expected parent DOCID '{expectedDocId}' in DAT.");
+            var actualVolume = nativePath.Split('/')[^2];
+            Assert.Equal(expectedVolume, actualVolume);
         }
 
         long totalDocuments = datLines.Count - 1;
@@ -526,13 +537,33 @@ internal static class EdiscoveryDeliveryZipVerifier
                 || name.EndsWith(".xml", StringComparison.OrdinalIgnoreCase);
         }
 
-        var datPropertiesName = datEntry.FullName + "_properties.json";
-        var expectedRootArtifacts = new HashSet<string>(StringComparer.Ordinal)
+        var formats = request.LoadFile.Formats.Count > 0
+            ? request.LoadFile.Formats
+            : new List<LoadFileFormat> { LoadFileFormat.Dat };
+        var baseStem = Path.GetFileNameWithoutExtension(datEntry.FullName);
+        bool disambiguateConcordance = formats.Contains(LoadFileFormat.Dat) && formats.Contains(LoadFileFormat.Concordance);
+        var expectedRootArtifacts = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var format in formats)
         {
-            datEntry.FullName,
-            datPropertiesName,
-        };
-        Assert.Contains(datPropertiesName, archiveEntryNames);
+            var ext = format switch
+            {
+                LoadFileFormat.Dat => ".dat",
+                LoadFileFormat.Csv => ".csv",
+                LoadFileFormat.Opt => ".opt",
+                LoadFileFormat.Concordance => disambiguateConcordance ? ".concordance.dat" : ".dat",
+                LoadFileFormat.EdrmXml => ".xml",
+                _ => ".dat",
+            };
+            var fileName = baseStem + ext;
+            expectedRootArtifacts.Add(fileName);
+            expectedRootArtifacts.Add(fileName + "_properties.json");
+        }
+        if (optEntry is not null)
+        {
+            expectedRootArtifacts.Add(optEntry.FullName);
+            expectedRootArtifacts.Add(optEntry.FullName + "_properties.json");
+        }
+        Assert.Contains(datEntry.FullName + "_properties.json", archiveEntryNames);
         var actualRootArtifacts = archiveEntryNames.Where(name => !name.Contains('/')).ToHashSet(StringComparer.Ordinal);
         Assert.True(
             actualRootArtifacts.SetEquals(expectedRootArtifacts),

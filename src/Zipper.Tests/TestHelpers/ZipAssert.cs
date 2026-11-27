@@ -196,6 +196,7 @@ public static class ZipAssert
     {
         byte[] buffer = new byte[8192];
         using var sharpZip = new ICSharpCode.SharpZipLib.Zip.ZipFile(zipPath);
+        Assert.True(sharpZip.TestArchive(testData: false), $"SharpZipLib header integrity test failed for '{zipPath}'.");
         foreach (ICSharpCode.SharpZipLib.Zip.ZipEntry entry in sharpZip)
         {
             if (entry.IsDirectory)
