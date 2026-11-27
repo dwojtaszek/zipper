@@ -12,6 +12,13 @@
 
 Core cross-platform E2E suites (called by both `run-tests.sh` and `run-tests.bat`) have `.bat` counterparts for Windows CI. Utility scripts (`test-autoreview-validator.sh`, `test-build-version.sh`, `test-mutation-smoke-operators.sh`, `test-perf-measure.sh`, `test-stress-harness.sh`, `test-zip64-boundary.sh`, `validate-e2e-parity.sh`, `validate-req-traceability.sh`, `wait-for-reviews.sh`) are Linux-only. `test-mutation-smoke.sh` / `.bat` is a standalone, manual-only integration smoke for the pinned Stryker CLI and report normalizer (#1110), omitted from `run-tests` due to runtime cost. `validate-e2e-parity.sh` runs in PR CI (strict mode) and fails if the inline test cases or invoked sub-script suites drift between `run-tests.sh` and `run-tests.bat` (#624); platform-specific suites need a documented exemption in the script.
 
+## Platform-only runner checks
+
+- `run-tests.sh` runs `test-mutation-smoke-operators.sh`, `test-perf-measure.sh`, and `test-stress-harness.sh`. It also runs the coverage-gate self-test, `test_perf_compare.py`, the golden helper and runner unit tests, and the `FileGenerationRequest` flat-property guard.
+- `run-tests.bat` runs `test-run-tests-fatal.bat` to check how the Windows runner propagates a failing child suite.
+
+A passing run covers the paired E2E suites and the checks invoked by that runner. GitHub Actions can also run checks separately from these entry points. See [CI.md](../CI.md) for CI coverage.
+
 ## Subdirectories
 
 | Directory | Purpose |
