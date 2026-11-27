@@ -2643,10 +2643,10 @@ def _verify_directory_attributes(check, case, zip_bytes):
         entry, sidecar = parsed[ordinal], sidecar_entries[ordinal]
         wire_tuple = (
             entry["c_name"], entry["l_name"], entry["host_system"], entry["external_attr"],
-            entry["c_method"], entry["l_method"], entry["c_comp"], entry["c_uncomp"],
-            entry["l_comp"], entry["l_uncomp"],
+            entry["c_method"], entry["l_method"], entry["c_crc"], entry["l_crc"],
+            entry["c_comp"], entry["c_uncomp"], entry["l_comp"], entry["l_uncomp"],
         )
-        if wire_tuple != (expected_name, expected_name, expected_host, expected_attr, 0, 0, 0, 0, 0, 0):
+        if wire_tuple != (expected_name, expected_name, expected_host, expected_attr, 0, 0, 0, 0, 0, 0, 0, 0):
             raise VerificationError(
                 check, "entry %d wire fields do not match %s attributes" % (ordinal, expected_name.decode("ascii")))
         sidecar_tuple = (
