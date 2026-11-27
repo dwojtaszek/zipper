@@ -367,15 +367,16 @@ def _read_bounded(path, limit):
     return data
 
 
-def verify_directory(fixtures_dir, passwords, seven_zip=None, require_seven_zip=False):
-    fixtures_path = Path(fixtures_dir)
+def verify_directory(fixtures_dir, passwords, seven_zip=None, require_seven_zip=False, report_path=None):
+    fixtures_path = Path(fixtures_dir).resolve()
     if not fixtures_path.is_dir():
         raise ValueError(f"Fixtures directory does not exist: {fixtures_dir}")
     if require_seven_zip and not seven_zip:
         raise ValueError("7-Zip (7zz/7z) is required but was not found on PATH")
 
+    report_path = Path(report_path).resolve() if report_path is not None else None
     manifests = sorted(
-        p for p in fixtures_path.glob("*.json") if p.name != "passwords.json"
+        p for p in fixtures_path.glob("*.json") if p.name != "passwords.json" and p != report_path
     )
     if not manifests:
         raise ValueError(f"No AES interoperability manifests found in {fixtures_dir}")
@@ -427,17 +428,22 @@ def main():
     parser.add_argument("--report", default=None, help="Optional output path for JSON verification report")
     args = parser.parse_args()
 
-    passwords = json.loads(_read_bounded(Path(args.passwords_json), MAX_MANIFEST_BYTES).decode("utf-8"))
+    passwords_path = Path(args.passwords_json).resolve()
+    report_path = Path(args.report).resolve() if args.report else None
+    if report_path == passwords_path:
+        parser.error("--report cannot overwrite --passwords-json")
+    passwords = json.loads(_read_bounded(passwords_path, MAX_MANIFEST_BYTES).decode("utf-8"))
     seven_zip = resolve_seven_zip(args.seven_zip)
     report = verify_directory(
         args.fixtures_dir,
         passwords,
         seven_zip=seven_zip,
         require_seven_zip=args.require_seven_zip,
+        report_path=report_path,
     )
 
-    if args.report:
-        Path(args.report).write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    if report_path:
+        report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     print(f"Verified {report['fixtureCount']} AES-256 interoperability fixture(s).")
     return 0

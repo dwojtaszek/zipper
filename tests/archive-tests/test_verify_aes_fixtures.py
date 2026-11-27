@@ -82,6 +82,8 @@ class VerifyAesFixturesTests(unittest.TestCase):
             }
             (root / "aes256-space-padded.zip").write_bytes(zbytes)
             (root / "aes256-space-padded.json").write_text(json.dumps(manifest), encoding="utf-8")
+            report_path = root / "verification.json"
+            report_path.write_text('{"fixtureCount": 1}', encoding="utf-8")
 
             with mock.patch.object(VERIFY_AES, "verify_zip_aes_headers"), \
                  mock.patch.object(VERIFY_AES, "check_python_zipfile_capability", return_value={"reader": "python-zipfile", "status": "unsupported-capability", "missingCapability": "aes-256"}), \
@@ -95,6 +97,7 @@ class VerifyAesFixturesTests(unittest.TestCase):
                     {"aes256-space-padded": "  zipper aes pass  "},
                     seven_zip="7z",
                     require_seven_zip=True,
+                    report_path=report_path,
                 )
 
             self.assertEqual(report["fixtureCount"], 1)
