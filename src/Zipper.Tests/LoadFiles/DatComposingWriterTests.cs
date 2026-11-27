@@ -59,6 +59,44 @@ public class DatComposingWriterTests : TempDirectoryTestBase
     }
 
     [Fact]
+    public async Task WriteAsync_StandardMode_WithColumnProfileHashColumn_DoesNotDuplicateHashColumn()
+    {
+        var request = DefaultRequest();
+        request.Hash = new HashConfig
+        {
+            Mode = HashMode.Simulated,
+            Algorithms = new HashSet<HashAlgorithm> { HashAlgorithm.MD5 },
+        };
+        request.Metadata = request.Metadata with
+        {
+            Seed = 42,
+            ColumnProfile = new Zipper.Profiles.ColumnProfile
+            {
+                Name = "dat-hash",
+                Columns = new List<Zipper.Profiles.ColumnDefinition>
+                {
+                    new() { Name = "Control Number", Type = "text" },
+                    new() { Name = "File Path", Type = "text" },
+                    new() { Name = "MD5HASH", Type = "text" },
+                },
+            },
+        };
+        var file = MakeFileData(1) with
+        {
+            Hashes = new Dictionary<HashAlgorithm, string>
+            {
+                [HashAlgorithm.MD5] = "0123456789abcdef0123456789abcdef",
+            },
+        };
+
+        var output = await WriteAndCaptureOutput(request, new List<FileData> { file });
+        var header = output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)[0];
+
+        Assert.Equal(1, header.Split("MD5HASH", StringSplitOptions.None).Length - 1);
+        Assert.Contains("0123456789abcdef0123456789abcdef", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task WriteAsync_WithBatesConfig_IncludesBatesNumberColumn()
     {
         var request = DefaultRequest();

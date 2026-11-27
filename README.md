@@ -320,6 +320,7 @@ In Standard generation mode (no custom `--column-profile`), Load File columns ar
 | `Extracted Text` | `EXTRACTED TEXT` | `TEXT_PATH` | `--with-text` |
 | `BEGATTACH`, `ENDATTACH`, `PARENTDOCID` | `BEGATTACH`, `ENDATTACH`, `PARENTDOCID` | `BEGATTACH`, `ENDATTACH`, `PARENTDOCID` | `--with-families` |
 | `Thread ID`, `Inclusive`, `Thread Parent` | `THREAD ID`, `INCLUSIVE`, `THREAD PARENT` | `THREAD_ID`, `INCLUSIVE`, `THREAD_PARENT` | `--with-threading` |
+| `MD5HASH`, `SHA1HASH`, `SHA256HASH` | `MD5HASH`, `SHA1HASH`, `SHA256HASH` | `MD5HASH`, `SHA1HASH`, `SHA256HASH` | `--hash-mode actual` or `--hash-mode simulated` |
 
 For in-depth explanations, delimiter syntax, argument interaction rules, and audit schemas, see the [Advanced CLI & Reference Guide](docs/advanced-guide.md). Argument interactions for `--compression` and the exclusive `--archive-test-suite` workflow are in [§7 Argument Interactions Reference](docs/advanced-guide.md#7-argument-interactions-reference).
 

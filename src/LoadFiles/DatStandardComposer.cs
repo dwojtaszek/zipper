@@ -15,6 +15,7 @@ internal sealed class DatStandardComposer
     private readonly IReadOnlyList<string> headerColumns;
     private readonly DataGenerator? profileGenerator;
     private readonly List<string>? profileColumnNames;
+    private readonly IReadOnlyList<string> hashColumnKeys;
     private readonly bool hasTextPathColumn;
 
     public DatStandardComposer(
@@ -29,6 +30,7 @@ internal sealed class DatStandardComposer
         this.headerColumns = headerColumns;
         this.profileGenerator = profileGenerator;
         this.profileColumnNames = profileColumnNames;
+        this.hashColumnKeys = StandardRowComposer.GetHashColumnKeys(request);
         this.hasTextPathColumn = profileColumnNames?.Any(
             n => StandardRowValueGenerators.ByName.TryGetValue(n, out var gen) && gen is TextPathGenerator) ?? false;
     }
@@ -89,6 +91,8 @@ internal sealed class DatStandardComposer
         {
             cols.AddRange(new[] { "Thread ID", "Inclusive", "Thread Parent" });
         }
+
+        cols.AddRange(StandardRowComposer.GetHashColumnKeys(request));
 
         return cols.Select(c => DatComposerShared.ApplyConvention(c, namingConvention)).ToList();
     }
@@ -396,6 +400,8 @@ internal sealed class DatStandardComposer
             v.Add(inclusive);
             v.Add(threadParent);
         }
+
+        DatComposerShared.AppendHashValues(v, fileData.Hashes, this.hashColumnKeys);
 
         return v;
     }

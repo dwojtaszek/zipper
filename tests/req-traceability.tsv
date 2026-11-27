@@ -401,6 +401,12 @@ REQ-165	unit	HashModuleTests.TryBuild_ValidHashMode_ReturnsTrue	--hash-mode actu
 REQ-166	unit	HashModuleTests.Parse_SimulatedMode_ReturnsDefaultMD5	--hash-algorithms, default md5
 REQ-167	unit	ParallelFileGeneratorTests.GenerateFileData_WithHashModeActual_ComputesAllConfiguredHashes	Hash columns MD5HASH/SHA1HASH/SHA256HASH
 REQ-167	unit	HashUtilityTests.GetColumnAlgorithm_KnownAndUnknownNames_ReturnsExpectedAlgorithm	Hash column aliases resolve to their configured algorithm
+REQ-167	unit	ActualHashIntegrationTests.StandardMode_DatWithoutColumnProfile_EmitsAllConfiguredHashColumnsMatchingArchiveBytes	Concordance DAT hash columns emitted without a Column Profile and match Archive bytes
+REQ-167	unit	ActualHashIntegrationTests.StandardMode_SeededEmailWithFamilies_DatHashMatchesEachArchiveEntryBytes	Concordance DAT parent and child Attachment hash values match their own Archive entry bytes
+REQ-167	unit	ActualHashIntegrationTests.ProductionSet_DatWithoutColumnProfile_EmitsHashColumnsMatchingOnDiskBytes	Production Set DAT hash columns match on-disk Native File bytes
+REQ-167	unit	LoadFileOnlyGeneratorTests.GenerateAsync_Dat_LoadfileOnly_SimulatedHash_EmitsDeterministicHashColumns	Loadfile-Only DAT simulated hash columns are deterministic for a fixed seed
+REQ-167	unit	LoadFileOnlyGeneratorTests.GenerateAsync_Dat_LoadfileOnly_SimulatedHash_WithFamilies_ChildRowsEmitEmptyHashColumns	Loadfile-Only DAT child rows keep empty hash values and stay header-aligned
+REQ-167	unit	DatComposingWriterTests.WriteAsync_StandardMode_WithColumnProfileHashColumn_DoesNotDuplicateHashColumn	Column Profile hash columns are not duplicated
 REQ-168	unit	HashModuleTests.TryBuild_InvalidHashMode_ReturnsFalse	Invalid hash-mode/algorithms fail validation
 REQ-169	unit	HashModuleTests.TryBuild_HashAlgorithmsWithoutHashMode_ReturnsFalse	Algorithms without hash-mode fail
 REQ-170	unit	ProductionSetTests.ProductionSet_RollingArgs_ParsesCorrectly	--production-id single/list, defaults; 250 UTF-8 byte cap after rolling derivation

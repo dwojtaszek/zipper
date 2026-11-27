@@ -74,6 +74,105 @@ public class LoadFileOnlyGeneratorTests : IDisposable
         Assert.Contains("Custodian", firstLine, StringComparison.Ordinal);
         Assert.Contains("EmailSubject", firstLine, StringComparison.Ordinal);
         Assert.Contains("ExtractedText", firstLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("MD5HASH", firstLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_Dat_LoadfileOnly_SimulatedHash_EmitsDeterministicHashColumns()
+    {
+        var request = this.CreateRequest(count: 3);
+        request.Hash = new HashConfig
+        {
+            Mode = HashMode.Simulated,
+            Algorithms = new HashSet<Config.HashAlgorithm>
+            {
+                Config.HashAlgorithm.MD5,
+                Config.HashAlgorithm.SHA256,
+            },
+        };
+
+        var result = await LoadFileOnlyGenerator.GenerateAsync(request);
+        var lines = await File.ReadAllLinesAsync(result.LoadFilePath);
+        var header = DatLineParser.Parse(lines[0], '\u0014', '\u00fe');
+        int pathIndex = header.IndexOf("File Path");
+        int md5Index = header.IndexOf("MD5HASH");
+        int sha256Index = header.IndexOf("SHA256HASH");
+
+        Assert.True(pathIndex >= 0);
+        Assert.True(md5Index >= 0, "MD5HASH column must be emitted without a Column Profile.");
+        Assert.True(sha256Index >= 0, "SHA256HASH column must be emitted without a Column Profile.");
+        Assert.DoesNotContain("SHA1HASH", header);
+        Assert.Equal(new[] { "MD5HASH", "SHA256HASH" }, header.TakeLast(2));
+
+        var md5Values = new List<string>();
+        for (int lineIndex = 1; lineIndex < lines.Length; lineIndex++)
+        {
+            var record = DatLineParser.Parse(lines[lineIndex], '\u0014', '\u00fe');
+            Assert.Matches(@"^NATIVES\\\d{3}\\DOC\d{8}\.pdf$", record[pathIndex]);
+            Assert.Matches("^[0-9a-f]{32}$", record[md5Index]);
+            Assert.Matches("^[0-9a-f]{64}$", record[sha256Index]);
+            md5Values.Add(record[md5Index]);
+        }
+
+        Assert.Equal(md5Values.Count, md5Values.Distinct(StringComparer.Ordinal).Count());
+
+        var secondRun = await LoadFileOnlyGenerator.GenerateAsync(request);
+        Assert.Equal(
+            await File.ReadAllTextAsync(result.LoadFilePath),
+            await File.ReadAllTextAsync(secondRun.LoadFilePath));
+    }
+
+    [Fact]
+    public async Task GenerateAsync_Dat_LoadfileOnly_SimulatedHash_WithFamilies_ChildRowsEmitEmptyHashColumns()
+    {
+        var request = this.CreateRequest(count: 4);
+        request.Output = request.Output with { FileType = "eml" };
+        request.Metadata = request.Metadata with { WithFamilies = true };
+        request.LoadFile = request.LoadFile with { AttachmentRate = 100 };
+        request.Hash = new HashConfig
+        {
+            Mode = HashMode.Simulated,
+            Algorithms = new HashSet<Config.HashAlgorithm>
+            {
+                Config.HashAlgorithm.MD5,
+                Config.HashAlgorithm.SHA256,
+            },
+        };
+
+        var result = await LoadFileOnlyGenerator.GenerateAsync(request);
+        var lines = await File.ReadAllLinesAsync(result.LoadFilePath);
+        var header = DatLineParser.Parse(lines[0], '\u0014', '\u00fe');
+        int controlIndex = header.IndexOf("Control Number");
+        int pathIndex = header.IndexOf("File Path");
+        int md5Index = header.IndexOf("MD5HASH");
+        int sha256Index = header.IndexOf("SHA256HASH");
+
+        Assert.True(controlIndex >= 0);
+        Assert.True(pathIndex >= 0);
+        Assert.True(md5Index >= 0);
+        Assert.True(sha256Index >= 0);
+
+        int childCount = 0;
+        for (int lineIndex = 1; lineIndex < lines.Length; lineIndex++)
+        {
+            var record = DatLineParser.Parse(lines[lineIndex], '\u0014', '\u00fe');
+            Assert.Equal(header.Count, record.Count);
+            Assert.Matches(@"^NATIVES\\\d{3}\\DOC\d{8}(_A001)?\.pdf$", record[pathIndex]);
+
+            if (record[controlIndex].EndsWith("_A001", StringComparison.Ordinal))
+            {
+                childCount++;
+                Assert.Equal(string.Empty, record[md5Index]);
+                Assert.Equal(string.Empty, record[sha256Index]);
+            }
+            else
+            {
+                Assert.Matches("^[0-9a-f]{32}$", record[md5Index]);
+                Assert.Matches("^[0-9a-f]{64}$", record[sha256Index]);
+            }
+        }
+
+        Assert.True(childCount > 0, "Seeded family plan must produce at least one child row.");
     }
 
     [Fact]
