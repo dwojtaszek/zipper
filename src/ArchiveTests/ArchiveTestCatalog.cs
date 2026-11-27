@@ -826,11 +826,11 @@ internal static class ArchiveTestCatalog
     static ArchiveTestCatalog()
     {
         // Split the opt-in workload into fixture pairs within the ordinary per-Archive budget.
-        const int EntriesPerFixture = 1_000;
+        const int entriesPerFixture = ArchiveTestCaseSemantics.MaxEntries;
         for (var shard = 0; shard < 10; shard++)
         {
             var key = FormattableString.Invariant($"empty-directories-{shard + 1:00}");
-            var entries = Enumerable.Range(shard * EntriesPerFixture + 1, EntriesPerFixture)
+            var entries = Enumerable.Range(shard * entriesPerFixture + 1, entriesPerFixture)
                 .Select(index => ArchiveTestRecipeEntry.Directory(FormattableString.Invariant($"empty-{index:00000}/")))
                 .ToArray();
             Cases.Add(key, DirectoryControl(key, entries, DirectoryWorkloadSuite));

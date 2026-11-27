@@ -77,7 +77,7 @@ zipper --archive-test-suite directory-workload --seed 42 --output-path ./empty-d
 | `directory-tree-implicit` | None | `café/文/file.txt` creates its two ancestors. The empty branch has no ZIP entry and produces no destination directory. |
 | `directory-tree-only` | The same five directory entries as the explicit tree | All five directories, with no files |
 
-The explicit and implicit cases carry identical bytes for the shared file. Directory entries have zero expanded size and no payload. The scale suite publishes `empty-directories-01` through `empty-directories-10`, with 1,000 globally unique named directory entries per fixture. It emits the entries directly because Directory Templates enumerate files. Choose one shard with `--archive-test-cases` or omit that option to publish all ten.
+The explicit and implicit cases carry identical bytes for the shared file. Directory entries have zero expanded size and no payload. The `directory-workload` suite publishes `empty-directories-01` through `empty-directories-10`, with 1,000 globally unique named directory entries per fixture. It emits the entries directly because Directory Templates enumerate files. Choose one shard with `--archive-test-cases` or omit that option to publish all ten.
 
 The boundary measurements are for the whole ZIP member name. The byte and scalar totals include slash separators. Segment depth includes the filename, with the Archive root excluded.
 
@@ -142,7 +142,7 @@ The Standard Archive contains `folder_001/00000001.docx` and `folder_001/0000000
 | Per-Archive physical size | ≤ 16 MiB |
 | Per-Archive recursively expanded recipe content | ≤ 32 MiB |
 | Entries per Archive | ≤ 1,000 |
-| Entry path depth | ≤ 2 for ordinary paths; policy-sensitive names explicitly under test may exceed this budget and are not extracted during ordinary verification |
+| Entry path depth | ≤ 2 for ordinary paths; bounded deep paths explicitly under test allow up to 64 segments, and policy-sensitive names can bypass the ordinary path guard and are excluded from ordinary extraction |
 | Expectation File JSON | ≤ 1 MiB |
 | Total output folder | ≤ 256 MiB |
 | Per-fixture deadline | ≤ 10 s |

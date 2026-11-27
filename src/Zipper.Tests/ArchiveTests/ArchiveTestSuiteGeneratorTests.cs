@@ -637,6 +637,7 @@ public class ArchiveTestSuiteGeneratorTests : WorkingDirectoryTestBase
     [InlineData("malformed")]
     [InlineData("security")]
     [InlineData("encoding")]
+    [InlineData("directory-workload")]
     public async Task GenerateAsync_Suites_HaveCompleteDeclaredOperationMembership(string suite)
     {
         var suiteCases = ArchiveTestCatalog.ListSuite(suite).Select(c => c.CaseKey).ToList();

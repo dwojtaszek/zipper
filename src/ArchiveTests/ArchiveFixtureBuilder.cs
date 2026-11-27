@@ -219,14 +219,7 @@ internal static class ArchiveFixtureBuilder
                 // name bytes are the hazard under test, so the generation-time guard is
                 // bypassed for them alone. Bounded deep paths use the dedicated
                 // 64-segment guard. This builder only writes in-memory Archive bytes.
-                if (recipeEntry.IsBoundedDeepName)
-                {
-                    ValidateDeepPathBudget(definition.CaseKey, recipeEntry.Name);
-                }
-                else if (!recipeEntry.IsPolicyName)
-                {
-                    ValidatePathDepth(definition.CaseKey, recipeEntry.Name);
-                }
+                ValidateRecipeEntryPath(recipeEntry, definition.CaseKey);
 
                 var content = GeneratePayload(definition.CaseKey, seed, recipeEntry);
                 expandedBytes = checked(expandedBytes + content.Length);
@@ -1349,7 +1342,7 @@ internal static class ArchiveFixtureBuilder
         }
 
         var recipeEntry = definition.Recipe.Entries[0];
-        ValidatePathDepth(definition.CaseKey, recipeEntry.Name);
+        ValidateRecipeEntryPath(recipeEntry, definition.CaseKey);
         var content = GeneratePayload(definition.CaseKey, seed, recipeEntry);
         var encoded = DeflateStoredBlocks(content);
         var name = Encoding.UTF8.GetBytes(recipeEntry.Name);
@@ -1761,14 +1754,7 @@ internal static class ArchiveFixtureBuilder
                     $"Archive Test case '{definition.CaseKey}': the coded baseline drops Unix metadata; found entry '{recipeEntry.Name}' with external attributes or a host system.");
             }
 
-            if (recipeEntry.IsBoundedDeepName)
-            {
-                ValidateDeepPathBudget(definition.CaseKey, recipeEntry.Name);
-            }
-            else if (!recipeEntry.IsPolicyName)
-            {
-                ValidatePathDepth(definition.CaseKey, recipeEntry.Name);
-            }
+            ValidateRecipeEntryPath(recipeEntry, definition.CaseKey);
 
             var content = GeneratePayload(definition.CaseKey, seed, recipeEntry);
             payloads.Add((Encoding.UTF8.GetBytes(recipeEntry.Name), content, EncodePayload(code, content), code));
@@ -1994,31 +1980,29 @@ internal static class ArchiveFixtureBuilder
         return bytes;
     }
 
-    private static void ValidatePathDepth(string caseKey, string name)
+    private static void ValidateRecipeEntryPath(ArchiveTestRecipeEntry recipeEntry, string caseKey)
     {
-        var segments = name.TrimEnd('/').Split('/');
-        if (segments.Length > 2)
+        if (recipeEntry.IsBoundedDeepName)
         {
-            throw new InvalidDataException($"Archive Test case '{caseKey}' entry '{name}' exceeds the depth-2 entry path budget.");
+            ValidateDeepPathBudget(caseKey, recipeEntry.Name);
         }
-
-        foreach (var segment in segments)
+        else if (!recipeEntry.IsPolicyName)
         {
-            if (segment.Length == 0 || segment is "." or "..")
-            {
-                throw new InvalidDataException($"Archive Test case '{caseKey}' entry '{name}' has an empty or relative path segment.");
-            }
+            ValidateSegmentBudget(caseKey, recipeEntry.Name, maxSegments: 2, "depth-2 entry path budget");
         }
     }
 
     /// <summary>Bounds opt-in deep recipe paths, including the 63/64 segment
     /// boundary pair. Destination profiles determine their own limits.</summary>
-    internal static void ValidateDeepPathBudget(string caseKey, string name)
+    internal static void ValidateDeepPathBudget(string caseKey, string name) =>
+        ValidateSegmentBudget(caseKey, name, maxSegments: 64, "64-segment deep-path budget");
+
+    private static void ValidateSegmentBudget(string caseKey, string name, int maxSegments, string budgetLabel)
     {
         var segments = name.TrimEnd('/').Split('/');
-        if (segments.Length > 64)
+        if (segments.Length > maxSegments)
         {
-            throw new InvalidDataException($"Archive Test case '{caseKey}' entry '{name}' exceeds the 64-segment deep-path budget.");
+            throw new InvalidDataException($"Archive Test case '{caseKey}' entry '{name}' exceeds the {budgetLabel}.");
         }
 
         foreach (var segment in segments)
