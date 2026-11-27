@@ -1,72 +1,73 @@
 {
-  "_captured_on": "ubuntu-latest (5-run median, 2026-11-02)",
+  "_captured_on": "ubuntu-latest (5-run median, 2026-11-23)",
   "_methodology": "Run measure.sh 5x with --seed 42, take median(wall_s) and median(rss_kb) per scenario.",
   "_context": {
     "runner_os": "Linux",
-    "runner_image": "ubuntu26 (20261026.180.1)",
-    "dotnet_sdk": "10.0.402",
+    "runner_image": "ubuntu26 (20261116.88.1)",
+    "dotnet_sdk": "10.0.404",
     "seed": 42
   },
   "_variability": {
     "pdf_50k": {
       "wall_s": {
-        "median": 1.92,
-        "min": 1.89,
-        "max": 1.94,
-        "spread": 0.05,
-        "spread_pct": 2.6
+        "median": 1.62,
+        "min": 1.59,
+        "max": 1.66,
+        "spread": 0.07,
+        "spread_pct": 4.3
       },
       "rss_kb": {
-        "median": 125984,
-        "min": 125732,
-        "max": 126180,
-        "spread": 448,
-        "spread_pct": 0.4
+        "median": 188820,
+        "min": 187608,
+        "max": 189964,
+        "spread": 2356,
+        "spread_pct": 1.2
       }
     },
     "eml_20k": {
       "wall_s": {
-        "median": 1.59,
-        "min": 1.53,
-        "max": 1.7,
-        "spread": 0.17,
-        "spread_pct": 10.7
+        "median": 1.34,
+        "min": 1.32,
+        "max": 1.38,
+        "spread": 0.06,
+        "spread_pct": 4.5
       },
       "rss_kb": {
-        "median": 101340,
-        "min": 100516,
-        "max": 101492,
-        "spread": 976,
-        "spread_pct": 1.0
+        "median": 168288,
+        "min": 167156,
+        "max": 168480,
+        "spread": 1324,
+        "spread_pct": 0.8
       }
     },
     "loadfile_200k": {
       "wall_s": {
-        "median": 3.79,
-        "min": 3.73,
-        "max": 3.88,
-        "spread": 0.15,
-        "spread_pct": 4.0
+        "median": 3.68,
+        "min": 3.61,
+        "max": 3.75,
+        "spread": 0.14,
+        "spread_pct": 3.8
       },
       "rss_kb": {
-        "median": 110540,
-        "min": 109388,
-        "max": 111072,
-        "spread": 1684,
-        "spread_pct": 1.5
+        "median": 172280,
+        "min": 172164,
+        "max": 173156,
+        "spread": 992,
+        "spread_pct": 0.6
       }
     }
   },
   "pdf_50k": {
-    "wall_s": 1.92,
-    "rss_kb": 125984
+    "wall_s": 1.62,
+    "rss_kb": 188820
   },
   "eml_20k": {
-    "wall_s": 1.59,
-    "rss_kb": 101340
+    "wall_s": 1.34,
+    "rss_kb": 168288
   },
   "loadfile_200k": {
-    "wall_s": 3.79,
-    "rss_kb": 110540
-  }
+    "wall_s": 3.68,
+    "rss_kb": 172280
+  },
+  "_justification": "Paired GitHub Actions run 45957152537 rebuilt 648bca6 and 281febb with SDK 10.0.404 on the same ubuntu26 20261116.88.1 runner. Five alternating Seed 42 samples per revision measured median peak RSS changes of -0.10% for PDF, +0.19% for Email, and -0.09% for Loadfile-Only. The old source revision also measured 188052, 168280, and 172564 KB on this environment. The prior 50–66% comparison crossed environments and does not appear in the paired source comparison."
 }
