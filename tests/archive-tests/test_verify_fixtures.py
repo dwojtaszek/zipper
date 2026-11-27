@@ -3321,6 +3321,35 @@ class ProducerCompatibilityControlTests(TempDirTest):
             fake_eocd = struct.pack("<IHHHHIIH", 0x06054B50, 0, 0, 65535, 65535, 0, 0, 0)
             vf._parse_length_anchored_entries("producer-compatibility", fake_eocd, 0, 2)
 
+    def test_producer_controls_reject_wrong_sidecar_raw_names(self):
+        comment, payload = self._build_max_eocd_comment_zip()
+        extra, a_data, b_data = self._build_extra_field_zip()
+        for case_key, zip_bytes, entries in (
+            ("valid-max-eocd-comment", comment, [entry_record(0, "d.txt", payload)]),
+            ("valid-directory-attributes", self._build_directory_attributes_zip(),
+             [entry_record(0, "dos-dir", b""), entry_record(1, "unix-dir", b"")]),
+            ("valid-extra-field", extra, [entry_record(0, "a.txt", a_data), entry_record(1, "b.bin", b_data)]),
+        ):
+            for key in ("localNameRaw", "centralNameRaw"):
+                with self.subTest(case_key=case_key, key=key):
+                    changed = [*entries[:-1], entries[-1] | {key: b"other.txt".hex()}]
+                    self._assert_fails(case_key, zip_bytes, changed)
+
+    def test_descriptor_free_controls_reject_bit_three(self):
+        extra, a_data, b_data = self._build_extra_field_zip()
+        for case_key, zip_bytes, entries in (
+            ("valid-directory-attributes", self._build_directory_attributes_zip(),
+             [entry_record(0, "dos-dir", b""), entry_record(1, "unix-dir", b"")]),
+            ("valid-extra-field", extra, [entry_record(0, "a.txt", a_data), entry_record(1, "b.bin", b_data)]),
+        ):
+            cd_offset = struct.unpack_from("<I", zip_bytes, len(zip_bytes) - 6)[0]
+            for offsets in ((6,), (cd_offset + 8,), (6, cd_offset + 8)):
+                with self.subTest(case_key=case_key, offsets=offsets):
+                    changed = bytearray(zip_bytes)
+                    for offset in offsets:
+                        changed[offset] |= 8
+                    self._assert_fails(case_key, bytes(changed), entries)
+
     def test_valid_descriptor_forms_pass_and_reject_mismatched_signature_or_local_crc(self):
         for case_key, signed in (("valid-descriptor-signature", True), ("valid-descriptor-no-signature", False)):
             with self.subTest(case_key=case_key):

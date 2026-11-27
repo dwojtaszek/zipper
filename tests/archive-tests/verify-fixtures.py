@@ -2627,6 +2627,8 @@ def _verify_max_eocd_comment(check, case, zip_bytes):
         raise VerificationError(check, "valid-max-eocd-comment wire headers do not match pinned seekable sample")
     payload_sha = sha256_hex(zip_bytes[entry["data_offset"]:entry["data_offset"] + 100])
     if (sidecar.get("kind") != "file" or sidecar.get("readableName") != "d.txt"
+            or sidecar.get("localNameRaw") != entry["l_name"].hex()
+            or sidecar.get("centralNameRaw") != entry["c_name"].hex()
             or sidecar.get("contentSize") != 100 or payload_sha != sidecar.get("contentSha256")):
         raise VerificationError(check, "valid-max-eocd-comment entry sidecar or payload hash disagrees")
     return "eocd-comment=65535 seekable-flags=0 d.txt-verified"
@@ -2646,14 +2648,16 @@ def _verify_directory_attributes(check, case, zip_bytes):
             entry["c_method"], entry["l_method"], entry["c_crc"], entry["l_crc"],
             entry["c_comp"], entry["c_uncomp"], entry["l_comp"], entry["l_uncomp"],
         )
-        if wire_tuple != (expected_name, expected_name, expected_host, expected_attr, 0, 0, 0, 0, 0, 0, 0, 0):
+        if ((entry["l_flags"] | entry["c_flags"]) & 0x0008
+                or wire_tuple != (expected_name, expected_name, expected_host, expected_attr, 0, 0, 0, 0, 0, 0, 0, 0)):
             raise VerificationError(
                 check, "entry %d wire fields do not match %s attributes" % (ordinal, expected_name.decode("ascii")))
         sidecar_tuple = (
             sidecar.get("kind"), sidecar.get("readableName"),
+            sidecar.get("localNameRaw"), sidecar.get("centralNameRaw"),
             sidecar.get("contentSize"), sidecar.get("contentSha256"),
         )
-        if sidecar_tuple != ("file", expected_name.decode("ascii"), 0, empty_sha):
+        if sidecar_tuple != ("file", expected_name.decode("ascii"), entry["l_name"].hex(), entry["c_name"].hex(), 0, empty_sha):
             raise VerificationError(
                 check, "entry %d sidecar does not preserve reference-reader file interpretation" % ordinal)
     return "dos-dir=fat/0x10 unix-dir=unix/0x41ed0000"
@@ -2667,7 +2671,12 @@ def _verify_extra_field(check, case, zip_bytes):
     entry = parsed[0]
     if entry["l_extra"] != b"\x99\x99\x04\x00\xaa\xbb\xcc\xdd" or entry["c_extra_len"] != 0:
         raise VerificationError(check, "valid-extra-field local 0x9999 extra field or central extra length mismatches")
-    for ordinal, entry in enumerate(parsed):
+    for ordinal, (entry, sidecar) in enumerate(zip(parsed, sidecar_entries)):
+        if (entry["l_flags"] | entry["c_flags"]) & 0x0008:
+            raise VerificationError(check, "valid-extra-field entry %d declares a data descriptor" % ordinal)
+        if (sidecar.get("localNameRaw") != entry["l_name"].hex()
+                or sidecar.get("centralNameRaw") != entry["c_name"].hex()):
+            raise VerificationError(check, "valid-extra-field entry %d names disagree with the sidecar" % ordinal)
         local = (entry["l_crc"], entry["l_comp"], entry["l_uncomp"])
         central = (entry["c_crc"], entry["c_comp"], entry["c_uncomp"])
         if local != central:
