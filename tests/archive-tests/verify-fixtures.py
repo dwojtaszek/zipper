@@ -2667,6 +2667,11 @@ def _verify_extra_field(check, case, zip_bytes):
     entry = parsed[0]
     if entry["l_extra"] != b"\x99\x99\x04\x00\xaa\xbb\xcc\xdd" or entry["c_extra_len"] != 0:
         raise VerificationError(check, "valid-extra-field local 0x9999 extra field or central extra length mismatches")
+    for ordinal, entry in enumerate(parsed):
+        local = (entry["l_crc"], entry["l_comp"], entry["l_uncomp"])
+        central = (entry["c_crc"], entry["c_comp"], entry["c_uncomp"])
+        if local != central:
+            raise VerificationError(check, "valid-extra-field entry %d local CRC or sizes disagree with central header" % ordinal)
     return "local-extra=0x9999+4bytes central-extra=0"
 
 

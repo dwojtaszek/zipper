@@ -3311,6 +3311,12 @@ class ProducerCompatibilityControlTests(TempDirTest):
             with self.subTest(label=label):
                 self._assert_fails("valid-extra-field", mutated, entries)
 
+        for offset in (14, 18, 22):
+            with self.subTest(local_header_offset=offset):
+                mutated = bytearray(zip_bytes)
+                mutated[offset] ^= 1
+                self._assert_fails("valid-extra-field", bytes(mutated), entries)
+
         # Inflated EOCD total_entries must fail fast without allocating unbounded entry tables
         with self.assertRaises(vf.VerificationError):
             fake_eocd = struct.pack("<IHHHHIIH", 0x06054B50, 0, 0, 65535, 65535, 0, 0, 0)
