@@ -86,7 +86,11 @@ public class ArchiveStructureCaseTests : WorkingDirectoryTestBase
     {
         var control = BuildControl("valid-extra-field");
 
-        Assert.Equal(8, control.Layout.Entries[0].LocalExtraLength);
+        var entry = control.Layout.Entries[0];
+        Assert.Equal(8, entry.LocalExtraLength);
+        Assert.Equal(0, entry.CentralExtraLength);
+        Assert.Equal("99990400aabbccdd", Convert.ToHexStringLower(control.ArchiveBytes.AsSpan(
+            (int)entry.LocalHeaderOffset + 30 + entry.LocalNameLength, entry.LocalExtraLength)));
         Assert.Equal(control.Entries.Count, control.Layout.Entries.Count);
         Assert.Equal(
             Convert.ToHexStringLower(SHA256.HashData(control.Entries[0].Content)),
@@ -1064,7 +1068,7 @@ public class ArchiveStructureCaseTests : WorkingDirectoryTestBase
     public async Task GenerateAsync_AllSuites_PublishesUniqueValidatedPairsForEachCase()
     {
         var all = ArchiveTestCatalog.ListSuite(ArchiveTestCatalog.AllSuites);
-        Assert.Equal(119, all.Count);
+        Assert.Equal(121, all.Count);
 
         var result = await ArchiveTestSuiteGenerator.GenerateAsync(
             ArchiveTestRequest.Create(all.Select(c => c.CaseKey).ToList(), 42, Path.Combine(TempDir, "all")),

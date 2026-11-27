@@ -125,6 +125,12 @@ Publish the frozen smoke suite (five cases: three valid controls plus a CRC lie 
 zipper --archive-test-suite smoke --seed 42 --output-path ./archive-cases
 ```
 For Archive Test workflows, `--seed` accepts only non-negative integers and defaults to 42; negative values fail before output generation.
+Generate the ZIP producer compatibility controls at Seed 42 to compare seekable and streamed payloads and inspect archive comments, directory attributes, and unknown extra fields.
+
+```bash
+zipper --archive-test-suite compatibility --archive-test-cases valid-max-eocd-comment,valid-directory-attributes,valid-extra-field,valid-descriptor-signature,valid-descriptor-no-signature --seed 42 --output-path ./zip-producer-controls
+```
+
 Expectation Files can declare Adapter Checks for named Reader Adapter Profiles. The E2E matrix requires Python `zipfile` and the .NET reference reader, compares Info-ZIP `unzip` when available, runs declared optional checks, and prints per-fixture agreement or splits; missing optional readers and platform-inapplicable Archive Test Fixtures are reported as skips. See [Archive Test Suites](docs/archive-test-suites.md).
 To generate the malformed `stored-payload-bitflip` Archive Test Fixture on its own:
 ```bash

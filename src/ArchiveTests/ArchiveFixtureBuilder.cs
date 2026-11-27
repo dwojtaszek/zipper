@@ -140,9 +140,12 @@ internal static class ArchiveFixtureBuilder
 
             // The control's own comment expectation carries over to every re-read: a
             // comment-bearing control must not be misread mid-chain.
-            var controlExpectedCommentLength = controlDefinition.Construction is ArchiveControlConstruction.ArchiveComment
-                ? ArchiveTestCatalog.SignatureCommentLength
-                : 0;
+            var controlExpectedCommentLength = controlDefinition.Construction switch
+            {
+                ArchiveControlConstruction.ArchiveComment => ArchiveTestCatalog.SignatureCommentLength,
+                ArchiveControlConstruction.PinnedMaxEocdComment => ushort.MaxValue,
+                _ => 0,
+            };
             var current = Build(controlDefinition, seed, cancellationToken);
             var records = new List<ArchiveTestMutation>();
             for (var index = 0; index < chain.Count; index++)
@@ -209,6 +212,11 @@ internal static class ArchiveFixtureBuilder
         if (definition.Construction is ArchiveControlConstruction.NestedCumulativeBudget)
         {
             return BuildHandBuiltNestedBudget(definition, cancellationToken);
+        }
+
+        if (definition.Construction is ArchiveControlConstruction.PinnedMaxEocdComment)
+        {
+            return BuildPinnedMaxEocdComment(definition);
         }
 
         if (definition.Construction is ArchiveControlConstruction.Zip64Descriptor)
@@ -409,7 +417,7 @@ internal static class ArchiveFixtureBuilder
             archiveBytes, expectedCommentLength, allowLocalCentralNameDivergence);
         // Host-dependent Unix metadata (ticket #842, issue #1178): the standard writer
         // records the build host in the central version-made-by host byte, so pin it to
-        // the Unix host — or a recipe's declared host system (also Unix) — for every
+        // the Unix host — or a recipe's declared host system — for every
         // entry. Only that host byte changes; no captured layout field moves.
         PatchHostSystem(archiveBytes, definition.Recipe.Entries, layout);
         if (definition.Construction is ArchiveControlConstruction.Cp437Name)
@@ -457,8 +465,8 @@ internal static class ArchiveFixtureBuilder
     {
         for (var ordinal = 0; ordinal < layout.Entries.Count; ordinal++)
         {
-            var hostSystem = ordinal < recipeEntries.Count && recipeEntries[ordinal].HostSystem != 0
-                ? recipeEntries[ordinal].HostSystem
+            var hostSystem = ordinal < recipeEntries.Count && recipeEntries[ordinal].HostSystem is { } declaredHost
+                ? declaredHost
                 : ArchiveTestCatalog.UnixHostSystem;
 
             var entry = layout.Entries[ordinal];
@@ -861,6 +869,35 @@ internal static class ArchiveFixtureBuilder
             archiveBytes.AsSpan(localFlagsOffset, 2),
             (ushort)(localFlags & ~Utf8NameFlag));
         return archiveBytes;
+    }
+
+    private static ArchiveFixtureArtifact BuildPinnedMaxEocdComment(ArchiveTestCaseDefinition definition)
+    {
+        // CPython 3.14.10 output through the EOCD, followed by 65,535 ASCII X bytes.
+        // The regeneration recipe and complete Archive hash are in docs/archive-test-suites.md.
+        var prefix = Convert.FromBase64String(
+            "UEsDBBQAAAAAAAAAIQDMK8MoZAAAAGQAAAAFAAAAZC50eHSLgQOCTxUyU3C8Xz/2TqiZ" +
+            "St5pW5ul2Brjpt1N9S7rnA+wmwHTEqTsTt4vIUzVW6KHvaIVdoYqXkEahXC9ujJIRq6z" +
+            "+A8IxX/ZihaRXZ1D6gRTdbZKwYh3/nmiGr5rmGJyW1TKUEsBAhQDFAAAAAAAAAAhAMwr" +
+            "wyhkAAAAZAAAAAUAAAAAAAAAAAAAAIABAAAAAGQudHh0UEsFBgAAAAABAAEAMwAAAIcAAAD//w==");
+        var bytes = new byte[prefix.Length + ushort.MaxValue];
+        prefix.CopyTo(bytes, 0);
+        bytes.AsSpan(prefix.Length).Fill((byte)'X');
+
+        var entry = definition.Recipe.Entries.Single();
+        var content = entry.PayloadPrefix!;
+        return new ArchiveFixtureArtifact(
+            ArchiveBytes: bytes,
+            ArchiveSha256: Convert.ToHexStringLower(SHA256.HashData(bytes)),
+            Layout: ArchiveFixtureLayout.Read(bytes, ushort.MaxValue),
+            Entries:
+            [
+                new ArchiveFixtureEntryExpectation(
+                    Ordinal: 0, Name: entry.Name, IsDirectory: false, Method: ArchiveTestCodec.Stored,
+                    Content: content, ContentSha256: Convert.ToHexStringLower(SHA256.HashData(content)),
+                    PayloadCodec: entry.PayloadCodec),
+            ],
+            Mutations: []);
     }
 
     /// <summary>
@@ -1720,7 +1757,7 @@ internal static class ArchiveFixtureBuilder
                     $"Archive Test case '{definition.CaseKey}': the coded baseline expects stored directories only; found directory '{recipeEntry.Name}' with method \"{recipeEntry.PayloadCodec}\".");
             }
 
-            if (recipeEntry.ExternalAttributes != 0 || recipeEntry.HostSystem != 0)
+            if (recipeEntry.ExternalAttributes != 0 || recipeEntry.HostSystem is not null)
             {
                 throw new InvalidOperationException(
                     $"Archive Test case '{definition.CaseKey}': the coded baseline drops Unix metadata; found entry '{recipeEntry.Name}' with external attributes or a host system.");
