@@ -66,7 +66,7 @@ zipper --archive-test-suite <smoke|compatibility|malformed|security|encoding|all
 ### ZIP producer compatibility controls
 
 - `valid-max-eocd-comment` pins a seekable CPython 3.14.10 Archive with one Stored member and an EOCD comment of exactly 65,535 bytes. The Android CTS recorded package installation rejection at this length. The independent APK verifier tests acceptance at the same length. This control isolates the ZIP comment from APK signing and installation policy. [CTS rejection record](https://android.googlesource.com/platform/cts/%2B/8a73803e7db19c75a436071e7ebd51a88784c2e3%5E2..8a73803e7db19c75a436071e7ebd51a88784c2e3/) · [APK verifier test](https://android.googlesource.com/platform/tools/apksig/%2B/2bbf5d704da8667803af95d8c8625ec98bd7cef4/src/test/java/com/android/apksig/ApkVerifierTest.java)
-- `valid-directory-attributes` isolates the observed reader split with two empty, slashless entries. The DOS entry has FAT host 0 and attributes `0x00000010`. The Unix entry has Unix host 3 and attributes `0x41ed0000`. The Expectation File and the `dotnet-reference` and `python-zipfile` profiles treat both as files with the empty-content hash. The optional `7zip` check records both names as directories in its technical listing and checks that reading the selected entries yields empty content. The split was verified with CPython 3.14.10 and 7-Zip 26.06. [CPython directory classification](https://docs.python.org/3/library/zipfile.html#zipfile.ZipInfo.is_dir)
+- `valid-directory-attributes` isolates the observed reader split with two empty, slashless entries. The DOS entry has FAT host 0 and attributes `0x00000010`. The Unix entry has Unix host 3 and attributes `0x41ed0000`. The Expectation File and the `dotnet-reference` and `python-zipfile` profiles treat both as files with the empty-content hash. The optional `7zip` check records both names as directories in its technical listing and checks that reading the selected entries yields empty content. Info-ZIP 6.00 also displays directory modes for both entries in its technical listing. The split was verified with CPython 3.14.10 and 7-Zip 26.06. [CPython directory classification](https://docs.python.org/3/library/zipfile.html#zipfile.ZipInfo.is_dir)
 - `valid-extra-field` already carries the unknown local extra field `0x9999` with four data bytes. The existing signed and unsigned descriptor cases exercise both forms. At Seed 42, the pinned seekable control and `valid-descriptor-signature` have the same member name and payload SHA-256, while bit 3 and descriptor presence differ. The cases retain their original Seed derivation.
 
 Regenerate the pinned Archive with CPython 3.14.10. Its Archive bytes are independent of the requested Seed, which still participates in the Fixture ID.
@@ -79,8 +79,11 @@ payload = b"".join(
     sha256(b"valid-descriptor-signature\n42\nd.txt\n" + i.to_bytes(4, "little")).digest()
     for i in range(4)
 )[:100]
+entry = ZipInfo("d.txt")
+entry.create_system = 3
+entry.external_attr = 0o600 << 16
 with ZipFile("valid-max-eocd-comment.zip", "w") as archive:
-    archive.writestr(ZipInfo("d.txt"), payload)
+    archive.writestr(entry, payload)
     archive.comment = b"X" * 65535
 ```
 

@@ -184,49 +184,9 @@ internal static class ArchiveFixtureBuilder
             return current with { Mutations = records };
         }
 
-        if (definition.Construction is ArchiveControlConstruction.Zip64HandBuilt
-            or ArchiveControlConstruction.Zip64HandBuiltWithRealEocdValues)
+        if (BuildSpecializedControl(definition, seed, cancellationToken) is { } specialized)
         {
-            return BuildHandBuiltZip64(
-                definition,
-                seed,
-                cancellationToken,
-                useRealEocdValues: definition.Construction is ArchiveControlConstruction.Zip64HandBuiltWithRealEocdValues);
-        }
-
-        if (definition.Construction is ArchiveControlConstruction.OverlappingEntries)
-        {
-            return BuildHandBuiltOverlapping(definition, seed, cancellationToken);
-        }
-
-        if (definition.Construction is ArchiveControlConstruction.PinnedDeflate64LongMatch)
-        {
-            return BuildHandBuiltPinnedDeflate64(definition, cancellationToken);
-        }
-
-        if (definition.Construction is ArchiveControlConstruction.DeflateStoredBlock)
-        {
-            return BuildHandBuiltDeflateStoredBlock(definition, seed, cancellationToken);
-        }
-
-        if (definition.Construction is ArchiveControlConstruction.NestedCumulativeBudget)
-        {
-            return BuildHandBuiltNestedBudget(definition, cancellationToken);
-        }
-
-        if (definition.Construction is ArchiveControlConstruction.PinnedMaxEocdComment)
-        {
-            return BuildPinnedMaxEocdComment(definition);
-        }
-
-        if (definition.Construction is ArchiveControlConstruction.Zip64Descriptor)
-        {
-            return BuildHandBuiltZip64Descriptor(definition, seed, withSignature: true, cancellationToken);
-        }
-
-        if (definition.Construction is ArchiveControlConstruction.Zip64DescriptorNoSignature)
-        {
-            return BuildHandBuiltZip64Descriptor(definition, seed, withSignature: false, cancellationToken);
+            return specialized;
         }
 
         if (definition.Recipe.Entries.Any(e => ArchiveTestCodec.WireCode(e.PayloadCodec) is ArchiveTestCodec.Deflate64 or ArchiveTestCodec.Bzip2))
@@ -447,6 +407,23 @@ internal static class ArchiveFixtureBuilder
             Entries: expectations,
             Mutations: []);
     }
+
+    private static ArchiveFixtureArtifact? BuildSpecializedControl(
+        ArchiveTestCaseDefinition definition, int seed, CancellationToken cancellationToken) =>
+        definition.Construction switch
+        {
+            ArchiveControlConstruction.Zip64HandBuilt or ArchiveControlConstruction.Zip64HandBuiltWithRealEocdValues =>
+                BuildHandBuiltZip64(definition, seed, cancellationToken,
+                    useRealEocdValues: definition.Construction is ArchiveControlConstruction.Zip64HandBuiltWithRealEocdValues),
+            ArchiveControlConstruction.OverlappingEntries => BuildHandBuiltOverlapping(definition, seed, cancellationToken),
+            ArchiveControlConstruction.PinnedDeflate64LongMatch => BuildHandBuiltPinnedDeflate64(definition, cancellationToken),
+            ArchiveControlConstruction.DeflateStoredBlock => BuildHandBuiltDeflateStoredBlock(definition, seed, cancellationToken),
+            ArchiveControlConstruction.NestedCumulativeBudget => BuildHandBuiltNestedBudget(definition, cancellationToken),
+            ArchiveControlConstruction.PinnedMaxEocdComment => BuildPinnedMaxEocdComment(definition),
+            ArchiveControlConstruction.Zip64Descriptor => BuildHandBuiltZip64Descriptor(definition, seed, withSignature: true, cancellationToken),
+            ArchiveControlConstruction.Zip64DescriptorNoSignature => BuildHandBuiltZip64Descriptor(definition, seed, withSignature: false, cancellationToken),
+            _ => null,
+        };
 
     /// <summary>
     /// Rewrites the central version-made-by host byte (upper byte at central + 4) to the

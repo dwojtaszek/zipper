@@ -45,6 +45,19 @@ def list_archive_entries(seven, archive, timeout=MAX_FIXTURE_CHECK_SECONDS, *, d
     return names
 
 
+def verify_directory_classification(seven, archive, case_key, fixture_deadline, check_report):
+    if case_key != "valid-directory-attributes":
+        return None
+
+    directories = []
+    entries = list_archive_entries(
+        seven, archive, _remaining_fixture_time(fixture_deadline, case_key), directories=directories)
+    if sorted(directories) != ["dos-dir", "unix-dir"]:
+        raise ValueError(f"7-Zip directory classification differs: {directories!r}")
+    check_report["directoryNames"] = directories
+    return entries
+
+
 def check_entry(
     seven, archive, entry, budget, archive_entries=None, expected_name_count=1,
     timeout=MAX_FIXTURE_CHECK_SECONDS,
@@ -261,16 +274,8 @@ def verify(fixtures, seven, report_path=None):
                             for candidate in entries)
                         for entry in entries
                     }
-                    archive_entries = None
-                    if data["caseKey"] == "valid-directory-attributes":
-                        directories = []
-                        archive_entries = list_archive_entries(
-                            seven, archive,
-                            _remaining_fixture_time(fixture_deadline, data["caseKey"]),
-                            directories=directories)
-                        if sorted(directories) != ["dos-dir", "unix-dir"]:
-                            raise ValueError(f"7-Zip directory classification differs: {directories!r}")
-                        check_report["directoryNames"] = directories
+                    archive_entries = verify_directory_classification(
+                        seven, archive, data["caseKey"], fixture_deadline, check_report)
                     for entry in entries:
                         if entry["contentSize"] == 0 and archive_entries is None:
                             archive_entries = list_archive_entries(
