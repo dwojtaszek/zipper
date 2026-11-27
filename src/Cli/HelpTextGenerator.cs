@@ -20,7 +20,7 @@ internal static class HelpTextGenerator
         Console.Error.WriteLine("Optional Arguments:");
         Console.Error.WriteLine("  --types <list>           File Type Mix alternative to --type (e.g., \"pdf:50,eml:30,tiff:20\")");
         Console.Error.WriteLine("  --folders <number>       Number of folders (1-100, default: 1)");
-        Console.Error.WriteLine($"  --encoding <string>      Encoding: {EncodingHelper.SupportedNames} (default: UTF-8)");
+        Console.Error.WriteLine($"  --encoding <string>      Encoding: {EncodingHelper.SupportedNames} (default: UTF-8, OPT: ANSI when omitted)");
         Console.Error.WriteLine("  --distribution <string>  Distribution: proportional, gaussian, exponential");
         Console.Error.WriteLine("  --with-metadata          Include metadata columns in load file");
         Console.Error.WriteLine("  --with-collection-metadata Include collection metadata columns in load file");

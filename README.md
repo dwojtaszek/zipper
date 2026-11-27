@@ -220,7 +220,7 @@ All command-line flags recognized by Zipper:
 | `--count` | **required** | non-negative integer for `adversarial-values`; otherwise positive | Total number of files/records to generate |
 | `--output-path` | **required** | directory path | Target output directory |
 | `--folders` | `1` | `1` to `100` | Number of subfolders for file distribution |
-| `--encoding` | `UTF-8` | `UTF-8`, `UTF-16` (`UTF-16LE`, `UNICODE`), `ANSI` (`WINDOWS-1252`, `WESTERN EUROPEAN (WINDOWS)`), `ASCII` | Text encoding for Load Files |
+| `--encoding` | `UTF-8` (`ANSI` for OPT when omitted) | `UTF-8`, `UTF-16` (`UTF-16LE`, `UNICODE`), `ANSI` (`WINDOWS-1252`, `WESTERN EUROPEAN (WINDOWS)`), `ASCII` | Text encoding for Load Files. For seven-bit `ASCII` with DAT, select ASCII-compatible delimiters such as `--dat-delimiters csv`. |
 | `--distribution` | `proportional` | `proportional`, `gaussian`, `exponential` | Folder distribution algorithm |
 | `--with-metadata` | `false` | flag | Include standard metadata columns (incl. Compression Method reflecting `--compression`) |
 | `--with-collection-metadata` | `false` | flag | Include e-discovery collection metadata columns |

@@ -38,7 +38,7 @@ public class HelpTextGeneratorTests
         Assert.Contains("--with-mime-realism", stderr, StringComparison.Ordinal);
         Assert.Contains("Loadfile-Only or Production Set", stderr, StringComparison.Ordinal);
         Assert.Contains("default: md5 when hashes are enabled", stderr, StringComparison.Ordinal);
-        Assert.Contains("Encoding: UTF-8, UTF-16, UTF-16LE, UNICODE, ANSI, WINDOWS-1252, WESTERN EUROPEAN (WINDOWS), ASCII (default: UTF-8)", stderr, StringComparison.Ordinal);
+        Assert.Contains("Encoding: UTF-8, UTF-16, UTF-16LE, UNICODE, ANSI, WINDOWS-1252, WESTERN EUROPEAN (WINDOWS), ASCII (default: UTF-8, OPT: ANSI when omitted)", stderr, StringComparison.Ordinal);
         Assert.Contains("--redacted-production", stderr, StringComparison.Ordinal);
         Assert.Contains("--withheld-native-policy", stderr, StringComparison.Ordinal);
         Assert.Contains(
