@@ -122,6 +122,24 @@ public class ZipAssertTests : TempDirectoryTestBase
         Assert.ThrowsAny<XunitException>(() => ZipAssert.AssertValidZip(zipPath, 2));
     }
 
+    [Theory]
+    [InlineData("folder./file.txt")]
+    [InlineData("folder /file.txt")]
+    [InlineData("folder/file.txt.")]
+    [InlineData("folder/file.txt ")]
+    [InlineData("file.txt.")]
+    [InlineData("file.txt ")]
+    public void AssertValidZip_PathSegmentEndingInPeriodOrSpace_ThrowsException(string entryName)
+    {
+        var zipPath = this.GetTempFilePath();
+        using (var archive = ZipFile.Open(zipPath, ZipArchiveMode.Create))
+        {
+            archive.CreateEntry(entryName);
+        }
+
+        Assert.ThrowsAny<XunitException>(() => ZipAssert.AssertValidZip(zipPath, 1));
+    }
+
     [Fact]
     public void AssertValidZip_EquivalentExtractionPaths_ThrowsException()
     {

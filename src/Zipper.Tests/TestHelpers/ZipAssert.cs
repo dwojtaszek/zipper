@@ -44,6 +44,9 @@ public static class ZipAssert
                 Assert.False(
                     segments[i] is ".." or "." || segments[i].Length == 0,
                     $"ZIP entry name has an unsupported path segment: '{entry.FullName}'.");
+                Assert.False(
+                    segments[i].EndsWith('.') || segments[i].EndsWith(' '),
+                    $"ZIP entry '{entry.FullName}' has path segment '{segments[i]}' ending in a period or space, which is invalid on Windows.");
             }
         }
 

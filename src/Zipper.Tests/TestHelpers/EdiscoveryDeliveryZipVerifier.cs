@@ -86,6 +86,8 @@ internal static class EdiscoveryDeliveryZipVerifier
         Assert.Equal(persistedReport!.Status, validationReport.Status);
         Assert.Equal(persistedReport.ErrorCount, validationReport.ErrorCount);
         Assert.Equal(persistedReport.WarningCount, validationReport.WarningCount);
+        Assert.Empty(persistedReport.Findings);
+        Assert.Equal(validationReport.Findings.Count, persistedReport.Findings.Count);
         Assert.Equal(persistedReport.CheckedFileCounts.Count, validationReport.CheckedFileCounts.Count);
         foreach (var (kind, count) in validationReport.CheckedFileCounts)
         {
@@ -217,6 +219,27 @@ internal static class EdiscoveryDeliveryZipVerifier
         {
             Assert.NotEmpty(familyParentIds);
             Assert.NotEmpty(familyChildren);
+
+            if (request.LoadFile.AttachmentRate >= 100)
+            {
+                var childrenByParent = familyRecords
+                    .Where(r => !string.IsNullOrEmpty(r.ParentDocId))
+                    .GroupBy(r => r.ParentDocId, StringComparer.Ordinal)
+                    .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+
+                for (int i = 0; i < (int)request.Output.FileCount; i++)
+                {
+                    if (string.Equals(request.Output.ResolveFileType(i + 1), "eml", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var expectedEmlParentDocId = request.Bates is not null
+                            ? BatesSequence.FromConfig(request.Bates).Format(i).ToString()
+                            : $"DOC{i + 1:D8}";
+                        Assert.True(
+                            childrenByParent.ContainsKey(expectedEmlParentDocId),
+                            $"Expected EML parent '{expectedEmlParentDocId}' has no family children in 100% attachment recipe.");
+                    }
+                }
+            }
         }
 
         // 6. Manifest and validation counts agree.
@@ -384,7 +407,10 @@ internal static class EdiscoveryDeliveryZipVerifier
         }
 
         // Locate included DAT load file in archive root.
-        var datEntry = archive.Entries.FirstOrDefault(e => !e.FullName.Contains('/') && e.FullName.EndsWith(".dat", StringComparison.OrdinalIgnoreCase));
+        var datEntry = archive.Entries.FirstOrDefault(e =>
+            !e.FullName.Contains('/') &&
+            e.FullName.EndsWith(".dat", StringComparison.OrdinalIgnoreCase) &&
+            !e.FullName.EndsWith(".concordance.dat", StringComparison.OrdinalIgnoreCase));
         Assert.NotNull(datEntry);
 
         char colDelim = request.Delimiters?.GetColumnChar() ?? '\u0014';
