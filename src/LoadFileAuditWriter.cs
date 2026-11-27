@@ -392,8 +392,12 @@ internal static class LoadFileAuditWriter
             return request.Delimiters.EndOfLine;
         }
 
-        var mode = request.LoadfileOnly ? WriterMode.LoadfileOnly :
-            request.Production.ProductionSet ? WriterMode.ProductionSet : WriterMode.Standard;
+        var mode = request switch
+        {
+            { LoadfileOnly: true } => WriterMode.LoadfileOnly,
+            { Production.ProductionSet: true } => WriterMode.ProductionSet,
+            _ => WriterMode.Standard,
+        };
         // Standard Native File chaos does not change the Load File emitter's line endings.
         var lineEnding = TextOutputPolicy.ResolveEndOfLine(request, format, mode, hasChaos: false);
         return lineEnding switch
