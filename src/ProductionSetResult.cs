@@ -3,7 +3,7 @@ namespace Zipper;
 /// <summary>
 /// Result of a production set generation operation.
 /// </summary>
-internal class ProductionSetResult
+internal sealed class ProductionSetResult
 {
     public string ProductionPath { get; set; } = string.Empty;
     public string? ZipFilePath { get; set; }

@@ -440,9 +440,9 @@ internal static class ArchiveTestCaseSemantics
 
     private static bool IsUnsafeBasename(string fileName) =>
         fileName.Length == 0
-        || fileName.Contains('/')
-        || fileName.Contains('\\')
-        || fileName.Contains('\0')
-        || fileName.Contains(':')
-        || fileName.StartsWith(".", StringComparison.Ordinal);
+        || fileName.Contains('/', StringComparison.Ordinal)
+        || fileName.Contains('\\', StringComparison.Ordinal)
+        || fileName.Contains('\0', StringComparison.Ordinal)
+        || fileName.Contains(':', StringComparison.Ordinal)
+        || fileName.StartsWith('.');
 }

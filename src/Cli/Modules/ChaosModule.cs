@@ -323,7 +323,7 @@ public sealed class ChaosModule : CliModule
 
     internal static bool IsValidChaosAmount(string value) => value switch
     {
-        _ when value.EndsWith("%", StringComparison.Ordinal) => double.TryParse(value.TrimEnd('%'), CultureInfo.InvariantCulture, out var pct) && pct > 0,
+        _ when value.EndsWith('%') => double.TryParse(value.TrimEnd('%'), CultureInfo.InvariantCulture, out var pct) && pct > 0,
         _ => int.TryParse(value, CultureInfo.InvariantCulture, out var count) && count > 0,
     };
 }

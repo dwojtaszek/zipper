@@ -44,7 +44,7 @@ internal sealed class ConcordanceSerializer : ILoadFileSerializer
         }
 
         return this.hasQuote && value.Contains(this.quoteDelim, StringComparison.Ordinal)
-            ? value.Replace(this.quoteDelim.ToString(), new string(this.quoteDelim, 2), StringComparison.Ordinal)
+            ? value.Replace(new string(this.quoteDelim, 1), new string(this.quoteDelim, 2), StringComparison.Ordinal)
             : value;
     }
 }

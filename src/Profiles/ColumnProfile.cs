@@ -133,7 +133,7 @@ public class ProfileSettings
 /// <summary>
 /// Configuration for a data source used in value generation.
 /// </summary>
-public class DataSourceConfig
+public sealed class DataSourceConfig
 {
     /// <summary>
     /// Gets or sets the number of values to generate (for generated sources).
@@ -265,7 +265,7 @@ public class ColumnDefinition
 /// <summary>
 /// Numeric range configuration.
 /// </summary>
-public class RangeConfig
+public sealed class RangeConfig
 {
     /// <summary>
     /// Gets or sets the minimum value.
@@ -283,7 +283,7 @@ public class RangeConfig
 /// <summary>
 /// Date range configuration.
 /// </summary>
-public class DateRangeConfig
+public sealed class DateRangeConfig
 {
     /// <summary>
     /// Gets or sets the minimum date.

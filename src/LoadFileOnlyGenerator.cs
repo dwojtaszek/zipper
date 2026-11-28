@@ -323,7 +323,7 @@ internal static class LoadFileOnlyGenerator
 /// <summary>
 /// Result of a loadfile-only generation operation.
 /// </summary>
-internal class LoadFileOnlyResult
+internal sealed class LoadFileOnlyResult
 {
     /// <summary>
     /// Gets or sets the path to the generated load file.

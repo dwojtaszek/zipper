@@ -24,7 +24,7 @@ internal static class QuotedPrintableHelper
         int currentLineLength = 0;
 
         // Process line by line to preserve hard CRLF / LF line breaks
-        var lines = text.Replace("\r\n", "\n").Split('\n');
+        var lines = text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
         for (int lineIndex = 0; lineIndex < lines.Length; lineIndex++)
         {
             var line = lines[lineIndex];

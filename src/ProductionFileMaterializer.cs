@@ -80,7 +80,7 @@ internal sealed class ProductionFileMaterializer : IFileMaterializer
         try
         {
             await using (var zipStream = new FileStream(zipPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, PerformanceConstants.DefaultBufferSize, useAsync: true))
-            using (var archive = new ZipArchive(zipStream, ZipArchiveMode.Create, leaveOpen: false))
+            await using (var archive = new ZipArchive(zipStream, ZipArchiveMode.Create, leaveOpen: false))
             {
                 bool hasEntries = false;
                 foreach (var item in sourceInfo.EnumerateFileSystemInfos("*", SearchOption.AllDirectories))
@@ -97,7 +97,7 @@ internal sealed class ProductionFileMaterializer : IFileMaterializer
 #pragma warning disable RS0030
                         entry.LastWriteTime = new DateTimeOffset(fileInfo.LastWriteTime);
 #pragma warning restore RS0030
-                        await using var entryStream = entry.Open();
+                        await using var entryStream = await entry.OpenAsync(cancellationToken).ConfigureAwait(false);
                         await using var fileStream = new FileStream(fileInfo.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, PerformanceConstants.DefaultBufferSize, useAsync: true);
                         await fileStream.CopyToAsync(entryStream, cancellationToken).ConfigureAwait(false);
                     }

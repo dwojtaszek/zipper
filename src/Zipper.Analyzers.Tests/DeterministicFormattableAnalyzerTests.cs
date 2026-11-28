@@ -241,6 +241,36 @@ class MyFormatter
     }
 
     [Fact]
+    public async Task ToStringOnValueTypeInDatComposer_ReportsDiagnostic()
+    {
+        const string source = @"
+class DatStandardComposer
+{
+    public string Format(int value)
+    {
+        return {|ZIP002:value.ToString()|};
+    }
+}
+";
+        await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+
+    [Fact]
+    public async Task ToStringOnValueTypeInDatSerializer_ReportsDiagnostic()
+    {
+        const string source = @"
+class DatSerializer
+{
+    public string Format(char delimiter)
+    {
+        return {|ZIP002:delimiter.ToString()|};
+    }
+}
+";
+        await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+
+    [Fact]
     public void SupportedDiagnostics_DefaultSeverityIsWarning()
     {
         var analyzer = new DeterministicFormattableAnalyzer();

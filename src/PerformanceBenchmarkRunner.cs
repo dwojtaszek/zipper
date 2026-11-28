@@ -381,8 +381,8 @@ public static partial class PerformanceBenchmarkRunner
         var baseFileName = $"archive_{DateTime.UtcNow:yyyyMMdd_HHmmss}";
         var zipFilePath = Path.Combine(outputPath, $"{baseFileName}.zip");
 
-        using var archiveStream = new FileStream(zipFilePath, FileMode.Create);
-        using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create, true);
+        await using var archiveStream = new FileStream(zipFilePath, FileMode.Create);
+        await using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create, true);
 
         var placeholderContent = PlaceholderFiles.GetContent("pdf");
 
@@ -390,7 +390,7 @@ public static partial class PerformanceBenchmarkRunner
         {
             var fileName = $"{i:D8}.pdf";
             var entry = archive.CreateEntry(fileName, CompressionLevel.Optimal);
-            using var entryStream = entry.Open();
+            await using var entryStream = await entry.OpenAsync().ConfigureAwait(false);
             await entryStream.WriteAsync(placeholderContent).ConfigureAwait(false);
         }
     }

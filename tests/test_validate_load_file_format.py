@@ -7,7 +7,6 @@ scenarios, ensuring exact record counts, schema, central-directory archive
 cross-referencing, Bates numbering, and delimiter verification.
 """
 
-import io
 import json
 import os
 import sys

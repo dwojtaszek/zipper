@@ -3,7 +3,7 @@ namespace Zipper;
 /// <summary>
 /// Production Set generation mode — emits a Bates-numbered, volumed Production Set with DAT, OPT, and Production Manifest sidecars.
 /// </summary>
-internal class ProductionSetMode : IGenerationMode
+internal sealed class ProductionSetMode : IGenerationMode
 {
     private readonly Func<FileGenerationRequest, CancellationToken, Task<ProductionSetResult>> _generate;
 

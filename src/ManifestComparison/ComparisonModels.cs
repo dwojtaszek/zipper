@@ -45,7 +45,7 @@ public class ComparisonRecord
     public int SourceLine { get; set; }
 }
 
-public class ComparisonResult
+public sealed class ComparisonResult
 {
     [JsonPropertyName("comparisonMode")]
     public string ComparisonMode { get; set; } = string.Empty;
@@ -66,7 +66,7 @@ public class ComparisonResult
     public ResultDetails Details { get; set; } = new();
 }
 
-public class SummaryResult
+public sealed class SummaryResult
 {
     [JsonPropertyName("totalPriorRecords")]
     public int TotalPriorRecords { get; set; }
@@ -123,7 +123,7 @@ public class BatesRangeReport
     public string End { get; set; } = string.Empty;
 }
 
-public class VolumeResult
+public sealed class VolumeResult
 {
     [JsonPropertyName("productionId")]
     public string ProductionId { get; set; } = string.Empty;
@@ -141,7 +141,7 @@ public class VolumeResult
     public string Status { get; set; } = string.Empty; // unchanged, added, removed, changed
 }
 
-public class ResultDetails
+public sealed class ResultDetails
 {
     [JsonPropertyName("added")]
     public List<RecordDetail> Added { get; set; } = new();
