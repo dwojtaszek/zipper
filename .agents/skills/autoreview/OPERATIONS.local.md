@@ -578,6 +578,14 @@
 - **lessons**: status filtering must happen after full pagination; a later page failure stays environmental
 - **suppressions**: none
 
+### 2026-11-28 opencode:local:issue-1486-runner-test-sharpener
+
+- **findings**: 1 CodeRabbit local minor, valid — network-failure test returned a quality-gate payload before the simulated error
+- **outcome**: removed the premature payload from `side_effect`; asserted API-query error detail and that the failing request was page 2
+- **telemetry**: host=opencode mode=local specialists=0 bundle=~900c
+- **lessons**: mocked side effects must match the request order the code under test actually makes
+- **suppressions**: none
+
 ### 2026-11-28 factory:local:issue-1486-sonar-runner-gate
 
 - **findings**: 1 INFO (missing-status default coverage), 0 ACTION; patch correct

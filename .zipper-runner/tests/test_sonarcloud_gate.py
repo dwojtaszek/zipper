@@ -144,14 +144,15 @@ class SonarCloudGateTests(unittest.TestCase):
             "_sonarcloud_get_json",
             side_effect=[
                 {"issues": [closed], "total": 2},
-                {"projectStatus": {"status": "OK", "conditions": []}},
                 urllib.error.URLError("timeout"),
             ],
-        ):
+        ) as mock_get:
             result = runner._check_sonarcloud_pr_gate(1438)
 
         self.assertFalse(result.ok)
         self.assertTrue(result.environmental)
+        self.assertIn("Could not query SonarCloud API", result.detail)
+        self.assertIn("p=2", mock_get.call_args_list[1].args[0])
 
     def test_quality_gate_error_without_issues_still_fails(self):
         with patch.object(
