@@ -402,6 +402,16 @@ class CheckSonarTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual(len(summary["advisory_issues"]), 99)
 
+    def test_malformed_issue_entry_is_environmental(self):
+        gate = {"projectStatus": {"status": "OK", "conditions": []}}
+        with (
+            patch.object(self.mod, "_fetch_json", side_effect=[gate, {"issues": [None]}]),
+            patch.object(sys, "argv", ["check-sonar.py", "1444"]),
+            patch("sys.stderr", new_callable=io.StringIO) as err,
+        ):
+            self.assertEqual(self.mod.main(), 2)
+        self.assertIn("Malformed issue entry", err.getvalue())
+
     def test_empty_later_page_with_unmet_total_is_environmental(self):
         gate = {"projectStatus": {"status": "OK", "conditions": []}}
         page1 = {"total": 2, "issues": []}

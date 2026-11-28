@@ -35,12 +35,13 @@ def _summarize_gate(gate_payload: dict) -> tuple[str, list[dict], list[dict]]:
 
 
 def _open_sonar_issues(batch: list) -> list[dict]:
+    # An unreadable entry means the listing is incomplete, not clean; dropping
+    # it would let an OK gate mask a blocking issue.
+    if not all(isinstance(item, dict) for item in batch):
+        raise ValueError("Malformed issue entry in SonarCloud response")
     # The server-side statuses filter is unreliable when pullRequest is set: it
     # can omit real issues and return CLOSED ones, so status is filtered here.
-    return [
-        item for item in batch
-        if isinstance(item, dict) and item.get("status", "OPEN") in OPEN_STATUSES
-    ]
+    return [item for item in batch if item.get("status", "OPEN") in OPEN_STATUSES]
 
 
 def _sonar_paging_complete(raw_fetched: int, total: object, batch_size: int, page_size: int) -> bool:
