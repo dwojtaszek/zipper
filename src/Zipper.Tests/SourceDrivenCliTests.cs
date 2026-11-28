@@ -1,3 +1,4 @@
+using System.Reflection;
 using Xunit;
 
 namespace Zipper.Tests;
@@ -28,6 +29,12 @@ public class SourceDrivenCliTests : WorkingDirectoryTestBase
 
     private static string CaptureError(Action action) =>
         ConsoleOutputCapture.RunWithCapturedOutput(action).stderr;
+
+    private static IEnumerable<string> EnabledWorkItemTypes(ChaosEngine engine)
+    {
+        var field = engine.GetType().GetField("enabledTypes", BindingFlags.NonPublic | BindingFlags.Instance);
+        return Assert.IsAssignableFrom<IEnumerable<string>>(field?.GetValue(engine));
+    }
 
     [Fact]
     public void Parse_InputCsvAndDirectoryTemplate_StoreRawValues()
@@ -76,6 +83,8 @@ public class SourceDrivenCliTests : WorkingDirectoryTestBase
         Assert.True(request!.Output.HasFileType("eml"));
         Assert.True(request.Output.HasFileType("tiff"));
         Assert.Equal("mime-boundary,tiff-strip-offset", request.Chaos.ChaosTypes);
+        Assert.Equal(new[] { "mime-boundary" }, EnabledWorkItemTypes(ChaosEngineBuilder.BuildForStandardEmail(request)!).OrderBy(type => type, StringComparer.Ordinal));
+        Assert.Equal(new[] { "tiff-strip-offset" }, EnabledWorkItemTypes(ChaosEngineBuilder.BuildForStandardTiff(request)!).OrderBy(type => type, StringComparer.Ordinal));
     }
 
     [Fact]
@@ -95,6 +104,9 @@ public class SourceDrivenCliTests : WorkingDirectoryTestBase
         Assert.True(request!.Output.HasFileType("eml"));
         Assert.True(request.Output.HasFileType("tiff"));
         Assert.Equal("mime-boundary,tiff-strip-offset", request.Chaos.ChaosTypes);
+        var plans = ProductionSetPlanner.Plan(request);
+        Assert.Equal(new[] { "mime-boundary" }, EnabledWorkItemTypes(ChaosEngineBuilder.BuildForProductionEmail(request, plans)!).OrderBy(type => type, StringComparer.Ordinal));
+        Assert.Equal(new[] { "tiff-strip-offset" }, EnabledWorkItemTypes(ChaosEngineBuilder.BuildForProductionTiff(request, plans)!).OrderBy(type => type, StringComparer.Ordinal));
     }
 
     [Fact]

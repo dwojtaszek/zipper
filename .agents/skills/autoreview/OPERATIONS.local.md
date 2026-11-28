@@ -545,3 +545,11 @@
 - **telemetry**: host=opencode mode=local specialists=0 bundle=~1800c
 - **lessons**: every native scenario restriction needs the Loadfile-Only qualifier in all three docs, not just README
 - **suppressions**: none
+
+### 2026-11-28 factory:local:issue-1486-coderabbit-round5
+
+- **findings**: 1 ACTION on first pass (HashSet order equality); re-review 0 ACTION, 2 INFO (helper duplication, null-forgiving)
+- **outcome**: accepted — source-driven Standard and Production Set tests assert each native engine keeps only its own chaos type with ordinal-sorted comparison; documented Loadfile-Only scenario qualifier verified at HEAD; requirement sentence capitalization fixed
+- **telemetry**: host=factory mode=local specialists=1 bundle=~900c (fast pass + rerun after fix)
+- **lessons**: source-driven engine assertions must order HashSet-backed enabled types before sequence equality
+- **suppressions**: local reflection helper duplication accepted for test isolation
