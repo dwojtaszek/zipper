@@ -537,3 +537,11 @@
 - **telemetry**: host=opencode mode=local specialists=0 bundle=~4500c
 - **lessons**: `ChaosEngine.ResolveEnabledWorkItemTypes` intersects the combined list with each native family; source-driven generation needs explicit engine assertions, not only `Pipeline.Build` assertions
 - **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-coderabbit-round4
+
+- **findings**: 1 (CodeRabbit local, valid)
+- **outcome**: accepted — qualified REQ-237 and REQ-241 scenario rejection clauses with `without --loadfile-only`, matching README and the interaction table
+- **telemetry**: host=opencode mode=local specialists=0 bundle=~1800c
+- **lessons**: every native scenario restriction needs the Loadfile-Only qualifier in all three docs, not just README
+- **suppressions**: none
