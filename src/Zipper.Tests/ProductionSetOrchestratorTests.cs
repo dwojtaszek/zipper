@@ -438,6 +438,7 @@ public class ProductionSetOrchestratorTests
     [Theory]
     [InlineData("pdf", "cross-format-desync")]
     [InlineData("pdf", "broken-families")]
+    [InlineData("pdf", "Cross-Format-Desync")]
     [InlineData("eml", null)]
     [InlineData("tiff", null)]
     public async Task GenerateAsync_WithChaosModeAllowedForProductionSet_DoesNotThrow(string fileType, string? scenario)

@@ -481,3 +481,11 @@
 - **telemetry**: host=factory mode=local specialists=2 bundle=20000c
 - **lessons**: ParallelFileGenerator's hardcoded productionSetMode:false needs its own cross-format rejection test; assert full guidance strings so truncation fails
 - **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-cross-format-followup
+
+- **findings**: 0 (fast pass)
+- **outcome**: clean review — mixed-case cross-format names covered in CLI build and Production Set orchestrator
+- **telemetry**: host=opencode mode=local specialists=1 bundle=1377c
+- **lessons**: `--loadfile-only` makes the Standard cross-format rejection case legal; no shell test change
+- **suppressions**: none

@@ -575,6 +575,7 @@ public class CliPipelineTests : WorkingDirectoryTestBase
     [Theory]
     [InlineData("cross-format-desync")]
     [InlineData("broken-families")]
+    [InlineData("Cross-Format-Desync")]
     public void Build_ProductionSetPdfWithCrossFormatScenario_ReturnsChaosConfig(string scenario)
     {
         var args = new[] { "--production-set", "--bates-prefix", "CLIENT001", "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--chaos-mode", "--chaos-scenario", scenario };
