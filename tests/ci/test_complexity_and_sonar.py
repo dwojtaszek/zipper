@@ -387,6 +387,19 @@ class CheckSonarTests(unittest.TestCase):
             self.assertEqual(len(summary["blocking_issues"]), 1)
             self.assertEqual(len(summary["advisory_issues"]), 100)
 
+    def test_closed_issue_on_a_full_page_does_not_request_another_page(self):
+        gate = {"projectStatus": {"status": "OK", "conditions": []}}
+        page1 = {
+            "total": 100,
+            "issues": [{"severity": "MINOR", "rule": "r1"} for _ in range(99)]
+            + [{"severity": "BLOCKER", "status": "CLOSED", "rule": "r2"}],
+        }
+        # `total` counts the CLOSED issue too, so page one already holds every result.
+        with patch.object(self.mod, "_fetch_json", side_effect=[gate, page1]):
+            code, summary = self.mod.inspect_pr(1444)
+            self.assertEqual(code, 0)
+            self.assertEqual(len(summary["advisory_issues"]), 99)
+
 
 if __name__ == "__main__":
     unittest.main()

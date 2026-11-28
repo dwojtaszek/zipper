@@ -38,6 +38,7 @@ def _fetch_all_issues(project: str, pr_number: int) -> list[dict]:
     issues: list[dict] = []
     page = 1
     page_size = 100
+    raw_fetched = 0
     while True:
         payload = _fetch_json(
             f"https://sonarcloud.io/api/issues/search"
@@ -51,8 +52,11 @@ def _fetch_all_issues(project: str, pr_number: int) -> list[dict]:
             item for item in batch
             if isinstance(item, dict) and item.get("status", "OPEN") in OPEN_STATUSES
         )
+        # `total` counts unfiltered issues, so pagination must compare against the
+        # raw count; comparing the filtered one requests an extra page that can fail.
+        raw_fetched += len(batch)
         total = payload.get("total")
-        if isinstance(total, int) and len(issues) >= total:
+        if isinstance(total, int) and raw_fetched >= total:
             break
         if len(batch) < page_size:
             break
