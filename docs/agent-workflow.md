@@ -103,7 +103,7 @@ See [CI.md](../CI.md) for SonarCloud, CodeRabbit, CodeQL, and golden file proced
 | `src/Validation/` | Post-generation, reconciliation, and chaos expectation validators |
 | `src/ArchiveTests/` & `src/ManifestComparison/` | Archive Test Suite fixtures/mutations and Production Manifest Comparison |
 | `src/Zipper.Tests/` | Unit and FsCheck property tests (`Properties/`) |
-| `src/Zipper.Analyzers/` & `src/Zipper.Analyzers.Tests/` | Custom Roslyn analyzers (`ZIP001`–`ZIP005`) and tests |
+| `src/Zipper.Analyzers/` & `src/Zipper.Analyzers.Tests/` | Custom Roslyn analyzers (`ZIP001`–`ZIP004`, `FGR_FLAT_ACCESS`) and tests |
 | `.github/`, `.zipper-runner/`, `tests/` | CI workflows/scripts, autonomous runner, and E2E/CI test suites |
 
 ---

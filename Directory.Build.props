@@ -42,6 +42,7 @@
 
   <ItemGroup>
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSyntaxes.txt" />
   </ItemGroup>
 
   <!-- Automatically install/sync local Git hooks on local builds (skipped in CI) -->

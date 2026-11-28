@@ -1,3 +1,4 @@
+using Microsoft.CodeAnalysis;
 using Xunit;
 
 using VerifyCS = Microsoft.CodeAnalysis.CSharp.Testing.XUnit.AnalyzerVerifier<
@@ -134,5 +135,14 @@ class MyWriter
 }
 ";
         await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+
+    [Fact]
+    public void SupportedDiagnostics_DefaultSeverityIsWarning()
+    {
+        var analyzer = new ExactStreamReadAnalyzer();
+        var descriptor = Assert.Single(analyzer.SupportedDiagnostics);
+        Assert.Equal(ExactStreamReadAnalyzer.DiagnosticId, descriptor.Id);
+        Assert.Equal(DiagnosticSeverity.Warning, descriptor.DefaultSeverity);
     }
 }

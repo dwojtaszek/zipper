@@ -1,3 +1,4 @@
+using Microsoft.CodeAnalysis;
 using Xunit;
 
 using VerifyCS = Microsoft.CodeAnalysis.CSharp.Testing.XUnit.AnalyzerVerifier<
@@ -26,14 +27,14 @@ class MyComposer
     }
 
     [Fact]
-    public async Task DirectTextWriterWriteInEmitter_ReportsDiagnostic()
+    public async Task DirectTextWriterWriteInEmitter_NoDiagnostic()
     {
         const string source = @"
 class MyEmitter
 {
     public void Emit(System.IO.TextWriter writer)
     {
-        {|ZIP001:writer.Write|}(""hello"");
+        writer.Write(""hello"");
     }
 }
 ";
@@ -123,7 +124,7 @@ class MyComposer
     }
 
     [Fact]
-    public async Task DirectTextWriterWriteLineAsyncInEmitter_ReportsDiagnostic()
+    public async Task DirectTextWriterWriteLineAsyncInEmitter_NoDiagnostic()
     {
         const string source = @"
 using System.Threading.Tasks;
@@ -132,10 +133,64 @@ class MyEmitter
 {
     public async Task EmitAsync(System.IO.TextWriter writer)
     {
-        await {|ZIP001:writer.WriteLineAsync|}(""hello"");
+        await writer.WriteLineAsync(""hello"");
     }
 }
 ";
         await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+
+    [Fact]
+    public async Task DirectWriteInEmailSerializer_NoDiagnostic()
+    {
+        const string source = @"
+class EmailSerializer
+{
+    public void Write(System.IO.TextWriter writer)
+    {
+        writer.Write(""From: a@b.c"");
+    }
+}
+";
+        await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+
+    [Fact]
+    public async Task DirectWriteInEmailFieldSerializer_ReportsDiagnostic()
+    {
+        const string source = @"
+class EmailFieldSerializer
+{
+    public void Write(System.IO.TextWriter writer)
+    {
+        {|ZIP001:writer.Write|}(""x"");
+    }
+}
+";
+        await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+
+    [Fact]
+    public async Task DirectWriteInFileDataSerializer_NoDiagnostic()
+    {
+        const string source = @"
+class FileDataSerializer
+{
+    public void Write(System.IO.BinaryWriter writer)
+    {
+        writer.Write(1);
+    }
+}
+";
+        await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+
+    [Fact]
+    public void SupportedDiagnostics_DefaultSeverityIsWarning()
+    {
+        var analyzer = new LoadFileSeamInvariantAnalyzer();
+        var descriptor = Assert.Single(analyzer.SupportedDiagnostics);
+        Assert.Equal(LoadFileSeamInvariantAnalyzer.DiagnosticId, descriptor.Id);
+        Assert.Equal(DiagnosticSeverity.Warning, descriptor.DefaultSeverity);
     }
 }

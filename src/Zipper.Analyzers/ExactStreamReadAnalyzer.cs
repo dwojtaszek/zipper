@@ -20,7 +20,7 @@ public sealed class ExactStreamReadAnalyzer : ZipperAnalyzerBase
         title: "Prefer exact stream reads",
         messageFormat: "Prefer exact stream reads instead of inexact Read/ReadAsync",
         category: "Correctness",
-        defaultSeverity: DiagnosticSeverity.Info,
+        defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         description: "Stream.Read/ReadAsync can return partial reads. Use exact read methods to guarantee full buffer fill.");
 
