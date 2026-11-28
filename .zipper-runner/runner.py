@@ -2754,6 +2754,7 @@ def _run_review_gate(pr_number, cwd: str, wait_minutes: int | None = None,
 
 SONARCLOUD_PROJECT_KEY = "dwojtaszek_zipper"
 SONARCLOUD_TIMEOUT_SECONDS = 20
+SONARCLOUD_ISSUES_PAGE_SIZE = 50
 SONARCLOUD_OPEN_STATUSES = frozenset({"OPEN", "CONFIRMED", "REOPENED"})
 
 
@@ -2805,7 +2806,8 @@ def _sonarcloud_issue_findings(issues: list, pr_number: int) -> tuple[list[str] 
     for issue in issues:
         if not isinstance(issue, dict):
             return None, f"Unexpected SonarCloud issue entry for PR #{pr_number}."
-        # SonarCloud ignores the statuses filter when pullRequest is set and returns CLOSED issues.
+        # The server-side statuses filter is unreliable when pullRequest is set: it
+        # can omit real issues and return CLOSED ones, so status is filtered here.
         if issue.get("status", "OPEN") not in SONARCLOUD_OPEN_STATUSES:
             continue
         severity = issue.get("severity", "MAJOR")
@@ -2826,7 +2828,8 @@ def _check_sonarcloud_pr_gate(pr_number: int, rollup: list | None = None) -> Rev
     project_q = urllib.parse.quote(SONARCLOUD_PROJECT_KEY, safe="")
     issues_url = (
         f"https://sonarcloud.io/api/issues/search?componentKeys={project_q}"
-        f"&pullRequest={pr_number}&statuses=OPEN,CONFIRMED,REOPENED&severities=BLOCKER,CRITICAL,MAJOR&ps=50"
+        f"&pullRequest={pr_number}&severities=BLOCKER,CRITICAL,MAJOR"
+        f"&ps={SONARCLOUD_ISSUES_PAGE_SIZE}"
     )
     gate_url = (
         f"https://sonarcloud.io/api/qualitygates/project_status"
@@ -2843,10 +2846,18 @@ def _check_sonarcloud_pr_gate(pr_number: int, rollup: list | None = None) -> Rev
             if not isinstance(batch, list):
                 return ReviewGate(False, True, f"Unexpected SonarCloud API payload for PR #{pr_number}.")
             issues.extend(batch)
-            total = issues_data.get("total", len(batch))
-            if not isinstance(total, int):
+            total = issues_data.get("total")
+            if total is not None and not isinstance(total, int):
                 return ReviewGate(False, True, f"Unexpected SonarCloud API payload for PR #{pr_number}.")
-            if not batch or len(issues) >= total:
+            if not batch:
+                break
+            # `total` is the reliable stop when the payload carries it. Without it,
+            # only a short page proves the listing is exhausted; treating a missing
+            # `total` as "one page" would silently cap the gate at the first page.
+            if isinstance(total, int):
+                if len(issues) >= total:
+                    break
+            elif len(batch) < SONARCLOUD_ISSUES_PAGE_SIZE:
                 break
             page += 1
         gate_data = _sonarcloud_get_json(gate_url)

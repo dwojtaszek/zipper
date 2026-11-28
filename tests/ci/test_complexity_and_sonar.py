@@ -381,11 +381,13 @@ class CheckSonarTests(unittest.TestCase):
         gate = {"projectStatus": {"status": "OK", "conditions": []}}
         page1 = {"total": 101, "issues": [{"severity": "MINOR", "rule": "r1"} for _ in range(100)]}
         page2 = {"total": 101, "issues": [{"severity": "MAJOR", "rule": "r2", "component": "p:f.py", "line": 5, "message": "fix"}]}
-        with patch.object(self.mod, "_fetch_json", side_effect=[gate, page1, page2]):
+        with patch.object(self.mod, "_fetch_json", side_effect=[gate, page1, page2]) as mock_get:
             code, summary = self.mod.inspect_pr(1444)
             self.assertEqual(code, 1)
             self.assertEqual(len(summary["blocking_issues"]), 1)
             self.assertEqual(len(summary["advisory_issues"]), 100)
+            # The server-side statuses filter drops real issues on the pullRequest path.
+            self.assertNotIn("statuses=", mock_get.call_args_list[1].args[0])
 
     def test_closed_issue_on_a_full_page_does_not_request_another_page(self):
         gate = {"projectStatus": {"status": "OK", "conditions": []}}

@@ -42,12 +42,13 @@ def _fetch_all_issues(project: str, pr_number: int) -> list[dict]:
     while True:
         payload = _fetch_json(
             f"https://sonarcloud.io/api/issues/search"
-            f"?componentKeys={project}&pullRequest={pr_number}&statuses=OPEN,CONFIRMED,REOPENED&ps={page_size}&p={page}"
+            f"?componentKeys={project}&pullRequest={pr_number}&ps={page_size}&p={page}"
         )
         batch = payload.get("issues")
         if not isinstance(batch, list):
             raise ValueError("Missing issues list in SonarCloud response")
-        # SonarCloud can return CLOSED issues despite the statuses filter when pullRequest is set.
+        # The server-side statuses filter is unreliable when pullRequest is set: it
+        # can omit real issues and return CLOSED ones, so status is filtered here.
         issues.extend(
             item for item in batch
             if isinstance(item, dict) and item.get("status", "OPEN") in OPEN_STATUSES

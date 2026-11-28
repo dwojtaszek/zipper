@@ -124,12 +124,14 @@ class SonarCloudGateTests(unittest.TestCase):
                 {"issues": [blocker], "total": 2},
                 {"projectStatus": {"status": "OK", "conditions": []}},
             ],
-        ):
+        ) as mock_get:
             result = runner._check_sonarcloud_pr_gate(1438)
 
         self.assertFalse(result.ok)
         self.assertFalse(result.environmental)
         self.assertIn("BLOCKER csharpsquid:S999", result.detail)
+        # The server-side statuses filter drops real issues on the pullRequest path.
+        self.assertNotIn("statuses=", mock_get.call_args_list[0].args[0])
 
     def test_later_issue_page_failure_is_environmental(self):
         closed = {
@@ -153,6 +155,52 @@ class SonarCloudGateTests(unittest.TestCase):
         self.assertTrue(result.environmental)
         self.assertIn("Could not query SonarCloud API", result.detail)
         self.assertIn("p=2", mock_get.call_args_list[1].args[0])
+
+    def test_full_page_without_total_keeps_paging(self):
+        # A missing `total` must not be read as "page one is everything".
+        page1 = {"issues": [{"severity": "MINOR", "rule": "r1"} for _ in range(50)]}
+        page2 = {"issues": [{"severity": "BLOCKER", "rule": "S999", "component": "x:src/B.cs", "line": 3, "message": "Bug"}]}
+        with patch.object(
+            runner,
+            "_sonarcloud_get_json",
+            side_effect=[page1, page2, {"projectStatus": {"status": "OK", "conditions": []}}],
+        ):
+            result = runner._check_sonarcloud_pr_gate(1438)
+
+        self.assertFalse(result.ok)
+        self.assertFalse(result.environmental)
+        self.assertIn("BLOCKER S999", result.detail)
+
+    def test_empty_later_page_ends_pagination(self):
+        # A total larger than the issues served is the shape that would spin forever
+        # without the empty-batch terminator.
+        with patch.object(
+            runner,
+            "_sonarcloud_get_json",
+            side_effect=[
+                {"issues": [{"severity": "MAJOR", "status": "CLOSED", "rule": "r1"}], "total": 2},
+                {"issues": [], "total": 2},
+                {"projectStatus": {"status": "OK", "conditions": []}},
+            ],
+        ) as mock_get:
+            result = runner._check_sonarcloud_pr_gate(1438)
+
+        self.assertTrue(result.ok)
+        self.assertEqual(mock_get.call_count, 3)
+
+    def test_malformed_later_issue_page_is_environmental(self):
+        for bad_page in ({"unexpected": []}, {"issues": "nope", "total": 2}, {"issues": [], "total": "2"}):
+            with self.subTest(bad_page=bad_page), patch.object(
+                runner,
+                "_sonarcloud_get_json",
+                side_effect=[
+                    {"issues": [{"severity": "MINOR", "rule": "r1"}], "total": 2},
+                    bad_page,
+                ],
+            ):
+                result = runner._check_sonarcloud_pr_gate(1438)
+            self.assertFalse(result.ok)
+            self.assertTrue(result.environmental)
 
     def test_quality_gate_error_without_issues_still_fails(self):
         with patch.object(
