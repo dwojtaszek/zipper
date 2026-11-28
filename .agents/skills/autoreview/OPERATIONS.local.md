@@ -433,3 +433,219 @@
 - **telemetry**: host=droid mode=local specialists=6 bundle=9187c
 - **lessons**: none
 - **suppressions**: none
+
+### 2026-11-28 droid:local:ISSUE-1486
+
+- **findings**: cycle 1 broad INFO set (0 ACTION); cycle 2 3 ACTION-class docs/traceability/ADR drift plus INFO; cycle 3 0 ACTION, INFO only
+- **outcome**: accepted — mode-scoped predicate, docs sync, CLI messages, test coverage
+- **telemetry**: host=droid mode=local specialists=5 bundle=43293 c
+- **lessons**: adversarial pass catches README/Requirements/traceability drift that correctness treats as INFO
+- **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-coderabbit-fix
+
+- **findings**: 0 (fast pass)
+- **outcome**: clean review — qualified native Email/TIFF chaos note and asserted cross-format exception
+- **telemetry**: host=opencode mode=local specialists=1 bundle=2157c
+- **lessons**: none
+- **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-review-followups
+
+- **findings**: 0 (fast pass)
+- **outcome**: clean review — mixed native chaos family filtering covered; S2699 assertions added
+- **telemetry**: host=opencode mode=local specialists=1 bundle=7125c
+- **lessons**: CodeRabbit mixed-type question resolved by family-scoped filtering tests and CLI runs
+- **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-gate-followup
+
+- **findings**: 0 (fast pass)
+- **outcome**: clean review — exact native family type sets asserted for Standard and Production Set
+- **telemetry**: host=opencode mode=local specialists=1 bundle=1886c
+- **lessons**: mode-specific cross-format gate and single-part MIME mutation already covered by existing tests
+- **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-source-csv-followup
+
+- **findings**: 0 (fast pass)
+- **outcome**: clean review — Source CSV native flags covered for Standard and Production Set CLI build
+- **telemetry**: host=opencode mode=local specialists=1 bundle=4428c
+- **lessons**: SourceRecords without SourceFileTypes is not a supported generation path; Source CSV plumbing sets both
+- **suppressions**: none
+
+### 2026-11-28 factory:local:issue-1486-review-followup
+
+- **findings**: 6 (0 correctness, 6 testing: 1 medium, 5 low)
+- **outcome**: accepted medium and four lows — generator rejects cross-format scenarios, bare native acceptance cases added, full Production Set guidance asserted, E2E accept/reject cases added; skipped source-CSV runtime integration as optional
+- **telemetry**: host=factory mode=local specialists=2 bundle=20000c
+- **lessons**: ParallelFileGenerator's hardcoded productionSetMode:false needs its own cross-format rejection test; assert full guidance strings so truncation fails
+- **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-cross-format-followup
+
+- **findings**: 0 (fast pass)
+- **outcome**: clean review — mixed-case cross-format names covered in CLI build and Production Set orchestrator
+- **telemetry**: host=opencode mode=local specialists=1 bundle=1377c
+- **lessons**: `--loadfile-only` makes the Standard cross-format rejection case legal; no shell test change
+- **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-native-scenario-followup
+
+- **findings**: 0 (fast pass)
+- **outcome**: clean review — shared native-scenario rule closes direct Standard bypass while preserving Loadfile-Only cross-format
+- **telemetry**: host=opencode mode=local specialists=1 bundle=23010c
+- **lessons**: generator native flags must exclude Loadfile-Only runs; docs and both E2E scripts updated for mixed native chaos
+- **suppressions**: none
+
+### 2026-11-28 factory:local:issue-1486-coderabbit-closeout
+
+- **findings**: 3 CodeRabbit (1 valid README gap, 2 questions refuted by existing guards) + 4 reviewer cycles
+- **outcome**: accepted — documented mixed native chaos, shared the native-scenario gate across CLI/Standard/Production Set, scoped REQ-237/REQ-241 wording, added truth-table and gate tests
+- **telemetry**: host=factory mode=local specialists=4 bundle=~12000c
+- **lessons**: scenario gates need the raw hasEml/hasTiff/loadfileOnly inputs, not caller-derived flags, or the CLI and runtime drift; keep doc rejection clauses scoped to the condition the code checks
+- **suppressions**: declared-vs-allocated File Type gaps are pre-existing and out of scope for this closeout
+
+### 2026-11-28 opencode:local:issue-1486-loadfile-only-doc-closeout
+
+- **findings**: 0 (fast pass)
+- **outcome**: clean review — EML/TIFF mix row now excludes `--loadfile-only`, preserving the REQ-094 cross-format exception
+- **telemetry**: host=opencode mode=local specialists=1 bundle=~1700c
+- **lessons**: `ChaosModule` already masks native flags with `!loadfileOnly`; helper truth-table and CLI test refute the raw-flag concern
+- **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-gate-closeout
+
+- **findings**: 0 (manual fast pass; specialist subagent unavailable on free usage limit)
+- **outcome**: clean review — Loadfile-Only TIFF scenario regression locked by truth-table and `ChaosModule.TryBuild` tests; Sonar complexity reduced via shared cross-format-chaos helper
+- **telemetry**: host=opencode mode=local specialists=0 bundle=~4500c
+- **lessons**: `IsNativeScenarioAllowed` takes raw `loadfileOnly`; moving boolean sequences out of `ValidateProductionSetAsync` clears Sonar cognitive-complexity threshold without behavior change
+- **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-coderabbit-round2
+
+- **findings**: 2 (CodeRabbit local; 1 question refuted by tests, 1 valid E2E isolation gap)
+- **outcome**: accepted — added loadfile-only Email regression; isolated Standard cross-format rejection with an accepted no-scenario Email run in both `.sh` and `.bat`
+- **telemetry**: host=opencode mode=local specialists=0 bundle=~5000c
+- **lessons**: cross-format rejection tests must start from a legal native run; mutation-smoke baseline test has a hardcoded 60s timeout, so run after a fresh pre-commit marker
+- **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-coderabbit-round3
+
+- **findings**: 2 (CodeRabbit local; 1 valid README scope gap, 1 question refuted by native-engine tests)
+- **outcome**: accepted — scoped README native scenario restrictions to runs without `--loadfile-only`; locked source-record combined-type family filtering for Standard and Production Set
+- **telemetry**: host=opencode mode=local specialists=0 bundle=~4500c
+- **lessons**: `ChaosEngine.ResolveEnabledWorkItemTypes` intersects the combined list with each native family; source-driven generation needs explicit engine assertions, not only `Pipeline.Build` assertions
+- **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-coderabbit-round4
+
+- **findings**: 1 (CodeRabbit local, valid)
+- **outcome**: accepted — qualified REQ-237 and REQ-241 scenario rejection clauses with `without --loadfile-only`, matching README and the interaction table
+- **telemetry**: host=opencode mode=local specialists=0 bundle=~1800c
+- **lessons**: every native scenario restriction needs the Loadfile-Only qualifier in all three docs, not just README
+- **suppressions**: none
+
+### 2026-11-28 factory:local:issue-1486-coderabbit-round5
+
+- **findings**: 1 ACTION on first pass (HashSet order equality); re-review 0 ACTION, 2 INFO (helper duplication, null-forgiving)
+- **outcome**: accepted — source-driven Standard and Production Set tests assert each native engine keeps only its own chaos type with ordinal-sorted comparison; documented Loadfile-Only scenario qualifier verified at HEAD; requirement sentence capitalization fixed
+- **telemetry**: host=factory mode=local specialists=1 bundle=~900c (fast pass + rerun after fix)
+- **lessons**: source-driven engine assertions must order HashSet-backed enabled types before sequence equality
+- **suppressions**: local reflection helper duplication accepted for test isolation
+
+### 2026-11-28 opencode:local:issue-1486-coderabbit-rerun
+
+- **findings**: 0 (local CodeRabbit rerun after "Repository changed during CodeRabbit review")
+- **outcome**: no code change — verified PR #1501 open with 0 unresolved review threads, Qodo paused, all CI checks success except informational CodeRabbit skip, and Sonar blockers already CLOSED/FIXED; local CodeRabbit clean at HEAD
+- **telemetry**: host=opencode mode=local specialists=0 bundle=~1200c
+- **lessons**: `check-sonar.py` can return CLOSED/FIXED Sonar issues for a PR because the API ignores `statuses` with `pullRequest`; inspect `status` and `resolution` before treating a finding as blocking
+- **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-sonar-filter
+
+- **findings**: 3 reported Sonar BLOCKER `csharpsquid:S2699` findings at `src/Zipper.Tests/ModeAdapterTests.cs`
+- **outcome**: verified all three are `CLOSED`/`FIXED` and the tests already assert; fixed root cause in `check-sonar.py` by filtering open statuses client-side, with a regression test
+- **telemetry**: host=opencode mode=local specialists=0 bundle=~1400c
+- **lessons**: Sonar PR issue search returns closed issues despite `statuses=OPEN,CONFIRMED,REOPENED`; filter returned issues by status before classification
+- **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-runner-sonar-pagination
+
+- **findings**: 1 CodeRabbit local major, valid — `_check_sonarcloud_pr_gate` filtered a single 50-issue page before deciding no blockers remained
+- **outcome**: paginate raw SonarCloud issues before status filtering; added regression for closed-only first page plus open second-page blocker and later-page network failure
+- **telemetry**: host=opencode mode=local specialists=0 bundle=~2000c
+- **lessons**: status filtering must happen after full pagination; a later page failure stays environmental
+- **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-runner-test-sharpener
+
+- **findings**: 1 CodeRabbit local minor, valid — network-failure test returned a quality-gate payload before the simulated error
+- **outcome**: removed the premature payload from `side_effect`; asserted API-query error detail and that the failing request was page 2
+- **telemetry**: host=opencode mode=local specialists=0 bundle=~900c
+- **lessons**: mocked side effects must match the request order the code under test actually makes
+- **suppressions**: none
+
+### 2026-11-28 factory:local:issue-1486-sonar-runner-gate
+
+- **findings**: 1 INFO (missing-status default coverage), 0 ACTION; patch correct
+- **outcome**: accepted — pinned a missing `status` as OPEN in the runner Sonar gate test; fixed the runner's duplicate closed-issue filter, which kept reporting the three already-CLOSED S2699 findings
+- **telemetry**: host=factory mode=commit specialists=1 bundle=~2600c
+- **lessons**: the runner queries SonarCloud with its own gate; fixing `check-sonar.py` alone leaves the runner reporting closed issues, so both filters must exist
+- **suppressions**: none
+
+### 2026-11-28 factory:local:issue-1486-sonar-status-filter
+
+- **findings**: 6 INFO from 4 specialists plus 2 ACTION from correctness; both ACTIONs valid and verified live (filtered query dropped CRITICAL S3776, unfiltered returned all 4 rows)
+- **outcome**: removed `statuses=` from both SonarCloud queries (client-side status filter already covers it); kept raw-count pagination; added short-page fallback when `total` is absent, with tests for a full page without `total` and malformed later pages
+- **telemetry**: host=factory mode=local specialists=4+1 bundle=~12000c
+- **lessons**: on the `pullRequest` issue-search path the server-side `statuses` filter both drops real issues and returns CLOSED rows, so never rely on it; `total` is safe only when compared against the same raw rows the query returns
+- **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-final-review-followups
+
+- **findings**: 2 CodeRabbit local, both valid — native `--chaos-types` clauses lacked the `--loadfile-only` qualifier; a short empty Sonar issue page could be accepted before `total` was reached
+- **outcome**: scoped README/REQ-237/REQ-241 type restrictions to native runs; made the runner and `check-sonar.py` treat an empty short page with unmet `total` as environmental; added regression tests
+- **telemetry**: host=opencode mode=local specialists=0 bundle=~3000c
+- **lessons**: document CLI validation against the mode flags it actually uses; pagination must distinguish exhausted results from truncated results
+- **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-macos-runner-test
+
+- **findings**: CI check `ci / runner-tests (macos-latest)` failed at `test_droid_plugin.py:63` — `assert "started" in out`
+- **outcome**: raised the timeout fixture from 0.2s to 2.0s for slow macOS child startup and moved the would-be survivor marker from 0.5s to 5s so process-group termination stays under test
+- **telemetry**: host=opencode mode=local specialists=0 bundle=~2200c
+- **lessons**: fixture timings are part of the assertion; on slower CI a subsecond ceiling can cut before the fake child writes its startup line
+- **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-sonar-complexity
+
+- **findings**: live Sonar reported CRITICAL `python:S3776` in `_check_sonarcloud_pr_gate` (complexity 25/15) after pagination checks were added; local guard also caught `_fetch_all_issues` at 17/15
+- **outcome**: extracted payload validation and paging-stop decisions into small helpers in both gate scripts; local complexity guard now passes with behavior unchanged
+- **telemetry**: host=opencode mode=local specialists=0 bundle=~2000c
+- **lessons**: check the cognitive-complexity guard immediately after adding branches to runner gates, not only unit tests
+- **suppressions**: none
+
+### 2026-11-28 factory:local:issue-1486-review-closeout
+
+- **findings**: 2 local CodeRabbit — malformed Sonar issue entries were silently dropped (valid); TIFF alias assertion questioned (refuted)
+- **outcome**: reject non-dictionary issue entries before status filtering; kept `tiff-truncated-ifd` assertion because `CanonicalEmailType` rewrites only `rfc822-depth`, and TIFF names pass through unchanged; retuned the Droid timeout survivor fixture
+- **telemetry**: host=factory mode=local specialists=0 bundle=~2800c
+- **lessons**: verify a questioned alias against the canonicalizer itself; a TIFF type is unaffected by an email-only alias map
+- **suppressions**: refuted TIFF alias finding — no code change needed
+
+### 2026-11-28 opencode:local:issue-1486-retain-sonar-total
+
+- **findings**: 2 local CodeRabbit major, both valid — a later page without `total` could make an incomplete Sonar listing look clean in both `check-sonar.py` and the runner gate
+- **outcome**: retain the last reported total across pages; added two-page regressions where page 1 advertises one more issue than page 2 serves
+- **telemetry**: host=opencode mode=local specialists=0 bundle=~2300c
+- **lessons**: pagination state must persist across pages; a missing field on a later response does not reset an earlier authoritative total
+- **suppressions**: none
+
+### 2026-11-28 factory:branch:issue-1486-final-unification-review
+
+- **findings**: 5 specialists plus a 2-specialist re-review; 1 ACTION (REQ-237/REQ-241/README dropped the Loadfile-Only native-type rejection that `emailRun`/`tiffRun` still enforce), 1 INFO fail-open non-integer Sonar `total` in `check-sonar.py`, 1 INFO page-2 test that never reached page 2, 1 INFO missing Production Set rejection case in the E2E scripts. Rejected: StandardMode hardcoded `loadfileOnly:false` (SelectMode owns routing), the "unreachable" TIFF fallback (the `else` is the TIFF-only path), declared-mix vs allocated-file types (pre-existing, suppressed), six-boolean struct proposal, `--type eml` message wording (only reached when no native type exists), unbounded paging (pre-existing on main), and `bool` passing the `int` guard (unreachable from the API, matches the runner).
+- **outcome**: accepted and fixed the four items; docs now state native types are rejected on every `--loadfile-only` run, combined EML/TIFF types require no `--loadfile-only`, `check-sonar.py` rejects a non-integer `total`, the empty-later-page test now provably fetches page 2, and both E2E scripts reject `--production-set --chaos-mode` without a scenario or native type. Full suite 4694 passed, 2 skipped; Python 24 passed; E2E arguments 51/51; mutation smoke 3/3 killed.
+- **telemetry**: host=factory mode=branch specialists=5+2 bundle=145197c + 17122c
+- **lessons**: when a review wave rewrites a rejection clause, check both the missing-family and the Loadfile-Only cases; a fail-open `total` in one gate remains a divergence even when the other gate validates it
+- **suppressions**: none

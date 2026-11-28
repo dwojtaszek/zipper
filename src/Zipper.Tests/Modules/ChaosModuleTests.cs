@@ -7,7 +7,13 @@ namespace Zipper.Tests;
 [Collection("ConsoleTests")]
 public class ChaosModuleTests
 {
-    private static bool TryBuildWithValues(ChaosConfigSpec spec, out ChaosConfig config, bool loadfileOnly = true, IReadOnlyList<LoadFileFormat>? formats = null)
+    private static bool TryBuildWithValues(
+        ChaosConfigSpec spec,
+        out ChaosConfig config,
+        bool loadfileOnly = true,
+        IReadOnlyList<LoadFileFormat>? formats = null,
+        bool hasEml = false,
+        bool hasTiff = false)
     {
         var module = new ChaosModule();
         if (spec.Mode)
@@ -26,7 +32,12 @@ public class ChaosModuleTests
         {
             Assert.True(module.TryApply("--chaos-scenario", spec.Scenario));
         }
-        return module.TryBuild(loadfileOnly, formats ?? new List<LoadFileFormat> { LoadFileFormat.Dat }, out config);
+        return module.TryBuild(
+            loadfileOnly,
+            formats ?? new List<LoadFileFormat> { LoadFileFormat.Dat },
+            out config,
+            hasEml: hasEml,
+            hasTiff: hasTiff);
     }
 
     private sealed record ChaosConfigSpec(string? Amount, string? Types, string? Scenario)
@@ -119,7 +130,7 @@ public class ChaosModuleTests
     }
 
     [Fact]
-    public void TryBuild_ChaosModeWithoutLoadfileOnly_ReturnsFalse()
+    public void TryBuild_ChaosModeWithoutLoadfileOnlyOrNativeType_ReturnsFalse()
     {
         var spec = new ChaosConfigSpec(Amount: null, Types: null, Scenario: null) { Mode = true };
         Assert.False(TryBuildWithValues(spec, out _, loadfileOnly: false));
@@ -212,6 +223,30 @@ public class ChaosModuleTests
     }
 
     [Fact]
+    public void TryBuild_LoadfileOnlyTiffWithOptScenario_BuildsConfig()
+    {
+        var spec = new ChaosConfigSpec(Amount: null, Types: null, Scenario: "broken-boundaries") { Mode = true };
+
+        Assert.True(TryBuildWithValues(
+            spec,
+            out var config,
+            formats: new List<LoadFileFormat> { LoadFileFormat.Opt },
+            hasTiff: true));
+
+        Assert.Equal("broken-boundaries", config.ChaosScenario);
+    }
+
+    [Fact]
+    public void TryBuild_LoadfileOnlyEmailWithDatScenario_BuildsConfig()
+    {
+        var spec = new ChaosConfigSpec(Amount: null, Types: null, Scenario: "structured-import-failures") { Mode = true };
+
+        Assert.True(TryBuildWithValues(spec, out var config, hasEml: true));
+
+        Assert.Equal("structured-import-failures", config.ChaosScenario);
+    }
+
+    [Fact]
     public void TryBuild_OptEncodingTypeForOptFormat_BuildsConfig()
     {
         var spec = new ChaosConfigSpec(Amount: null, Types: "opt-encoding", Scenario: null) { Mode = true };
@@ -294,11 +329,14 @@ public class ChaosModuleTests
         Assert.True(module.TryApply("--chaos-mode", null));
         Assert.True(module.TryApply("--chaos-scenario", "structured-import-failures"));
 
-        Assert.False(module.TryBuild(
+        var (built, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => module.TryBuild(
             loadfileOnly: false,
             formats: new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt },
             out _,
             productionSet: true));
+
+        Assert.False(built);
+        Assert.Contains("Error: --chaos-mode with --production-set requires a cross-format chaos scenario ('cross-format-desync' or 'broken-families') or email (.eml) or TIFF (.tiff) generation.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -307,11 +345,14 @@ public class ChaosModuleTests
         var module = new ChaosModule();
         Assert.True(module.TryApply("--chaos-mode", null));
 
-        Assert.False(module.TryBuild(
+        var (built, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => module.TryBuild(
             loadfileOnly: false,
             formats: new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt },
             out _,
             productionSet: true));
+
+        Assert.False(built);
+        Assert.Contains("Error: --chaos-mode with --production-set requires a cross-format chaos scenario ('cross-format-desync' or 'broken-families') or email (.eml) or TIFF (.tiff) generation.", stderr, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -617,6 +658,25 @@ public class ChaosModuleTests
 
         Assert.False(result);
         Assert.Contains("Error: --chaos-scenario does not apply to TIFF (.tiff) chaos.", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TryBuild_MixedEmailAndTiffRunWithCrossFormatScenario_ReturnsFalseWithNativeMessage()
+    {
+        var module = new ChaosModule();
+        Assert.True(module.TryApply("--chaos-mode", null));
+        Assert.True(module.TryApply("--chaos-scenario", "cross-format-desync"));
+
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => module.TryBuild(
+            loadfileOnly: false,
+            formats: new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt },
+            out _,
+            productionSet: false,
+            hasEml: true,
+            hasTiff: true));
+
+        Assert.False(result);
+        Assert.Contains("Error: --chaos-scenario does not apply to email (.eml) or TIFF (.tiff) chaos.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]

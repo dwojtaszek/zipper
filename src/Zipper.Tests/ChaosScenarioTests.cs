@@ -19,6 +19,73 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
     }
 
     // --- Scenario registry tests ---
+    [Theory]
+    [InlineData(false, false, false, false, false, null, true)]
+    [InlineData(true, true, false, false, false, null, true)]
+    [InlineData(true, false, false, true, false, null, true)]
+    [InlineData(true, false, false, false, true, null, true)]
+    [InlineData(true, false, true, false, false, "cross-format-desync", true)]
+    [InlineData(true, false, true, false, false, "broken-families", true)]
+    [InlineData(true, false, true, false, false, "structured-import-failures", false)]
+    [InlineData(true, false, true, false, false, null, false)]
+    [InlineData(true, false, false, false, false, "cross-format-desync", false)]
+    [InlineData(true, false, false, true, false, "structured-import-failures", true)]
+    [InlineData(true, false, true, false, false, "Cross-Format-Desync", true)]
+    [InlineData(true, false, true, true, false, null, true)]
+    [InlineData(true, true, false, true, false, null, true)]
+    [InlineData(true, false, true, false, false, "", false)]
+    public void IsGenerationChaosAllowed_MatchesReq094Scopes(
+        bool chaosMode,
+        bool loadfileOnly,
+        bool productionSet,
+        bool hasEml,
+        bool hasTiff,
+        string? scenario,
+        bool expected)
+    {
+        Assert.Equal(expected, ChaosScenarios.IsGenerationChaosAllowed(chaosMode, loadfileOnly, productionSet, hasEml, hasTiff, scenario));
+    }
+
+    [Theory]
+    [InlineData(null, true, false, false, false, false, true)]
+    [InlineData("", true, false, true, true, false, true)]
+    [InlineData("cross-format-desync", true, false, true, true, false, false)]
+    [InlineData("cross-format-desync", true, false, true, true, true, true)]
+    [InlineData("Cross-Format-Desync", true, false, true, true, true, true)]
+    [InlineData("structured-import-failures", true, false, true, true, true, false)]
+    [InlineData("structured-import-failures", true, true, true, true, false, true)]
+    [InlineData("broken-boundaries", true, true, false, true, false, true)]
+    [InlineData("structured-import-failures", true, true, false, false, false, true)]
+    [InlineData("structured-import-failures", true, false, false, false, false, true)]
+    [InlineData("structured-import-failures", false, false, true, true, false, true)]
+    [InlineData("broken-families", true, false, false, false, true, true)]
+    [InlineData("cross-format-desync", true, false, false, false, false, true)]
+    public void IsNativeScenarioAllowed_MatchesNativeScopeRule(
+        string? scenario,
+        bool chaosMode,
+        bool loadfileOnly,
+        bool hasEml,
+        bool hasTiff,
+        bool productionSetMode,
+        bool expected)
+    {
+        Assert.Equal(expected, ChaosScenarios.IsNativeScenarioAllowed(scenario, chaosMode, loadfileOnly, hasEml, hasTiff, productionSetMode));
+    }
+
+    [Theory]
+    [InlineData(false, "cross-format-desync", false)]
+    [InlineData(true, "Cross-Format-Desync", true)]
+    [InlineData(true, "broken-families", true)]
+    [InlineData(true, "structured-import-failures", false)]
+    [InlineData(true, null, false)]
+    public void IsCrossFormatChaos_RequiresChaosModeAndCrossFormatScenario(
+        bool chaosMode,
+        string? scenario,
+        bool expected)
+    {
+        Assert.Equal(expected, ChaosScenarios.IsCrossFormatChaos(chaosMode, scenario));
+    }
+
     [Fact]
     public void GetByName_ValidName_ReturnsScenario()
     {
@@ -319,6 +386,9 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
         Assert.Contains("full-chaos", stdout, StringComparison.Ordinal);
         Assert.Contains("single-format scenarios require --loadfile-only", stdout, StringComparison.Ordinal);
         Assert.Contains("cross-format scenarios also support --production-set", stdout, StringComparison.Ordinal);
+        Assert.Contains("a File Type mix containing eml or tiff", stdout, StringComparison.Ordinal);
+        Assert.Contains("In Standard and Production Set native runs, Email and TIFF chaos applies --chaos-types to native files", stdout, StringComparison.Ordinal);
+        Assert.Contains("Production Set cross-format scenarios apply chaos to Load File lines", stdout, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -2754,6 +2754,8 @@ def _run_review_gate(pr_number, cwd: str, wait_minutes: int | None = None,
 
 SONARCLOUD_PROJECT_KEY = "dwojtaszek_zipper"
 SONARCLOUD_TIMEOUT_SECONDS = 20
+SONARCLOUD_ISSUES_PAGE_SIZE = 50
+SONARCLOUD_OPEN_STATUSES = frozenset({"OPEN", "CONFIRMED", "REOPENED"})
 
 
 def _sonarcloud_get_json(url: str) -> dict:
@@ -2804,6 +2806,10 @@ def _sonarcloud_issue_findings(issues: list, pr_number: int) -> tuple[list[str] 
     for issue in issues:
         if not isinstance(issue, dict):
             return None, f"Unexpected SonarCloud issue entry for PR #{pr_number}."
+        # The server-side statuses filter is unreliable when pullRequest is set: it
+        # can omit real issues and return CLOSED ones, so status is filtered here.
+        if issue.get("status", "OPEN") not in SONARCLOUD_OPEN_STATUSES:
+            continue
         severity = issue.get("severity", "MAJOR")
         rule = issue.get("rule", "?")
         comp = (issue.get("component") or "").split(":")[-1] or "?"
@@ -2811,6 +2817,56 @@ def _sonarcloud_issue_findings(issues: list, pr_number: int) -> tuple[list[str] 
         msg = issue.get("message", "")
         findings.append(f"{severity} {rule} {comp}:{line} — {msg}")
     return findings, None
+
+
+def _sonarcloud_page_payload(pr_number: int, issues_data: object) -> tuple[list, int | None, ReviewGate | None]:
+    if not isinstance(issues_data, dict):
+        return [], None, ReviewGate(False, True, f"Unexpected SonarCloud API payload for PR #{pr_number}.")
+    batch = issues_data.get("issues")
+    if not isinstance(batch, list):
+        return [], None, ReviewGate(False, True, f"Unexpected SonarCloud API payload for PR #{pr_number}.")
+    total = issues_data.get("total")
+    if total is not None and not isinstance(total, int):
+        return [], None, ReviewGate(False, True, f"Unexpected SonarCloud API payload for PR #{pr_number}.")
+    return batch, total, None
+
+
+def _sonarcloud_paging_done(issues: list, batch: list, total: int | None, pr_number: int) -> tuple[bool, ReviewGate | None]:
+    if not batch:
+        if isinstance(total, int) and len(issues) < total:
+            return False, ReviewGate(
+                False,
+                True,
+                f"Incomplete SonarCloud issue listing for PR #{pr_number}: got {len(issues)} of {total} issues.",
+            )
+        return True, None
+    # `total` is the reliable stop when the payload carries it. Without it, only a
+    # short page proves the listing is exhausted; a missing `total` must not cap
+    # the gate at the first page.
+    if isinstance(total, int):
+        return len(issues) >= total, None
+    return len(batch) < SONARCLOUD_ISSUES_PAGE_SIZE, None
+
+
+def _fetch_sonarcloud_issues(pr_number: int, issues_url: str) -> tuple[list[dict], ReviewGate | None]:
+    issues: list[dict] = []
+    page = 1
+    reported_total = None
+    while True:
+        batch, total, failure = _sonarcloud_page_payload(pr_number, _sonarcloud_get_json(f"{issues_url}&p={page}"))
+        if failure is not None:
+            return [], failure
+        issues.extend(batch)
+        # A later page may omit `total`; keep the last reported value so an
+        # empty page cannot turn a truncated listing into a clean verdict.
+        if total is not None:
+            reported_total = total
+        done, failure = _sonarcloud_paging_done(issues, batch, reported_total, pr_number)
+        if failure is not None:
+            return [], failure
+        if done:
+            return issues, None
+        page += 1
 
 
 def _check_sonarcloud_pr_gate(pr_number: int, rollup: list | None = None) -> ReviewGate:
@@ -2822,24 +2878,26 @@ def _check_sonarcloud_pr_gate(pr_number: int, rollup: list | None = None) -> Rev
     project_q = urllib.parse.quote(SONARCLOUD_PROJECT_KEY, safe="")
     issues_url = (
         f"https://sonarcloud.io/api/issues/search?componentKeys={project_q}"
-        f"&pullRequest={pr_number}&statuses=OPEN,CONFIRMED,REOPENED&severities=BLOCKER,CRITICAL,MAJOR&ps=50"
+        f"&pullRequest={pr_number}&severities=BLOCKER,CRITICAL,MAJOR"
+        f"&ps={SONARCLOUD_ISSUES_PAGE_SIZE}"
     )
     gate_url = (
         f"https://sonarcloud.io/api/qualitygates/project_status"
         f"?projectKey={project_q}&pullRequest={pr_number}"
     )
     try:
-        issues_data = _sonarcloud_get_json(issues_url)
+        issues, fetch_failure = _fetch_sonarcloud_issues(pr_number, issues_url)
+        if fetch_failure is not None:
+            return fetch_failure
         gate_data = _sonarcloud_get_json(gate_url)
     except (http.client.HTTPException, ValueError, OSError) as exc:
         return ReviewGate(False, True, f"Could not query SonarCloud API for PR #{pr_number}: {exc}")
 
-    if not isinstance(issues_data, dict) or not isinstance(gate_data, dict):
+    if not isinstance(gate_data, dict):
         return ReviewGate(False, True, f"Unexpected SonarCloud API payload for PR #{pr_number}.")
 
-    issues = issues_data.get("issues")
     project_status = gate_data.get("projectStatus")
-    if not isinstance(issues, list) or not isinstance(project_status, dict) or not isinstance(project_status.get("status"), str):
+    if not isinstance(project_status, dict) or not isinstance(project_status.get("status"), str):
         return ReviewGate(False, True, f"Unexpected SonarCloud API payload for PR #{pr_number}.")
 
     issue_findings, parse_err = _sonarcloud_issue_findings(issues, pr_number)

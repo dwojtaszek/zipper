@@ -39,9 +39,28 @@ internal static class ProductionSetOrchestrator
         ArgumentNullException.ThrowIfNull(materializer);
         ArgumentNullException.ThrowIfNull(hashComputer);
 
-        if (request.Chaos.ChaosMode && !request.LoadfileOnly && !request.Output.HasFileType("eml") && !request.Output.HasFileType("tiff") && (request.Chaos.ChaosScenario is null || !ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario)))
+        bool hasEml = request.Output.HasFileType("eml");
+        bool hasTiff = request.Output.HasFileType("tiff");
+        if (!ChaosScenarios.IsGenerationChaosAllowed(
+                chaosMode: request.Chaos.ChaosMode,
+                loadfileOnly: request.LoadfileOnly,
+                productionSetMode: true,
+                hasEml: hasEml,
+                hasTiff: hasTiff,
+                scenario: request.Chaos.ChaosScenario))
         {
-            throw new InvalidOperationException("Chaos mode requires loadfile-only mode at the generation layer.");
+            throw new InvalidOperationException(ChaosScenarios.GenerationChaosRequirement);
+        }
+
+        if (!ChaosScenarios.IsNativeScenarioAllowed(
+                scenario: request.Chaos.ChaosScenario,
+                chaosMode: request.Chaos.ChaosMode,
+                loadfileOnly: request.LoadfileOnly,
+                hasEml: hasEml,
+                hasTiff: hasTiff,
+                productionSetMode: true))
+        {
+            throw new InvalidOperationException(ChaosScenarios.NativeScenarioRequirement);
         }
 
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -645,7 +664,7 @@ internal static class ProductionSetOrchestrator
         var datPath = Path.Combine(dataDir, "loadfile.dat");
         var optPath = Path.Combine(dataDir, "loadfile.opt");
 
-        if (request.Chaos.ChaosMode && ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario))
+        if (ChaosScenarios.IsCrossFormatChaos(request.Chaos.ChaosMode, request.Chaos.ChaosScenario))
         {
             await LoadFiles.LoadFileOrchestrator.EmitCrossFormatAsync(
                 request, request, fileDataList, LoadFiles.WriterMode.ProductionSet,
@@ -731,7 +750,7 @@ internal static class ProductionSetOrchestrator
                 Request = request,
                 // Cross-format chaos deliberately breaks DAT↔OPT structure, so its report
                 // findings are expected; Native File chaos keeps the structural contract.
-                IsChaosMode = ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario),
+                IsChaosMode = ChaosScenarios.IsCrossFormatChaos(request.Chaos.ChaosMode, request.Chaos.ChaosScenario),
                 ValidateChaosExpectations = request.Chaos.ChaosMode,
             };
             try

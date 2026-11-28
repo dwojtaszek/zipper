@@ -108,6 +108,16 @@ public class OutputConfigTests
     }
 
     [Fact]
+    public void HasFileType_SourceDrivenTypes_MatchesRecordTypes()
+    {
+        var config = new OutputConfig { FileType = "pdf", SourceFileTypes = new[] { "eml", "tiff" } };
+
+        Assert.True(config.HasFileType("eml"));
+        Assert.True(config.HasFileType("TIFF"));
+        Assert.False(config.HasFileType("pdf"));
+    }
+
+    [Fact]
     public void ResolveFileType_SingleType_AlwaysReturnsRequestType()
     {
         var config = new OutputConfig { FileType = "docx", FileCount = 10 };

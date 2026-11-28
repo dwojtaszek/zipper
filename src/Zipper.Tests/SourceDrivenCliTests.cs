@@ -1,3 +1,4 @@
+using System.Reflection;
 using Xunit;
 
 namespace Zipper.Tests;
@@ -29,6 +30,12 @@ public class SourceDrivenCliTests : WorkingDirectoryTestBase
     private static string CaptureError(Action action) =>
         ConsoleOutputCapture.RunWithCapturedOutput(action).stderr;
 
+    private static IEnumerable<string> EnabledWorkItemTypes(ChaosEngine engine)
+    {
+        var field = engine.GetType().GetField("enabledTypes", BindingFlags.NonPublic | BindingFlags.Instance);
+        return Assert.IsAssignableFrom<IEnumerable<string>>(field?.GetValue(engine));
+    }
+
     [Fact]
     public void Parse_InputCsvAndDirectoryTemplate_StoreRawValues()
     {
@@ -58,6 +65,48 @@ public class SourceDrivenCliTests : WorkingDirectoryTestBase
         Assert.True(request.Output.IsMixedFileTypes);
         Assert.Equal(3, request.SourceRecords!.Count);
         Assert.Equal("a/x.pdf", request.SourceRecords[0].RelativePath);
+    }
+
+    [Fact]
+    public void Build_InputCsvWithNativeTypesAndChaos_NoTypeFlag_BuildsRequest()
+    {
+        var csv = this.WriteCsv("FilePath,FileType\na.eml,eml\nb.tiff,tiff\n");
+        var args = new[]
+        {
+            "--input-csv", csv, "--output-path", this.OutputDir("chaos-standard"),
+            "--chaos-mode", "--chaos-types", "mime-boundary,tiff-strip-offset",
+        };
+
+        var request = Cli.Pipeline.Build(args);
+
+        Assert.NotNull(request);
+        Assert.True(request!.Output.HasFileType("eml"));
+        Assert.True(request.Output.HasFileType("tiff"));
+        Assert.Equal("mime-boundary,tiff-strip-offset", request.Chaos.ChaosTypes);
+        Assert.Equal(new[] { "mime-boundary" }, EnabledWorkItemTypes(ChaosEngineBuilder.BuildForStandardEmail(request)!).OrderBy(type => type, StringComparer.Ordinal));
+        Assert.Equal(new[] { "tiff-strip-offset" }, EnabledWorkItemTypes(ChaosEngineBuilder.BuildForStandardTiff(request)!).OrderBy(type => type, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void Build_ProductionSetInputCsvWithNativeTypesAndChaos_NoTypeFlag_BuildsRequest()
+    {
+        var csv = this.WriteCsv("FilePath,FileType\na.eml,eml\nb.tiff,tiff\n");
+        var args = new[]
+        {
+            "--production-set", "--bates-prefix", "CSV", "--input-csv", csv,
+            "--output-path", this.OutputDir("chaos-production"),
+            "--chaos-mode", "--chaos-types", "mime-boundary,tiff-strip-offset",
+        };
+
+        var request = Cli.Pipeline.Build(args);
+
+        Assert.NotNull(request);
+        Assert.True(request!.Output.HasFileType("eml"));
+        Assert.True(request.Output.HasFileType("tiff"));
+        Assert.Equal("mime-boundary,tiff-strip-offset", request.Chaos.ChaosTypes);
+        var plans = ProductionSetPlanner.Plan(request);
+        Assert.Equal(new[] { "mime-boundary" }, EnabledWorkItemTypes(ChaosEngineBuilder.BuildForProductionEmail(request, plans)!).OrderBy(type => type, StringComparer.Ordinal));
+        Assert.Equal(new[] { "tiff-strip-offset" }, EnabledWorkItemTypes(ChaosEngineBuilder.BuildForProductionTiff(request, plans)!).OrderBy(type => type, StringComparer.Ordinal));
     }
 
     [Fact]

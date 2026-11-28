@@ -8,6 +8,7 @@ import urllib.request
 
 DEFAULT_PROJECT = "dwojtaszek_zipper"
 BLOCKING_SEVERITIES = frozenset({"BLOCKER", "CRITICAL", "MAJOR"})
+OPEN_STATUSES = frozenset({"OPEN", "CONFIRMED", "REOPENED"})
 NON_CODE_METRICS = frozenset({"new_coverage", "coverage"})
 
 
@@ -33,23 +34,51 @@ def _summarize_gate(gate_payload: dict) -> tuple[str, list[dict], list[dict]]:
     return gate_status, failed_conditions, non_coverage
 
 
+def _open_sonar_issues(batch: list) -> list[dict]:
+    # An unreadable entry means the listing is incomplete, not clean; dropping
+    # it would let an OK gate mask a blocking issue.
+    if not all(isinstance(item, dict) for item in batch):
+        raise ValueError("Malformed issue entry in SonarCloud response")
+    # The server-side statuses filter is unreliable when pullRequest is set: it
+    # can omit real issues and return CLOSED ones, so status is filtered here.
+    return [item for item in batch if item.get("status", "OPEN") in OPEN_STATUSES]
+
+
+def _sonar_paging_complete(raw_fetched: int, total: object, batch_size: int, page_size: int) -> bool:
+    # `total` counts unfiltered issues, so pagination compares raw counts. An
+    # empty or short page before `total` is a truncated listing, not a clean pass.
+    if isinstance(total, int) and raw_fetched >= total:
+        return True
+    if batch_size < page_size:
+        if isinstance(total, int) and raw_fetched < total:
+            raise ValueError(f"Incomplete SonarCloud issue listing: got {raw_fetched} of {total} issues")
+        return True
+    return False
+
+
 def _fetch_all_issues(project: str, pr_number: int) -> list[dict]:
     issues: list[dict] = []
     page = 1
     page_size = 100
+    raw_fetched = 0
+    reported_total = None
     while True:
         payload = _fetch_json(
             f"https://sonarcloud.io/api/issues/search"
-            f"?componentKeys={project}&pullRequest={pr_number}&statuses=OPEN,CONFIRMED,REOPENED&ps={page_size}&p={page}"
+            f"?componentKeys={project}&pullRequest={pr_number}&ps={page_size}&p={page}"
         )
         batch = payload.get("issues")
         if not isinstance(batch, list):
             raise ValueError("Missing issues list in SonarCloud response")
-        issues.extend(item for item in batch if isinstance(item, dict))
-        total = payload.get("total")
-        if isinstance(total, int) and len(issues) >= total:
-            break
-        if len(batch) < page_size:
+        issues.extend(_open_sonar_issues(batch))
+        raw_fetched += len(batch)
+        # A later page may omit `total`; keep the last reported value so an
+        # empty page cannot turn a truncated listing into a clean pass.
+        if payload.get("total") is not None:
+            if not isinstance(payload["total"], int):
+                raise ValueError("Malformed total in SonarCloud response")
+            reported_total = payload["total"]
+        if _sonar_paging_complete(raw_fetched, reported_total, len(batch), page_size):
             break
         page += 1
     return issues

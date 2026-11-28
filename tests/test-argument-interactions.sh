@@ -176,8 +176,14 @@ assert_rejected "--chaos-scenario + --chaos-types" \
 
 # --- Chaos dependencies ---
 
-assert_rejected "--chaos-mode without --loadfile-only" \
+assert_rejected "--chaos-mode without --loadfile-only or native type" \
     --type pdf --count 5 --chaos-mode
+
+assert_rejected "--chaos-mode with cross-format scenario in Standard mode" \
+    --type eml --count 5 --chaos-mode --chaos-scenario cross-format-desync
+
+assert_rejected "--production-set + --chaos-mode without cross-format scenario or native type" \
+    --production-set --bates-prefix TEST --type pdf --count 5 --chaos-mode
 
 assert_rejected "--chaos-amount without --chaos-mode" \
     --loadfile-only --count 5 --chaos-amount "5%"
@@ -261,6 +267,18 @@ assert_accepted "valid standard --production-set" \
 
 assert_accepted "--loadfile-only + --chaos-mode + --chaos-amount" \
     --loadfile-only --count 5 --chaos-mode --chaos-amount "5%"
+
+assert_accepted "--chaos-mode + email" \
+    --type eml --count 5 --chaos-mode
+
+assert_accepted "--chaos-mode + EML/TIFF mix with combined chaos types" \
+    --types "eml:50,tiff:50" --count 5 --chaos-mode --chaos-types mime-boundary,tiff-strip-offset
+
+assert_accepted "--production-set + --chaos-mode + email" \
+    --production-set --count 5 --bates-prefix TEST --type eml --chaos-mode
+
+assert_accepted "--production-set + --chaos-mode + cross-format scenario" \
+    --production-set --count 5 --bates-prefix TEST --chaos-mode --chaos-scenario cross-format-desync
 
 assert_accepted "--production-set + --bates-prefix + --volume-size" \
     --production-set --count 5 --bates-prefix TEST --volume-size 100

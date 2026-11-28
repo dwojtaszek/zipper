@@ -219,7 +219,8 @@ REQ-092	unit	LoadFileEmitterTests.NoChaos_NoHeader_WritesRecordsOnly	LoadFileEmi
 REQ-092	unit	PostGenerationValidatorTests.Validate_InconsistentLineEnding_ReportsError	Post-generation validator verifies Load File line endings
 REQ-092	unit	ValidatorRunnerTests.ValidatorRunner_RunsCategory_LineEnding_ReportsExactFinding	ValidatorRunner reports line ending mismatch errors
 REQ-093	unit	CliPipelineTests.ValidateAndParseArguments_LoadfileOnly_WithStrictDelimiters_ShouldParseCorrectly	Strict-prefix delimiter arguments
-REQ-094	unit	ChaosModuleTests.TryBuild_ChaosModeWithoutLoadfileOnly_ReturnsFalse	--chaos-mode requires loadfile-only; all Load File formats supported
+REQ-094	unit	ChaosModuleTests.TryBuild_ChaosModeWithoutLoadfileOnlyOrNativeType_ReturnsFalse	--chaos-mode requires loadfile-only, a Production Set cross-format scenario, or email/TIFF generation
+REQ-094	unit	ChaosScenarioTests.IsGenerationChaosAllowed_MatchesReq094Scopes	Shared REQ-094 eligibility predicate truth table for CLI and runtime gates
 REQ-094	unit	LoadFileEmitterTests.Chaos_WithNoTargets_MatchesNoChaosOutput	LoadFileEmitter chaos pipeline integration
 REQ-094	unit	PostGenerationValidatorTests.Validate_ChaosMode_ReturnsEmptyResult	Post-generation validator skips structural errors in chaos mode
 REQ-095	unit	ChaosSamplerTests.ParseChaosAmount_Percentage_ReturnsCorrectCount	--chaos-amount N|N%

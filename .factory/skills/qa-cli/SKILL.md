@@ -107,7 +107,7 @@ Verify nonzero exit, a clear validation error (not an unhandled exception), and 
 
 1. **No `--help` flag.** Zipper prints usage when invoked without arguments; `--version` is the supported informational flag.
 2. **Production Set requires a Bates Prefix.** Always pass `--bates-prefix`; `--production-set` conflicts with `--loadfile-only`.
-3. **Chaos Engine constraints.** `--chaos-mode` is parameterless and requires `--loadfile-only`; `--chaos-amount` is a separate value.
+3. **Chaos Engine constraints.** `--chaos-mode` is parameterless and requires `--loadfile-only`, a Production Set cross-format scenario, or `eml`/`tiff` generation; `--chaos-amount` is a separate value.
 4. **DAT delimiters are control characters.** The default column delimiter is ASCII 20 and the quote delimiter is ASCII 254. Inspect bytes or parse with a delimiter-aware script rather than relying on visible text.
 5. **Target Archive size needs a count without source input.** `--target-zip-size` requires `--count` only when neither `--input-csv` nor `--directory-template` supplies Source Records. An impossible target is rejected. Compare achieved size with the scenario's committed tolerance.
 6. **Source inputs define paths and types, not content.** `FilePath` and `FileType` are required in the Source CSV. Source bytes must not be copied into generated Archives.

@@ -837,6 +837,225 @@ public class ChaosEngineBuilderTests
         Assert.Equal(3, engine!.Anomalies.Count);
     }
 
+    [Fact]
+    public void BuildForStandardNativeEngines_WithCombinedEmailAndTiffTypes_ApplyOnlyFamilyTypes()
+    {
+        var ratios = new[]
+        {
+            new FileTypeRatio { Type = "eml", Weight = 1 },
+            new FileTypeRatio { Type = "tiff", Weight = 1 },
+        };
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileCount = 8,
+                FileType = "eml",
+                FileTypeRatios = ratios,
+                FileTypePlan = new FileTypePlan(ratios, 8),
+            },
+            Chaos = new ChaosConfig { ChaosMode = true, ChaosAmount = "100%", ChaosTypes = "mime-boundary,tiff-strip-offset" },
+            Metadata = new MetadataConfig { Seed = 42 },
+        };
+        var emailEngine = ChaosEngineBuilder.BuildForStandardEmail(request);
+        var tiffEngine = ChaosEngineBuilder.BuildForStandardTiff(request);
+        Assert.NotNull(emailEngine);
+        Assert.NotNull(tiffEngine);
+        AssertEnabledWorkItemTypes(emailEngine, "mime-boundary");
+        AssertEnabledWorkItemTypes(tiffEngine, "tiff-strip-offset");
+
+        var emlCount = Enumerable.Range(1, (int)request.Output.FileCount).Count(i => request.Output.ResolveFileType(i) == "eml");
+        Assert.InRange(emlCount, 1, (int)request.Output.FileCount - 1);
+
+        for (long index = 1; index <= request.Output.FileCount; index++)
+        {
+            string fileType = request.Output.ResolveFileType(index);
+            var input = fileType == "eml" ? MultipartEmlContent() : TiffContent();
+            var item = new FileWorkItem { Index = index, FileType = fileType, FileName = $"{index:D8}.{fileType}" };
+
+            var afterEmail = emailEngine!.ApplyEmailChaos(item, input);
+            var afterTiff = tiffEngine!.ApplyTiffChaos(item, afterEmail);
+
+            if (fileType == "eml")
+            {
+                Assert.False(input.Content.AsSpan().SequenceEqual(afterEmail.Content));
+                Assert.Same(afterEmail, afterTiff);
+            }
+            else
+            {
+                Assert.Same(input, afterEmail);
+                Assert.False(afterEmail.Content.AsSpan().SequenceEqual(afterTiff.Content));
+            }
+        }
+
+        Assert.Equal(emlCount, emailEngine.Anomalies.Count);
+        Assert.Equal((int)request.Output.FileCount - emlCount, tiffEngine.Anomalies.Count);
+        Assert.All(emailEngine.Anomalies, anomaly => Assert.Equal("mime-boundary", anomaly.ErrorType));
+        Assert.All(tiffEngine.Anomalies, anomaly => Assert.Equal("tiff-strip-offset", anomaly.ErrorType));
+    }
+
+    [Fact]
+    public void BuildForProductionNativeEngines_WithCombinedEmailAndTiffTypes_ApplyOnlyFamilyTypes()
+    {
+        var ratios = new[]
+        {
+            new FileTypeRatio { Type = "eml", Weight = 1 },
+            new FileTypeRatio { Type = "tiff", Weight = 1 },
+        };
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileCount = 8,
+                FileType = "eml",
+                FileTypeRatios = ratios,
+                FileTypePlan = new FileTypePlan(ratios, 8),
+            },
+            Production = new ProductionConfig { ProductionSet = true },
+            Bates = new BatesNumberConfig { Prefix = "PLAN", Start = 1, Digits = 8 },
+            Chaos = new ChaosConfig { ChaosMode = true, ChaosAmount = "100%", ChaosTypes = "mime-boundary,tiff-strip-offset" },
+            Metadata = new MetadataConfig { Seed = 42 },
+        };
+        var plans = ProductionSetPlanner.Plan(request);
+        var emailEngine = ChaosEngineBuilder.BuildForProductionEmail(request, plans);
+        var tiffEngine = ChaosEngineBuilder.BuildForProductionTiff(request, plans);
+        Assert.NotNull(emailEngine);
+        Assert.NotNull(tiffEngine);
+        AssertEnabledWorkItemTypes(emailEngine, "mime-boundary");
+        AssertEnabledWorkItemTypes(tiffEngine, "tiff-strip-offset");
+
+        var emlCount = plans.Count(plan => plan.FileType == "eml");
+        Assert.InRange(emlCount, 1, plans.Count - 1);
+
+        foreach (var plan in plans)
+        {
+            var input = plan.FileType == "eml" ? MultipartEmlContent() : TiffContent();
+            // Production plans are 0-based; work item indexes are 1-based.
+            var item = new FileWorkItem { Index = plan.Index + 1, FileType = plan.FileType, FileName = $"{plan.Index + 1:D8}.{plan.FileType}" };
+
+            var afterEmail = emailEngine!.ApplyEmailChaos(item, input);
+            var afterTiff = tiffEngine!.ApplyTiffChaos(item, afterEmail);
+
+            if (plan.FileType == "eml")
+            {
+                Assert.False(input.Content.AsSpan().SequenceEqual(afterEmail.Content));
+                Assert.Same(afterEmail, afterTiff);
+            }
+            else
+            {
+                Assert.Same(input, afterEmail);
+                Assert.False(afterEmail.Content.AsSpan().SequenceEqual(afterTiff.Content));
+            }
+        }
+
+        Assert.Equal(emlCount, emailEngine.Anomalies.Count);
+        Assert.Equal(plans.Count - emlCount, tiffEngine.Anomalies.Count);
+        Assert.All(emailEngine.Anomalies, anomaly => Assert.Equal("mime-boundary", anomaly.ErrorType));
+        Assert.All(tiffEngine.Anomalies, anomaly => Assert.Equal("tiff-strip-offset", anomaly.ErrorType));
+    }
+
+    [Fact]
+    public void BuildForStandardNativeEngines_WithSourceRecordsAndCombinedTypes_ApplyOnlyFamilyTypes()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileCount = 2,
+                FileType = "eml",
+                SourceFileTypes = new[] { "eml", "tiff" },
+            },
+            SourceRecords = new List<SourceRecord>
+            {
+                new() { RelativePath = "a.eml", FileType = "eml" },
+                new() { RelativePath = "b.tiff", FileType = "tiff" },
+            },
+            Chaos = new ChaosConfig
+            {
+                ChaosMode = true,
+                ChaosAmount = "100%",
+                ChaosTypes = "mime-boundary,tiff-strip-offset",
+            },
+            Metadata = new MetadataConfig { Seed = 42 },
+        };
+
+        var emailEngine = ChaosEngineBuilder.BuildForStandardEmail(request);
+        var tiffEngine = ChaosEngineBuilder.BuildForStandardTiff(request);
+        Assert.NotNull(emailEngine);
+        Assert.NotNull(tiffEngine);
+        AssertEnabledWorkItemTypes(emailEngine, "mime-boundary");
+        AssertEnabledWorkItemTypes(tiffEngine, "tiff-strip-offset");
+
+        var emlInput = MultipartEmlContent();
+        var emlResult = emailEngine.ApplyEmailChaos(
+            new FileWorkItem { Index = 1, FileType = "eml", FileName = "00000001.eml" }, emlInput);
+        Assert.False(emlInput.Content.AsSpan().SequenceEqual(emlResult.Content));
+        Assert.Equal("mime-boundary", Assert.Single(emailEngine.Anomalies).ErrorType);
+
+        var tiffInput = TiffContent();
+        var tiffResult = tiffEngine.ApplyTiffChaos(
+            new FileWorkItem { Index = 2, FileType = "tiff", FileName = "00000002.tiff" }, tiffInput);
+        Assert.False(tiffInput.Content.AsSpan().SequenceEqual(tiffResult.Content));
+        Assert.Equal("tiff-strip-offset", Assert.Single(tiffEngine.Anomalies).ErrorType);
+    }
+
+    [Fact]
+    public void BuildForProductionNativeEngines_WithSourceRecordsAndCombinedTypes_ApplyOnlyFamilyTypes()
+    {
+        var request = new FileGenerationRequest
+        {
+            Output = new OutputConfig
+            {
+                FileCount = 2,
+                FileType = "eml",
+                SourceFileTypes = new[] { "eml", "tiff" },
+            },
+            SourceRecords = new List<SourceRecord>
+            {
+                new() { RelativePath = "a.eml", FileType = "eml" },
+                new() { RelativePath = "b.tiff", FileType = "tiff" },
+            },
+            Production = new ProductionConfig { ProductionSet = true },
+            Bates = new BatesNumberConfig { Prefix = "SRC", Start = 1, Digits = 8 },
+            Chaos = new ChaosConfig
+            {
+                ChaosMode = true,
+                ChaosAmount = "100%",
+                ChaosTypes = "mime-boundary,tiff-strip-offset",
+            },
+            Metadata = new MetadataConfig { Seed = 42 },
+        };
+        var plans = ProductionSetPlanner.Plan(request);
+
+        var emailEngine = ChaosEngineBuilder.BuildForProductionEmail(request, plans);
+        var tiffEngine = ChaosEngineBuilder.BuildForProductionTiff(request, plans);
+        Assert.NotNull(emailEngine);
+        Assert.NotNull(tiffEngine);
+        AssertEnabledWorkItemTypes(emailEngine, "mime-boundary");
+        AssertEnabledWorkItemTypes(tiffEngine, "tiff-strip-offset");
+
+        var emlPlan = Assert.Single(plans, plan => plan.FileType == "eml");
+        var tiffPlan = Assert.Single(plans, plan => plan.FileType == "tiff");
+
+        var emlInput = MultipartEmlContent();
+        var emlResult = emailEngine.ApplyEmailChaos(
+            new FileWorkItem { Index = emlPlan.Index + 1, FileType = "eml", FileName = "00000001.eml" }, emlInput);
+        Assert.False(emlInput.Content.AsSpan().SequenceEqual(emlResult.Content));
+        Assert.Equal("mime-boundary", Assert.Single(emailEngine.Anomalies).ErrorType);
+
+        var tiffInput = TiffContent();
+        var tiffResult = tiffEngine.ApplyTiffChaos(
+            new FileWorkItem { Index = tiffPlan.Index + 1, FileType = "tiff", FileName = "00000002.tiff" }, tiffInput);
+        Assert.False(tiffInput.Content.AsSpan().SequenceEqual(tiffResult.Content));
+        Assert.Equal("tiff-strip-offset", Assert.Single(tiffEngine.Anomalies).ErrorType);
+    }
+
+    private static void AssertEnabledWorkItemTypes(ChaosEngine engine, params string[] expected)
+    {
+        var enabledTypes = Assert.IsAssignableFrom<IEnumerable<string>>(GetPrivateField(engine, "enabledTypes"));
+        Assert.Equal(expected.OrderBy(type => type), enabledTypes.OrderBy(type => type));
+    }
+
     private static GeneratedFileContent TiffContent() => new()
     {
         Content = PlaceholderFiles.GetContent("tiff"),
@@ -852,5 +1071,22 @@ public class ChaosEngineBuilderTests
             "Content-Type: text/plain; charset=us-ascii\r\n" +
             "\r\n" +
             "Body\r\n"),
+    };
+
+    // mime-boundary rewrites an existing multipart delimiter, so this fixture gives it a real boundary to mutate.
+    private static GeneratedFileContent MultipartEmlContent() => new()
+    {
+        Content = Encoding.ASCII.GetBytes(
+            "From: sender@example.com\r\n" +
+            "To: recipient@example.com\r\n" +
+            "Subject: Hello\r\n" +
+            "MIME-Version: 1.0\r\n" +
+            "Content-Type: multipart/mixed; boundary=\"----=_Boundary\"\r\n" +
+            "\r\n" +
+            "------=_Boundary\r\n" +
+            "Content-Type: text/plain; charset=us-ascii\r\n" +
+            "\r\n" +
+            "Body\r\n" +
+            "------=_Boundary--\r\n"),
     };
 }

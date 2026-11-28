@@ -620,8 +620,8 @@ Written by `--compare-production-manifests` to `--comparison-output`. Records co
 | `--loadfile-only` + `--target-zip-size` | **Conflict**: cannot use both |
 | `--loadfile-only` + `--include-load-file` | **Conflict**: cannot use both |
 | `--col-delim`, `--quote-delim`, etc. | Use `ascii:N` or `char:C` prefix (works in all modes) |
-| `--chaos-mode` | Requires `--loadfile-only` or `--production-set` |
-| `--chaos-mode` + `--production-set` | Permitted with cross-format scenarios (`cross-format-desync`, `broken-families`); otherwise requires `--loadfile-only` |
+| `--chaos-mode` | Requires `--loadfile-only`, a cross-format scenario with `--production-set`, or `eml` / `tiff` generation, including in a File Type Mix |
+| `--chaos-mode` + `--production-set` | Permitted with cross-format scenarios (`cross-format-desync`, `broken-families`) or when generating `eml` (email anomalies) or `tiff` (TIFF anomalies) |
 | `--chaos-amount`, `--chaos-types` | Require `--chaos-mode` |
 | `--chaos-scenario` | Requires `--chaos-mode`; conflicts with `--chaos-types` |
 | `--chaos-scenario` + format | Some scenarios require specific `--loadfile-format` (e.g., `broken-boundaries` requires `opt`, `realistic-import-failures` requires `dat`, `csv-escaping-failures` requires `csv`, `concordance-import-failures` requires `concordance`, `edrm-xml-structural-failures` requires `edrm-xml`, while `cross-format-desync` and `broken-families` require `--load-file-formats dat,opt` or `--production-set`) |

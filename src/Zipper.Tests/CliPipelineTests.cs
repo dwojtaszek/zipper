@@ -538,7 +538,53 @@ public class CliPipelineTests : WorkingDirectoryTestBase
         var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
 
         Assert.Null(result);
-        Assert.Contains("Error: --chaos-mode requires --loadfile-only, --production-set, email (.eml), or TIFF (.tiff) generation.", stderr, StringComparison.Ordinal);
+        Assert.Contains("Error: --chaos-mode requires --loadfile-only, a cross-format chaos scenario with --production-set, email (.eml), or TIFF (.tiff) generation.", stderr, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("structured-import-failures")]
+    public void ValidateAndParseArguments_ChaosModeProductionSetWithoutCrossFormat_ShouldReturnNull(string? scenario)
+    {
+        var args = new List<string> { "--production-set", "--bates-prefix", "CLIENT001", "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--chaos-mode" };
+        if (scenario is not null)
+        {
+            args.Add("--chaos-scenario");
+            args.Add(scenario);
+        }
+
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args.ToArray()));
+
+        Assert.Null(result);
+        Assert.Contains("Error: --chaos-mode with --production-set requires a cross-format chaos scenario ('cross-format-desync' or 'broken-families') or email (.eml) or TIFF (.tiff) generation.", stderr, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("cross-format-desync")]
+    [InlineData("broken-families")]
+    public void Build_StandardPdfWithCrossFormatScenario_ReturnsNull(string scenario)
+    {
+        var args = new[] { "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--chaos-mode", "--chaos-scenario", scenario };
+
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
+
+        Assert.Null(result);
+        Assert.Contains("Error: --chaos-mode requires --loadfile-only, a cross-format chaos scenario with --production-set, email (.eml), or TIFF (.tiff) generation.", stderr, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("cross-format-desync")]
+    [InlineData("broken-families")]
+    [InlineData("Cross-Format-Desync")]
+    public void Build_ProductionSetPdfWithCrossFormatScenario_ReturnsChaosConfig(string scenario)
+    {
+        var args = new[] { "--production-set", "--bates-prefix", "CLIENT001", "--type", "pdf", "--count", "10", "--output-path", this.tempDir, "--chaos-mode", "--chaos-scenario", scenario };
+
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
+
+        Assert.NotNull(result);
+        Assert.Equal(scenario, result!.Chaos.ChaosScenario);
+        Assert.DoesNotContain("Error:", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -553,6 +599,18 @@ public class CliPipelineTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void Build_StandardEmailWithChaosMode_ReturnsChaosConfig()
+    {
+        var args = new[] { "--type", "eml", "--count", "10", "--output-path", this.tempDir, "--chaos-mode" };
+
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
+
+        Assert.NotNull(result);
+        Assert.True(result!.Chaos.ChaosMode);
+        Assert.DoesNotContain("Error:", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Build_StandardEmailWithEmailChaosTypes_ReturnsChaosConfig()
     {
         var args = new[] { "--type", "eml", "--count", "10", "--output-path", this.tempDir, "--chaos-mode", "--chaos-types", "mime-boundary,rfc822-depth" };
@@ -562,6 +620,45 @@ public class CliPipelineTests : WorkingDirectoryTestBase
         Assert.NotNull(result);
         Assert.True(result!.Chaos.ChaosMode);
         Assert.Equal("mime-boundary,rf822-depth", result.Chaos.ChaosTypes);
+    }
+
+    [Fact]
+    public void Build_StandardTiffWithTiffChaosTypes_ReturnsChaosConfig()
+    {
+        var args = new[] { "--type", "tiff", "--count", "10", "--output-path", this.tempDir, "--chaos-mode", "--chaos-types", "tiff-truncated-ifd" };
+
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
+
+        Assert.NotNull(result);
+        Assert.True(result!.Chaos.ChaosMode);
+        Assert.Equal("tiff-truncated-ifd", result.Chaos.ChaosTypes);
+        Assert.DoesNotContain("Error:", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_StandardFileTypeMixWithEmailChaos_ReturnsChaosConfig()
+    {
+        var args = new[] { "--types", "pdf:1,eml:1", "--count", "10", "--output-path", this.tempDir, "--chaos-mode", "--chaos-types", "header-fold" };
+
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
+
+        Assert.NotNull(result);
+        Assert.True(result!.Chaos.ChaosMode);
+        Assert.Equal("header-fold", result.Chaos.ChaosTypes);
+        Assert.DoesNotContain("Error:", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_StandardEmailAndTiffMixWithCombinedNativeChaosTypes_ReturnsChaosConfig()
+    {
+        var args = new[] { "--types", "eml:1,tiff:1", "--count", "10", "--output-path", this.tempDir, "--chaos-mode", "--chaos-types", "mime-boundary,tiff-strip-offset" };
+
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
+
+        Assert.NotNull(result);
+        Assert.True(result!.Chaos.ChaosMode);
+        Assert.Equal("mime-boundary,tiff-strip-offset", result.Chaos.ChaosTypes);
+        Assert.DoesNotContain("Error:", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -607,6 +704,42 @@ public class CliPipelineTests : WorkingDirectoryTestBase
         Assert.NotNull(result);
         Assert.True(result!.Chaos.ChaosMode);
         Assert.Equal("cross-format-desync", result.Chaos.ChaosScenario);
+        Assert.DoesNotContain("Error:", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_ProductionSetEmailWithChaosMode_ReturnsChaosConfig()
+    {
+        var args = new[] { "--production-set", "--bates-prefix", "CLIENT001", "--type", "eml", "--count", "10", "--output-path", this.tempDir, "--chaos-mode" };
+
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
+
+        Assert.NotNull(result);
+        Assert.True(result!.Chaos.ChaosMode);
+        Assert.DoesNotContain("Error:", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_ProductionSetTiffWithChaosMode_ReturnsChaosConfig()
+    {
+        var args = new[] { "--production-set", "--bates-prefix", "CLIENT001", "--type", "tiff", "--count", "10", "--output-path", this.tempDir, "--chaos-mode" };
+
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
+
+        Assert.NotNull(result);
+        Assert.True(result!.Chaos.ChaosMode);
+        Assert.DoesNotContain("Error:", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_ProductionSetFileTypeMixWithEmailChaos_ReturnsChaosConfig()
+    {
+        var args = new[] { "--production-set", "--bates-prefix", "CLIENT001", "--types", "pdf:1,eml:1", "--count", "10", "--output-path", this.tempDir, "--chaos-mode" };
+
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
+
+        Assert.NotNull(result);
+        Assert.True(result!.Chaos.ChaosMode);
         Assert.DoesNotContain("Error:", stderr, StringComparison.Ordinal);
     }
 

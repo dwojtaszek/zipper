@@ -64,7 +64,7 @@ graph TD
     LOG -->|"ordinary or coordinated DAT/OPT"| LFO
 
     ProductionSetMode --> PSG["ProductionSetGenerator (thin facade)"]
-    PSG --> PSO["ProductionSetOrchestrator"]
+    PSG --> PSO["ProductionSetOrchestrator<br/>(cross-format or email/TIFF chaos)"]
     PSO --> PSP["ProductionSetPlanner (no I/O)"]
     PSP --> Tree["Directory Tree (NATIVES/IMAGES/DATA/TEXT; REDACTED when redacted; ORIGINALS in source-path-mode originals)"]
     PSO --> LFO

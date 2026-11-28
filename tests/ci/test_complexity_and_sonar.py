@@ -314,6 +314,34 @@ class CheckSonarTests(unittest.TestCase):
             self.assertEqual(code, 1)
             self.assertEqual(len(summary["blocking_issues"]), 1)
 
+    def test_closed_issues_are_ignored(self):
+        gate = {"projectStatus": {"status": "OK", "conditions": []}}
+        issues = {
+            "issues": [
+                {
+                    "severity": "BLOCKER",
+                    "status": "CLOSED",
+                    "resolution": "FIXED",
+                    "rule": "csharp:S2699",
+                    "line": 124,
+                    "component": "dwojtaszek_zipper:src/Zipper.Tests/ModeAdapterTests.cs",
+                    "message": "closed finding",
+                },
+                {
+                    "severity": "CRITICAL",
+                    "status": "REOPENED",
+                    "rule": "csharp:S3776",
+                    "line": 142,
+                    "component": "dwojtaszek_zipper:src/Zipper.Tests/ModeAdapterTests.cs",
+                    "message": "open finding",
+                },
+            ]
+        }
+        with patch.object(self.mod, "_fetch_json", side_effect=[gate, issues]):
+            code, summary = self.mod.inspect_pr(1444)
+            self.assertEqual(code, 1)
+            self.assertEqual([issue["message"] for issue in summary["blocking_issues"]], ["open finding"])
+
     def test_non_ok_gate_status_none_fails(self):
         gate = {"projectStatus": {"status": "NONE", "conditions": []}}
         with patch.object(self.mod, "_fetch_json", side_effect=[gate, {"issues": []}]):
@@ -353,11 +381,73 @@ class CheckSonarTests(unittest.TestCase):
         gate = {"projectStatus": {"status": "OK", "conditions": []}}
         page1 = {"total": 101, "issues": [{"severity": "MINOR", "rule": "r1"} for _ in range(100)]}
         page2 = {"total": 101, "issues": [{"severity": "MAJOR", "rule": "r2", "component": "p:f.py", "line": 5, "message": "fix"}]}
-        with patch.object(self.mod, "_fetch_json", side_effect=[gate, page1, page2]):
+        with patch.object(self.mod, "_fetch_json", side_effect=[gate, page1, page2]) as mock_get:
             code, summary = self.mod.inspect_pr(1444)
             self.assertEqual(code, 1)
             self.assertEqual(len(summary["blocking_issues"]), 1)
             self.assertEqual(len(summary["advisory_issues"]), 100)
+            # The server-side statuses filter drops real issues on the pullRequest path.
+            self.assertNotIn("statuses=", mock_get.call_args_list[1].args[0])
+
+    def test_closed_issue_on_a_full_page_does_not_request_another_page(self):
+        gate = {"projectStatus": {"status": "OK", "conditions": []}}
+        page1 = {
+            "total": 100,
+            "issues": [{"severity": "MINOR", "rule": "r1"} for _ in range(99)]
+            + [{"severity": "BLOCKER", "status": "CLOSED", "rule": "r2"}],
+        }
+        # `total` counts the CLOSED issue too, so page one already holds every result.
+        with patch.object(self.mod, "_fetch_json", side_effect=[gate, page1]):
+            code, summary = self.mod.inspect_pr(1444)
+            self.assertEqual(code, 0)
+            self.assertEqual(len(summary["advisory_issues"]), 99)
+
+    def test_malformed_issue_entry_is_environmental(self):
+        gate = {"projectStatus": {"status": "OK", "conditions": []}}
+        with (
+            patch.object(self.mod, "_fetch_json", side_effect=[gate, {"issues": [None]}]),
+            patch.object(sys, "argv", ["check-sonar.py", "1444"]),
+            patch("sys.stderr", new_callable=io.StringIO) as err,
+        ):
+            self.assertEqual(self.mod.main(), 2)
+        self.assertIn("Malformed issue entry", err.getvalue())
+
+    def test_retains_total_when_later_page_omits_it(self):
+        gate = {"projectStatus": {"status": "OK", "conditions": []}}
+        page1 = {"total": 101, "issues": [{"severity": "MINOR", "rule": "r1"} for _ in range(100)]}
+        page2 = {"issues": []}
+        with (
+            patch.object(self.mod, "_fetch_json", side_effect=[gate, page1, page2]),
+            patch.object(sys, "argv", ["check-sonar.py", "1444"]),
+            patch("sys.stderr", new_callable=io.StringIO) as err,
+        ):
+            self.assertEqual(self.mod.main(), 2)
+        self.assertIn("Incomplete SonarCloud issue listing", err.getvalue())
+
+    def test_empty_later_page_with_unmet_total_is_environmental(self):
+        gate = {"projectStatus": {"status": "OK", "conditions": []}}
+        page1 = {"total": 102, "issues": [{"severity": "MINOR", "rule": "r1"} for _ in range(100)]}
+        page2 = {"total": 102, "issues": []}
+        with (
+            patch.object(self.mod, "_fetch_json", side_effect=[gate, page1, page2]) as mock_get,
+            patch.object(sys, "argv", ["check-sonar.py", "1444"]),
+            patch("sys.stderr", new_callable=io.StringIO) as err,
+        ):
+            self.assertEqual(self.mod.main(), 2)
+        self.assertEqual(mock_get.call_count, 3)
+        self.assertIn("Error querying SonarCloud", err.getvalue())
+        self.assertIn("Incomplete SonarCloud issue listing", err.getvalue())
+
+    def test_non_integer_total_is_environmental(self):
+        gate = {"projectStatus": {"status": "OK", "conditions": []}}
+        page1 = {"total": "2", "issues": []}
+        with (
+            patch.object(self.mod, "_fetch_json", side_effect=[gate, page1]),
+            patch.object(sys, "argv", ["check-sonar.py", "1444"]),
+            patch("sys.stderr", new_callable=io.StringIO) as err,
+        ):
+            self.assertEqual(self.mod.main(), 2)
+        self.assertIn("Malformed total", err.getvalue())
 
 
 if __name__ == "__main__":

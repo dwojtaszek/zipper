@@ -707,7 +707,7 @@ public class ZipArchiveServiceTests : TempDirectoryTestBase
     }
 
     [Fact]
-    public async Task CreateArchiveAsync_ChaosModeEnabled_DoesNotApplyChaos()
+    public async Task CreateArchiveAsync_DatColumnChaosOnStandardArchive_DoesNotMutateDatLines()
     {
         // Arrange
         var tempDir = Path.Combine(TempDir, Guid.NewGuid().ToString());
