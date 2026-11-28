@@ -412,6 +412,18 @@ class CheckSonarTests(unittest.TestCase):
             self.assertEqual(self.mod.main(), 2)
         self.assertIn("Malformed issue entry", err.getvalue())
 
+    def test_retains_total_when_later_page_omits_it(self):
+        gate = {"projectStatus": {"status": "OK", "conditions": []}}
+        page1 = {"total": 101, "issues": [{"severity": "MINOR", "rule": "r1"} for _ in range(100)]}
+        page2 = {"issues": []}
+        with (
+            patch.object(self.mod, "_fetch_json", side_effect=[gate, page1, page2]),
+            patch.object(sys, "argv", ["check-sonar.py", "1444"]),
+            patch("sys.stderr", new_callable=io.StringIO) as err,
+        ):
+            self.assertEqual(self.mod.main(), 2)
+        self.assertIn("Incomplete SonarCloud issue listing", err.getvalue())
+
     def test_empty_later_page_with_unmet_total_is_environmental(self):
         gate = {"projectStatus": {"status": "OK", "conditions": []}}
         page1 = {"total": 2, "issues": []}

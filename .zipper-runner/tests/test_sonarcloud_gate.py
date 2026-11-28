@@ -202,6 +202,23 @@ class SonarCloudGateTests(unittest.TestCase):
         self.assertTrue(result.ok)
         self.assertFalse(result.environmental)
 
+    def test_retains_total_when_later_page_omits_it(self):
+        with patch.object(
+            runner,
+            "_sonarcloud_get_json",
+            side_effect=[
+                {"issues": [{"severity": "MINOR", "rule": "r1"} for _ in range(50)], "total": 51},
+                {"issues": []},
+                {"projectStatus": {"status": "OK", "conditions": []}},
+            ],
+        ) as mock_get:
+            result = runner._check_sonarcloud_pr_gate(1438)
+
+        self.assertFalse(result.ok)
+        self.assertTrue(result.environmental)
+        self.assertIn("Incomplete SonarCloud issue listing", result.detail)
+        self.assertEqual(mock_get.call_count, 2)
+
     def test_malformed_later_issue_page_is_environmental(self):
         for bad_page in ({"unexpected": []}, {"issues": "nope", "total": 2}, {"issues": [], "total": "2"}):
             with self.subTest(bad_page=bad_page), patch.object(

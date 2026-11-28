@@ -633,3 +633,11 @@
 - **telemetry**: host=factory mode=local specialists=0 bundle=~2800c
 - **lessons**: verify a questioned alias against the canonicalizer itself; a TIFF type is unaffected by an email-only alias map
 - **suppressions**: refuted TIFF alias finding — no code change needed
+
+### 2026-11-28 opencode:local:issue-1486-retain-sonar-total
+
+- **findings**: 2 local CodeRabbit major, both valid — a later page without `total` could make an incomplete Sonar listing look clean in both `check-sonar.py` and the runner gate
+- **outcome**: retain the last reported total across pages; added two-page regressions where page 1 advertises one more issue than page 2 serves
+- **telemetry**: host=opencode mode=local specialists=0 bundle=~2300c
+- **lessons**: pagination state must persist across pages; a missing field on a later response does not reset an earlier authoritative total
+- **suppressions**: none

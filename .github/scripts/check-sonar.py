@@ -61,6 +61,7 @@ def _fetch_all_issues(project: str, pr_number: int) -> list[dict]:
     page = 1
     page_size = 100
     raw_fetched = 0
+    reported_total = None
     while True:
         payload = _fetch_json(
             f"https://sonarcloud.io/api/issues/search"
@@ -71,7 +72,11 @@ def _fetch_all_issues(project: str, pr_number: int) -> list[dict]:
             raise ValueError("Missing issues list in SonarCloud response")
         issues.extend(_open_sonar_issues(batch))
         raw_fetched += len(batch)
-        if _sonar_paging_complete(raw_fetched, payload.get("total"), len(batch), page_size):
+        # A later page may omit `total`; keep the last reported value so an
+        # empty page cannot turn a truncated listing into a clean pass.
+        if payload.get("total") is not None:
+            reported_total = payload["total"]
+        if _sonar_paging_complete(raw_fetched, reported_total, len(batch), page_size):
             break
         page += 1
     return issues

@@ -2851,12 +2851,17 @@ def _sonarcloud_paging_done(issues: list, batch: list, total: int | None, pr_num
 def _fetch_sonarcloud_issues(pr_number: int, issues_url: str) -> tuple[list[dict], ReviewGate | None]:
     issues: list[dict] = []
     page = 1
+    reported_total = None
     while True:
         batch, total, failure = _sonarcloud_page_payload(pr_number, _sonarcloud_get_json(f"{issues_url}&p={page}"))
         if failure is not None:
             return [], failure
         issues.extend(batch)
-        done, failure = _sonarcloud_paging_done(issues, batch, total, pr_number)
+        # A later page may omit `total`; keep the last reported value so an
+        # empty page cannot turn a truncated listing into a clean verdict.
+        if total is not None:
+            reported_total = total
+        done, failure = _sonarcloud_paging_done(issues, batch, reported_total, pr_number)
         if failure is not None:
             return [], failure
         if done:
