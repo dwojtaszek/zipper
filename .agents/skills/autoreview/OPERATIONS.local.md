@@ -441,3 +441,11 @@
 - **telemetry**: host=droid mode=local specialists=5 bundle=43293 c
 - **lessons**: adversarial pass catches README/Requirements/traceability drift that correctness treats as INFO
 - **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-coderabbit-fix
+
+- **findings**: 0 (fast pass)
+- **outcome**: clean review — qualified native Email/TIFF chaos note and asserted cross-format exception
+- **telemetry**: host=opencode mode=local specialists=1 bundle=2157c
+- **lessons**: none
+- **suppressions**: none

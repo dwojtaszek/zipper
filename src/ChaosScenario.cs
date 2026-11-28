@@ -188,7 +188,7 @@ internal static class ChaosScenarios
         Console.WriteLine();
         Console.WriteLine("Notes:");
         Console.WriteLine("  - --chaos-scenario requires --chaos-mode; single-format scenarios require --loadfile-only, while cross-format scenarios also support --production-set");
-        Console.WriteLine("  - Email and TIFF runs apply --chaos-types to their native files instead of Load File lines");
+        Console.WriteLine("  - In Standard and Production Set native runs, Email and TIFF chaos applies --chaos-types to native files instead of Load File lines; Production Set cross-format scenarios apply chaos to Load File lines");
         Console.WriteLine("  - --chaos-scenario conflicts with --chaos-types (use one or the other)");
         Console.WriteLine("  - --chaos-amount overrides the scenario's default amount");
         Console.WriteLine("  - 'full-chaos' enables all types for the selected format");

@@ -347,7 +347,8 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
         Assert.Contains("single-format scenarios require --loadfile-only", stdout, StringComparison.Ordinal);
         Assert.Contains("cross-format scenarios also support --production-set", stdout, StringComparison.Ordinal);
         Assert.Contains("a File Type mix containing eml or tiff", stdout, StringComparison.Ordinal);
-        Assert.Contains("Email and TIFF runs apply --chaos-types to their native files", stdout, StringComparison.Ordinal);
+        Assert.Contains("In Standard and Production Set native runs, Email and TIFF chaos applies --chaos-types to native files", stdout, StringComparison.Ordinal);
+        Assert.Contains("Production Set cross-format scenarios apply chaos to Load File lines", stdout, StringComparison.Ordinal);
     }
 
     [Fact]
