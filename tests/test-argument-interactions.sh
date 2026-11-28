@@ -180,7 +180,7 @@ assert_rejected "--chaos-mode without --loadfile-only or native type" \
     --type pdf --count 5 --chaos-mode
 
 assert_rejected "--chaos-mode with cross-format scenario in Standard mode" \
-    --type pdf --count 5 --chaos-mode --chaos-scenario cross-format-desync
+    --type eml --count 5 --chaos-mode --chaos-scenario cross-format-desync
 
 assert_rejected "--chaos-amount without --chaos-mode" \
     --loadfile-only --count 5 --chaos-amount "5%"
@@ -264,6 +264,9 @@ assert_accepted "valid standard --production-set" \
 
 assert_accepted "--loadfile-only + --chaos-mode + --chaos-amount" \
     --loadfile-only --count 5 --chaos-mode --chaos-amount "5%"
+
+assert_accepted "--chaos-mode + email" \
+    --type eml --count 5 --chaos-mode
 
 assert_accepted "--chaos-mode + EML/TIFF mix with combined chaos types" \
     --types "eml:50,tiff:50" --count 5 --chaos-mode --chaos-types mime-boundary,tiff-strip-offset

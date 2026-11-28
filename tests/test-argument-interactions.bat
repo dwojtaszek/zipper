@@ -16,7 +16,7 @@ call :assert_rejected "--loadfile-only + --target-zip-size" --loadfile-only --co
 call :assert_rejected "--production-set + --loadfile-only" --production-set --loadfile-only --count 5 --output-path ".\results\zi_test" --bates-prefix TEST
 call :assert_rejected "--chaos-scenario + --chaos-types" --loadfile-only --count 5 --output-path ".\results\zi_test" --chaos-mode --chaos-scenario full-chaos --chaos-types quotes
 call :assert_rejected "--chaos-mode without --loadfile-only or native type" --type pdf --count 5 --output-path ".\results\zi_test" --chaos-mode
-call :assert_rejected "--chaos-mode with cross-format scenario in Standard mode" --type pdf --count 5 --output-path ".\results\zi_test" --chaos-mode --chaos-scenario cross-format-desync
+call :assert_rejected "--chaos-mode with cross-format scenario in Standard mode" --type eml --count 5 --output-path ".\results\zi_test" --chaos-mode --chaos-scenario cross-format-desync
 call :assert_rejected "--chaos-amount without --chaos-mode" --loadfile-only --count 5 --output-path ".\results\zi_test" --chaos-amount "5%%"
 call :assert_rejected "--chaos-types without --chaos-mode" --loadfile-only --count 5 --output-path ".\results\zi_test" --chaos-types quotes
 call :assert_rejected "--chaos-scenario without --chaos-mode" --loadfile-only --count 5 --output-path ".\results\zi_test" --chaos-scenario full-chaos
@@ -36,6 +36,7 @@ call :assert_accepted "valid standard --loadfile-only" --loadfile-only --count 5
 call :assert_accepted "valid standard --loadfile-only with --col-delim" --loadfile-only --count 5 --output-path ".\results\zi_test" --col-delim "char:|"
 call :assert_accepted "valid standard --production-set" --production-set --count 5 --bates-prefix TEST --type pdf --output-path ".\results\zi_test"
 call :assert_accepted "--loadfile-only + --chaos-mode + --chaos-amount" --loadfile-only --count 5 --chaos-mode --chaos-amount "5%%" --output-path ".\results\zi_test"
+call :assert_accepted "--chaos-mode + email" --type eml --count 5 --chaos-mode --output-path ".\results\zi_test"
 call :assert_accepted "--chaos-mode + EML/TIFF mix with combined chaos types" --types "eml:50,tiff:50" --count 5 --chaos-mode --chaos-types mime-boundary,tiff-strip-offset --output-path ".\results\zi_test"
 call :assert_accepted "--production-set + --chaos-mode + email" --production-set --count 5 --bates-prefix TEST --type eml --chaos-mode --output-path ".\results\zi_test"
 call :assert_accepted "--production-set + --chaos-mode + cross-format scenario" --production-set --count 5 --bates-prefix TEST --chaos-mode --chaos-scenario cross-format-desync --output-path ".\results\zi_test"

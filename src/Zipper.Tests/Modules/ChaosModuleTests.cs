@@ -237,6 +237,16 @@ public class ChaosModuleTests
     }
 
     [Fact]
+    public void TryBuild_LoadfileOnlyEmailWithDatScenario_BuildsConfig()
+    {
+        var spec = new ChaosConfigSpec(Amount: null, Types: null, Scenario: "structured-import-failures") { Mode = true };
+
+        Assert.True(TryBuildWithValues(spec, out var config, hasEml: true));
+
+        Assert.Equal("structured-import-failures", config.ChaosScenario);
+    }
+
+    [Fact]
     public void TryBuild_OptEncodingTypeForOptFormat_BuildsConfig()
     {
         var spec = new ChaosConfigSpec(Amount: null, Types: "opt-encoding", Scenario: null) { Mode = true };
