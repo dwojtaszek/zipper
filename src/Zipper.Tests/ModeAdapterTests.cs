@@ -133,7 +133,8 @@ public class StandardModeTests
             }
         };
 
-        await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => mode.RunAsync(request, CancellationToken.None));
+        var (stdout, _) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => mode.RunAsync(request, CancellationToken.None));
+        Assert.Contains("Generation complete", stdout, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -151,7 +152,8 @@ public class StandardModeTests
             }
         };
 
-        await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => mode.RunAsync(request, CancellationToken.None));
+        var (stdout, _) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => mode.RunAsync(request, CancellationToken.None));
+        Assert.Contains("Generation complete", stdout, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -173,7 +175,8 @@ public class StandardModeTests
             }
         };
 
-        await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => mode.RunAsync(request, CancellationToken.None));
+        var (stdout, _) = await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => mode.RunAsync(request, CancellationToken.None));
+        Assert.Contains("Generation complete", stdout, StringComparison.Ordinal);
     }
 
     [Fact]

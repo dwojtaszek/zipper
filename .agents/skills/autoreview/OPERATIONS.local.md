@@ -449,3 +449,11 @@
 - **telemetry**: host=opencode mode=local specialists=1 bundle=2157c
 - **lessons**: none
 - **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-review-followups
+
+- **findings**: 0 (fast pass)
+- **outcome**: clean review — mixed native chaos family filtering covered; S2699 assertions added
+- **telemetry**: host=opencode mode=local specialists=1 bundle=7125c
+- **lessons**: CodeRabbit mixed-type question resolved by family-scoped filtering tests and CLI runs
+- **suppressions**: none
