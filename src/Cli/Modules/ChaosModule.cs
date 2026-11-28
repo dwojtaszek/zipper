@@ -162,6 +162,7 @@ public sealed class ChaosModule : CliModule
     private bool TryValidateNativeScenario(bool loadfileOnly, bool hasEml, bool hasTiff, bool productionSet)
     {
         // Same native-scenario rule as the generation layer, so CLI and runtime cannot drift.
+        // Native flags stay raw here; the shared predicate applies the Loadfile-Only exemption.
         if (ChaosScenarios.IsNativeScenarioAllowed(
                 scenario: this._scenario,
                 chaosMode: this._mode,

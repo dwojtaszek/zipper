@@ -521,3 +521,11 @@
 - **telemetry**: host=opencode mode=local specialists=0 bundle=~4500c
 - **lessons**: `IsNativeScenarioAllowed` takes raw `loadfileOnly`; moving boolean sequences out of `ValidateProductionSetAsync` clears Sonar cognitive-complexity threshold without behavior change
 - **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-coderabbit-round2
+
+- **findings**: 2 (CodeRabbit local; 1 question refuted by tests, 1 valid E2E isolation gap)
+- **outcome**: accepted — added loadfile-only Email regression; isolated Standard cross-format rejection with an accepted no-scenario Email run in both `.sh` and `.bat`
+- **telemetry**: host=opencode mode=local specialists=0 bundle=~5000c
+- **lessons**: cross-format rejection tests must start from a legal native run; mutation-smoke baseline test has a hardcoded 60s timeout, so run after a fresh pre-commit marker
+- **suppressions**: none

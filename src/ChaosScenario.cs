@@ -165,8 +165,10 @@ internal static class ChaosScenarios
         "Chaos mode requires --loadfile-only, --type eml, --type tiff, or a Production Set cross-format scenario.";
 
     /// <summary>
-    /// A named Chaos Scenario is rejected on a chaos run that generates native work items
-    /// (Emails or TIFFs, not a Loadfile-Only run) unless it is a Production Set cross-format run.
+    /// A named Chaos Scenario is rejected when a chaos run generates native work items
+    /// (Emails or TIFFs) outside a Loadfile-Only run, unless it is a Production Set
+    /// cross-format run. A Loadfile-Only run keeps any scenario, even when an Email or
+    /// TIFF File Type is present.
     /// </summary>
     internal static bool IsNativeScenarioAllowed(
         string? scenario,
