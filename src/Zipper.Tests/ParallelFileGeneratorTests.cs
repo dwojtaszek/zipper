@@ -825,7 +825,7 @@ public class ParallelFileGeneratorTests
     }
 
     [Fact]
-    public async Task GenerateFilesAsync_WithChaosModeAndNoLoadfileOnly_ThrowsInvalidOperationException()
+    public async Task GenerateFilesAsync_WithChaosModeAndNoEmailsTiffsOrLoadfileOnly_ThrowsInvalidOperationException()
     {
         var tempDir = Path.GetTempPath();
         var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
@@ -849,7 +849,10 @@ public class ParallelFileGeneratorTests
                 LoadfileOnly = false,
             };
 
-            await Assert.ThrowsAsync<InvalidOperationException>(() => generator.GenerateFilesAsync(request));
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => generator.GenerateFilesAsync(request));
+            Assert.Contains("--loadfile-only", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("--type eml", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("--type tiff", exception.Message, StringComparison.Ordinal);
         }
         finally
         {

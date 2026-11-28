@@ -82,7 +82,7 @@ public class StandardModeTests
     }
 
     [Fact]
-    public async Task RunAsync_WithChaosMode_ThrowsInvalidOperationException()
+    public async Task RunAsync_WithChaosModeAndNoEmailsOrTiffs_ThrowsInvalidOperationException()
     {
         var mode = new StandardMode((req, ct) => Task.FromResult(new FileGenerationResult()));
         var request = new FileGenerationRequest
@@ -93,6 +93,104 @@ public class StandardModeTests
             }
         };
 
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => mode.RunAsync(request, CancellationToken.None));
+        Assert.Contains("--loadfile-only", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("--type eml", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("--type tiff", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("pdf", "cross-format-desync")]
+    [InlineData("pdf", "broken-families")]
+    public async Task RunAsync_WithChaosModeAndCrossFormatScenarioWithoutLoadfileOnly_ThrowsInvalidOperationException(string fileType, string scenario)
+    {
+        var mode = new StandardMode((req, ct) => Task.FromResult(new FileGenerationResult()));
+        var request = new FileGenerationRequest
+        {
+            Output = new Config.OutputConfig { FileType = fileType },
+            Chaos = new Config.ChaosConfig
+            {
+                ChaosMode = true,
+                ChaosScenario = scenario,
+            }
+        };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => mode.RunAsync(request, CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData("eml")]
+    [InlineData("tiff")]
+    public async Task RunAsync_WithChaosModeAndEmailOrTiffGeneration_DoesNotThrow(string fileType)
+    {
+        var mode = new StandardMode((req, ct) => Task.FromResult(new FileGenerationResult()));
+        var request = new FileGenerationRequest
+        {
+            Output = new Config.OutputConfig { FileType = fileType },
+            Chaos = new Config.ChaosConfig
+            {
+                ChaosMode = true
+            }
+        };
+
+        await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => mode.RunAsync(request, CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData("eml")]
+    [InlineData("tiff")]
+    public async Task RunAsync_WithChaosModeAndNativeTypeInFileTypeMix_DoesNotThrow(string nativeType)
+    {
+        var mode = new StandardMode((req, ct) => Task.FromResult(new FileGenerationResult()));
+        var request = new FileGenerationRequest
+        {
+            Output = CreateMixedOutput(nativeType),
+            Chaos = new Config.ChaosConfig
+            {
+                ChaosMode = true
+            }
+        };
+
+        await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => mode.RunAsync(request, CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData("eml")]
+    [InlineData("tiff")]
+    public async Task RunAsync_WithChaosModeAndNativeTypeInSourceFileTypes_DoesNotThrow(string nativeType)
+    {
+        var mode = new StandardMode((req, ct) => Task.FromResult(new FileGenerationResult()));
+        var request = new FileGenerationRequest
+        {
+            Output = new Config.OutputConfig
+            {
+                FileType = "pdf",
+                SourceFileTypes = new[] { "pdf", nativeType },
+            },
+            Chaos = new Config.ChaosConfig
+            {
+                ChaosMode = true
+            }
+        };
+
+        await ConsoleOutputCapture.RunWithCapturedOutputAsync(() => mode.RunAsync(request, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task RunAsync_WithChaosModeAndLoadfileOnlyFlagButNoNativeType_ThrowsInvalidOperationException()
+    {
+        var mode = new StandardMode((req, ct) => Task.FromResult(new FileGenerationResult()));
+        var request = new FileGenerationRequest
+        {
+            Output = new Config.OutputConfig { FileType = "pdf" },
+            LoadfileOnly = true,
+            Chaos = new Config.ChaosConfig
+            {
+                ChaosMode = true,
+                ChaosScenario = "cross-format-desync",
+            }
+        };
+
         await Assert.ThrowsAsync<InvalidOperationException>(() => mode.RunAsync(request, CancellationToken.None));
     }
 
@@ -100,6 +198,21 @@ public class StandardModeTests
     public void Constructor_WithNullGenerate_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>(() => new StandardMode(null!));
+    }
+
+    private static Config.OutputConfig CreateMixedOutput(string nativeType)
+    {
+        var ratios = new[]
+        {
+            new Config.FileTypeRatio { Type = "pdf", Weight = 1 },
+            new Config.FileTypeRatio { Type = nativeType, Weight = 1 },
+        };
+        return new Config.OutputConfig
+        {
+            FileType = "pdf",
+            FileTypeRatios = ratios,
+            FileTypePlan = new Config.FileTypePlan(ratios, fileCount: 2),
+        };
     }
 }
 

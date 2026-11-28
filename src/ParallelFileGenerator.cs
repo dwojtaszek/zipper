@@ -54,9 +54,15 @@ public class ParallelFileGenerator
         try
         {
             // Validate inputs
-            if (request.Chaos.ChaosMode && !request.LoadfileOnly && !request.Output.HasFileType("eml") && !request.Output.HasFileType("tiff"))
+            if (!ChaosScenarios.IsGenerationChaosAllowed(
+                    chaosMode: request.Chaos.ChaosMode,
+                    loadfileOnly: request.LoadfileOnly,
+                    productionSetMode: false,
+                    hasEml: request.Output.HasFileType("eml"),
+                    hasTiff: request.Output.HasFileType("tiff"),
+                    scenario: request.Chaos.ChaosScenario))
             {
-                throw new InvalidOperationException("Chaos mode requires loadfile-only mode at the generation layer.");
+                throw new InvalidOperationException(ChaosScenarios.GenerationChaosRequirement);
             }
 
             if (request.Output.FileCount <= 0)

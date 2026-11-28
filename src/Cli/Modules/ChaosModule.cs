@@ -113,16 +113,25 @@ public sealed class ChaosModule : CliModule
     {
         if (this._mode)
         {
-            bool nativeRun = hasEml || hasTiff;
-            if (!loadfileOnly && !productionSet && !nativeRun)
+            // Same REQ-094 rule as the runtime gates, so CLI and generation layer cannot drift.
+            if (!ChaosScenarios.IsGenerationChaosAllowed(
+                    chaosMode: this._mode,
+                    loadfileOnly: loadfileOnly,
+                    productionSetMode: productionSet,
+                    hasEml: hasEml,
+                    hasTiff: hasTiff,
+                    scenario: this._scenario))
             {
-                Console.Error.WriteLine("Error: --chaos-mode requires --loadfile-only, --production-set, email (.eml), or TIFF (.tiff) generation.");
-                return false;
-            }
+                // The predicate rejected every legal scope; tailor the guidance to the mode in play.
+                if (!productionSet)
+                {
+                    Console.Error.WriteLine("Error: --chaos-mode requires --loadfile-only, a cross-format chaos scenario with --production-set, email (.eml), or TIFF (.tiff) generation.");
+                }
+                else
+                {
+                    Console.Error.WriteLine("Error: --chaos-mode with --production-set requires a cross-format chaos scenario ('cross-format-desync' or 'broken-families') or email (.eml) or TIFF (.tiff) generation.");
+                }
 
-            if (!loadfileOnly && !nativeRun && !ChaosScenarios.IsCrossFormat(this._scenario))
-            {
-                Console.Error.WriteLine("Error: --chaos-mode with --production-set requires a cross-format chaos scenario ('cross-format-desync' or 'broken-families') or email (.eml) or TIFF (.tiff) generation.");
                 return false;
             }
 

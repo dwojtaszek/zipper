@@ -17,9 +17,15 @@ internal class StandardMode : IGenerationMode
 
     public async Task RunAsync(FileGenerationRequest request, CancellationToken cancellationToken = default)
     {
-        if (request.Chaos.ChaosMode && !request.Output.HasFileType("eml") && !request.Output.HasFileType("tiff"))
+        if (!ChaosScenarios.IsGenerationChaosAllowed(
+                chaosMode: request.Chaos.ChaosMode,
+                loadfileOnly: false,
+                productionSetMode: false,
+                hasEml: request.Output.HasFileType("eml"),
+                hasTiff: request.Output.HasFileType("tiff"),
+                scenario: request.Chaos.ChaosScenario))
         {
-            throw new InvalidOperationException("Chaos mode is not supported in standard generation mode without email or TIFF generation. Use --loadfile-only, --type eml, or --type tiff.");
+            throw new InvalidOperationException(ChaosScenarios.GenerationChaosRequirement);
         }
 
         Console.WriteLine("Starting parallel file generation...");

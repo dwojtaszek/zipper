@@ -39,9 +39,15 @@ internal static class ProductionSetOrchestrator
         ArgumentNullException.ThrowIfNull(materializer);
         ArgumentNullException.ThrowIfNull(hashComputer);
 
-        if (request.Chaos.ChaosMode && !request.LoadfileOnly && !request.Output.HasFileType("eml") && !request.Output.HasFileType("tiff") && (request.Chaos.ChaosScenario is null || !ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario)))
+        if (!ChaosScenarios.IsGenerationChaosAllowed(
+                chaosMode: request.Chaos.ChaosMode,
+                loadfileOnly: request.LoadfileOnly,
+                productionSetMode: true,
+                hasEml: request.Output.HasFileType("eml"),
+                hasTiff: request.Output.HasFileType("tiff"),
+                scenario: request.Chaos.ChaosScenario))
         {
-            throw new InvalidOperationException("Chaos mode requires loadfile-only mode at the generation layer.");
+            throw new InvalidOperationException(ChaosScenarios.GenerationChaosRequirement);
         }
 
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();

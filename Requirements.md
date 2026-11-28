@@ -657,7 +657,7 @@ This section clarifies behavior when multiple arguments interact:
 | `--production-zip` + `--production-set` | **Requires**: `--production-zip` cannot be used without `--production-set` |
 | `--volume-size` + `--production-set` | **Requires**: `--volume-size` cannot be used without `--production-set` |
 | `--col-delim`, `--quote-delim`, etc. | Supported in all modes; use `ascii:N` or `char:C` prefix |
-| `--chaos-mode` | Requires `--loadfile-only`, `--production-set`, or Standard Mode generating `--type eml` or `--type tiff` (REQ-094, REQ-237, REQ-241) |
+| `--chaos-mode` | Requires `--loadfile-only`, `--production-set` with a cross-format scenario, or generating `--type eml` or `--type tiff` (REQ-094, REQ-237, REQ-241) |
 | `--chaos-mode` + `--production-set` | Permitted with cross-format scenarios (`cross-format-desync`, `broken-families`) or when generating `eml` (email anomalies) or `tiff` (TIFF anomalies); requires `--loadfile-only` for other single-format chaos modes |
 | `--chaos-mode` + `--type eml` (no `--loadfile-only`) | Permitted; `--chaos-types` selects email types only (`mime-boundary`, `encoded-word`, `header-fold`, `rf822-depth`); `--chaos-scenario` is rejected except for Production Set cross-format scenarios (REQ-237) |
 | `--chaos-mode` + `--type tiff` (no `--loadfile-only`) | Permitted; `--chaos-types` selects TIFF types only (`tiff-dimension-lie`, `tiff-truncated-ifd`, `tiff-tag-count-lie`, `tiff-strip-offset`); `--chaos-scenario` is rejected except for Production Set cross-format scenarios (REQ-241) |

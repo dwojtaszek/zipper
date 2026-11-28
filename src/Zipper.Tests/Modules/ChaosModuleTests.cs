@@ -119,7 +119,7 @@ public class ChaosModuleTests
     }
 
     [Fact]
-    public void TryBuild_ChaosModeWithoutLoadfileOnly_ReturnsFalse()
+    public void TryBuild_ChaosModeWithoutLoadfileOnlyOrNativeType_ReturnsFalse()
     {
         var spec = new ChaosConfigSpec(Amount: null, Types: null, Scenario: null) { Mode = true };
         Assert.False(TryBuildWithValues(spec, out _, loadfileOnly: false));
@@ -294,11 +294,14 @@ public class ChaosModuleTests
         Assert.True(module.TryApply("--chaos-mode", null));
         Assert.True(module.TryApply("--chaos-scenario", "structured-import-failures"));
 
-        Assert.False(module.TryBuild(
+        var (built, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => module.TryBuild(
             loadfileOnly: false,
             formats: new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt },
             out _,
             productionSet: true));
+
+        Assert.False(built);
+        Assert.Contains("Error: --chaos-mode with --production-set requires a cross-format chaos scenario", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -307,11 +310,14 @@ public class ChaosModuleTests
         var module = new ChaosModule();
         Assert.True(module.TryApply("--chaos-mode", null));
 
-        Assert.False(module.TryBuild(
+        var (built, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => module.TryBuild(
             loadfileOnly: false,
             formats: new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt },
             out _,
             productionSet: true));
+
+        Assert.False(built);
+        Assert.Contains("Error: --chaos-mode with --production-set requires a cross-format chaos scenario", stderr, StringComparison.Ordinal);
     }
 
     [Theory]

@@ -133,6 +133,31 @@ internal static class ChaosScenarios
     internal static bool IsCrossFormat(string? name) =>
         name is not null && GetByName(name)?.IsCrossFormat == true;
 
+    /// <summary>
+    /// REQ-094 eligibility rule shared by the CLI and every runtime generation gate.
+    /// Loadfile-Only allows Load File chaos, including coordinated cross-format scenarios;
+    /// Standard and Production Set allow Email and TIFF native chaos; Production Set also
+    /// accepts coordinated cross-format scenarios, which replace native chaos for that run.
+    /// </summary>
+    internal static bool IsGenerationChaosAllowed(
+        bool chaosMode,
+        bool loadfileOnly,
+        bool productionSetMode,
+        bool hasEml,
+        bool hasTiff,
+        string? scenario)
+    {
+        return !chaosMode
+            || loadfileOnly
+            || hasEml
+            || hasTiff
+            || (productionSetMode && IsCrossFormat(scenario));
+    }
+
+    /// <summary>Exception text for a request outside the REQ-094 eligibility rule.</summary>
+    internal const string GenerationChaosRequirement =
+        "Chaos mode requires --loadfile-only, --type eml, --type tiff, or a Production Set cross-format scenario.";
+
     internal static IReadOnlyList<string> ResolveTypes(ChaosScenarioDefinition scenario, LoadFileFormat format)
     {
         ArgumentNullException.ThrowIfNull(scenario);
@@ -159,9 +184,11 @@ internal static class ChaosScenarios
 
         Console.WriteLine();
         Console.WriteLine("Usage: zipper --chaos-mode --chaos-scenario <name> with --loadfile-only or --production-set (cross-format scenarios only)");
+        Console.WriteLine("       zipper --chaos-mode with --type eml, --type tiff, or a File Type mix containing eml or tiff");
         Console.WriteLine();
         Console.WriteLine("Notes:");
         Console.WriteLine("  - --chaos-scenario requires --chaos-mode; single-format scenarios require --loadfile-only, while cross-format scenarios also support --production-set");
+        Console.WriteLine("  - Email and TIFF runs apply --chaos-types to their native files instead of Load File lines");
         Console.WriteLine("  - --chaos-scenario conflicts with --chaos-types (use one or the other)");
         Console.WriteLine("  - --chaos-amount overrides the scenario's default amount");
         Console.WriteLine("  - 'full-chaos' enables all types for the selected format");

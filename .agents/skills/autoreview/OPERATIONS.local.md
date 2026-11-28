@@ -433,3 +433,11 @@
 - **telemetry**: host=droid mode=local specialists=6 bundle=9187c
 - **lessons**: none
 - **suppressions**: none
+
+### 2026-11-28 droid:local:ISSUE-1486
+
+- **findings**: cycle 1 broad INFO set (0 ACTION); cycle 2 3 ACTION-class docs/traceability/ADR drift plus INFO; cycle 3 0 ACTION, INFO only
+- **outcome**: accepted — mode-scoped predicate, docs sync, CLI messages, test coverage
+- **telemetry**: host=droid mode=local specialists=5 bundle=43293 c
+- **lessons**: adversarial pass catches README/Requirements/traceability drift that correctness treats as INFO
+- **suppressions**: none

@@ -830,7 +830,7 @@ public class ProductionSetTests : WorkingDirectoryTestBase
     }
 
     [Fact]
-    public async Task GenerateAsync_WithChaosModeAndNoLoadfileOnly_ThrowsInvalidOperationException()
+    public async Task GenerateAsync_WithChaosModeWithoutCrossFormatOrNativeType_ThrowsInvalidOperationException()
     {
         var outputPath = Path.Combine(this.TempDir, Guid.NewGuid().ToString());
         Directory.CreateDirectory(outputPath);
@@ -862,7 +862,8 @@ public class ProductionSetTests : WorkingDirectoryTestBase
                 LoadfileOnly = false,
             };
 
-            await Assert.ThrowsAsync<InvalidOperationException>(() => ProductionSetGenerator.GenerateAsync(request));
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => ProductionSetGenerator.GenerateAsync(request));
+            Assert.Equal(ChaosScenarios.GenerationChaosRequirement, exception.Message);
         }
         finally
         {
@@ -874,7 +875,7 @@ public class ProductionSetTests : WorkingDirectoryTestBase
     }
 
     [Fact]
-    public async Task GenerateAsync_ChaosModeEnabled_DoesNotApplyChaos()
+    public async Task GenerateAsync_DatColumnChaosOnProductionSet_DoesNotMutateDatLines()
     {
         // Arrange
         var request = this.CreateTestRequest(count: 5, batesPrefix: "ABC", batesDigits: 6);
@@ -884,7 +885,9 @@ public class ProductionSetTests : WorkingDirectoryTestBase
             ChaosAmount = "100%",
             ChaosTypes = "columns",
         };
-        request.LoadfileOnly = true; // bypass the exception guard in ProductionSetGenerator
+        // DAT-column chaos is eligible only in Loadfile-Only or with a native type; this test
+        // checks that it still never reaches Production Set DAT lines.
+        request.LoadfileOnly = true;
 
         // Act
         var result = await ProductionSetGenerator.GenerateAsync(request);
@@ -896,7 +899,7 @@ public class ProductionSetTests : WorkingDirectoryTestBase
         using var doc = System.Text.Json.JsonDocument.Parse(json);
         var chaosModeElement = doc.RootElement.GetProperty("chaosMode");
 
-        // Assert that totalAnomalies is 0 because ChaosEngine should not be constructed/used in ProductionSetGenerator
+        // DAT-column chaos targets Load File line rendering, which Production Set does not use for DAT lines.
         Assert.Equal(0, chaosModeElement.GetProperty("totalAnomalies").GetInt32());
     }
 

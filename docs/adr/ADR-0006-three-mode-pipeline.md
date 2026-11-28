@@ -23,4 +23,4 @@ The three-mode architecture is the correct shape. No unification needed.
 - Do not add a unified orchestrator abstraction
 - Adding a new generation mode = one `IGenerationMode` adapter + one generator class
 - The composer/serializer/emitter seam (`LoadFileRecord` → `ILoadFileComposer` → `ILoadFileSerializer` → `LoadFileEmitter`) enables format extensibility without orchestrator changes. This seam is now realised for all four delimited formats; EDRM-XML is a deliberate carve-out (see ADR-0007)
-- Chaos Engine is correctly scoped to Loadfile-Only mode only (REQ-094), and runs in exactly one place for delimited formats — the emitter; EDRM-XML applies its anomalies inside the carve-out writer (see ADR-0007)
+- Chaos Engine follows the REQ-094 scope: Loadfile-Only Mode applies Load File line chaos, including coordinated cross-format scenarios; Standard and Production Set apply Email and TIFF native chaos; Production Set also accepts coordinated cross-format scenarios, which replace native chaos for that run. For delimited Load File formats it runs in exactly one place — the emitter; EDRM-XML applies its anomalies inside the carve-out writer (see ADR-0007)

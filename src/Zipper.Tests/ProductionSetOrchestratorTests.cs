@@ -396,16 +396,117 @@ public class ProductionSetOrchestratorTests
             ProductionSetOrchestrator.GenerateAsync(request, materializer, null!));
     }
 
-    [Fact]
-    public async Task GenerateAsync_WithChaosModeAndNotLoadfileOnly_ThrowsInvalidOperationException()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("structured-import-failures")]
+    public async Task GenerateAsync_WithChaosModeAndNoEmailsTiffsOrCrossFormatScenario_ThrowsInvalidOperationException(string? scenario)
     {
         var materializer = new FakeMaterializer();
         var request = CreateRequest(count: 1, fileType: "pdf", outputPath: Path.GetTempPath());
-        request.Chaos = request.Chaos with { ChaosMode = true };
+        request.Chaos = request.Chaos with { ChaosMode = true, ChaosScenario = scenario };
         request.LoadfileOnly = false;
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer()));
+        Assert.Contains("--loadfile-only", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("--type eml", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("--type tiff", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("cross-format", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithChaosModeAndFileTypeMixWithoutNativeType_ThrowsInvalidOperationException()
+    {
+        var materializer = new FakeMaterializer();
+        var request = CreateRequest(count: 2, fileType: "pdf", outputPath: Path.GetTempPath());
+        var ratios = new[]
+        {
+            new FileTypeRatio { Type = "pdf", Weight = 1 },
+            new FileTypeRatio { Type = "jpg", Weight = 1 },
+        };
+        request.Output = request.Output with
+        {
+            FileTypeRatios = ratios,
+            FileTypePlan = new FileTypePlan(ratios, fileCount: 2),
+        };
+        request.Chaos = request.Chaos with { ChaosMode = true };
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer()));
+    }
+
+    [Theory]
+    [InlineData("pdf", "cross-format-desync")]
+    [InlineData("pdf", "broken-families")]
+    [InlineData("eml", null)]
+    [InlineData("tiff", null)]
+    public async Task GenerateAsync_WithChaosModeAllowedForProductionSet_DoesNotThrow(string fileType, string? scenario)
+    {
+        var materializer = new FakeMaterializer();
+        var request = CreateRequest(count: 1, fileType: fileType, outputPath: Path.GetTempPath());
+        request.Chaos = request.Chaos with { ChaosMode = true, ChaosScenario = scenario };
+
+        var result = await ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer());
+
+        Assert.NotNull(result);
+        Assert.NotEmpty(materializer.CreatedDirectories);
+    }
+
+    [Theory]
+    [InlineData("eml")]
+    [InlineData("tiff")]
+    public async Task GenerateAsync_WithChaosModeAndNativeTypeInFileTypeMix_DoesNotThrow(string nativeType)
+    {
+        var materializer = new FakeMaterializer();
+        var request = CreateRequest(count: 2, fileType: "pdf", outputPath: Path.GetTempPath());
+        var ratios = new[]
+        {
+            new FileTypeRatio { Type = "pdf", Weight = 1 },
+            new FileTypeRatio { Type = nativeType, Weight = 1 },
+        };
+        request.Output = request.Output with
+        {
+            FileTypeRatios = ratios,
+            FileTypePlan = new FileTypePlan(ratios, fileCount: 2),
+        };
+        request.Chaos = request.Chaos with { ChaosMode = true };
+
+        var result = await ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer());
+
+        Assert.NotNull(result);
+        Assert.NotEmpty(materializer.CreatedDirectories);
+    }
+
+    [Theory]
+    [InlineData("eml")]
+    [InlineData("tiff")]
+    public async Task GenerateAsync_WithChaosModeAndNativeTypeInSourceFileTypes_DoesNotThrow(string nativeType)
+    {
+        var materializer = new FakeMaterializer();
+        var request = CreateRequest(count: 1, fileType: "pdf", outputPath: Path.GetTempPath());
+        request.Output = request.Output with { SourceFileTypes = new[] { "pdf", nativeType } };
+        request.Chaos = request.Chaos with { ChaosMode = true };
+
+        var result = await ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer());
+
+        Assert.NotNull(result);
+        Assert.NotEmpty(materializer.CreatedDirectories);
+    }
+
+    [Theory]
+    [InlineData("cross-format-desync")]
+    [InlineData("broken-families")]
+    public async Task GenerateAsync_WithCrossFormatChaosAndUnsetProductionSetFlag_DoesNotThrow(string scenario)
+    {
+        // This orchestrator is the Production Set mode; the mode-selection flag is not required here.
+        var materializer = new FakeMaterializer();
+        var request = CreateRequest(count: 1, fileType: "pdf", outputPath: Path.GetTempPath());
+        request.Production = request.Production with { ProductionSet = false };
+        request.Chaos = request.Chaos with { ChaosMode = true, ChaosScenario = scenario };
+
+        var result = await ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer());
+
+        Assert.NotNull(result);
     }
 
     [Fact]

@@ -19,6 +19,33 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
     }
 
     // --- Scenario registry tests ---
+    [Theory]
+    [InlineData(false, false, false, false, false, null, true)]
+    [InlineData(true, true, false, false, false, null, true)]
+    [InlineData(true, false, false, true, false, null, true)]
+    [InlineData(true, false, false, false, true, null, true)]
+    [InlineData(true, false, true, false, false, "cross-format-desync", true)]
+    [InlineData(true, false, true, false, false, "broken-families", true)]
+    [InlineData(true, false, true, false, false, "structured-import-failures", false)]
+    [InlineData(true, false, true, false, false, null, false)]
+    [InlineData(true, false, false, false, false, "cross-format-desync", false)]
+    [InlineData(true, false, false, true, false, "structured-import-failures", true)]
+    [InlineData(true, false, true, false, false, "Cross-Format-Desync", true)]
+    [InlineData(true, false, true, true, false, null, true)]
+    [InlineData(true, true, false, true, false, null, true)]
+    [InlineData(true, false, true, false, false, "", false)]
+    public void IsGenerationChaosAllowed_MatchesReq094Scopes(
+        bool chaosMode,
+        bool loadfileOnly,
+        bool productionSet,
+        bool hasEml,
+        bool hasTiff,
+        string? scenario,
+        bool expected)
+    {
+        Assert.Equal(expected, ChaosScenarios.IsGenerationChaosAllowed(chaosMode, loadfileOnly, productionSet, hasEml, hasTiff, scenario));
+    }
+
     [Fact]
     public void GetByName_ValidName_ReturnsScenario()
     {
@@ -319,6 +346,8 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
         Assert.Contains("full-chaos", stdout, StringComparison.Ordinal);
         Assert.Contains("single-format scenarios require --loadfile-only", stdout, StringComparison.Ordinal);
         Assert.Contains("cross-format scenarios also support --production-set", stdout, StringComparison.Ordinal);
+        Assert.Contains("a File Type mix containing eml or tiff", stdout, StringComparison.Ordinal);
+        Assert.Contains("Email and TIFF runs apply --chaos-types to their native files", stdout, StringComparison.Ordinal);
     }
 
     [Fact]
