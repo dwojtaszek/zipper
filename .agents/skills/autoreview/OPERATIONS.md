@@ -27,7 +27,7 @@ Each entry: `### YYYY-MM-DD host:mode:target` (host = claude-code or cursor)
 >
 > **Never mutate the code under review to prove a finding.** Describe the mutation in the finding text instead ("adding `FuzzSuite` makes `<Test>` fail on `<assertion>`") and prove it by citing the line and reasoning about the assertion. Applying it corrupts the concurrent wave and the orchestrator's in-flight patch, and a later `git restore` of "contamination" silently reverts work the orchestrator did after the agent's snapshot. If execution is genuinely required, copy the repo to a scratch dir outside the working tree. (Observed 2026-09-27, issue #1042: the testing and adversarial specialists each mutated the shared tree, and each one's cleanup reverted 1–3 legitimate orchestrator fixes — one silently.)
 >
-> **One reviewer.** Do not stack `nori-code-reviewer` with `cavecrew-reviewer` and genericPurpose correctness/testing/maintainability on the same diff. Measured 2026-11-28 on PR #1506: nori found the Important Meziantou ID mislabels; cavecrew overlapped that class; the three specialists returned NO ACTION FINDINGS. Default is nori-code-reviewer 2.1.1 only.
+> **One reviewer.** Do not stack `nori-code-reviewer` with `cavecrew-reviewer` and `generalPurpose` correctness/testing/maintainability on the same diff. Measured 2026-11-28 on PR #1506: nori found the Important Meziantou ID mislabels; cavecrew overlapped that class; the three specialists returned NO ACTION FINDINGS. Default is nori-code-reviewer 2.1.1 only.
 
 ### Project facts (zipper) — inject into prompts for this repo; drop if forking the skill elsewhere
 
@@ -39,7 +39,7 @@ Each entry: `### YYYY-MM-DD host:mode:target` (host = claude-code or cursor)
 >
 > Trust boundary: zipper is a **local single-user CLI**. Operator-supplied args (`--output-path`, counts, profile paths) are **not an untrusted input boundary** — the operator can already do anything those args allow. Findings about operator-supplied paths/values (traversal, "writes outside cwd", absolute paths) are **INFO/hardening, not ACTION**, unless a concrete remote / multi-user / automated-pipeline vector is shown. (Observed 2026-06-02: adversarial rated operator-path findings ACTION while security correctly called them INFO — apply the security calibration. Tracked: zipper#412.)
 >
-> Extra dispatch signals (project-specific, per SKILL.md "Project-specific signals"): trigger **security** also on `PathValidator` (this repo's path-guard class); trigger **api-contract** also on `EDRM`, `DAT`, `OPT`, `Concordance` (this project's output-format/standard contracts — the emitted load-file format is the API). These are the zipper-specific terms intentionally kept out of the generic SKILL.md dispatch table.
+> Extra opt-in signals (project-specific, used only when choosing the single second reviewer): **security** also on `PathValidator` (this repo's path-guard class); **api-contract** also on `EDRM`, `DAT`, `OPT`, `Concordance` (this project's output-format/standard contracts — the emitted Load File format is the API). Do not dispatch these beside nori.
 
 ## Log
 
