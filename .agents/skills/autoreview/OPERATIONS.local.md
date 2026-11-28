@@ -505,3 +505,11 @@
 - **telemetry**: host=factory mode=local specialists=4 bundle=~12000c
 - **lessons**: scenario gates need the raw hasEml/hasTiff/loadfileOnly inputs, not caller-derived flags, or the CLI and runtime drift; keep doc rejection clauses scoped to the condition the code checks
 - **suppressions**: declared-vs-allocated File Type gaps are pre-existing and out of scope for this closeout
+
+### 2026-11-28 opencode:local:issue-1486-loadfile-only-doc-closeout
+
+- **findings**: 0 (fast pass)
+- **outcome**: clean review — EML/TIFF mix row now excludes `--loadfile-only`, preserving the REQ-094 cross-format exception
+- **telemetry**: host=opencode mode=local specialists=1 bundle=~1700c
+- **lessons**: `ChaosModule` already masks native flags with `!loadfileOnly`; helper truth-table and CLI test refute the raw-flag concern
+- **suppressions**: none
