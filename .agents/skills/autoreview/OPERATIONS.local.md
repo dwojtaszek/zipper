@@ -553,3 +553,11 @@
 - **telemetry**: host=factory mode=local specialists=1 bundle=~900c (fast pass + rerun after fix)
 - **lessons**: source-driven engine assertions must order HashSet-backed enabled types before sequence equality
 - **suppressions**: local reflection helper duplication accepted for test isolation
+
+### 2026-11-28 opencode:local:issue-1486-coderabbit-rerun
+
+- **findings**: 0 (local CodeRabbit rerun after "Repository changed during CodeRabbit review")
+- **outcome**: no code change — verified PR #1501 open with 0 unresolved review threads, Qodo paused, all CI checks success except informational CodeRabbit skip, and Sonar blockers already CLOSED/FIXED; local CodeRabbit clean at HEAD
+- **telemetry**: host=opencode mode=local specialists=0 bundle=~1200c
+- **lessons**: `check-sonar.py` can return CLOSED/FIXED Sonar issues for a PR because the API ignores `statuses` with `pullRequest`; inspect `status` and `resolution` before treating a finding as blocking
+- **suppressions**: none
