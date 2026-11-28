@@ -593,3 +593,11 @@
 - **telemetry**: host=factory mode=commit specialists=1 bundle=~2600c
 - **lessons**: the runner queries SonarCloud with its own gate; fixing `check-sonar.py` alone leaves the runner reporting closed issues, so both filters must exist
 - **suppressions**: none
+
+### 2026-11-28 factory:local:issue-1486-sonar-status-filter
+
+- **findings**: 6 INFO from 4 specialists plus 2 ACTION from correctness; both ACTIONs valid and verified live (filtered query dropped CRITICAL S3776, unfiltered returned all 4 rows)
+- **outcome**: removed `statuses=` from both SonarCloud queries (client-side status filter already covers it); kept raw-count pagination; added short-page fallback when `total` is absent, with tests for a full page without `total` and malformed later pages
+- **telemetry**: host=factory mode=local specialists=4+1 bundle=~12000c
+- **lessons**: on the `pullRequest` issue-search path the server-side `statuses` filter both drops real issues and returns CLOSED rows, so never rely on it; `total` is safe only when compared against the same raw rows the query returns
+- **suppressions**: none
