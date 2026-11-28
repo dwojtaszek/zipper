@@ -54,7 +54,10 @@ with tempfile.TemporaryDirectory() as directory:
 with tempfile.TemporaryDirectory() as directory:
     marker = Path(directory) / "child-survived"
     fake = Path(directory) / "droid"
-    fake.write_text("#!/usr/bin/env python3\nimport subprocess, sys, time\nsubprocess.Popen([sys.executable, '-c', \"import time; from pathlib import Path; time.sleep(5); Path(" + repr(str(marker)) + ").touch()\"])\nprint('started', flush=True)\ntime.sleep(30)\n")
+    # The child's touch must land after the ceiling (2.0s), so a kill that never
+    # happens leaves a marker; the wait after return covers the fake's own
+    # startup, which pushes the touch later than the ceiling.
+    fake.write_text("#!/usr/bin/env python3\nimport subprocess, sys, time\nsubprocess.Popen([sys.executable, '-c', \"import time; from pathlib import Path; time.sleep(2.5); Path(" + repr(str(marker)) + ").touch()\"])\nprint('started', flush=True)\ntime.sleep(30)\n")
     fake.chmod(0o755)
     # macOS CI needs more than 0.2s to start the fake Python child; a shorter
     # ceiling can cut it before `started` reaches the pipe.
@@ -63,6 +66,6 @@ with tempfile.TemporaryDirectory() as directory:
         assert code == -1
         assert "timed out" in err
         assert "started" in out
-    time.sleep(0.6)
+    time.sleep(2.6)
     assert not marker.exists(), "Timed-out Droid child survived process-group termination"
 print("Droid plugin checks passed")
