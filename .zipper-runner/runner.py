@@ -2833,17 +2833,31 @@ def _check_sonarcloud_pr_gate(pr_number: int, rollup: list | None = None) -> Rev
         f"?projectKey={project_q}&pullRequest={pr_number}"
     )
     try:
-        issues_data = _sonarcloud_get_json(issues_url)
+        issues = []
+        page = 1
+        while True:
+            issues_data = _sonarcloud_get_json(f"{issues_url}&p={page}")
+            if not isinstance(issues_data, dict):
+                return ReviewGate(False, True, f"Unexpected SonarCloud API payload for PR #{pr_number}.")
+            batch = issues_data.get("issues")
+            if not isinstance(batch, list):
+                return ReviewGate(False, True, f"Unexpected SonarCloud API payload for PR #{pr_number}.")
+            issues.extend(batch)
+            total = issues_data.get("total", len(batch))
+            if not isinstance(total, int):
+                return ReviewGate(False, True, f"Unexpected SonarCloud API payload for PR #{pr_number}.")
+            if not batch or len(issues) >= total:
+                break
+            page += 1
         gate_data = _sonarcloud_get_json(gate_url)
     except (http.client.HTTPException, ValueError, OSError) as exc:
         return ReviewGate(False, True, f"Could not query SonarCloud API for PR #{pr_number}: {exc}")
 
-    if not isinstance(issues_data, dict) or not isinstance(gate_data, dict):
+    if not isinstance(gate_data, dict):
         return ReviewGate(False, True, f"Unexpected SonarCloud API payload for PR #{pr_number}.")
 
-    issues = issues_data.get("issues")
     project_status = gate_data.get("projectStatus")
-    if not isinstance(issues, list) or not isinstance(project_status, dict) or not isinstance(project_status.get("status"), str):
+    if not isinstance(project_status, dict) or not isinstance(project_status.get("status"), str):
         return ReviewGate(False, True, f"Unexpected SonarCloud API payload for PR #{pr_number}.")
 
     issue_findings, parse_err = _sonarcloud_issue_findings(issues, pr_number)

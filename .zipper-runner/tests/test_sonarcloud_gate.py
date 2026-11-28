@@ -99,6 +99,60 @@ class SonarCloudGateTests(unittest.TestCase):
             if expected_rule:
                 self.assertIn(expected_rule, result.detail)
 
+    def test_paginates_issues_before_filtering_closed_findings(self):
+        closed = {
+            "severity": "BLOCKER",
+            "status": "CLOSED",
+            "resolution": "FIXED",
+            "rule": "csharpsquid:S2699",
+            "component": "dwojtaszek_zipper:src/Zipper.Tests/ModeAdapterTests.cs",
+            "message": "Add at least one assertion to this test case.",
+        }
+        blocker = {
+            "severity": "BLOCKER",
+            "status": "OPEN",
+            "rule": "csharpsquid:S999",
+            "component": "dwojtaszek_zipper:src/B.cs",
+            "line": 3,
+            "message": "Bug",
+        }
+        with patch.object(
+            runner,
+            "_sonarcloud_get_json",
+            side_effect=[
+                {"issues": [closed], "total": 2},
+                {"issues": [blocker], "total": 2},
+                {"projectStatus": {"status": "OK", "conditions": []}},
+            ],
+        ):
+            result = runner._check_sonarcloud_pr_gate(1438)
+
+        self.assertFalse(result.ok)
+        self.assertFalse(result.environmental)
+        self.assertIn("BLOCKER csharpsquid:S999", result.detail)
+
+    def test_later_issue_page_failure_is_environmental(self):
+        closed = {
+            "severity": "BLOCKER",
+            "status": "CLOSED",
+            "rule": "csharpsquid:S2699",
+            "component": "dwojtaszek_zipper:src/A.cs",
+            "message": "closed",
+        }
+        with patch.object(
+            runner,
+            "_sonarcloud_get_json",
+            side_effect=[
+                {"issues": [closed], "total": 2},
+                {"projectStatus": {"status": "OK", "conditions": []}},
+                urllib.error.URLError("timeout"),
+            ],
+        ):
+            result = runner._check_sonarcloud_pr_gate(1438)
+
+        self.assertFalse(result.ok)
+        self.assertTrue(result.environmental)
+
     def test_quality_gate_error_without_issues_still_fails(self):
         with patch.object(
             runner,

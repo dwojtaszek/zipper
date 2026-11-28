@@ -570,6 +570,14 @@
 - **lessons**: Sonar PR issue search returns closed issues despite `statuses=OPEN,CONFIRMED,REOPENED`; filter returned issues by status before classification
 - **suppressions**: none
 
+### 2026-11-28 opencode:local:issue-1486-runner-sonar-pagination
+
+- **findings**: 1 CodeRabbit local major, valid — `_check_sonarcloud_pr_gate` filtered a single 50-issue page before deciding no blockers remained
+- **outcome**: paginate raw SonarCloud issues before status filtering; added regression for closed-only first page plus open second-page blocker and later-page network failure
+- **telemetry**: host=opencode mode=local specialists=0 bundle=~2000c
+- **lessons**: status filtering must happen after full pagination; a later page failure stays environmental
+- **suppressions**: none
+
 ### 2026-11-28 factory:local:issue-1486-sonar-runner-gate
 
 - **findings**: 1 INFO (missing-status default coverage), 0 ACTION; patch correct
