@@ -9,7 +9,7 @@ namespace Zipper.Analyzers;
 /// <summary>
 /// Diagnostic analyzer enforcing the load-file three-stage seam invariant (ZIP001):
 /// Composer -> Serializer -> Emitter. Direct stream/writer writes bypassing
-/// <see cref="ILoadFileSerializer"/> inside load-file composer/emitter layers are flagged.
+/// <see cref="ILoadFileSerializer"/> inside load-file composer and serializer types are flagged.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class LoadFileSeamInvariantAnalyzer : ZipperAnalyzerBase
@@ -21,7 +21,7 @@ public sealed class LoadFileSeamInvariantAnalyzer : ZipperAnalyzerBase
         title: "Direct stream/write access bypasses ILoadFileSerializer",
         messageFormat: "Direct stream/write access bypasses ILoadFileSerializer in load-file pipeline",
         category: "Architecture",
-        defaultSeverity: DiagnosticSeverity.Info,
+        defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         description: "Write operations in load-file generation must route through ILoadFileSerializer; bypassing violates the Composer->Serializer->Emitter seam.");
 
@@ -57,11 +57,24 @@ public sealed class LoadFileSeamInvariantAnalyzer : ZipperAnalyzerBase
         context.ReportDiagnostic(Diagnostic.Create(Rule, memberAccess.GetLocation()));
     }
 
+    /// <summary>
+    /// Composers and load-file serializers must not write. The Emitter is the I/O
+    /// authority, so writes there are allowed. EmailSerializer and FileDataSerializer
+    /// are not load-file types.
+    /// </summary>
     private static bool IsLoadFileTargetLayer(string className)
     {
         var upper = className.ToUpperInvariant();
-        return upper.Contains("COMPOSER")
-            || upper.Contains("EMITTER")
-            || upper.Contains("SERIALIZER");
+        if (upper.Contains("COMPOSER"))
+        {
+            return true;
+        }
+
+        if (!upper.Contains("SERIALIZER"))
+        {
+            return false;
+        }
+
+        return !upper.Contains("EMAIL") && !upper.Contains("FILEDATA");
     }
 }

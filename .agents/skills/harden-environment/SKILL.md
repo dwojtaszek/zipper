@@ -66,9 +66,10 @@ analyzer, not a test.
 | Prose | judgment that no check can express | `AGENTS.md`, `docs/` |
 
 Existing analyzer IDs: ZIP001 Load File seam, ZIP002 deterministic formattable,
-ZIP003 exact stream read, ZIP004 sealed domain types. Extend one only when its
-rule is actually about the same invariant. Do not contort an unrelated analyzer,
-and do not add a fifth for a rule a single test can hold.
+ZIP003 exact stream read, ZIP004 sealed domain types. ZIP001–ZIP003 are build
+errors (`.editorconfig`); ZIP004 is Hidden. Extend one only when its rule is
+actually about the same invariant. Do not contort an unrelated analyzer, and do
+not add a fifth for a rule a single test can hold.
 
 A weak test is its own cluster: a test that asserts a column exists but not its
 serialized value leaves the value free to change. The constraint is a mutation

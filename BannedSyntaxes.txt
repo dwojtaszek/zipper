@@ -1,0 +1,4 @@
+# Meziantou MA0240 — language constructs banned in this repo.
+# SyntaxKind names (no leading //) are a single-pass scan. See
+# https://www.meziantou.net/querying-roslyn-syntax-trees-with-xpath.htm
+GotoStatement; Use structured control flow instead of goto

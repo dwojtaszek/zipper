@@ -1,7 +1,29 @@
+# Determinism: wall-clock and process-default locale/encoding leak into Load File bytes.
 P:System.DateTime.Now;Use DateTime.UtcNow instead
+P:System.DateTime.Today;Derive the calendar date from DateTime.UtcNow instead
+P:System.DateTimeOffset.Now;Use DateTimeOffset.UtcNow instead
+P:System.Text.Encoding.Default;Pass an explicit encoding (UTF-8, UTF-16, or ANSI)
 P:System.Globalization.CultureInfo.CurrentCulture;Use CultureInfo.InvariantCulture instead
+P:System.Environment.TickCount;Use a seeded clock or Stopwatch for elapsed time
 M:System.String.Format(System.String,System.Object);Use an overload that takes an IFormatProvider instead
 M:System.String.Format(System.String,System.Object[]);Use an overload that takes an IFormatProvider instead
 M:System.String.Format(System.String,System.Object,System.Object);Use an overload that takes an IFormatProvider instead
 M:System.String.Format(System.String,System.Object,System.Object,System.Object);Use an overload that takes an IFormatProvider instead
 P:System.Environment.CurrentDirectory;Pass explicit working directory or output path instead
+
+# Sync-over-async and sleeps: agents paste these into generation paths.
+M:System.Threading.Thread.Sleep(System.Int32);Do not block the generation thread; await a delay or poll with cancellation
+M:System.Threading.Thread.Sleep(System.TimeSpan);Do not block the generation thread; await a delay or poll with cancellation
+M:System.Threading.Tasks.Task.Wait();Await the Task instead of blocking
+M:System.Threading.Tasks.Task.Wait(System.Int32);Await the Task instead of blocking
+M:System.Threading.Tasks.Task.Wait(System.TimeSpan);Await the Task instead of blocking
+P:System.Threading.Tasks.Task`1.Result;Await the Task instead of using .Result
+M:System.Runtime.CompilerServices.TaskAwaiter.GetResult();Await the Task instead of GetAwaiter().GetResult()
+M:System.Runtime.CompilerServices.TaskAwaiter`1.GetResult();Await the Task instead of GetAwaiter().GetResult()
+
+# Removed / always-wrong APIs.
+T:System.Runtime.Serialization.Formatters.Binary.BinaryFormatter;Do not deserialize with BinaryFormatter
+T:System.Net.WebClient;Use HttpClient instead
+M:System.IO.File.GetCreationTime(System.String);Use GetCreationTimeUtc instead
+M:System.IO.File.GetLastWriteTime(System.String);Use GetLastWriteTimeUtc instead
+M:System.IO.File.GetLastAccessTime(System.String);Use GetLastAccessTimeUtc instead
