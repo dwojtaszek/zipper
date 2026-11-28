@@ -529,3 +529,11 @@
 - **telemetry**: host=opencode mode=local specialists=0 bundle=~5000c
 - **lessons**: cross-format rejection tests must start from a legal native run; mutation-smoke baseline test has a hardcoded 60s timeout, so run after a fresh pre-commit marker
 - **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-coderabbit-round3
+
+- **findings**: 2 (CodeRabbit local; 1 valid README scope gap, 1 question refuted by native-engine tests)
+- **outcome**: accepted — scoped README native scenario restrictions to runs without `--loadfile-only`; locked source-record combined-type family filtering for Standard and Production Set
+- **telemetry**: host=opencode mode=local specialists=0 bundle=~4500c
+- **lessons**: `ChaosEngine.ResolveEnabledWorkItemTypes` intersects the combined list with each native family; source-driven generation needs explicit engine assertions, not only `Pipeline.Build` assertions
+- **suppressions**: none
