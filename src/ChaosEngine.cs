@@ -198,6 +198,7 @@ internal class ChaosEngine
             var resolvedTypes = new HashSet<string>(
                 chaosTypes.Split(',').Select(type => ChaosAnomalyTypes.CanonicalEmailType(type.Trim().ToLowerInvariant())),
                 StringComparer.OrdinalIgnoreCase);
+            // Each native handler keeps only its own family, even when the CLI accepts a combined list.
             resolvedTypes.IntersectWith(workItemTypes);
             return resolvedTypes;
         }

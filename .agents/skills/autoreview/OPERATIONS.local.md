@@ -465,3 +465,11 @@
 - **telemetry**: host=opencode mode=local specialists=1 bundle=1886c
 - **lessons**: mode-specific cross-format gate and single-part MIME mutation already covered by existing tests
 - **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-source-csv-followup
+
+- **findings**: 0 (fast pass)
+- **outcome**: clean review — Source CSV native flags covered for Standard and Production Set CLI build
+- **telemetry**: host=opencode mode=local specialists=1 bundle=4428c
+- **lessons**: SourceRecords without SourceFileTypes is not a supported generation path; Source CSV plumbing sets both
+- **suppressions**: none

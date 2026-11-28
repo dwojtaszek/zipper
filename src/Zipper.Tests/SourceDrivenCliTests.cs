@@ -61,6 +61,43 @@ public class SourceDrivenCliTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void Build_InputCsvWithNativeTypesAndChaos_NoTypeFlag_BuildsRequest()
+    {
+        var csv = this.WriteCsv("FilePath,FileType\na.eml,eml\nb.tiff,tiff\n");
+        var args = new[]
+        {
+            "--input-csv", csv, "--output-path", this.OutputDir("chaos-standard"),
+            "--chaos-mode", "--chaos-types", "mime-boundary,tiff-strip-offset",
+        };
+
+        var request = Cli.Pipeline.Build(args);
+
+        Assert.NotNull(request);
+        Assert.True(request!.Output.HasFileType("eml"));
+        Assert.True(request.Output.HasFileType("tiff"));
+        Assert.Equal("mime-boundary,tiff-strip-offset", request.Chaos.ChaosTypes);
+    }
+
+    [Fact]
+    public void Build_ProductionSetInputCsvWithNativeTypesAndChaos_NoTypeFlag_BuildsRequest()
+    {
+        var csv = this.WriteCsv("FilePath,FileType\na.eml,eml\nb.tiff,tiff\n");
+        var args = new[]
+        {
+            "--production-set", "--bates-prefix", "CSV", "--input-csv", csv,
+            "--output-path", this.OutputDir("chaos-production"),
+            "--chaos-mode", "--chaos-types", "mime-boundary,tiff-strip-offset",
+        };
+
+        var request = Cli.Pipeline.Build(args);
+
+        Assert.NotNull(request);
+        Assert.True(request!.Output.HasFileType("eml"));
+        Assert.True(request.Output.HasFileType("tiff"));
+        Assert.Equal("mime-boundary,tiff-strip-offset", request.Chaos.ChaosTypes);
+    }
+
+    [Fact]
     public void Build_InputCsvSingleType_IsNotMixed()
     {
         var csv = this.WriteCsv("FilePath,FileType\na.pdf,pdf\nb.pdf,pdf\n");
