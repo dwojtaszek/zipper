@@ -609,3 +609,11 @@
 - **telemetry**: host=opencode mode=local specialists=0 bundle=~3000c
 - **lessons**: document CLI validation against the mode flags it actually uses; pagination must distinguish exhausted results from truncated results
 - **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-macos-runner-test
+
+- **findings**: CI check `ci / runner-tests (macos-latest)` failed at `test_droid_plugin.py:63` — `assert "started" in out`
+- **outcome**: raised the timeout fixture from 0.2s to 2.0s for slow macOS child startup and moved the would-be survivor marker from 0.5s to 5s so process-group termination stays under test
+- **telemetry**: host=opencode mode=local specialists=0 bundle=~2200c
+- **lessons**: fixture timings are part of the assertion; on slower CI a subsecond ceiling can cut before the fake child writes its startup line
+- **suppressions**: none
