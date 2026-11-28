@@ -457,3 +457,11 @@
 - **telemetry**: host=opencode mode=local specialists=1 bundle=7125c
 - **lessons**: CodeRabbit mixed-type question resolved by family-scoped filtering tests and CLI runs
 - **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-gate-followup
+
+- **findings**: 0 (fast pass)
+- **outcome**: clean review — exact native family type sets asserted for Standard and Production Set
+- **telemetry**: host=opencode mode=local specialists=1 bundle=1886c
+- **lessons**: mode-specific cross-format gate and single-part MIME mutation already covered by existing tests
+- **suppressions**: none

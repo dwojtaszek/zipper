@@ -861,6 +861,8 @@ public class ChaosEngineBuilderTests
         var tiffEngine = ChaosEngineBuilder.BuildForStandardTiff(request);
         Assert.NotNull(emailEngine);
         Assert.NotNull(tiffEngine);
+        AssertEnabledWorkItemTypes(emailEngine, "mime-boundary");
+        AssertEnabledWorkItemTypes(tiffEngine, "tiff-strip-offset");
 
         var emlCount = Enumerable.Range(1, (int)request.Output.FileCount).Count(i => request.Output.ResolveFileType(i) == "eml");
         Assert.InRange(emlCount, 1, (int)request.Output.FileCount - 1);
@@ -919,6 +921,8 @@ public class ChaosEngineBuilderTests
         var tiffEngine = ChaosEngineBuilder.BuildForProductionTiff(request, plans);
         Assert.NotNull(emailEngine);
         Assert.NotNull(tiffEngine);
+        AssertEnabledWorkItemTypes(emailEngine, "mime-boundary");
+        AssertEnabledWorkItemTypes(tiffEngine, "tiff-strip-offset");
 
         var emlCount = plans.Count(plan => plan.FileType == "eml");
         Assert.InRange(emlCount, 1, plans.Count - 1);
@@ -948,6 +952,12 @@ public class ChaosEngineBuilderTests
         Assert.Equal(plans.Count - emlCount, tiffEngine.Anomalies.Count);
         Assert.All(emailEngine.Anomalies, anomaly => Assert.Equal("mime-boundary", anomaly.ErrorType));
         Assert.All(tiffEngine.Anomalies, anomaly => Assert.Equal("tiff-strip-offset", anomaly.ErrorType));
+    }
+
+    private static void AssertEnabledWorkItemTypes(ChaosEngine engine, params string[] expected)
+    {
+        var enabledTypes = Assert.IsAssignableFrom<IEnumerable<string>>(GetPrivateField(engine, "enabledTypes"));
+        Assert.Equal(expected.OrderBy(type => type), enabledTypes.OrderBy(type => type));
     }
 
     private static GeneratedFileContent TiffContent() => new()
