@@ -98,3 +98,27 @@ Each script below is called by `run-tests.sh` and has a `.bat` parity file.
 
 - Unit tests: `src/Zipper.Tests/` (run with `dotnet test`)
 - CI gate map: [docs/cicd.md](../docs/cicd.md#quick-reference-for-agents)
+
+## Split ZIP delivery fixture
+
+Run the optional fixture with Python 3.11 or later, Info-ZIP `zip` 3.0, and 7-Zip
+(`7zz` or `7z`). The destination must be a new directory with an existing parent.
+
+```bash
+python3 tests/split_zip_delivery.py ./split-zip-deliveries
+```
+
+The fixture writes a `complete` delivery and a `missing-middle` delivery. Both
+use Info-ZIP's 64 KiB split ZIP convention with numbered `.zNN` parts followed
+by `delivery.zip`. A Stored member spans multiple parts. The missing-middle
+variant excludes `delivery.z02` from the same complete Archive. The independent
+reader verifies every logical member of the complete Archive and rejects the
+missing-middle variant.
+
+Each delivery has a separate `delivery-manifest.json`. Schema version 1 records
+the format, producer name and version, split size, and variant. Its `parts`
+array lists the complete Archive in order and gives each part a 1-based
+`ordinal`, `filename`, exact `bytes`, and lowercase SHA-256 in `sha256`.
+`missing_part_ordinals` lists the parts the variant intentionally omits.
+`members` records the logical inventory with each member's filename, expanded
+length, and SHA-256. The sibling note is outside the declared delivery parts.
