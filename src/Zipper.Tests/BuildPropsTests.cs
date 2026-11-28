@@ -143,5 +143,6 @@ public class BuildPropsTests
             .ToList();
 
         Assert.Contains("$(MSBuildThisFileDirectory)BannedSymbols.txt", additionalFiles);
+        Assert.Contains("$(MSBuildThisFileDirectory)BannedSyntaxes.txt", additionalFiles);
     }
 }

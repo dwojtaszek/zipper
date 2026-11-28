@@ -59,8 +59,8 @@ public sealed class LoadFileSeamInvariantAnalyzer : ZipperAnalyzerBase
 
     /// <summary>
     /// Composers and load-file serializers must not write. The Emitter is the I/O
-    /// authority, so writes there are allowed. EmailSerializer and FileDataSerializer
-    /// are not load-file types.
+    /// authority, so writes there are allowed. The exact names EmailSerializer and
+    /// FileDataSerializer are not load-file types.
     /// </summary>
     private static bool IsLoadFileTargetLayer(string className)
     {
@@ -75,6 +75,6 @@ public sealed class LoadFileSeamInvariantAnalyzer : ZipperAnalyzerBase
             return false;
         }
 
-        return !upper.Contains("EMAIL") && !upper.Contains("FILEDATA");
+        return upper is not "EMAILSERIALIZER" and not "FILEDATASERIALIZER";
     }
 }

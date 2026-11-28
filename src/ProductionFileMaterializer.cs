@@ -94,7 +94,9 @@ internal sealed class ProductionFileMaterializer : IFileMaterializer
                         var entry = archive.CreateEntry(relativePath, level);
                         // Match ZipFile.CreateFromDirectory, which stored the local file time;
                         // using UTC here would change entry bytes on non-UTC hosts.
+#pragma warning disable RS0030
                         entry.LastWriteTime = new DateTimeOffset(fileInfo.LastWriteTime);
+#pragma warning restore RS0030
                         await using var entryStream = entry.Open();
                         await using var fileStream = new FileStream(fileInfo.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, PerformanceConstants.DefaultBufferSize, useAsync: true);
                         await fileStream.CopyToAsync(entryStream, cancellationToken).ConfigureAwait(false);

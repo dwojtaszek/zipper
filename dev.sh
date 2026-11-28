@@ -244,7 +244,7 @@ run_check() {
                     need_complexity=1
                 fi
                 ;;
-            Directory.Build.props|zipper.sln|BannedSymbols.txt|global.json)
+            Directory.Build.props|zipper.sln|BannedSymbols.txt|BannedSyntaxes.txt|global.json)
                 need_build=1
                 need_format=1
                 need_unit_tests=1

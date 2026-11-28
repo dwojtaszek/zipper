@@ -71,7 +71,7 @@ public sealed class DeterministicFormattableAnalyzer : ZipperAnalyzerBase
         }
 
         var containing = method.ContainingType;
-        if (containing is null || !containing.IsValueType || containing.SpecialType == SpecialType.System_String)
+        if (containing is null || !containing.IsValueType)
         {
             return;
         }

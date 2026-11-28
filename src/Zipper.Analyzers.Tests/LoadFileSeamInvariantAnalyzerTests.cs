@@ -156,6 +156,21 @@ class EmailSerializer
     }
 
     [Fact]
+    public async Task DirectWriteInEmailFieldSerializer_ReportsDiagnostic()
+    {
+        const string source = @"
+class EmailFieldSerializer
+{
+    public void Write(System.IO.TextWriter writer)
+    {
+        {|ZIP001:writer.Write|}(""x"");
+    }
+}
+";
+        await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+
+    [Fact]
     public async Task DirectWriteInFileDataSerializer_NoDiagnostic()
     {
         const string source = @"
