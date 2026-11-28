@@ -138,6 +138,8 @@ internal static class ChaosScenarios
     /// Loadfile-Only allows Load File chaos, including coordinated cross-format scenarios;
     /// Standard and Production Set allow Email and TIFF native chaos; Production Set also
     /// accepts coordinated cross-format scenarios, which replace native chaos for that run.
+    /// A combined <c>--chaos-types</c> list can name both families in a mix; each native
+    /// handler keeps only the types of its own family before applying anomalies.
     /// </summary>
     internal static bool IsGenerationChaosAllowed(
         bool chaosMode,

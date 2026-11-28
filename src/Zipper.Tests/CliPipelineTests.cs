@@ -636,6 +636,19 @@ public class CliPipelineTests : WorkingDirectoryTestBase
     }
 
     [Fact]
+    public void Build_StandardEmailAndTiffMixWithCombinedNativeChaosTypes_ReturnsChaosConfig()
+    {
+        var args = new[] { "--types", "eml:1,tiff:1", "--count", "10", "--output-path", this.tempDir, "--chaos-mode", "--chaos-types", "mime-boundary,tiff-strip-offset" };
+
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
+
+        Assert.NotNull(result);
+        Assert.True(result!.Chaos.ChaosMode);
+        Assert.Equal("mime-boundary,tiff-strip-offset", result.Chaos.ChaosTypes);
+        Assert.DoesNotContain("Error:", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Build_StandardEmailWithLoadFileChaosType_ReturnsNullWithEmailScope()
     {
         var args = new[] { "--type", "eml", "--count", "10", "--output-path", this.tempDir, "--chaos-mode", "--chaos-types", "unclosed-quote" };

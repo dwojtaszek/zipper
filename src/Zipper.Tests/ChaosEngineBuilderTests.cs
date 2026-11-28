@@ -862,6 +862,9 @@ public class ChaosEngineBuilderTests
         Assert.NotNull(emailEngine);
         Assert.NotNull(tiffEngine);
 
+        var emlCount = Enumerable.Range(1, (int)request.Output.FileCount).Count(i => request.Output.ResolveFileType(i) == "eml");
+        Assert.InRange(emlCount, 1, (int)request.Output.FileCount - 1);
+
         for (long index = 1; index <= request.Output.FileCount; index++)
         {
             string fileType = request.Output.ResolveFileType(index);
@@ -883,12 +886,8 @@ public class ChaosEngineBuilderTests
             }
         }
 
-        Assert.Equal(
-            Enumerable.Range(1, (int)request.Output.FileCount).Count(i => request.Output.ResolveFileType(i) == "eml"),
-            emailEngine.Anomalies.Count);
-        Assert.Equal(
-            Enumerable.Range(1, (int)request.Output.FileCount).Count(i => request.Output.ResolveFileType(i) == "tiff"),
-            tiffEngine.Anomalies.Count);
+        Assert.Equal(emlCount, emailEngine.Anomalies.Count);
+        Assert.Equal((int)request.Output.FileCount - emlCount, tiffEngine.Anomalies.Count);
         Assert.All(emailEngine.Anomalies, anomaly => Assert.Equal("mime-boundary", anomaly.ErrorType));
         Assert.All(tiffEngine.Anomalies, anomaly => Assert.Equal("tiff-strip-offset", anomaly.ErrorType));
     }
@@ -921,6 +920,9 @@ public class ChaosEngineBuilderTests
         Assert.NotNull(emailEngine);
         Assert.NotNull(tiffEngine);
 
+        var emlCount = plans.Count(plan => plan.FileType == "eml");
+        Assert.InRange(emlCount, 1, plans.Count - 1);
+
         foreach (var plan in plans)
         {
             var input = plan.FileType == "eml" ? EmlContent() : TiffContent();
@@ -942,8 +944,8 @@ public class ChaosEngineBuilderTests
             }
         }
 
-        Assert.Equal(plans.Count(plan => plan.FileType == "eml"), emailEngine.Anomalies.Count);
-        Assert.Equal(plans.Count(plan => plan.FileType == "tiff"), tiffEngine.Anomalies.Count);
+        Assert.Equal(emlCount, emailEngine.Anomalies.Count);
+        Assert.Equal(plans.Count - emlCount, tiffEngine.Anomalies.Count);
         Assert.All(emailEngine.Anomalies, anomaly => Assert.Equal("mime-boundary", anomaly.ErrorType));
         Assert.All(tiffEngine.Anomalies, anomaly => Assert.Equal("tiff-strip-offset", anomaly.ErrorType));
     }
