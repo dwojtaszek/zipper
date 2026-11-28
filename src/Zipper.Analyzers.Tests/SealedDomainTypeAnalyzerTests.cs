@@ -1,3 +1,4 @@
+using Microsoft.CodeAnalysis;
 using Xunit;
 
 using VerifyCS = Microsoft.CodeAnalysis.CSharp.Testing.XUnit.AnalyzerVerifier<
@@ -97,5 +98,14 @@ static class DefaultConfig
 }
 ";
         await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+
+    [Fact]
+    public void SupportedDiagnostics_DefaultSeverityIsWarning()
+    {
+        var analyzer = new Zipper.Analyzers.SealedDomainTypeAnalyzer();
+        var descriptor = Assert.Single(analyzer.SupportedDiagnostics);
+        Assert.Equal(Zipper.Analyzers.SealedDomainTypeAnalyzer.DiagnosticId, descriptor.Id);
+        Assert.Equal(DiagnosticSeverity.Warning, descriptor.DefaultSeverity);
     }
 }

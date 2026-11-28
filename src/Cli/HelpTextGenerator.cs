@@ -8,6 +8,8 @@ internal static class HelpTextGenerator
     public static void Show()
     {
         var exeName = Process.GetCurrentProcess().ProcessName;
+        // CLI help text is display-only output, not deterministic Load File content.
+#pragma warning disable MA0136
         var help = $"""
             Error: Missing required arguments.
             Usage: {exeName} --type <pdf|jpg|tiff|eml|docx|xlsx> --count <number> --output-path <directory> [options]
@@ -136,6 +138,7 @@ internal static class HelpTextGenerator
                                        Generate a deterministic benchmark ZIP and exit
               --version                Print the version string and exit
             """;
+#pragma warning restore MA0136
         Console.Error.WriteLine(help.ReplaceLineEndings(Console.Error.NewLine));
     }
 }

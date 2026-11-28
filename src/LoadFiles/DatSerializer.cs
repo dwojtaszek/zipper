@@ -97,7 +97,7 @@ internal sealed class DatSerializer : ILoadFileSerializer
         if (this.hasQuote && result.Contains(this.quoteDelimiter, StringComparison.Ordinal))
         {
             result = result.Replace(
-                this.quoteDelimiter.ToString(),
+                new string(this.quoteDelimiter, 1),
                 new string(this.quoteDelimiter, 2),
                 StringComparison.Ordinal);
         }

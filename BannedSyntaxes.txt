@@ -2,3 +2,4 @@
 # SyntaxKind names (no leading //) are a single-pass scan. See
 # https://www.meziantou.net/querying-roslyn-syntax-trees-with-xpath.htm
 GotoStatement; Use structured control flow instead of goto
+UnsafeStatement; Avoid unsafe blocks in managed e-discovery generation code

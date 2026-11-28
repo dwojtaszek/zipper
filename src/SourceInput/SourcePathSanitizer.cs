@@ -49,7 +49,7 @@ internal static class SourcePathSanitizer
         }
 
         var unified = trimmed.Replace('\\', '/');
-        if (unified.StartsWith("/", StringComparison.Ordinal))
+        if (unified.StartsWith('/'))
         {
             error = "Path must be relative (rooted and UNC paths are not allowed).";
             return false;
@@ -78,7 +78,7 @@ internal static class SourcePathSanitizer
 
             // Windows trims trailing spaces/dots from the stem before the device-name
             // comparison, so the check must do the same ("CON .pdf" is still CON).
-            var stemEnd = segment.IndexOf('.');
+            var stemEnd = segment.IndexOf('.', StringComparison.Ordinal);
             var stem = (stemEnd >= 0 ? segment[..stemEnd] : segment).TrimEnd(' ', '.');
             if (ReservedDeviceNames.Contains(stem))
             {

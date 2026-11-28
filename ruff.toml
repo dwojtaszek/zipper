@@ -1,12 +1,12 @@
 # Pinned scope for repository Python gates (ruff 0.17.5).
 include = [
+  ".agents/**/*.py",
   ".zipper-runner/**/*.py",
   ".github/scripts/**/*.py",
   ".github/actions/**/*.py",
-  "tests/ci/**/*.py",
-  "tests/perf/**/*.py",
+  "tests/**/*.py",
   "tools/**/*.py",
 ]
 
 [lint]
-select = ["B014", "E9", "F"]
+select = ["B006", "B008", "B011", "B014", "B015", "B018", "B023", "B033", "E9", "F", "T10", "UP035", "W6"]

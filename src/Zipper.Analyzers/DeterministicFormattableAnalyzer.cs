@@ -181,7 +181,16 @@ public sealed class DeterministicFormattableAnalyzer : ZipperAnalyzerBase
     private static bool IsFormatterLayer(string typeName)
     {
         var upper = typeName.ToUpperInvariant();
-        return upper.Contains("FORMATTER")
-            || (upper.Contains("LOADFILE") && upper.Contains("COMPOSER"));
+        if (upper.Contains("FORMATTER") || upper.Contains("COMPOSER"))
+        {
+            return true;
+        }
+
+        if (!upper.Contains("SERIALIZER"))
+        {
+            return false;
+        }
+
+        return upper is not "EMAILSERIALIZER" and not "FILEDATASERIALIZER";
     }
 }

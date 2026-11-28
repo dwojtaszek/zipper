@@ -22,7 +22,7 @@ internal static class EmailFactory
 
     private static readonly Dictionary<EmailCategory, List<EmailTemplateBase>> TemplatesByCategory =
         Data.Templates.ToDictionary(
-            kvp => (EmailCategory)Enum.Parse(typeof(EmailCategory), kvp.Key, true),
+            kvp => Enum.Parse<EmailCategory>(kvp.Key, ignoreCase: true),
             kvp => kvp.Value);
 
     // Aliases into Data.Templates; treat as read-only — mutating would corrupt the shared data.
@@ -90,7 +90,7 @@ internal static class EmailFactory
         string? htmlBody = email.HtmlBody;
         if (realism.MultipartAlternative && string.IsNullOrEmpty(htmlBody))
         {
-            htmlBody = $"<html><body><p>{System.Net.WebUtility.HtmlEncode(email.Body).Replace("\r\n", "\n").Replace("\n", "<br/>\n")}</p></body></html>";
+            htmlBody = $"<html><body><p>{System.Net.WebUtility.HtmlEncode(email.Body).Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\n", "<br/>\n", StringComparison.Ordinal)}</p></body></html>";
         }
 
         return email with
@@ -193,7 +193,7 @@ internal static class EmailFactory
                 throw new ArgumentException($"Type contains invalid character U+{(int)c:X4}.", nameof(type));
             }
             // Reject characters that are special in email addresses or headers
-            if ("()<>@,;:\\\"[]".Contains(c))
+            if ("()<>@,;:\\\"[]".Contains(c, StringComparison.Ordinal))
             {
                 throw new ArgumentException($"Type contains invalid character '{c}'.", nameof(type));
             }
@@ -335,7 +335,7 @@ internal static class EmailFactory
             return template;
         }
 
-        int openBraceIndex = template.IndexOf('{');
+        int openBraceIndex = template.IndexOf('{', StringComparison.Ordinal);
         if (openBraceIndex == -1)
         {
             return template;

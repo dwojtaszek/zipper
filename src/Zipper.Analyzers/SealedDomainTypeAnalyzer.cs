@@ -20,7 +20,7 @@ public sealed class SealedDomainTypeAnalyzer : ZipperAnalyzerBase
         title: "Prefer sealed for domain types",
         messageFormat: "Consider sealing {0} to prevent unintended inheritance",
         category: "Architecture",
-        defaultSeverity: DiagnosticSeverity.Hidden,
+        defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         description: "Domain types that are not designed for inheritance should be marked sealed to preserve architectural invariants.");
 

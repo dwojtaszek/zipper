@@ -5,7 +5,7 @@ namespace Zipper;
 /// <summary>
 /// Standard parallel file generation mode — produces an Archive plus a Load File.
 /// </summary>
-internal class StandardMode : IGenerationMode
+internal sealed class StandardMode : IGenerationMode
 {
     private readonly Func<FileGenerationRequest, CancellationToken, Task<FileGenerationResult>> _generate;
 

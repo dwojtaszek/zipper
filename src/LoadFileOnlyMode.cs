@@ -5,7 +5,7 @@ namespace Zipper;
 /// <summary>
 /// Loadfile-Only generation mode — emits a load file plus its properties sidecar without producing native files.
 /// </summary>
-internal class LoadFileOnlyMode : IGenerationMode
+internal sealed class LoadFileOnlyMode : IGenerationMode
 {
     private readonly Func<FileGenerationRequest, CancellationToken, Task<LoadFileOnlyResult>> _generate;
 

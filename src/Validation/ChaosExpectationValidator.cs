@@ -310,8 +310,9 @@ public sealed class ChaosExpectationValidator
             return;
         }
 
-        var lines = File.ReadLines(loadFilePath, ResolveEncoding(format, request));
-        long lineCount = lines.LongCount();
+        var encoding = ResolveEncoding(format, request);
+        var (lineCount, firstLine) = CountLinesAndFirst(loadFilePath, encoding);
+
         int dataStartIndex = format == LoadFileFormat.Opt ? 0 : 1;
         if (format != LoadFileFormat.Opt && lineCount == 0)
         {
@@ -369,12 +370,12 @@ public sealed class ChaosExpectationValidator
             return;
         }
 
-        int expectedFieldCount = format == LoadFileFormat.Opt ? 7 : ParseFieldCount(lines.First(), format, request);
+        int expectedFieldCount = format == LoadFileFormat.Opt ? 7 : ParseFieldCount(firstLine!, format, request);
 
         long lastRecordIndex = Math.Max(dataStartIndex, lineCount - trailingFragments);
         var anomalyFieldCounts = new Dictionary<long, int>();
         long lineNumber = dataStartIndex;
-        foreach (var line in lines.Skip(dataStartIndex))
+        foreach (var line in File.ReadLines(loadFilePath, encoding).Skip(dataStartIndex))
         {
             lineNumber++;
             int fieldCount = ParseFieldCount(line, format, request);
@@ -506,6 +507,19 @@ public sealed class ChaosExpectationValidator
         int dash = value.IndexOf('-', prefix.Length);
         return dash > prefix.Length
             && long.TryParse(value.AsSpan(prefix.Length, dash - prefix.Length), NumberStyles.None, CultureInfo.InvariantCulture, out startLine);
+    }
+
+    private static (long LineCount, string? FirstLine) CountLinesAndFirst(string path, Encoding encoding)
+    {
+        long count = 0;
+        string? first = null;
+        foreach (var line in File.ReadLines(path, encoding))
+        {
+            first ??= line;
+            count++;
+        }
+
+        return (count, first);
     }
 
     private static void AddError(ValidationResult result, string path, string message, long? lineNumber = null) =>

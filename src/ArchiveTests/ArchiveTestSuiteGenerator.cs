@@ -866,12 +866,12 @@ internal static class ArchiveTestSuiteGenerator
         var jsonPath = Path.Combine(staging, fixtureId + ".json");
 
         // Exclusive-create file modes: an unexpected collision fails the run instead of overwriting.
-        using (var zip = new FileStream(zipPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+        await using (var zip = new FileStream(zipPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
         {
             await zip.WriteAsync(archiveBytes, cancellationToken).ConfigureAwait(false);
         }
 
-        using (var json = new FileStream(jsonPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+        await using (var json = new FileStream(jsonPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
         {
             await json.WriteAsync(jsonBytes, cancellationToken).ConfigureAwait(false);
         }

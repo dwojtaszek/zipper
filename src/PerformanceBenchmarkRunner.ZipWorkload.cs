@@ -105,7 +105,7 @@ public static partial class PerformanceBenchmarkRunner
         {
             await using (stream)
             {
-                using var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true);
+                await using var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true);
                 long index = 0;
                 foreach (var group in groups)
                 {

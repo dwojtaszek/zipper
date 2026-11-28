@@ -61,7 +61,7 @@ internal class ZipArchiveSink : IArchiveSink
         try
         {
             await using (archiveStream.ConfigureAwait(false))
-            using (var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create, leaveOpen: false))
+            await using (var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create, leaveOpen: false))
             {
                 using var processedFiles = new DiskBackedFileDataList();
                 var usedEntryPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

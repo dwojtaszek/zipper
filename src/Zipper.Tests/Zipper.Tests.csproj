@@ -31,6 +31,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="JunitXml.TestLogger" Version="8.1.0" />
+    <PackageReference Include="NetArchTest.eNhancedEdition" Version="1.4.5" />
     <PackageReference Include="Xunit.SkippableFact" Version="1.5.85" />
   </ItemGroup>
 

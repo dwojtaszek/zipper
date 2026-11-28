@@ -186,6 +186,53 @@ class FileDataSerializer
     }
 
     [Fact]
+    public async Task FileWriteAllTextInComposer_ReportsDiagnostic()
+    {
+        const string source = @"
+class DatStandardComposer
+{
+    public void Dump(string path)
+    {
+        {|ZIP001:System.IO.File.WriteAllText|}(path, ""data"");
+    }
+}
+";
+        await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+
+    [Fact]
+    public async Task FileWriteAllBytesAsyncInSerializer_ReportsDiagnostic()
+    {
+        const string source = @"
+using System.Threading.Tasks;
+
+class DatSerializer
+{
+    public Task DumpAsync(string path, byte[] bytes)
+    {
+        return {|ZIP001:System.IO.File.WriteAllBytesAsync|}(path, bytes);
+    }
+}
+";
+        await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+
+    [Fact]
+    public async Task StringCreateInComposer_NoDiagnostic()
+    {
+        const string source = @"
+class DatStandardComposer
+{
+    public string Build()
+    {
+        return string.Create(1, 'a', (span, c) => span[0] = c);
+    }
+}
+";
+        await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+
+    [Fact]
     public void SupportedDiagnostics_DefaultSeverityIsWarning()
     {
         var analyzer = new LoadFileSeamInvariantAnalyzer();

@@ -298,7 +298,7 @@ internal static class EmailSerializer
         WriteBodyContent(writer, email.Body, "text/plain; charset=utf-8", transferEncoding);
         writer.WriteLine();
 
-        var html = email.HtmlBody ?? $"<html><body><p>{System.Net.WebUtility.HtmlEncode(email.Body).Replace("\r\n", "\n").Replace("\n", "<br/>\n")}</p></body></html>";
+        var html = email.HtmlBody ?? $"<html><body><p>{System.Net.WebUtility.HtmlEncode(email.Body).Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\n", "<br/>\n", StringComparison.Ordinal)}</p></body></html>";
         writer.WriteLine($"--{altBoundary}");
         WriteBodyContent(writer, html, "text/html; charset=utf-8", transferEncoding);
         writer.WriteLine();

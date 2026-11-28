@@ -137,8 +137,8 @@ internal sealed class AdversarialValueTailPlan
 
         string replacement = replacementFallback.DefaultString;
         return !replacement.Contains(quoteDelimiter, StringComparison.Ordinal)
-            && !replacement.Contains('\r')
-            && !replacement.Contains('\n');
+            && !replacement.Contains('\r', StringComparison.Ordinal)
+            && !replacement.Contains('\n', StringComparison.Ordinal);
     }
 
     private static bool CanRoundTrip(Encoding encoding, string value)
@@ -197,10 +197,23 @@ internal sealed class AdversarialValueTailPlan
             IsEligibleColumn(column)
             && (normalizedSourceMetadataKeys is null || !normalizedSourceMetadataKeys.Contains(SourceMetadataKeyNormalizer.Normalize(column.Name)));
 
-        return columns.FirstOrDefault(column =>
-                   IsAvailableColumn(column)
-                   && column.Name.Equals("AUTHOR", StringComparison.OrdinalIgnoreCase))
-               ?? columns.FirstOrDefault(IsAvailableColumn);
+        ColumnDefinition? fallback = null;
+        foreach (var column in columns)
+        {
+            if (!IsAvailableColumn(column))
+            {
+                continue;
+            }
+
+            if (column.Name.Equals("AUTHOR", StringComparison.OrdinalIgnoreCase))
+            {
+                return column;
+            }
+
+            fallback ??= column;
+        }
+
+        return fallback;
     }
 
     internal string? GetValue(long recordIndex)

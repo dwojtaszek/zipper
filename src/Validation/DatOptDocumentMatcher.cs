@@ -110,10 +110,11 @@ internal static class DatOptDocumentMatcher
         Func<TRecord, string?> getBates,
         bool includeBates)
     {
+        var materialized = records as IReadOnlyCollection<TRecord> ?? records.ToList();
         var index = new Dictionary<string, TRecord>(StringComparer.OrdinalIgnoreCase);
         if (includeBates)
         {
-            foreach (var record in records)
+            foreach (var record in materialized)
             {
                 var bates = getBates(record);
                 if (!string.IsNullOrEmpty(bates))
@@ -123,7 +124,7 @@ internal static class DatOptDocumentMatcher
             }
         }
 
-        foreach (var record in records)
+        foreach (var record in materialized)
         {
             var docId = getDocId(record);
             if (!string.IsNullOrEmpty(docId))

@@ -176,7 +176,7 @@ public class ParallelFileGenerator
             }
             else
             {
-                archiveStream.Dispose();
+                await archiveStream.DisposeAsync();
                 archiveStream = null;
                 consumerTask = this.archiveSink.CreateArchiveAsync(zipFilePath, loadFileName, loadFilePath, request, resultChannel.Reader, onItemCommitted, pipelineCts.Token, anomalyProvider);
             }

@@ -2,7 +2,7 @@ using Zipper.Config;
 
 namespace Zipper;
 
-public class FileGenerationRequest
+public sealed class FileGenerationRequest
 {
     public OutputConfig Output { get; set; } = new();
 
@@ -79,7 +79,7 @@ public class FileGenerationRequest
     }
 }
 
-public class FileGenerationResult
+public sealed class FileGenerationResult
 {
     public string ZipFilePath { get; set; } = string.Empty;
 

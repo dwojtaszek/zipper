@@ -2,7 +2,7 @@ using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using System.Text.Json;
 
-using var stream = File.OpenRead(args[0]);
+await using var stream = File.OpenRead(args[0]);
 using var pe = new PEReader(stream);
 var metadata = pe.GetMetadataReader();
 var result = new Dictionary<string, string>

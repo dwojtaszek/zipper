@@ -33,11 +33,37 @@ public sealed class LoadFileSeamInvariantAnalyzer : ZipperAnalyzerBase
         context.RegisterSyntaxNodeAction(AnalyzeWriteAccess, SyntaxKind.SimpleMemberAccessExpression);
     }
 
+    private static readonly HashSet<string> DirectWriteMethods = new(StringComparer.Ordinal)
+    {
+        "Write",
+        "WriteLine",
+        "WriteAsync",
+        "WriteLineAsync",
+    };
+
+    private static readonly HashSet<string> FileIoWriteMethods = new(StringComparer.Ordinal)
+    {
+        "WriteAllText",
+        "WriteAllTextAsync",
+        "WriteAllBytes",
+        "WriteAllBytesAsync",
+        "WriteAllLines",
+        "WriteAllLinesAsync",
+        "AppendAllText",
+        "AppendAllTextAsync",
+        "AppendAllLines",
+        "AppendAllLinesAsync",
+        "Create",
+        "OpenWrite",
+    };
+
     private static void AnalyzeWriteAccess(SyntaxNodeAnalysisContext context)
     {
         var memberAccess = (MemberAccessExpressionSyntax)context.Node;
         var memberName = memberAccess.Name.Identifier.Text;
-        if (memberName != "Write" && memberName != "WriteLine" && memberName != "WriteAsync" && memberName != "WriteLineAsync")
+        var isDirectWrite = DirectWriteMethods.Contains(memberName);
+        var isFileIoWrite = !isDirectWrite && FileIoWriteMethods.Contains(memberName);
+        if (!isDirectWrite && !isFileIoWrite)
         {
             return;
         }
@@ -54,7 +80,21 @@ public sealed class LoadFileSeamInvariantAnalyzer : ZipperAnalyzerBase
             return;
         }
 
+        if (isFileIoWrite && !IsSystemIoFileMember(context, memberAccess))
+        {
+            return;
+        }
+
         context.ReportDiagnostic(Diagnostic.Create(Rule, memberAccess.GetLocation()));
+    }
+
+    private static bool IsSystemIoFileMember(
+        SyntaxNodeAnalysisContext context,
+        MemberAccessExpressionSyntax memberAccess)
+    {
+        var symbol = context.SemanticModel.GetSymbolInfo(memberAccess, context.CancellationToken).Symbol;
+        return symbol is IMethodSymbol method
+            && string.Equals(method.ContainingType?.ToDisplayString(), "System.IO.File", StringComparison.Ordinal);
     }
 
     /// <summary>
