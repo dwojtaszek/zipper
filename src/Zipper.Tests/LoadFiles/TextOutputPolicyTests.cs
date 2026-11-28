@@ -85,7 +85,7 @@ public class TextOutputPolicyTests
     [Fact]
     public void Csv_Standard_NoChaos_PlatformNewLine()
     {
-        var req = Req(LoadFileFormat.Csv, eol: "LF");
+        var req = Req(LoadFileFormat.Csv, eol: "CR");
         var policy = new TextOutputPolicy(req, LoadFileFormat.Csv, WriterMode.Standard, hasChaos: false);
 
         Assert.Equal(Environment.NewLine, policy.EndOfLine);
@@ -103,7 +103,7 @@ public class TextOutputPolicyTests
     [Fact]
     public void Csv_WithChaos_PlatformNewLine()
     {
-        var req = Req(LoadFileFormat.Csv, eol: "LF");
+        var req = Req(LoadFileFormat.Csv, eol: "CR");
         var policy = new TextOutputPolicy(req, LoadFileFormat.Csv, WriterMode.Standard, hasChaos: true);
 
         // Csv should always use Environment.NewLine even with chaos
@@ -113,7 +113,7 @@ public class TextOutputPolicyTests
     [Fact]
     public void Concordance_Standard_NoChaos_PlatformNewLine()
     {
-        var req = Req(LoadFileFormat.Concordance, eol: "LF");
+        var req = Req(LoadFileFormat.Concordance, eol: "CR");
         var policy = new TextOutputPolicy(req, LoadFileFormat.Concordance, WriterMode.Standard, hasChaos: false);
 
         Assert.Equal(Environment.NewLine, policy.EndOfLine);
@@ -122,7 +122,7 @@ public class TextOutputPolicyTests
     [Fact]
     public void Concordance_WithChaos_PlatformNewLine()
     {
-        var req = Req(LoadFileFormat.Concordance, eol: "LF");
+        var req = Req(LoadFileFormat.Concordance, eol: "CR");
         var policy = new TextOutputPolicy(req, LoadFileFormat.Concordance, WriterMode.Standard, hasChaos: true);
 
         // Concordance should always use Environment.NewLine even with chaos

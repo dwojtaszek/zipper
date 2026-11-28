@@ -178,6 +178,7 @@ public class AllWritersTests : TempDirectoryTestBase
         var content = System.Text.Encoding.UTF8.GetString(stream.ToArray());
         Assert.NotEmpty(engine.Anomalies);
         Assert.All(engine.Anomalies, anomaly => Assert.Equal("xml-unclosed-tag", anomaly.ErrorType));
+        Assert.Equal(1, content.AsSpan().Count("</Root>".AsSpan()));
         Assert.Throws<System.Xml.XmlException>(() => { _ = System.Xml.Linq.XDocument.Parse(content); });
     }
 }
