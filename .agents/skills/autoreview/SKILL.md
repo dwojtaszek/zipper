@@ -1,13 +1,13 @@
 ---
 name: autoreview
-description: "Auto Review closeout. Runs as parallel review subagents inside the current coding agent (Claude Code or Cursor) — no external reviewer CLI."
+description: "Auto Review closeout. Default is one nori-code-reviewer inside the current coding agent (Claude Code or Cursor) — no external reviewer CLI."
 ---
 
 # Auto Review
 
 Run a structured code review as a closeout check. This is code review, not Guardian `auto_review` approval routing.
 
-The review runs entirely **inside the current coding agent** (Claude Code or Cursor) as parallel review subagents dispatched via the native `Agent` tool. There is no external reviewer CLI, no second-model binary, and no code leaves the machine.
+The review runs entirely **inside the current coding agent** (Claude Code or Cursor). Default is **one** `nori-code-reviewer` subagent. There is no external reviewer CLI, no second-model binary, and no code leaves the machine.
 
 Use when:
 
@@ -30,7 +30,7 @@ This skill is split so SKILL.md stays a lean orchestrator:
   - `evals.md` — basic eval scenarios + how to run them.
 - **`OPERATIONS.md`** — curated `## Insights` (learned suppressions) read at review time, plus a sample log. Per-run telemetry goes to the gitignored `OPERATIONS.local.md`.
 
-**Portability:** `agents/`, `references/review-policy.md`, and this file are **generic** (web-app-flavored examples, but the methodology is language/stack-neutral). All repo/domain coupling lives in `OPERATIONS.md` → `## Project facts` (terminology, hot paths, trust boundary, extra dispatch signals). To fork to another repo: keep `agents/` + `review-policy.md` + `SKILL.md` as-is, replace the `## Project facts` block, and re-baseline `references/baseline_runs.md` + `evals.md` (the Z-scenarios). Specialists with no matching signal (e.g. `data-migration` in a repo with no DB, `design` with no frontend) simply never dispatch — that is expected, not a gap.
+**Portability:** default dispatch is one `nori-code-reviewer`. Specialist files in `agents/` and `references/review-policy.md` stay generic. Repo/domain coupling lives in `OPERATIONS.md` → `## Project facts` (terminology, hot paths, trust boundary, extra opt-in signals). The opt-in table may name this repo's output-format contracts; that does not change the one-nori default. To fork: keep `agents/` + `review-policy.md` + `SKILL.md`, replace `## Project facts`, and re-baseline `references/baseline_runs.md` + `evals.md`.
 
 ## Contract
 
@@ -41,12 +41,12 @@ This skill is split so SKILL.md stays a lean orchestrator:
 - Prefer small fixes at the right ownership boundary; no refactor unless it clearly improves the bug class.
 - Keep going until the review returns no accepted/actionable findings. Maximum 3 fix-review cycles — after 3, escalate remaining findings to the user.
 - If a review-triggered fix changes code, rerun focused tests and rerun the review.
-- Be patient. A full multi-specialist review takes **~3–5 minutes** end-to-end (measured — see `references/baseline_runs.md`); a single subagent runs ~25–120s depending on how much surrounding code it reads. Wall-clock ≈ the slowest subagent, not the sum (the wave is parallel). Do not kill a review subagent that is still working.
+- Be patient. One `nori-code-reviewer` run takes **~1–3 minutes** (see `references/baseline_runs.md` for historical multi-specialist timings). Do not kill a reviewer that is still working.
 - Review subagents may use read-only inspection tools (read files, grep) to check dependency contracts and current behavior. They do not need write access or web access.
 - Security perspective is always included, but it should not cripple legitimate functionality. Report security findings only when the change creates a concrete, actionable risk or removes an important safety check.
-- Do not nest reviewers: a review subagent must not dispatch another review or shell out to any external review CLI. Dispatch the detected specialists once, collect, synthesize, stop.
+- Do not nest reviewers: a review subagent must not dispatch another review or shell out to any external review CLI. Dispatch `nori-code-reviewer` once, collect, synthesize, stop. Do not also spawn `cavecrew-reviewer` or `generalPurpose` copies of correctness/testing/maintainability in the same wave.
 - Stop as soon as the review completes with no accepted/actionable findings. Do not run an extra pass just to get a nicer "clean" line, a second opinion, or clearer closeout wording.
-- Do not spin up redundant subagents beyond the set detected by scope signals (see Specialist Dispatch).
+- Do not spin up redundant subagents beyond the single default reviewer (see Reviewer Dispatch).
 - If rejecting a finding as intentional/not worth fixing, add a brief inline code comment only when it explains a real invariant or ownership decision that future reviewers should know.
 - Do not push just to review. Push only when the user requested push/ship/PR update.
 - Never skip review because "it's simple." Simple changes harbor simple bugs.
@@ -60,31 +60,35 @@ Adjust review depth based on diff size and risk. Higher effort catches more real
 - **High** (default) — All angles A-K, up to 6 candidates each, recall-biased verify, ≤10 findings. Catch every real bug a careful reviewer would catch in one sitting. Err on the side of surfacing.
 - **Maximum** — All angles A-K at full depth, up to 8 candidates each, 1-vote verify, ≤15 findings. Catching real bugs matters more than avoiding false positives. A missed bug ships.
 
-Selection rule: default to High. Upgrade to Maximum for diffs touching auth, crypto, data integrity, or payment flows. Caps apply to the correctness specialist; other specialists are additive (see `references/review-policy.md`).
+Selection rule: default to High. Upgrade to Maximum for diffs touching auth, crypto, data integrity, or payment flows. nori reports Critical / Important / Minor; apply High's ≤10 cap to that list. Opt-in specialists stay additive only when a second reviewer actually ran.
 
-**Use the fast pass (not the full wave) for trivial diffs** — single-file patches under ~20 lines with no security/data-safety surface (typo fixes, comment/doc edits, mechanical renames, version bumps). This is not merely "allowed," it is the expected path: a full multi-specialist review costs ~200K tokens and ~4 minutes; the fast pass costs ~30K tokens and ~30s (see `references/baseline_runs.md`). Spending the full budget on a one-line change is waste. Escalate to the full wave only if the fast pass surfaces something non-trivial.
+**Trivial diffs** (docs-only, version-bump, or single-line / mechanical rename with no security/data-safety surface): self-review. Do not spawn a reviewer. A 15-line logic patch is not trivial.
 
-## Specialist Dispatch
+## Reviewer Dispatch
 
-The review is performed by the specialist agents in `agents/`, dispatched in parallel. Always dispatch correctness, testing, and maintainability; add the rest by scope signal. Each subagent has fresh context — no prior review bias.
+**Default:** one `nori-code-reviewer` (`subagent_type: nori-code-reviewer`, prompt from `.claude/agents/nori-code-reviewer.md`, registry 2.1.1). That is the pre-PR signal.
 
-| Agent file | Dispatch when (changed-diff signal) |
+**Do not dispatch in the same wave:**
+- `cavecrew-reviewer` (overlapped nori on the same Important class)
+- `generalPurpose` (Cursor) or `Agent` with `.agents/skills/autoreview/agents/{correctness,testing,maintainability}.md` as the prompt (Claude Code)
+
+**Second reviewer (opt-in only):** when the user asks, or after nori returned empty Critical/Important and the diff still touches Load File bytes, CLI flags, or orchestrators. Then pick **one** specialist from the table below by scope signal — not the whole table.
+
+| Agent file | Opt-in when |
 |---|---|
-| `agents/correctness.md` | always (the main review — angles A–K + two-pass) |
-| `agents/testing.md` | always |
-| `agents/maintainability.md` | always |
 | `agents/security.md` | `authenticat`, `authoriz`, `credential`, `password`, `\btoken\b`, `secret`, `crypto`, `permission`, `session`, `login`, `injection`, `traversal`, `sanitiz`, `deserializ`, `\bSSRF\b` |
-| `agents/performance.md` | `\bfor\b`, `foreach`, `\bwhile\b`, `\.Select`, `\.Where`, `\bquery\b`, `fetch`, `\bmap\b` |
+| `agents/api-contract.md` | Load File / DAT / OPT / Concordance / EDRM writers |
+| `agents/adversarial.md` | user asked for a hostile pass |
+| `agents/correctness.md` | nori unavailable in this host |
+| `agents/testing.md` | user asked for a test-only pass |
+| `agents/maintainability.md` | user asked for a maintainability pass |
+| `agents/performance.md` | user asked; hot-path loops |
 | `agents/data-migration.md` | paths match `migrate/`, `migrations/`, `db/`, or `*.sql` |
-| `agents/api-contract.md` | `\broute\b`, `endpoint`, `controller`, `handler`, `serializer`, `schema`, `\.xsd`, `openapi`, `swagger` (for a generator/exporter the **emitted file format is the contract** — output-format writers count) |
 | `agents/design.md` | frontend files (`*.css`, `*.scss`, `*.tsx`, `*.vue`, `*.html`) |
-| `agents/adversarial.md` | always, in the same parallel wave (see Running the Review) |
 
-**Signal matching:** match these as whole tokens / regex with word boundaries, not bare substrings. Bare `auth` substring-matches ordinary words like `Author` (a real false positive measured in `references/baseline_runs.md`) — use `authenticat`/`authoriz` instead. A spurious specialist costs ~30K tokens and ~60s.
+**Signal matching:** whole tokens / regex with word boundaries. Bare `auth` matches `Author`. A spurious specialist costs ~30K tokens and ~60s.
 
-**Project-specific signals:** also honor any extra dispatch triggers listed under `## Project facts` in `OPERATIONS.md` — that is where repo/domain-specific terms live (e.g. a project's path-guard class, or its output-format/standard names), keeping this table generic and portable.
-
-**Adaptive gating:** If a specialist has produced 0 findings across 10+ dispatches, it may be auto-gated. Security and data-migration are insurance — always dispatch regardless of hit rate. Specialists are additive — partial results beat no results.
+**Project-specific signals:** use extra triggers in `OPERATIONS.md` only when choosing the single opt-in second reviewer. Do not dispatch them beside nori.
 
 ## Pick Target
 
@@ -116,7 +120,7 @@ For extra review context (notes, evidence), read the relevant files yourself and
 
 The review runs entirely in the current coding agent. Both Claude Code and Cursor dispatch subagents via the `Agent` tool with `run_in_background=true`. No script, no external engine, no network egress of your code.
 
-**Headless / resumed CLI fallback:** In headless or resumed CLI sessions (such as `codex exec resume`) where subagent spawning fails (e.g., `collab spawn failed` / `invalid thread-store request: no rollout found`), do NOT retry subagent spawns — immediately run the detected specialist checklists inline in the current session.
+**Headless / resumed CLI fallback:** In headless or resumed CLI sessions (such as `codex exec resume`) where subagent spawning fails (e.g., `collab spawn failed` / `invalid thread-store request: no rollout found`), do NOT retry subagent spawns. Run `.claude/agents/nori-code-reviewer.md` inline. Do not run `agents/correctness.md`, `testing.md`, `maintainability.md`, or `adversarial.md` as a substitute wave.
 
 ### Steps
 
@@ -124,28 +128,17 @@ The review runs entirely in the current coding agent. Both Claude Code and Curso
    - **Repo context** — skim `UBIQUITOUS_LANGUAGE.md`, `CLAUDE.md`, `AGENTS.md`, `CONTEXT.md`, `GLOSSARY.md` if present (≤4K each). Note the primary language(s) from `git ls-files` and any domain/glossary terms.
    - **Insights** — read the `## Insights` section of `OPERATIONS.md` for learned suppressions and confidence adjustments.
 
-2. **Detect specialists** from the changed paths using the Specialist Dispatch table.
-
-3. **Dispatch all detected specialists AND the adversarial reviewer in parallel, in a single message.** The adversarial pass depends only on the diff (not on specialist output), so it runs in the same wave — not after. For each, the subagent prompt is the contents of its `agents/<name>.md` file, with the diff and context appended:
-
-   **Order the calls longest-pole first** — `Agent` admission is serial (~1.3s/agent, measured in `references/baseline_runs.md`), so whatever you list first starts first. Put the two slowest (correctness, adversarial) at the top, then security, then the rest:
+2. **Dispatch one `nori-code-reviewer`.** Cursor: `Task` with `subagent_type: nori-code-reviewer`. Claude Code: `Agent` with the contents of `.claude/agents/nori-code-reviewer.md`. Append the diff and the Zipper overlay already in that file. Do not add `cavecrew-reviewer` or `generalPurpose` specialists in the same message.
 
    ```text
-   Agent(description="correctness specialist", run_in_background=True, prompt=<agents/correctness.md + appendix>)
-   Agent(description="adversarial reviewer",   run_in_background=True, prompt=<agents/adversarial.md + appendix>)
-   Agent(description="security specialist",    run_in_background=True, prompt=<agents/security.md + appendix>)
-   Agent(description="testing specialist",     run_in_background=True, prompt=<agents/testing.md + appendix>)
-   # + maintainability + any others detected in step 2
+   Agent(description="nori PR review", subagent_type="nori-code-reviewer", prompt=<purpose + base SHA + head SHA + git diff>)
    ```
 
-   There is no hard parallel cap (tested to 8 — no stall); the only cost is the ~1.3s/agent admission ramp, so a 9-subagent review does not split into serial waves — it carries a ~12s ramp on top of the slowest agent. Adversarial is the ~120s long pole and depends only on the diff, so launching it **second** (not last, not after the wave) keeps it off the critical path.
-
-   Appendix appended to each agent file:
+   Appendix appended to the nori prompt:
    ```text
    ## Hard constraints — you are a READ-ONLY reviewer
-   You share one working tree with the orchestrator and with every other
-   specialist in this wave, all running concurrently. Anything you write
-   corrupts their in-flight review, and anything you revert destroys work
+   You share one working tree with the orchestrator. Anything you write
+   corrupts in-flight work, and anything you revert destroys work
    the orchestrator did after your snapshot.
 
    - Do NOT edit, create, delete, stage, stash, checkout, restore, or revert ANY file.
@@ -156,7 +149,7 @@ The review runs entirely in the current coding agent. Both Claude Code and Curso
      Reason about the assertion and cite the line — that is sufficient proof.
    - If you want to execute something, copy the repo to a scratch dir outside
      the working tree first and work only there.
-   - The orchestrator diff-verifies the tree after the wave. If you touched it,
+   - The orchestrator diff-verifies the tree after the review. If you touched it,
      say so explicitly in your final line so a revert can be traced.
 
    ## Effort
@@ -175,7 +168,7 @@ The review runs entirely in the current coding agent. Both Claude Code and Curso
 
    **Cache discipline (cost):** assemble the prompt as a stable prefix + volatile suffix — the agent file, effort, insights, and repo context come first (identical across runs of the same repo), and the `<diff>` block comes **last**. Across the fix→re-review cycles (up to 3 per the Contract) keep that prefix **byte-identical** so the host prompt cache hits and only the changed diff is re-billed. Do not reorder or reword the prefix between cycles. See `references/improvements.md` (C1).
 
-4. **Collect responses.** Tag each finding with its specialist. Pass the structured JSON findings through `validators/line-validator.sh` to deterministically verify that the referenced files and lines exist. Merge and dedup per `references/review-policy.md` (Finding Merging & Fingerprinting).
+3. **Collect responses.** Tag each finding with its source. Pass the structured JSON findings through `validators/line-validator.sh` to deterministically verify that the referenced files and lines exist. Merge and dedup per `references/review-policy.md` (Finding Merging & Fingerprinting).
 
    **Tree-integrity gate (mandatory, before acting on any finding).** Subagents share the orchestrator's working tree and have been observed writing to it despite read-only dispatch — applying "verification" mutations mid-review and then reverting files the orchestrator had since edited. Never trust a subagent's self-report that it left the tree alone; verify:
 
@@ -192,17 +185,17 @@ The review runs entirely in the current coding agent. Both Claude Code and Curso
 
    Then apply the AUTO-FIX batch in a single pass and verify the resulting diff line by line against the merge table.
 
-5. **Merge + synthesize** once all subagents (specialists + adversarial) return. Emit the required **merge table** (fingerprint dedup + multi-source confidence boost) and the **SYNTHESIS** block, both per `references/review-policy.md`. These are mandatory output, not optional — multi-source agreement must be made visible, not left implicit.
+4. **Merge + synthesize** nori's findings (and any single opt-in specialist) per `references/review-policy.md`. Emit the **merge table** and **SYNTHESIS** block when more than one reviewer ran.
 
-6. **Report** combined findings and the overall verdict (see Final Report). Use the Finding Format from `references/review-policy.md`.
+5. **Report** combined findings and the overall verdict (see Final Report). Use the Finding Format from `references/review-policy.md`.
 
 Specialists read code only — no web search. Wall-clock ≈ the slowest subagent, not the sum.
 
 **Large diffs:** order changed paths so auth/security files come first and vendor/generated files last; if the diff is too large to fit, omit the least-relevant (vendor/generated) hunks first and say so.
 
-### Fast pass (effort: min)
+### Self-review (trivial diffs)
 
-The required path for trivial diffs (see Effort Levels selection rule) and an option for large diffs where specialist depth isn't needed. Dispatch a **single** correctness subagent — `agents/correctness.md` restricted to angles A–E, no tools, ≤4 findings — instead of the full parallel set. ~30K tokens, ~30s versus ~200K / ~4 min for the full wave. Escalate to the full wave only if the fast pass surfaces a non-trivial finding.
+The required path for trivial diffs (see Reviewer Dispatch). Self-review. Do not spawn `nori-code-reviewer` for a typo or comment-only patch.
 
 ## Parallel Closeout
 
@@ -226,7 +219,7 @@ Curated insights and suppressions live in the tracked `OPERATIONS.md`; per-run t
 
 ### Before review: read insights
 
-Read the `## Insights` section of `OPERATIONS.md`. Apply any suppressions and confidence adjustments listed there, and inject them into each subagent prompt (step 3 appendix). These are learned rules from past reviews — real patterns where the skill over-flagged or misclassified.
+Read the `## Insights` section of `OPERATIONS.md`. Apply any suppressions and confidence adjustments listed there, and inject them into the nori prompt (step 2 appendix). These are learned rules from past reviews — real patterns where the skill over-flagged or misclassified.
 
 ### After review: log the operation
 
