@@ -473,3 +473,11 @@
 - **telemetry**: host=opencode mode=local specialists=1 bundle=4428c
 - **lessons**: SourceRecords without SourceFileTypes is not a supported generation path; Source CSV plumbing sets both
 - **suppressions**: none
+
+### 2026-11-28 factory:local:issue-1486-review-followup
+
+- **findings**: 6 (0 correctness, 6 testing: 1 medium, 5 low)
+- **outcome**: accepted medium and four lows — generator rejects cross-format scenarios, bare native acceptance cases added, full Production Set guidance asserted, E2E accept/reject cases added; skipped source-CSV runtime integration as optional
+- **telemetry**: host=factory mode=local specialists=2 bundle=20000c
+- **lessons**: ParallelFileGenerator's hardcoded productionSetMode:false needs its own cross-format rejection test; assert full guidance strings so truncation fails
+- **suppressions**: none

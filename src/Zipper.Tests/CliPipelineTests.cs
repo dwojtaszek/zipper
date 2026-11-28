@@ -556,7 +556,7 @@ public class CliPipelineTests : WorkingDirectoryTestBase
         var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args.ToArray()));
 
         Assert.Null(result);
-        Assert.Contains("Error: --chaos-mode with --production-set requires a cross-format chaos scenario", stderr, StringComparison.Ordinal);
+        Assert.Contains("Error: --chaos-mode with --production-set requires a cross-format chaos scenario ('cross-format-desync' or 'broken-families') or email (.eml) or TIFF (.tiff) generation.", stderr, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -595,6 +595,18 @@ public class CliPipelineTests : WorkingDirectoryTestBase
 
         Assert.NotNull(result);
         Assert.Equal(new[] { LoadFileFormat.Dat, LoadFileFormat.Opt }, result!.LoadFile.Formats);
+    }
+
+    [Fact]
+    public void Build_StandardEmailWithChaosMode_ReturnsChaosConfig()
+    {
+        var args = new[] { "--type", "eml", "--count", "10", "--output-path", this.tempDir, "--chaos-mode" };
+
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
+
+        Assert.NotNull(result);
+        Assert.True(result!.Chaos.ChaosMode);
+        Assert.DoesNotContain("Error:", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -691,6 +703,18 @@ public class CliPipelineTests : WorkingDirectoryTestBase
         Assert.NotNull(result);
         Assert.True(result!.Chaos.ChaosMode);
         Assert.Equal("cross-format-desync", result.Chaos.ChaosScenario);
+        Assert.DoesNotContain("Error:", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_ProductionSetEmailWithChaosMode_ReturnsChaosConfig()
+    {
+        var args = new[] { "--production-set", "--bates-prefix", "CLIENT001", "--type", "eml", "--count", "10", "--output-path", this.tempDir, "--chaos-mode" };
+
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => Cli.Pipeline.Build(args));
+
+        Assert.NotNull(result);
+        Assert.True(result!.Chaos.ChaosMode);
         Assert.DoesNotContain("Error:", stderr, StringComparison.Ordinal);
     }
 

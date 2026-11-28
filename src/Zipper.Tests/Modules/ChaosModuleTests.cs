@@ -301,7 +301,7 @@ public class ChaosModuleTests
             productionSet: true));
 
         Assert.False(built);
-        Assert.Contains("Error: --chaos-mode with --production-set requires a cross-format chaos scenario", stderr, StringComparison.Ordinal);
+        Assert.Contains("Error: --chaos-mode with --production-set requires a cross-format chaos scenario ('cross-format-desync' or 'broken-families') or email (.eml) or TIFF (.tiff) generation.", stderr, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -317,7 +317,7 @@ public class ChaosModuleTests
             productionSet: true));
 
         Assert.False(built);
-        Assert.Contains("Error: --chaos-mode with --production-set requires a cross-format chaos scenario", stderr, StringComparison.Ordinal);
+        Assert.Contains("Error: --chaos-mode with --production-set requires a cross-format chaos scenario ('cross-format-desync' or 'broken-families') or email (.eml) or TIFF (.tiff) generation.", stderr, StringComparison.Ordinal);
     }
 
     [Theory]

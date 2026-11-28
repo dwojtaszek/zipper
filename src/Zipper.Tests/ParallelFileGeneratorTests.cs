@@ -824,8 +824,11 @@ public class ParallelFileGeneratorTests
         }
     }
 
-    [Fact]
-    public async Task GenerateFilesAsync_WithChaosModeAndNoEmailsTiffsOrLoadfileOnly_ThrowsInvalidOperationException()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("cross-format-desync")]
+    [InlineData("broken-families")]
+    public async Task GenerateFilesAsync_WithChaosModeAndNoEmailsTiffsOrLoadfileOnly_ThrowsInvalidOperationException(string? scenario)
     {
         var tempDir = Path.GetTempPath();
         var outputPath = Path.Combine(tempDir, Guid.NewGuid().ToString());
@@ -845,6 +848,7 @@ public class ParallelFileGeneratorTests
                 Chaos = new ChaosConfig
                 {
                     ChaosMode = true,
+                    ChaosScenario = scenario,
                 },
                 LoadfileOnly = false,
             };
@@ -853,6 +857,7 @@ public class ParallelFileGeneratorTests
             Assert.Contains("--loadfile-only", exception.Message, StringComparison.Ordinal);
             Assert.Contains("--type eml", exception.Message, StringComparison.Ordinal);
             Assert.Contains("--type tiff", exception.Message, StringComparison.Ordinal);
+            Assert.Contains("cross-format", exception.Message, StringComparison.Ordinal);
         }
         finally
         {
