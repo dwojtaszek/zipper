@@ -17,6 +17,7 @@ internal class StandardMode : IGenerationMode
 
     public async Task RunAsync(FileGenerationRequest request, CancellationToken cancellationToken = default)
     {
+        // StandardMode never serves a Loadfile-Only request; SelectMode routes those to LoadFileOnlyMode.
         if (!ChaosScenarios.IsGenerationChaosAllowed(
                 chaosMode: request.Chaos.ChaosMode,
                 loadfileOnly: false,
