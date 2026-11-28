@@ -37,6 +37,11 @@ TODO.md
 !.claude/skills/harden-environment
 !.claude/skills/verify-zipper-change
 !.claude/skills/mine-agent-transcripts
+!.claude/agents/
+.claude/agents/*
+!.claude/agents/nori-code-reviewer.md
+!.claude/agents/nori.json
+!.claude/agents/.nori-version
 
 # Test Results
 **/TestResults/

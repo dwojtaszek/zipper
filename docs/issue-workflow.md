@@ -15,7 +15,7 @@ Disclosed from [agent-workflow.md](agent-workflow.md). Read when implementing, r
    - If the issue itself is stale (the code it describes no longer exists, or another change already resolved it), do not implement it as written — comment on the issue with evidence and a recommendation (close or retarget), then stop.
 6. Write a failing test first (TDD), then implement the fix
 7. Run focused tests after each behavior change and the affected final gates using [Commands](agent-workflow.md#commands), including analyzer tests when touching `src/Zipper.Analyzers/` and mutation smoke when modifying production `.cs` files. If mutants survive, add targeted unit tests in `src/Zipper.Tests/` exercising those conditions/operators until all mutants are killed. Never bypass with `SKIP_MUTATION_SMOKE`. Reuse hook evidence as documented there; repeat affected gates after review-driven fixes.
-8. Run autoreview before creating PR (see Adversarial Review section below). *Required for any change touching logic, error handling, or public contracts. For docs-only, version-bump, or single-line fixes, a self-review suffices — note the exemption in the PR.* Address every actionable finding before submitting the PR. Use the [CodeRabbit CLI](#coderabbit-local-pre-pr-review) for interactive work only when the user explicitly requests it for that scope.
+8. Run a single `nori-code-reviewer` pass before creating a PR (see Adversarial Review). *Required for any change touching logic, error handling, or public contracts. For docs-only, version-bump, or single-line fixes, a self-review suffices — note the exemption in the PR.* Do not also spawn `cavecrew-reviewer` or genericPurpose copies of correctness/testing/maintainability in the same wave. Address every actionable finding before submitting the PR. Use the [CodeRabbit CLI](#coderabbit-local-pre-pr-review) for interactive work only when the user explicitly requests it for that scope.
 9. For requested PR delivery or a runner dispatch, commit and create the PR — include `## Release Notes` per the [Release Notes Mandate](#release-notes-mandate) below. Reference `Fixes #NNN`. If the work advances a Roadmap phase, mention the roadmap issue in the PR body (do not auto-close it).
 10. Runner-dispatched implementation missions return after step 9; the parent runner owns steps 10–14, including CI and reviewer waits. For interactive PR work within the authorized delivery scope, monitor CI until all checks pass; fix failures before requesting review. Reproduce each gate locally first — see the [docs/cicd.md](cicd.md#quick-reference-for-agents) gate-to-command table so you fail fast instead of waiting on CI minutes. If a CI failure appears flaky (same test passes locally, or failure is in an unrelated component), re-run once. If it fails again, document the flake in the PR and proceed to request review. Before pushing a PR update, commit the fixes and apply the same local review and verification gates to the updated diff. Use `git push --force-with-lease` if the update rewrites history.
 11. Check SonarCloud on the PR after CI completes via `./dev.sh sonar <PR-number>` (see [CI.md](../CI.md#sonarcloud)). Fix all BLOCKER, CRITICAL, and MAJOR issues before merge. The quality **gate** can also fail on new-code *conditions* (duplication ≥3%, coverage) — `check-sonar.py` reports non-coverage gate failures. When adding parallel per-format modules (e.g. a composer/serializer per format), extract a shared base/builder to stay under the duplication threshold.
@@ -69,35 +69,11 @@ The `## Release Notes` section is pre-populated in [`.github/pull_request_templa
 
 ## Adversarial Review
 
-Run the autoreview skill before creating a PR. This is mandatory for any change touching logic, error handling, or public contracts. For docs-only, version-bump, or single-line fixes, a self-review suffices — note the exemption in the PR.
+Dispatch **one** `nori-code-reviewer` (pinned at `.claude/agents/nori-code-reviewer.md`, registry 2.1.1) before creating a PR. Mandatory for any change touching logic, error handling, or public contracts. Docs-only, version-bump, or single-line fixes: self-review and note the exemption in the PR.
 
-The autoreview skill runs entirely inside the current coding agent (Claude Code or Cursor): it produces the diff with git, then dispatches parallel review subagents via the `Agent` tool. No external reviewer CLI. Default target is local/uncommitted work; point it at a branch or commit diff for pushed/PR work.
+Do not stack `cavecrew-reviewer` or genericPurpose correctness/testing/maintainability specialists on the same diff. Those three returned no extra findings when run beside nori; cavecrew overlapped nori on the same Important class. A second reviewer is allowed only when the user asks, or after nori returned empty Critical/Important and the change still touches Load File bytes, CLI flags, or orchestrators.
 
-See `.agents/skills/autoreview/SKILL.md` for full methodology (target selection, two-pass review, specialist dispatch, confidence calibration, adversarial patterns). Pass an explicit bounded timeout (`options.timeoutMs`, e.g., `300000`–`480000`) when dispatching review subagents so a stalled reviewer never consumes the default 30-minute window.
-
-For lightweight subagent review without the full skill:
-
-**Dispatch format:**
-
-```
-Review the changes in <branch/file list> against the original request: <request summary>.
-
-Check all of the following:
-1. Correctness: Does the code do what was asked? Are there edge cases missed?
-2. Spec compliance: Does it match Requirements.md and the issue body exactly?
-3. Side effects: Were any adjacent files, formatting, or unrelated code changed?
-4. Test quality: Do tests verify real behavior, not mocks? Do they cover edge cases?
-5. Security: Any new attack surface, unsafe input handling, or exposed secrets?
-6. Performance: Any new allocations in hot paths? O(n) where O(1) was possible?
-7. Domain language: Are all terms canonical per UBIQUITOUS_LANGUAGE.md?
-
-Be harsh. I'll be disappointed if you don't find at least one significant problem.
-```
-
-**Techniques to increase rigor:**
-- **Cross-model:** Use a different model for review than for coding, if available.
-- **Competition:** Ask two subagents to review; the one that finds the most serious issues wins.
-- **Set expectations:** "I'll be disappointed if they don't find at least N significant problems."
+The review runs inside the current coding agent. Produce the diff with git, then dispatch `nori-code-reviewer` via the `Agent`/`Task` tool with `subagent_type: nori-code-reviewer`. No external reviewer CLI. See `.agents/skills/autoreview/SKILL.md` for merge/confidence rules and the opt-in specialist files. Pass an explicit bounded timeout (`options.timeoutMs`, e.g., `300000`) so a stalled reviewer never consumes the default 30-minute window.
 
 ## CodeRabbit Local Pre-PR Review
 
