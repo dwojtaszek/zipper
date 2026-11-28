@@ -314,6 +314,34 @@ class CheckSonarTests(unittest.TestCase):
             self.assertEqual(code, 1)
             self.assertEqual(len(summary["blocking_issues"]), 1)
 
+    def test_closed_issues_are_ignored(self):
+        gate = {"projectStatus": {"status": "OK", "conditions": []}}
+        issues = {
+            "issues": [
+                {
+                    "severity": "BLOCKER",
+                    "status": "CLOSED",
+                    "resolution": "FIXED",
+                    "rule": "csharp:S2699",
+                    "line": 124,
+                    "component": "dwojtaszek_zipper:src/Zipper.Tests/ModeAdapterTests.cs",
+                    "message": "closed finding",
+                },
+                {
+                    "severity": "CRITICAL",
+                    "status": "REOPENED",
+                    "rule": "csharp:S3776",
+                    "line": 142,
+                    "component": "dwojtaszek_zipper:src/Zipper.Tests/ModeAdapterTests.cs",
+                    "message": "open finding",
+                },
+            ]
+        }
+        with patch.object(self.mod, "_fetch_json", side_effect=[gate, issues]):
+            code, summary = self.mod.inspect_pr(1444)
+            self.assertEqual(code, 1)
+            self.assertEqual([issue["message"] for issue in summary["blocking_issues"]], ["open finding"])
+
     def test_non_ok_gate_status_none_fails(self):
         gate = {"projectStatus": {"status": "NONE", "conditions": []}}
         with patch.object(self.mod, "_fetch_json", side_effect=[gate, {"issues": []}]):

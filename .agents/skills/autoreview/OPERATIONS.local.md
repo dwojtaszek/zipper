@@ -561,3 +561,11 @@
 - **telemetry**: host=opencode mode=local specialists=0 bundle=~1200c
 - **lessons**: `check-sonar.py` can return CLOSED/FIXED Sonar issues for a PR because the API ignores `statuses` with `pullRequest`; inspect `status` and `resolution` before treating a finding as blocking
 - **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-sonar-filter
+
+- **findings**: 3 reported Sonar BLOCKER `csharpsquid:S2699` findings at `src/Zipper.Tests/ModeAdapterTests.cs`
+- **outcome**: verified all three are `CLOSED`/`FIXED` and the tests already assert; fixed root cause in `check-sonar.py` by filtering open statuses client-side, with a regression test
+- **telemetry**: host=opencode mode=local specialists=0 bundle=~1400c
+- **lessons**: Sonar PR issue search returns closed issues despite `statuses=OPEN,CONFIRMED,REOPENED`; filter returned issues by status before classification
+- **suppressions**: none

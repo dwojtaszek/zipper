@@ -8,6 +8,7 @@ import urllib.request
 
 DEFAULT_PROJECT = "dwojtaszek_zipper"
 BLOCKING_SEVERITIES = frozenset({"BLOCKER", "CRITICAL", "MAJOR"})
+OPEN_STATUSES = frozenset({"OPEN", "CONFIRMED", "REOPENED"})
 NON_CODE_METRICS = frozenset({"new_coverage", "coverage"})
 
 
@@ -45,7 +46,11 @@ def _fetch_all_issues(project: str, pr_number: int) -> list[dict]:
         batch = payload.get("issues")
         if not isinstance(batch, list):
             raise ValueError("Missing issues list in SonarCloud response")
-        issues.extend(item for item in batch if isinstance(item, dict))
+        # SonarCloud can return CLOSED issues despite the statuses filter when pullRequest is set.
+        issues.extend(
+            item for item in batch
+            if isinstance(item, dict) and item.get("status", "OPEN") in OPEN_STATUSES
+        )
         total = payload.get("total")
         if isinstance(total, int) and len(issues) >= total:
             break
