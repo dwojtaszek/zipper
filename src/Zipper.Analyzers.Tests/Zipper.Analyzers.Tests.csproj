@@ -12,9 +12,9 @@
       Without this, NuGet can resolve the legacy 1.0.1 build
       (Microsoft.CodeAnalysis.CSharp.Analyzer.Testing.XUnit 1.1.2 sets 1.0.1 as
       its minimum), which targets .NETFramework only and triggers NU1701 with
-      TreatWarningsAsErrors. 4.14.0 is the .NET 10 GA release and has a net TFM.
+      TreatWarningsAsErrors.
     -->
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.9.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.12.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Analyzer.Testing.XUnit" Version="1.1.2" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.12.0" />
 

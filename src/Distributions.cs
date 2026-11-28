@@ -55,7 +55,7 @@ public static class Distributions
 
         // Map to folder number
         double folderDouble = mean + (stdDev * z);
-        int folder = (int)Math.Round(folderDouble);
+        int folder = (int)Math.Round(folderDouble, MidpointRounding.ToEven);
 
         // Clamp to valid range
         return Math.Max(1, Math.Min(totalFolders, folder));

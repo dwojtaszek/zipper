@@ -8,7 +8,7 @@ Zipper is a high-performance .NET command-line tool for generating synthetic e-d
 
 ### Installation & Prerequisites
 
-- **Prerequisites**: [.NET 10.0 SDK](https://dotnet.microsoft.com/) (or newer)
+- **Prerequisites**: [.NET 11.0 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/11.0) at the version in `global.json` and the [.NET 10.0 runtime](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) for local tests and framework-dependent builds.
 - **Cross-Platform Compatibility**: Windows (x64/arm64), macOS (x64/arm64), and Linux (x64/arm64)
 - **Build from Source**:
   ```bash

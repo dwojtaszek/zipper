@@ -268,7 +268,7 @@ internal class DataGenerator
                 double u2 = 1.0 - this.random.NextDouble();
                 double z0 = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
 
-                int value = (int)Math.Round(mean + (z0 * stdDev));
+                int value = (int)Math.Round(mean + (z0 * stdDev), MidpointRounding.ToEven);
                 indices[i] = Math.Clamp(value, 0, count - 1);
             }
         }

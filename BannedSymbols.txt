@@ -1,4 +1,7 @@
 P:System.DateTime.Now;Use DateTime.UtcNow instead
+P:System.DateTime.Today;Derive the date from DateTime.UtcNow instead
+P:System.DateTimeOffset.Now;Use DateTimeOffset.UtcNow instead
+P:System.Text.Encoding.Default;Choose the output encoding explicitly
 P:System.Globalization.CultureInfo.CurrentCulture;Use CultureInfo.InvariantCulture instead
 M:System.String.Format(System.String,System.Object);Use an overload that takes an IFormatProvider instead
 M:System.String.Format(System.String,System.Object[]);Use an overload that takes an IFormatProvider instead

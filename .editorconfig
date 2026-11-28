@@ -217,6 +217,10 @@ dotnet_diagnostic.CA1859.severity = suggestion
 # CA1864: Prefer Dictionary.TryAdd over ContainsKey + Add
 dotnet_diagnostic.CA1864.severity = warning
 
+# Keep application behavior explicit and reject impossible null comparisons.
+dotnet_diagnostic.MA0193.severity = error     # Require explicit midpoint rounding
+dotnet_diagnostic.RCS1166.severity = error    # Value type object is never equal to null
+
 # RCS1139: Add summary element to documentation comment (disabled - codebase uses /// <remarks> without <summary>)
 dotnet_diagnostic.RCS1139.severity = none
 
