@@ -34,6 +34,27 @@ def _summarize_gate(gate_payload: dict) -> tuple[str, list[dict], list[dict]]:
     return gate_status, failed_conditions, non_coverage
 
 
+def _open_sonar_issues(batch: list) -> list[dict]:
+    # The server-side statuses filter is unreliable when pullRequest is set: it
+    # can omit real issues and return CLOSED ones, so status is filtered here.
+    return [
+        item for item in batch
+        if isinstance(item, dict) and item.get("status", "OPEN") in OPEN_STATUSES
+    ]
+
+
+def _sonar_paging_complete(raw_fetched: int, total: object, batch_size: int, page_size: int) -> bool:
+    # `total` counts unfiltered issues, so pagination compares raw counts. An
+    # empty or short page before `total` is a truncated listing, not a clean pass.
+    if isinstance(total, int) and raw_fetched >= total:
+        return True
+    if batch_size < page_size:
+        if isinstance(total, int) and raw_fetched < total:
+            raise ValueError(f"Incomplete SonarCloud issue listing: got {raw_fetched} of {total} issues")
+        return True
+    return False
+
+
 def _fetch_all_issues(project: str, pr_number: int) -> list[dict]:
     issues: list[dict] = []
     page = 1
@@ -47,23 +68,9 @@ def _fetch_all_issues(project: str, pr_number: int) -> list[dict]:
         batch = payload.get("issues")
         if not isinstance(batch, list):
             raise ValueError("Missing issues list in SonarCloud response")
-        # The server-side statuses filter is unreliable when pullRequest is set: it
-        # can omit real issues and return CLOSED ones, so status is filtered here.
-        issues.extend(
-            item for item in batch
-            if isinstance(item, dict) and item.get("status", "OPEN") in OPEN_STATUSES
-        )
-        # `total` counts unfiltered issues, so pagination must compare against the
-        # raw count; comparing the filtered one requests an extra page that can fail.
+        issues.extend(_open_sonar_issues(batch))
         raw_fetched += len(batch)
-        total = payload.get("total")
-        if isinstance(total, int) and raw_fetched >= total:
-            break
-        if len(batch) < page_size:
-            if isinstance(total, int) and raw_fetched < total:
-                raise ValueError(
-                    f"Incomplete SonarCloud issue listing: got {raw_fetched} of {total} issues"
-                )
+        if _sonar_paging_complete(raw_fetched, payload.get("total"), len(batch), page_size):
             break
         page += 1
     return issues

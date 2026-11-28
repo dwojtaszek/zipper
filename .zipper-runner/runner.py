@@ -2819,6 +2819,51 @@ def _sonarcloud_issue_findings(issues: list, pr_number: int) -> tuple[list[str] 
     return findings, None
 
 
+def _sonarcloud_page_payload(pr_number: int, issues_data: object) -> tuple[list, int | None, ReviewGate | None]:
+    if not isinstance(issues_data, dict):
+        return [], None, ReviewGate(False, True, f"Unexpected SonarCloud API payload for PR #{pr_number}.")
+    batch = issues_data.get("issues")
+    if not isinstance(batch, list):
+        return [], None, ReviewGate(False, True, f"Unexpected SonarCloud API payload for PR #{pr_number}.")
+    total = issues_data.get("total")
+    if total is not None and not isinstance(total, int):
+        return [], None, ReviewGate(False, True, f"Unexpected SonarCloud API payload for PR #{pr_number}.")
+    return batch, total, None
+
+
+def _sonarcloud_paging_done(issues: list, batch: list, total: int | None, pr_number: int) -> tuple[bool, ReviewGate | None]:
+    if not batch:
+        if isinstance(total, int) and len(issues) < total:
+            return False, ReviewGate(
+                False,
+                True,
+                f"Incomplete SonarCloud issue listing for PR #{pr_number}: got {len(issues)} of {total} issues.",
+            )
+        return True, None
+    # `total` is the reliable stop when the payload carries it. Without it, only a
+    # short page proves the listing is exhausted; a missing `total` must not cap
+    # the gate at the first page.
+    if isinstance(total, int):
+        return len(issues) >= total, None
+    return len(batch) < SONARCLOUD_ISSUES_PAGE_SIZE, None
+
+
+def _fetch_sonarcloud_issues(pr_number: int, issues_url: str) -> tuple[list[dict], ReviewGate | None]:
+    issues: list[dict] = []
+    page = 1
+    while True:
+        batch, total, failure = _sonarcloud_page_payload(pr_number, _sonarcloud_get_json(f"{issues_url}&p={page}"))
+        if failure is not None:
+            return [], failure
+        issues.extend(batch)
+        done, failure = _sonarcloud_paging_done(issues, batch, total, pr_number)
+        if failure is not None:
+            return [], failure
+        if done:
+            return issues, None
+        page += 1
+
+
 def _check_sonarcloud_pr_gate(pr_number: int, rollup: list | None = None) -> ReviewGate:
     """Verify SonarCloud has no open BLOCKER/CRITICAL/MAJOR issues and its quality gate is not ERROR."""
     # Absent/skipped SonarCloud in rollup (e.g., docs-only PRs and unit-test fixtures) skips the
@@ -2836,36 +2881,9 @@ def _check_sonarcloud_pr_gate(pr_number: int, rollup: list | None = None) -> Rev
         f"?projectKey={project_q}&pullRequest={pr_number}"
     )
     try:
-        issues = []
-        page = 1
-        while True:
-            issues_data = _sonarcloud_get_json(f"{issues_url}&p={page}")
-            if not isinstance(issues_data, dict):
-                return ReviewGate(False, True, f"Unexpected SonarCloud API payload for PR #{pr_number}.")
-            batch = issues_data.get("issues")
-            if not isinstance(batch, list):
-                return ReviewGate(False, True, f"Unexpected SonarCloud API payload for PR #{pr_number}.")
-            issues.extend(batch)
-            total = issues_data.get("total")
-            if total is not None and not isinstance(total, int):
-                return ReviewGate(False, True, f"Unexpected SonarCloud API payload for PR #{pr_number}.")
-            if not batch:
-                if isinstance(total, int) and len(issues) < total:
-                    return ReviewGate(
-                        False,
-                        True,
-                        f"Incomplete SonarCloud issue listing for PR #{pr_number}: got {len(issues)} of {total} issues.",
-                    )
-                break
-            # `total` is the reliable stop when the payload carries it. Without it,
-            # only a short page proves the listing is exhausted; treating a missing
-            # `total` as "one page" would silently cap the gate at the first page.
-            if isinstance(total, int):
-                if len(issues) >= total:
-                    break
-            elif len(batch) < SONARCLOUD_ISSUES_PAGE_SIZE:
-                break
-            page += 1
+        issues, fetch_failure = _fetch_sonarcloud_issues(pr_number, issues_url)
+        if fetch_failure is not None:
+            return fetch_failure
         gate_data = _sonarcloud_get_json(gate_url)
     except (http.client.HTTPException, ValueError, OSError) as exc:
         return ReviewGate(False, True, f"Could not query SonarCloud API for PR #{pr_number}: {exc}")

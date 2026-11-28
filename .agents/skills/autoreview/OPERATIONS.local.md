@@ -617,3 +617,11 @@
 - **telemetry**: host=opencode mode=local specialists=0 bundle=~2200c
 - **lessons**: fixture timings are part of the assertion; on slower CI a subsecond ceiling can cut before the fake child writes its startup line
 - **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-sonar-complexity
+
+- **findings**: live Sonar reported CRITICAL `python:S3776` in `_check_sonarcloud_pr_gate` (complexity 25/15) after pagination checks were added; local guard also caught `_fetch_all_issues` at 17/15
+- **outcome**: extracted payload validation and paging-stop decisions into small helpers in both gate scripts; local complexity guard now passes with behavior unchanged
+- **telemetry**: host=opencode mode=local specialists=0 bundle=~2000c
+- **lessons**: check the cognitive-complexity guard immediately after adding branches to runner gates, not only unit tests
+- **suppressions**: none
