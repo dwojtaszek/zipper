@@ -25,6 +25,23 @@ offset cases, with at least 4 GiB plus 1 MiB free in the temporary directory.
 Each recipe reports generation and verification time, peak memory, Archive
 size, and sampled member hashes.
 
+For matched Store and Deflate measurements, run the manual compression benchmark.
+It reports one JSON Lines record per Archive, with separate generation and
+verification time and peak memory.
+
+```bash
+python3 tests/zip-compression-workloads.py src/bin/Release/net10.0/Zipper > compression.jsonl
+```
+
+The benchmark uses the same seed and 16 MiB of expanded binary data for one large
+member, 256 evenly sized members, and one large member plus 50,000 one-byte
+members. Pass `--with-dat` to also generate a roughly 200 MiB Concordance DAT and
+an exactly equal-sized seeded binary input. The optional pair uses the same
+Python ZIP writer for both inputs, reads their payloads with `unzip`, and
+records the actual expanded byte count.
+Every Archive is read back independently and checked against its expected
+member sizes and expanded SHA-256.
+
 ## Platform-only runner checks
 
 - `run-tests.sh` runs `test-mutation-smoke-operators.sh`, `test-perf-measure.sh`, and `test-stress-harness.sh`. It also runs the coverage-gate self-test, `test_perf_compare.py`, the golden helper and runner unit tests, and the `FileGenerationRequest` flat-property guard.
@@ -81,3 +98,27 @@ Each script below is called by `run-tests.sh` and has a `.bat` parity file.
 
 - Unit tests: `src/Zipper.Tests/` (run with `dotnet test`)
 - CI gate map: [docs/cicd.md](../docs/cicd.md#quick-reference-for-agents)
+
+## Split ZIP delivery fixture
+
+Run the optional fixture with Python 3.11 or later, Info-ZIP `zip` 3.0, and 7-Zip
+(`7zz` or `7z`). The destination must be a new directory with an existing parent.
+
+```bash
+python3 tests/split_zip_delivery.py ./split-zip-deliveries
+```
+
+The fixture writes a `complete` delivery and a `missing-middle` delivery. Both
+use Info-ZIP's 64 KiB split ZIP convention with numbered `.zNN` parts followed
+by `delivery.zip`. A Stored member spans multiple parts. The missing-middle
+variant excludes `delivery.z02` from the same complete Archive. The independent
+reader verifies every logical member of the complete Archive and rejects the
+missing-middle variant.
+
+Each delivery has a separate `delivery-manifest.json`. Schema version 1 records
+the format, producer name and version, split size, and variant. Its `parts`
+array lists the complete Archive in order and gives each part a 1-based
+`ordinal`, `filename`, exact `bytes`, and lowercase SHA-256 in `sha256`.
+`missing_part_ordinals` lists the parts the variant intentionally omits.
+`members` records the logical inventory with each member's filename, expanded
+length, and SHA-256. The sibling note is outside the declared delivery parts.
