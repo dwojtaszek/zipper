@@ -885,8 +885,8 @@ public class ProductionSetTests : WorkingDirectoryTestBase
             ChaosAmount = "100%",
             ChaosTypes = "columns",
         };
-        // DAT-column chaos is eligible only in Loadfile-Only or with a native type; this test
-        // checks that it still never reaches Production Set DAT lines.
+        // Production Set emits DAT lines without a DAT chaos engine, so DAT-column chaos
+        // never reaches them even when the request is Loadfile-Only eligible.
         request.LoadfileOnly = true;
 
         // Act

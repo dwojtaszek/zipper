@@ -182,6 +182,9 @@ assert_rejected "--chaos-mode without --loadfile-only or native type" \
 assert_rejected "--chaos-mode with cross-format scenario in Standard mode" \
     --type eml --count 5 --chaos-mode --chaos-scenario cross-format-desync
 
+assert_rejected "--production-set + --chaos-mode without cross-format scenario or native type" \
+    --production-set --bates-prefix TEST --type pdf --count 5 --chaos-mode
+
 assert_rejected "--chaos-amount without --chaos-mode" \
     --loadfile-only --count 5 --chaos-amount "5%"
 

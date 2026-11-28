@@ -641,3 +641,11 @@
 - **telemetry**: host=opencode mode=local specialists=0 bundle=~2300c
 - **lessons**: pagination state must persist across pages; a missing field on a later response does not reset an earlier authoritative total
 - **suppressions**: none
+
+### 2026-11-28 factory:branch:issue-1486-final-unification-review
+
+- **findings**: 5 specialists plus a 2-specialist re-review; 1 ACTION (REQ-237/REQ-241/README dropped the Loadfile-Only native-type rejection that `emailRun`/`tiffRun` still enforce), 1 INFO fail-open non-integer Sonar `total` in `check-sonar.py`, 1 INFO page-2 test that never reached page 2, 1 INFO missing Production Set rejection case in the E2E scripts. Rejected: StandardMode hardcoded `loadfileOnly:false` (SelectMode owns routing), the "unreachable" TIFF fallback (the `else` is the TIFF-only path), declared-mix vs allocated-file types (pre-existing, suppressed), six-boolean struct proposal, `--type eml` message wording (only reached when no native type exists), unbounded paging (pre-existing on main), and `bool` passing the `int` guard (unreachable from the API, matches the runner).
+- **outcome**: accepted and fixed the four items; docs now state native types are rejected on every `--loadfile-only` run, combined EML/TIFF types require no `--loadfile-only`, `check-sonar.py` rejects a non-integer `total`, the empty-later-page test now provably fetches page 2, and both E2E scripts reject `--production-set --chaos-mode` without a scenario or native type. Full suite 4694 passed, 2 skipped; Python 24 passed; E2E arguments 51/51; mutation smoke 3/3 killed.
+- **telemetry**: host=factory mode=branch specialists=5+2 bundle=145197c + 17122c
+- **lessons**: when a review wave rewrites a rejection clause, check both the missing-family and the Loadfile-Only cases; a fail-open `total` in one gate remains a divergence even when the other gate validates it
+- **suppressions**: none

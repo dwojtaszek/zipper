@@ -75,6 +75,8 @@ def _fetch_all_issues(project: str, pr_number: int) -> list[dict]:
         # A later page may omit `total`; keep the last reported value so an
         # empty page cannot turn a truncated listing into a clean pass.
         if payload.get("total") is not None:
+            if not isinstance(payload["total"], int):
+                raise ValueError("Malformed total in SonarCloud response")
             reported_total = payload["total"]
         if _sonar_paging_complete(raw_fetched, reported_total, len(batch), page_size):
             break

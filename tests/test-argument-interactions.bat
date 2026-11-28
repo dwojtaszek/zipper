@@ -17,6 +17,7 @@ call :assert_rejected "--production-set + --loadfile-only" --production-set --lo
 call :assert_rejected "--chaos-scenario + --chaos-types" --loadfile-only --count 5 --output-path ".\results\zi_test" --chaos-mode --chaos-scenario full-chaos --chaos-types quotes
 call :assert_rejected "--chaos-mode without --loadfile-only or native type" --type pdf --count 5 --output-path ".\results\zi_test" --chaos-mode
 call :assert_rejected "--chaos-mode with cross-format scenario in Standard mode" --type eml --count 5 --output-path ".\results\zi_test" --chaos-mode --chaos-scenario cross-format-desync
+call :assert_rejected "--production-set + --chaos-mode without cross-format scenario or native type" --production-set --bates-prefix TEST --type pdf --count 5 --output-path ".\results\zi_test" --chaos-mode
 call :assert_rejected "--chaos-amount without --chaos-mode" --loadfile-only --count 5 --output-path ".\results\zi_test" --chaos-amount "5%%"
 call :assert_rejected "--chaos-types without --chaos-mode" --loadfile-only --count 5 --output-path ".\results\zi_test" --chaos-types quotes
 call :assert_rejected "--chaos-scenario without --chaos-mode" --loadfile-only --count 5 --output-path ".\results\zi_test" --chaos-scenario full-chaos
