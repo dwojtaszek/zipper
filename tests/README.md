@@ -12,6 +12,19 @@
 
 Core cross-platform E2E suites (called by both `run-tests.sh` and `run-tests.bat`) have `.bat` counterparts for Windows CI. Utility scripts (`test-autoreview-validator.sh`, `test-build-version.sh`, `test-mutation-smoke-operators.sh`, `test-perf-measure.sh`, `test-stress-harness.sh`, `test-zip64-boundary.sh`, `validate-e2e-parity.sh`, `validate-req-traceability.sh`, `wait-for-reviews.sh`) are Linux-only. `test-mutation-smoke.sh` / `.bat` is a standalone, manual-only integration smoke for the pinned Stryker CLI and report normalizer (#1110), omitted from `run-tests` due to runtime cost. `validate-e2e-parity.sh` runs in PR CI (strict mode) and fails if the inline test cases or invoked sub-script suites drift between `run-tests.sh` and `run-tests.bat` (#624); platform-specific suites need a documented exemption in the script.
 
+Run the ZIP64 workload checks on Linux with Python 3.11 or later and a built CLI.
+
+```bash
+dotnet build src/Zipper.csproj -c Release
+python3 tests/zip64-workload-boundaries.py src/bin/Release/net10.0/Zipper count
+```
+
+The `count` recipe verifies the six counts adjacent to 10,000 and 65,535. Use
+`scale` for 100,000 and 1,000,000 entries. Use `size` for exact 4 GiB size and
+offset cases, with at least 4 GiB plus 1 MiB free in the temporary directory.
+Each recipe reports generation and verification time, peak memory, Archive
+size, and sampled member hashes.
+
 ## Platform-only runner checks
 
 - `run-tests.sh` runs `test-mutation-smoke-operators.sh`, `test-perf-measure.sh`, and `test-stress-harness.sh`. It also runs the coverage-gate self-test, `test_perf_compare.py`, the golden helper and runner unit tests, and the `FileGenerationRequest` flat-property guard.

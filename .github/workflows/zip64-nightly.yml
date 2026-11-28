@@ -10,6 +10,11 @@ on:
         required: false
         type: boolean
         default: false
+      run_scale:
+        description: 'Run the 100,000- and 1,000,000-entry workloads'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   issues: write
@@ -17,6 +22,8 @@ permissions:
 jobs:
   test-zip64-boundary:
     runs-on: ubuntu-latest
+    env:
+      ZIPPER_EXECUTABLE: ${{ github.workspace }}/src/bin/Release/net10.0/Zipper
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -26,12 +33,26 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Build workload CLI
+        run: dotnet build src/Zipper.csproj -c Release
+
+      - name: Verify exact ZIP entry counts
+        run: python3 tests/zip64-workload-boundaries.py "$ZIPPER_EXECUTABLE" count
+
+      - name: Verify optional entry-count scale
+        if: ${{ inputs.run_scale }}
+        run: python3 tests/zip64-workload-boundaries.py "$ZIPPER_EXECUTABLE" scale
+
       - name: Run Zip64 Boundary (Count)
         run: ./tests/test-zip64-boundary.sh
 
       - name: Check free disk space for 4GB test
         if: ${{ github.event.inputs.run_4gb == 'true' || github.event_name == 'schedule' }}
         run: df -h
+
+      - name: Verify exact ZIP64 sizes and local-header offsets
+        if: ${{ inputs.run_4gb }}
+        run: python3 tests/zip64-workload-boundaries.py "$ZIPPER_EXECUTABLE" size
 
       - name: Run Zip64 Boundary (4GB Size)
         if: ${{ github.event.inputs.run_4gb == 'true' || github.event_name == 'schedule' }}
