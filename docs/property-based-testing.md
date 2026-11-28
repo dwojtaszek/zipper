@@ -35,12 +35,14 @@ All property-based test suites live under `src/Zipper.Tests/Properties/`:
 | `ZipperArbitraries.cs` | Shared `readonly record struct` inputs and `Arb.From` generators + shrinkers |
 | `LoadFileSerializationPropertyTests.cs` | `DatSerializer`, `DatLineParser`, `CsvSerializer`, `OptSerializer`, `ConcordanceSerializer`, `LoadFileRecordBuilder`, `EncodingHelper` |
 | `BatesAndDistributionPropertyTests.cs` | `BatesSequence`, `BatesNumber`, `Distributions`, `FileTypePlan`, `FileTypeRatioParser`, `ProductionSetPlanner` |
-| `PathAndSourceInputPropertyTests.cs` | `PathValidator`, `NamingConventionHelper`, `SourcePathSanitizer`, `SourceFileTypeMap`, `SourceCsvReader`, `SourceRecordIntake`, `ProductionModule` |
+| `PathAndSourceInputPropertyTests.cs` | `TextPathHelper`, `ImagePathHelper`, `PathValidator`, `NamingConventionHelper`, `SourcePathSanitizer`, `SourceFileTypeMap`, `SourceCsvReader`, `SourceRecordIntake`, `ProductionModule` |
 | `ChaosAndComparisonPropertyTests.cs` | `ChaosSampler`, `DatAnomalyApplier`, `OptAnomalyApplier`, `ComparisonEngine`, `BatesRangeAnalyzer`, `ProductionMetadataBudget`, `DataGenerator`, `NumberGenerator`, `TextGenerator` |
 | `ValidationPropertyTests.cs` | `PostGenerationValidator`, `ProductionSetPostValidator`, `SupplementalValidator`, `ProductionSetPlanner`, `VolumeAnalyzer` |
 | `LoadFileComposerAndEmitterPropertyTests.cs` | `DatStandardComposer`, `StandardRowComposer`, `SyntheticRowValues`, `LoadFileEmitter`, `XmlLoadFileWriter`, `FamilyPlan`, `LoadFileAuditWriter`, `CodedGenerator` |
 | `ArchiveFixturePropertyTests.cs` | `ArchiveTestModule`, `ArchiveFixtureMutator`, `ArchiveFixtureLayout`, `ArchiveTestCaseSemantics` |
 | `StreamingAndCliRulesPropertyTests.cs` | `OrderingWindow`, `DiskBackedFileDataList`, `FileDataSerializer`, `HashUtility`, `CrossCuttingRules`, `DelimiterModule` |
+| `EmailSerializerPropertyTests.cs` | MIME serialization, email headers, and body encodings |
+| `DatOptDocumentMatcherPropertyTests.cs` | Matching Concordance DAT records to OPT images |
 
 ### Mandatory Class & Attribute Structure
 

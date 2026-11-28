@@ -206,7 +206,7 @@ The four delimited formats (DAT, OPT, CSV, Concordance) are produced by three de
 - **Composer** (`ILoadFileComposer`) — column authority: header columns + lazy `LoadFileRecord`s with raw values held as parallel arrays aligned by index (handles modes + column profiles internally).
 - **Serializer** (`ILoadFileSerializer`) — render authority: record/header → one escaped line. Pure (no stream, EOL, or chaos).
 - **Emitter** (`LoadFileEmitter`) — I/O + per-format chaos authority: encoding preamble (BOM), end-of-line, batching, and the single-format Chaos Engine pipeline. Ordinary paths stream lazily (O(1) auxiliary memory); coordinated DAT/OPT scenarios buffer the rendered lines, mutate them together, then emit them through the Emitter.
-- **Roslyn analyzer `ZIP001` (`LoadFileSeamInvariantAnalyzer`)** — enforces this seam across the solution by flagging any `Write`/`WriteLine`/`WriteAsync`/`WriteLineAsync` invocation inside a class whose name contains `Composer`, `Serializer`, or `Emitter`.
+- **Roslyn analyzer `ZIP001` (`LoadFileSeamInvariantAnalyzer`)** — enforces this seam as a build error by flagging `Write`/`WriteLine`/`WriteAsync`/`WriteLineAsync` inside a class whose name contains `Composer` or `Serializer`. Emitter types are the I/O authority and are not flagged. The exact names `EmailSerializer` and `FileDataSerializer` are excluded (not load-file types).
 
 ```mermaid
 graph TD

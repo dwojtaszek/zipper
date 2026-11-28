@@ -1,3 +1,4 @@
+using Microsoft.CodeAnalysis;
 using Xunit;
 
 using VerifyCS = Microsoft.CodeAnalysis.CSharp.Testing.XUnit.AnalyzerVerifier<
@@ -77,6 +78,26 @@ class MyFormatter
 class MyFormatter
 {
     public string Format(string value)
+    {
+        return value.ToString();
+    }
+}
+";
+        await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+
+    [Fact]
+    public async Task ToStringOnReferenceType_NoDiagnostic()
+    {
+        const string source = @"
+class BatesNumber
+{
+    public override string ToString() => ""DOC1"";
+}
+
+class MyFormatter
+{
+    public string Format(BatesNumber value)
     {
         return value.ToString();
     }
@@ -217,6 +238,15 @@ class MyFormatter
 }
 ";
         await VerifyCS.VerifyAnalyzerAsync(source);
+    }
+
+    [Fact]
+    public void SupportedDiagnostics_DefaultSeverityIsWarning()
+    {
+        var analyzer = new DeterministicFormattableAnalyzer();
+        var descriptor = Assert.Single(analyzer.SupportedDiagnostics);
+        Assert.Equal(DeterministicFormattableAnalyzer.DiagnosticId, descriptor.Id);
+        Assert.Equal(DiagnosticSeverity.Warning, descriptor.DefaultSeverity);
     }
 }
 

@@ -48,7 +48,7 @@ for file in "README.md" "AGENTS.md" "Requirements.md" "UBIQUITOUS_LANGUAGE.md" "
 done
 
 # Non-documentation files MUST NOT match:
-for file in "BannedSymbols.txt" "tests/fixtures/chaos-anomaly-types.txt" "tests/fixtures/profiles/expected-headers/full.txt" "src/Program.cs" "zipper.sln"; do
+for file in "BannedSymbols.txt" "BannedSyntaxes.txt" "tests/fixtures/chaos-anomaly-types.txt" "tests/fixtures/profiles/expected-headers/full.txt" "src/Program.cs" "zipper.sln"; do
     if is_docs "$file"; then
         echo "FAIL: '$file' should NOT be classified as documentation"
         exit 1

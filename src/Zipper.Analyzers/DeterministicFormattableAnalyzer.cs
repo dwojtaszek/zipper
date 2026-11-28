@@ -23,7 +23,7 @@ public sealed class DeterministicFormattableAnalyzer : ZipperAnalyzerBase
         title: "Prefer deterministic formatting APIs",
         messageFormat: "Use deterministic formatting APIs instead of {0}",
         category: "Determinism",
-        defaultSeverity: DiagnosticSeverity.Info,
+        defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true,
         description: "Formatting APIs that depend on the current culture or mutable state should be avoided in deterministic formatter layers.");
 
@@ -71,7 +71,7 @@ public sealed class DeterministicFormattableAnalyzer : ZipperAnalyzerBase
         }
 
         var containing = method.ContainingType;
-        if (containing is null || containing.SpecialType == SpecialType.System_String)
+        if (containing is null || !containing.IsValueType)
         {
             return;
         }

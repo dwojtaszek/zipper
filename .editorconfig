@@ -136,19 +136,19 @@ dotnet_diagnostic.CA1311.severity = warning   # specify culture / use invariant 
 # --- Meziantou.Analyzer & Banned APIs ---
 dotnet_diagnostic.MA0011.severity = error     # IFormatProvider is missing
 dotnet_diagnostic.RS0030.severity = error     # Do not use banned APIs
+# Style/structure rules that fight existing Zipper layout (one-file modules, concrete types).
 dotnet_diagnostic.MA0048.severity = none      # File name must match type name
-dotnet_diagnostic.MA0051.severity = none      # Method is too long
-dotnet_diagnostic.MA0016.severity = none      # Prefer collection abstraction
-dotnet_diagnostic.MA0015.severity = none      # ArgumentException parameter name
-dotnet_diagnostic.MA0023.severity = none      # RegexOptions
-dotnet_diagnostic.MA0025.severity = none      # NotImplementedException
-dotnet_diagnostic.MA0144.severity = none
-dotnet_diagnostic.MA0158.severity = none      # Lock
-dotnet_diagnostic.MA0169.severity = none
-dotnet_diagnostic.MA0004.severity = none
-dotnet_diagnostic.MA0002.severity = none
-dotnet_diagnostic.MA0006.severity = none
-dotnet_diagnostic.MA0072.severity = none
+dotnet_diagnostic.MA0051.severity = none      # Method is too long (generation pipelines are long by design)
+dotnet_diagnostic.MA0016.severity = none      # Prefer collection abstraction (concrete lists are the domain)
+dotnet_diagnostic.MA0015.severity = none      # ArgumentException parameter name (existing call sites)
+dotnet_diagnostic.MA0023.severity = none      # Specify RegexOptions (generated-data regexes are invariant)
+dotnet_diagnostic.MA0144.severity = none      # Use System.OperatingSystem (generation is not OS-gated)
+dotnet_diagnostic.MA0158.severity = none      # Use System.Threading.Lock (.NET 9 type; SDK pin is net8-compatible)
+dotnet_diagnostic.MA0169.severity = none      # Use Equals instead of == (byte-identical string compares)
+dotnet_diagnostic.MA0004.severity = none      # Use ConfigureAwait (CLI, not a library)
+dotnet_diagnostic.MA0006.severity = none      # Use string.Equals instead of == (byte-identical string compares)
+dotnet_diagnostic.MA0002.severity = none      # IEqualityComparer<string> missing (concrete lists are the domain)
+dotnet_diagnostic.MA0072.severity = none      # Do not throw from a finally block (existing cleanup paths)
 
 # Phase 1: Zero-risk promotions
 dotnet_diagnostic.MA0009.severity = error
@@ -216,6 +216,22 @@ dotnet_diagnostic.CA1859.severity = suggestion
 
 # CA1864: Prefer Dictionary.TryAdd over ContainsKey + Add
 dotnet_diagnostic.CA1864.severity = warning
+
+# ZIP001-003: custom analyzers. Default is Warning; TreatWarningsAsErrors
+# already fails the build. Pin error here so editorconfig is the source of
+# truth if defaultSeverity is ever lowered.
+dotnet_diagnostic.ZIP001.severity = error     # Load File seam: no Write in Composer/Serializer (Emitter writes)
+dotnet_diagnostic.ZIP002.severity = error     # value-type ToString() / string.Format without invariant provider
+dotnet_diagnostic.ZIP003.severity = error     # Stream.Read in sink types; use ReadExactly
+
+# Agent-trap rules. MA0025 was none; the rest were default warning and
+# already failed the build via TreatWarningsAsErrors. Pin error so they
+# stay on if that global is ever relaxed.
+dotnet_diagnostic.MA0025.severity = error     # Do not throw NotImplementedException
+dotnet_diagnostic.MA0012.severity = error     # Do not raise reserved exception type
+dotnet_diagnostic.MA0022.severity = error     # Return Task.FromResult instead of returning null
+dotnet_diagnostic.MA0035.severity = error     # Do not use Thread.Abort/Suspend/Resume
+dotnet_diagnostic.MA0240.severity = error     # Do not use banned syntax (BannedSyntaxes.txt)
 
 # Keep application behavior explicit and reject impossible null comparisons.
 dotnet_diagnostic.MA0193.severity = error     # Require explicit midpoint rounding

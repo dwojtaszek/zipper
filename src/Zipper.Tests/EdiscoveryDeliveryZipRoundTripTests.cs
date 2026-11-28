@@ -3,7 +3,6 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Xunit;
 using Xunit.Abstractions;
-using Zipper.LoadFiles;
 using Zipper.Tests.TestHelpers;
 using IndependentZipFile = ICSharpCode.SharpZipLib.Zip.ZipFile;
 
@@ -416,7 +415,7 @@ public class EdiscoveryDeliveryZipRoundTripTests : WorkingDirectoryTestBase
             var textContent = string.Equals(fileType, "eml", StringComparison.OrdinalIgnoreCase)
                 ? PlaceholderFiles.EmlExtractedText
                 : PlaceholderFiles.ExtractedText;
-            var textPath = $"{folderPrefix}{TextPathHelper.GetTextPath(fileName)}";
+            var textPath = $"{folderPrefix}{i:D8}.txt";
             AddExpectedHash(hashes, textPath, textContent);
 
             var controlNumber = $"DOC{i:D8}";

@@ -71,7 +71,9 @@ internal sealed class OfficeFileGenerator : IFileGenerator
         {
             "docx" => GenerateDocx(workItem),
             "xlsx" => GenerateXlsx(workItem),
+#pragma warning disable MA0025 // PPTX is an explicit stub; callers must use DOCX or XLSX
             "pptx" => throw new System.NotImplementedException("PPTX generation is not yet implemented. Please use DOCX or XLSX formats."),
+#pragma warning restore MA0025
             _ => throw new System.ArgumentException($"Unsupported Office format: {fileType}"),
         };
     }
