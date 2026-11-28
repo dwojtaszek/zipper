@@ -55,6 +55,50 @@ class SonarCloudGateTests(unittest.TestCase):
         self.assertIn("CRITICAL csharpsquid:S3776", result.detail)
         self.assertIn("ProductionSetPostValidator.cs:670", result.detail)
 
+    def test_closed_issues_are_ignored(self):
+        closed = {
+            "severity": "BLOCKER",
+            "status": "CLOSED",
+            "resolution": "FIXED",
+            "rule": "csharpsquid:S2699",
+            "component": "dwojtaszek_zipper:src/Zipper.Tests/ModeAdapterTests.cs",
+            "message": "Add at least one assertion to this test case.",
+        }
+        reopened = {
+            "severity": "CRITICAL",
+            "status": "REOPENED",
+            "rule": "csharpsquid:S3776",
+            "component": "dwojtaszek_zipper:src/ProductionSetOrchestrator.cs",
+            "line": 16,
+            "message": "Refactor this method to reduce its Cognitive Complexity.",
+        }
+        no_status = {
+            "severity": "MAJOR",
+            "rule": "csharpsquid:S100",
+            "component": "dwojtaszek_zipper:src/A.cs",
+            "line": 12,
+            "message": "Rename this method.",
+        }
+        for issues, expected_ok, expected_rule in (
+            ([closed], True, None),
+            ([closed, reopened], False, "CRITICAL csharpsquid:S3776"),
+            ([no_status], False, "MAJOR csharpsquid:S100"),
+        ):
+            with self.subTest(issues=issues), patch.object(
+                runner,
+                "_sonarcloud_get_json",
+                side_effect=[
+                    {"issues": issues},
+                    {"projectStatus": {"status": "OK", "conditions": []}},
+                ],
+            ):
+                result = runner._check_sonarcloud_pr_gate(1438)
+
+            self.assertEqual(expected_ok, result.ok)
+            self.assertNotIn("S2699", result.detail)
+            if expected_rule:
+                self.assertIn(expected_rule, result.detail)
+
     def test_quality_gate_error_without_issues_still_fails(self):
         with patch.object(
             runner,

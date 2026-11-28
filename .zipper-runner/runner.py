@@ -2754,6 +2754,7 @@ def _run_review_gate(pr_number, cwd: str, wait_minutes: int | None = None,
 
 SONARCLOUD_PROJECT_KEY = "dwojtaszek_zipper"
 SONARCLOUD_TIMEOUT_SECONDS = 20
+SONARCLOUD_OPEN_STATUSES = frozenset({"OPEN", "CONFIRMED", "REOPENED"})
 
 
 def _sonarcloud_get_json(url: str) -> dict:
@@ -2804,6 +2805,9 @@ def _sonarcloud_issue_findings(issues: list, pr_number: int) -> tuple[list[str] 
     for issue in issues:
         if not isinstance(issue, dict):
             return None, f"Unexpected SonarCloud issue entry for PR #{pr_number}."
+        # SonarCloud ignores the statuses filter when pullRequest is set and returns CLOSED issues.
+        if issue.get("status", "OPEN") not in SONARCLOUD_OPEN_STATUSES:
+            continue
         severity = issue.get("severity", "MAJOR")
         rule = issue.get("rule", "?")
         comp = (issue.get("component") or "").split(":")[-1] or "?"
