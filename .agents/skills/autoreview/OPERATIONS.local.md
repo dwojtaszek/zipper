@@ -569,3 +569,11 @@
 - **telemetry**: host=opencode mode=local specialists=0 bundle=~1400c
 - **lessons**: Sonar PR issue search returns closed issues despite `statuses=OPEN,CONFIRMED,REOPENED`; filter returned issues by status before classification
 - **suppressions**: none
+
+### 2026-11-28 factory:local:issue-1486-sonar-runner-gate
+
+- **findings**: 1 INFO (missing-status default coverage), 0 ACTION; patch correct
+- **outcome**: accepted — pinned a missing `status` as OPEN in the runner Sonar gate test; fixed the runner's duplicate closed-issue filter, which kept reporting the three already-CLOSED S2699 findings
+- **telemetry**: host=factory mode=commit specialists=1 bundle=~2600c
+- **lessons**: the runner queries SonarCloud with its own gate; fixing `check-sonar.py` alone leaves the runner reporting closed issues, so both filters must exist
+- **suppressions**: none
