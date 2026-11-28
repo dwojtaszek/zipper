@@ -58,16 +58,17 @@ analyzer, not a test.
 | Layer | Use for | Where |
 |---|---|---|
 | Format | whitespace, ordering, naming | `.editorconfig` |
-| Banned API | a method or type that must not be called | `BannedSymbols.txt` |
+| Banned API / syntax | a method, type, or syntax construct that must not be used | `BannedSymbols.txt`, `BannedSyntaxes.txt` |
 | Analyzer | a structural mistake that must fail at every call site | `src/Zipper.Analyzers/` + `src/Zipper.Analyzers.Tests/` |
+| Architecture | namespace, layer, seam, and sealing boundaries | `src/Zipper.Tests/ArchitectureTests.cs` (NetArchTest) |
 | Test | one behavioral contract, including test quality | `src/Zipper.Tests/` (property tests in `Properties/`) |
 | Golden | byte output drift | `tests/goldens/` |
 | Hook or script | a command an agent must run, or a test-strength gate | `.github/hooks/`, `dev.sh`, `tests/` |
 | Prose | judgment that no check can express | `AGENTS.md`, `docs/` |
 
 Existing analyzer IDs: ZIP001 Load File seam, ZIP002 deterministic formattable,
-ZIP003 exact stream read, ZIP004 sealed domain types. ZIP001–ZIP003 are build
-errors (`.editorconfig`); ZIP004 is Hidden. Extend one only when its rule is
+ZIP003 exact stream read, ZIP004 sealed domain types. ZIP001–ZIP004 are all build
+errors (`.editorconfig`). Extend one only when its rule is
 actually about the same invariant. Do not contort an unrelated analyzer, and do
 not add a fifth for a rule a single test can hold.
 

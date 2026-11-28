@@ -71,6 +71,7 @@ Non-discoverable gate conventions:
 - **Mutation cache:** `tests/run-mutation-smoke.sh` caches killed/compile-error mutants under `.git/zipper-hooks/mutation-cache/` (bypass with `--no-cache` or `MUTATION_SMOKE_CACHE=0`).
 - **Python multi-suite logs:** Wrap `.zipper-runner/tests`, `tests/ci`, or `tools/typesafe-audit/tests` with `.github/scripts/run-check.py --log <path> -- ...` so output stays bounded.
 - **Coverage gate:** `ci.yml` enforces ≥80% aggregate line, ≥85% aggregate branch, and ≥50% per-file line coverage (≥20 lines) via `.github/actions/coverage-gate/check-per-file-coverage.py`.
+- **Static & architecture gates:** `dotnet build` enforces `.editorconfig`, `BannedSymbols.txt` (`RS0030`), `BannedSyntaxes.txt` (`MA0240`), and custom Roslyn analyzers (`ZIP001`–`ZIP004`, `FGR_FLAT_ACCESS`) as build errors. Run focused architecture and config contract checks while iterating with `./dev.sh test --filter "FullyQualifiedName~ArchitectureTests|FullyQualifiedName~EditorConfigTests|FullyQualifiedName~BuildPropsTests"`.
 - **Full E2E suite:** `./tests/run-tests.sh` (`--serial` or `--jobs N`) / `tests/run-tests.bat`.
 
 ---
@@ -102,7 +103,7 @@ See [CI.md](../CI.md) for SonarCloud, CodeRabbit, CodeQL, and golden file proced
 | `src/SourceInput/` | Source CSV / directory template loaders |
 | `src/Validation/` | Post-generation, reconciliation, and chaos expectation validators |
 | `src/ArchiveTests/` & `src/ManifestComparison/` | Archive Test Suite fixtures/mutations and Production Manifest Comparison |
-| `src/Zipper.Tests/` | Unit and FsCheck property tests (`Properties/`) |
+| `src/Zipper.Tests/` | Unit, NetArchTest architecture (`ArchitectureTests.cs`), config contract (`EditorConfigTests.cs`, `BuildPropsTests.cs`), and FsCheck property tests (`Properties/`) |
 | `src/Zipper.Analyzers/` & `src/Zipper.Analyzers.Tests/` | Custom Roslyn analyzers (`ZIP001`–`ZIP004`, `FGR_FLAT_ACCESS`) and tests |
 | `.github/`, `.zipper-runner/`, `tests/` | CI workflows/scripts, autonomous runner, and E2E/CI test suites |
 

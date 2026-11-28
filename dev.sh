@@ -244,7 +244,7 @@ run_check() {
                     need_complexity=1
                 fi
                 ;;
-            Directory.Build.props|zipper.sln|BannedSymbols.txt|BannedSyntaxes.txt|global.json)
+            Directory.Build.props|.editorconfig|zipper.sln|BannedSymbols.txt|BannedSyntaxes.txt|global.json)
                 need_build=1
                 need_format=1
                 need_unit_tests=1
@@ -302,6 +302,9 @@ run_check() {
             tests/*)
                 need_parity=1
                 need_docs_drift=1
+                if [[ "$file" == *.py ]]; then
+                    need_python_lint=1
+                fi
                 if [[ "$file" =~ ^tests/(test-[a-zA-Z0-9._-]+|run-e2e-[a-zA-Z0-9._-]+)\.sh$ ]]; then
                     specific_e2e_scripts+=("$file")
                 fi
