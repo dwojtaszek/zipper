@@ -5,6 +5,7 @@ using System.Text;
 using FsCheck.Xunit;
 using Xunit;
 using Zipper.Cli.Modules;
+using Zipper.LoadFiles;
 using Zipper.SourceInput;
 using Zipper.Utils;
 
@@ -108,6 +109,20 @@ public sealed class PathAndSourceInputPropertyTests : IDisposable
         string? BatesNumber,
         string Custodian,
         string Department);
+
+    [Property]
+    public void GetTextPath_WithRelativeNativePath_ShouldBeIdempotent(uint stem, uint extension)
+    {
+        var textPath = TextPathHelper.GetTextPath($"folder/document{stem:x}.{extension:x}");
+        Assert.Equal(textPath, TextPathHelper.GetTextPath(textPath));
+    }
+
+    [Property]
+    public void GetImagePath_WithRelativeNativePath_ShouldBeIdempotent(uint stem, uint extension)
+    {
+        var imagePath = ImagePathHelper.GetImagePath($"folder/document{stem:x}.{extension:x}");
+        Assert.Equal(imagePath, ImagePathHelper.GetImagePath(imagePath));
+    }
 
     [Property]
     public void ProductionModule_TryBuild_ShouldRejectUnsafeCharactersAndDeviceNamesInProductionId(

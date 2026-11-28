@@ -806,6 +806,15 @@ public class MimeRealismTests
     }
 
     [Fact]
+    public void QuotedPrintableHelper_Encode_LongBody_RespectsLineLengthIncludingSoftBreak()
+    {
+        var encoded = QuotedPrintableHelper.Encode(new string('a', 180) + "=é");
+
+        Assert.Contains("=\r\n", encoded, StringComparison.Ordinal);
+        Assert.All(encoded.Split("\r\n", StringSplitOptions.None), line => Assert.InRange(line.Length, 0, 76));
+    }
+
+    [Fact]
     public async Task XmlLoadFileWriter_WithDuplicateAttachmentFilenames_EmitsDistinctChildNativePaths()
     {
         var request = new FileGenerationRequest
