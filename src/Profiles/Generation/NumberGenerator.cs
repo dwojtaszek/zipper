@@ -70,7 +70,7 @@ internal sealed class NumberGenerator : IColumnValueGenerator
             double mean = this.min + (this.max - this.min) / 2.0;
             double stdDev = (this.max - this.min) / 6.0; // 99.7% of values within [min, max]
 
-            int value = (int)Math.Round(mean + z0 * stdDev);
+            int value = (int)Math.Round(mean + z0 * stdDev, MidpointRounding.ToEven);
             value = Math.Max(this.min, Math.Min(this.max, value));
             return value.ToString(System.Globalization.CultureInfo.InvariantCulture);
         }

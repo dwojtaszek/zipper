@@ -233,6 +233,10 @@ dotnet_diagnostic.MA0022.severity = error     # Return Task.FromResult instead o
 dotnet_diagnostic.MA0035.severity = error     # Do not use Thread.Abort/Suspend/Resume
 dotnet_diagnostic.MA0240.severity = error     # Do not use banned syntax (BannedSyntaxes.txt)
 
+# Keep application behavior explicit and reject impossible null comparisons.
+dotnet_diagnostic.MA0193.severity = error     # Require explicit midpoint rounding
+dotnet_diagnostic.RCS1166.severity = error    # Value type object is never equal to null
+
 # RCS1139: Add summary element to documentation comment (disabled - codebase uses /// <remarks> without <summary>)
 dotnet_diagnostic.RCS1139.severity = none
 
