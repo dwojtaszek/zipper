@@ -36,6 +36,7 @@ call :assert_accepted "valid standard --loadfile-only" --loadfile-only --count 5
 call :assert_accepted "valid standard --loadfile-only with --col-delim" --loadfile-only --count 5 --output-path ".\results\zi_test" --col-delim "char:|"
 call :assert_accepted "valid standard --production-set" --production-set --count 5 --bates-prefix TEST --type pdf --output-path ".\results\zi_test"
 call :assert_accepted "--loadfile-only + --chaos-mode + --chaos-amount" --loadfile-only --count 5 --chaos-mode --chaos-amount "5%%" --output-path ".\results\zi_test"
+call :assert_accepted "--chaos-mode + EML/TIFF mix with combined chaos types" --types "eml:50,tiff:50" --count 5 --chaos-mode --chaos-types mime-boundary,tiff-strip-offset --output-path ".\results\zi_test"
 call :assert_accepted "--production-set + --chaos-mode + email" --production-set --count 5 --bates-prefix TEST --type eml --chaos-mode --output-path ".\results\zi_test"
 call :assert_accepted "--production-set + --chaos-mode + cross-format scenario" --production-set --count 5 --bates-prefix TEST --chaos-mode --chaos-scenario cross-format-desync --output-path ".\results\zi_test"
 call :assert_accepted "--production-set + --bates-prefix + --volume-size" --production-set --count 5 --bates-prefix TEST --volume-size 100 --output-path ".\results\zi_test"

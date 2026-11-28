@@ -160,6 +160,27 @@ internal static class ChaosScenarios
     internal const string GenerationChaosRequirement =
         "Chaos mode requires --loadfile-only, --type eml, --type tiff, or a Production Set cross-format scenario.";
 
+    /// <summary>
+    /// A named Chaos Scenario is rejected on a chaos run that generates native work items
+    /// (Emails or TIFFs, not a Loadfile-Only run) unless it is a Production Set cross-format run.
+    /// </summary>
+    internal static bool IsNativeScenarioAllowed(
+        string? scenario,
+        bool chaosMode,
+        bool loadfileOnly,
+        bool hasEml,
+        bool hasTiff,
+        bool productionSetMode) =>
+        !chaosMode
+        || string.IsNullOrEmpty(scenario)
+        || (productionSetMode && IsCrossFormat(scenario))
+        || loadfileOnly
+        || (!hasEml && !hasTiff);
+
+    /// <summary>Exception text for a native run that names an unsupported Chaos Scenario.</summary>
+    internal const string NativeScenarioRequirement =
+        "Chaos scenario requires --loadfile-only or a Production Set cross-format scenario.";
+
     internal static IReadOnlyList<string> ResolveTypes(ChaosScenarioDefinition scenario, LoadFileFormat format)
     {
         ArgumentNullException.ThrowIfNull(scenario);

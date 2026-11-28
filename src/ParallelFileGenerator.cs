@@ -54,15 +54,28 @@ public class ParallelFileGenerator
         try
         {
             // Validate inputs
+            bool hasEml = request.Output.HasFileType("eml");
+            bool hasTiff = request.Output.HasFileType("tiff");
             if (!ChaosScenarios.IsGenerationChaosAllowed(
                     chaosMode: request.Chaos.ChaosMode,
                     loadfileOnly: request.LoadfileOnly,
                     productionSetMode: false,
-                    hasEml: request.Output.HasFileType("eml"),
-                    hasTiff: request.Output.HasFileType("tiff"),
+                    hasEml: hasEml,
+                    hasTiff: hasTiff,
                     scenario: request.Chaos.ChaosScenario))
             {
                 throw new InvalidOperationException(ChaosScenarios.GenerationChaosRequirement);
+            }
+
+            if (!ChaosScenarios.IsNativeScenarioAllowed(
+                    scenario: request.Chaos.ChaosScenario,
+                    chaosMode: request.Chaos.ChaosMode,
+                    loadfileOnly: request.LoadfileOnly,
+                    hasEml: hasEml,
+                    hasTiff: hasTiff,
+                    productionSetMode: false))
+            {
+                throw new InvalidOperationException(ChaosScenarios.NativeScenarioRequirement);
             }
 
             if (request.Output.FileCount <= 0)

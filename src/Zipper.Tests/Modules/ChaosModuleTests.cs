@@ -626,6 +626,25 @@ public class ChaosModuleTests
     }
 
     [Fact]
+    public void TryBuild_MixedEmailAndTiffRunWithCrossFormatScenario_ReturnsFalseWithNativeMessage()
+    {
+        var module = new ChaosModule();
+        Assert.True(module.TryApply("--chaos-mode", null));
+        Assert.True(module.TryApply("--chaos-scenario", "cross-format-desync"));
+
+        var (result, _, stderr) = ConsoleOutputCapture.RunWithCapturedOutput(() => module.TryBuild(
+            loadfileOnly: false,
+            formats: new List<LoadFileFormat> { LoadFileFormat.Dat, LoadFileFormat.Opt },
+            out _,
+            productionSet: false,
+            hasEml: true,
+            hasTiff: true));
+
+        Assert.False(result);
+        Assert.Contains("Error: --chaos-scenario does not apply to email (.eml) or TIFF (.tiff) chaos.", stderr, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TryBuild_ProductionSetTiffRunWithCrossFormatScenario_BuildsConfig()
     {
         var module = new ChaosModule();

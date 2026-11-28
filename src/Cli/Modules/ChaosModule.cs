@@ -90,7 +90,7 @@ public sealed class ChaosModule : CliModule
         bool emailRun = hasEml && !loadfileOnly;
         bool tiffRun = hasTiff && !loadfileOnly;
         if (!this.TryValidateMode(loadfileOnly, productionSet, hasEml, hasTiff)
-            || !this.TryValidateNativeScenario(emailRun, tiffRun, productionSet)
+            || !this.TryValidateNativeScenario(loadfileOnly, hasEml, hasTiff, productionSet)
             || !this.TryValidateScenario(formats, delimiters, encoding)
             || !this.TryValidateAmount()
             || !this.TryNormalizeChaosTypes(formats, emailRun, tiffRun, out var normalizedChaosTypes))
@@ -159,28 +159,36 @@ public sealed class ChaosModule : CliModule
         return true;
     }
 
-    private bool TryValidateNativeScenario(bool emailRun, bool tiffRun, bool productionSet)
+    private bool TryValidateNativeScenario(bool loadfileOnly, bool hasEml, bool hasTiff, bool productionSet)
     {
-        // Production Set cross-format scenarios still drive load file chaos next to the native files.
-        bool loadFileScenario = productionSet && ChaosScenarios.IsCrossFormat(this._scenario);
-        if (string.IsNullOrEmpty(this._scenario) || loadFileScenario)
+        // Same native-scenario rule as the generation layer, so CLI and runtime cannot drift.
+        if (ChaosScenarios.IsNativeScenarioAllowed(
+                scenario: this._scenario,
+                chaosMode: this._mode,
+                loadfileOnly: loadfileOnly,
+                hasEml: hasEml,
+                hasTiff: hasTiff,
+                productionSetMode: productionSet))
         {
             return true;
         }
 
-        if (emailRun)
+        bool emailRun = hasEml && !loadfileOnly;
+        bool tiffRun = hasTiff && !loadfileOnly;
+        if (emailRun && tiffRun)
+        {
+            Console.Error.WriteLine("Error: --chaos-scenario does not apply to email (.eml) or TIFF (.tiff) chaos. Use --chaos-types with native types.");
+        }
+        else if (emailRun)
         {
             Console.Error.WriteLine("Error: --chaos-scenario does not apply to email (.eml) chaos. Use --chaos-types with email types.");
-            return false;
         }
-
-        if (tiffRun)
+        else
         {
             Console.Error.WriteLine("Error: --chaos-scenario does not apply to TIFF (.tiff) chaos. Use --chaos-types with TIFF types.");
-            return false;
         }
 
-        return true;
+        return false;
     }
 
     private bool TryValidateScenario(

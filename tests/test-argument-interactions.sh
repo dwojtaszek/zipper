@@ -265,6 +265,9 @@ assert_accepted "valid standard --production-set" \
 assert_accepted "--loadfile-only + --chaos-mode + --chaos-amount" \
     --loadfile-only --count 5 --chaos-mode --chaos-amount "5%"
 
+assert_accepted "--chaos-mode + EML/TIFF mix with combined chaos types" \
+    --types "eml:50,tiff:50" --count 5 --chaos-mode --chaos-types mime-boundary,tiff-strip-offset
+
 assert_accepted "--production-set + --chaos-mode + email" \
     --production-set --count 5 --bates-prefix TEST --type eml --chaos-mode
 

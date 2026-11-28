@@ -39,15 +39,28 @@ internal static class ProductionSetOrchestrator
         ArgumentNullException.ThrowIfNull(materializer);
         ArgumentNullException.ThrowIfNull(hashComputer);
 
+        bool hasEml = request.Output.HasFileType("eml");
+        bool hasTiff = request.Output.HasFileType("tiff");
         if (!ChaosScenarios.IsGenerationChaosAllowed(
                 chaosMode: request.Chaos.ChaosMode,
                 loadfileOnly: request.LoadfileOnly,
                 productionSetMode: true,
-                hasEml: request.Output.HasFileType("eml"),
-                hasTiff: request.Output.HasFileType("tiff"),
+                hasEml: hasEml,
+                hasTiff: hasTiff,
                 scenario: request.Chaos.ChaosScenario))
         {
             throw new InvalidOperationException(ChaosScenarios.GenerationChaosRequirement);
+        }
+
+        if (!ChaosScenarios.IsNativeScenarioAllowed(
+                scenario: request.Chaos.ChaosScenario,
+                chaosMode: request.Chaos.ChaosMode,
+                loadfileOnly: request.LoadfileOnly,
+                hasEml: hasEml,
+                hasTiff: hasTiff,
+                productionSetMode: true))
+        {
+            throw new InvalidOperationException(ChaosScenarios.NativeScenarioRequirement);
         }
 
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -737,7 +750,7 @@ internal static class ProductionSetOrchestrator
                 Request = request,
                 // Cross-format chaos deliberately breaks DAT↔OPT structure, so its report
                 // findings are expected; Native File chaos keeps the structural contract.
-                IsChaosMode = ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario),
+                IsChaosMode = request.Chaos.ChaosMode && ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario),
                 ValidateChaosExpectations = request.Chaos.ChaosMode,
             };
             try

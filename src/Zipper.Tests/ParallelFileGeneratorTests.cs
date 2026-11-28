@@ -868,6 +868,125 @@ public class ParallelFileGeneratorTests
         }
     }
 
+    [Theory]
+    [InlineData("eml")]
+    [InlineData("tiff")]
+    public async Task GenerateFilesAsync_WithLoadfileOnlyNativeTypeAndCrossFormatScenario_DoesNotThrow(string nativeType)
+    {
+        var outputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(outputPath);
+
+        try
+        {
+            var generator = new ParallelFileGenerator();
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    OutputPath = outputPath,
+                    FileCount = 1,
+                    FileType = nativeType,
+                },
+                Chaos = new ChaosConfig
+                {
+                    ChaosMode = true,
+                    ChaosScenario = "cross-format-desync",
+                },
+                LoadfileOnly = true,
+            };
+
+            await generator.GenerateFilesAsync(request);
+
+            Assert.NotEmpty(Directory.EnumerateFiles(outputPath));
+        }
+        finally
+        {
+            if (Directory.Exists(outputPath))
+            {
+                Directory.Delete(outputPath, true);
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData("eml")]
+    [InlineData("tiff")]
+    public async Task GenerateFilesAsync_WithNativeTypeAndCrossFormatScenario_ThrowsInvalidOperationException(string nativeType)
+    {
+        var outputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(outputPath);
+
+        try
+        {
+            var generator = new ParallelFileGenerator();
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    OutputPath = outputPath,
+                    FileCount = 1,
+                    FileType = nativeType,
+                },
+                Chaos = new ChaosConfig
+                {
+                    ChaosMode = true,
+                    ChaosScenario = "cross-format-desync",
+                },
+                LoadfileOnly = false,
+            };
+
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => generator.GenerateFilesAsync(request));
+
+            Assert.Equal(ChaosScenarios.NativeScenarioRequirement, exception.Message);
+            Assert.Empty(Directory.EnumerateFileSystemEntries(outputPath));
+        }
+        finally
+        {
+            if (Directory.Exists(outputPath))
+            {
+                Directory.Delete(outputPath, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task GenerateFilesAsync_WithChaosScenarioButChaosModeDisabled_DoesNotThrow()
+    {
+        var outputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
+        Directory.CreateDirectory(outputPath);
+
+        try
+        {
+            var generator = new ParallelFileGenerator();
+            var request = new FileGenerationRequest
+            {
+                Output = new OutputConfig
+                {
+                    OutputPath = outputPath,
+                    FileCount = 1,
+                    FileType = "eml",
+                },
+                Chaos = new ChaosConfig
+                {
+                    ChaosMode = false,
+                    ChaosScenario = "structured-import-failures",
+                },
+                LoadfileOnly = false,
+            };
+
+            await generator.GenerateFilesAsync(request);
+
+            Assert.NotEmpty(Directory.EnumerateFiles(outputPath));
+        }
+        finally
+        {
+            if (Directory.Exists(outputPath))
+            {
+                Directory.Delete(outputPath, true);
+            }
+        }
+    }
+
     [Fact]
     public void GenerateFileData_TotalSizeEqualsMaxPoolSize_UsesMemoryOwner()
     {

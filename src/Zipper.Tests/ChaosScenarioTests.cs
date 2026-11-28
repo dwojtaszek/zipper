@@ -46,6 +46,31 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
         Assert.Equal(expected, ChaosScenarios.IsGenerationChaosAllowed(chaosMode, loadfileOnly, productionSet, hasEml, hasTiff, scenario));
     }
 
+    [Theory]
+    [InlineData(null, true, false, false, false, false, true)]
+    [InlineData("", true, false, true, true, false, true)]
+    [InlineData("cross-format-desync", true, false, true, true, false, false)]
+    [InlineData("cross-format-desync", true, false, true, true, true, true)]
+    [InlineData("Cross-Format-Desync", true, false, true, true, true, true)]
+    [InlineData("structured-import-failures", true, false, true, true, true, false)]
+    [InlineData("structured-import-failures", true, true, true, true, false, true)]
+    [InlineData("structured-import-failures", true, true, false, false, false, true)]
+    [InlineData("structured-import-failures", true, false, false, false, false, true)]
+    [InlineData("structured-import-failures", false, false, true, true, false, true)]
+    [InlineData("broken-families", true, false, false, false, true, true)]
+    [InlineData("cross-format-desync", true, false, false, false, false, true)]
+    public void IsNativeScenarioAllowed_MatchesNativeScopeRule(
+        string? scenario,
+        bool chaosMode,
+        bool loadfileOnly,
+        bool hasEml,
+        bool hasTiff,
+        bool productionSetMode,
+        bool expected)
+    {
+        Assert.Equal(expected, ChaosScenarios.IsNativeScenarioAllowed(scenario, chaosMode, loadfileOnly, hasEml, hasTiff, productionSetMode));
+    }
+
     [Fact]
     public void GetByName_ValidName_ReturnsScenario()
     {

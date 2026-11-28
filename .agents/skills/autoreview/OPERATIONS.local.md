@@ -489,3 +489,19 @@
 - **telemetry**: host=opencode mode=local specialists=1 bundle=1377c
 - **lessons**: `--loadfile-only` makes the Standard cross-format rejection case legal; no shell test change
 - **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-native-scenario-followup
+
+- **findings**: 0 (fast pass)
+- **outcome**: clean review — shared native-scenario rule closes direct Standard bypass while preserving Loadfile-Only cross-format
+- **telemetry**: host=opencode mode=local specialists=1 bundle=23010c
+- **lessons**: generator native flags must exclude Loadfile-Only runs; docs and both E2E scripts updated for mixed native chaos
+- **suppressions**: none
+
+### 2026-11-28 factory:local:issue-1486-coderabbit-closeout
+
+- **findings**: 3 CodeRabbit (1 valid README gap, 2 questions refuted by existing guards) + 4 reviewer cycles
+- **outcome**: accepted — documented mixed native chaos, shared the native-scenario gate across CLI/Standard/Production Set, scoped REQ-237/REQ-241 wording, added truth-table and gate tests
+- **telemetry**: host=factory mode=local specialists=4 bundle=~12000c
+- **lessons**: scenario gates need the raw hasEml/hasTiff/loadfileOnly inputs, not caller-derived flags, or the CLI and runtime drift; keep doc rejection clauses scoped to the condition the code checks
+- **suppressions**: declared-vs-allocated File Type gaps are pre-existing and out of scope for this closeout

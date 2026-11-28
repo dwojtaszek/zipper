@@ -397,6 +397,48 @@ public class ProductionSetOrchestratorTests
     }
 
     [Theory]
+    [InlineData("eml")]
+    [InlineData("tiff")]
+    public async Task GenerateAsync_WithNativeTypeAndNativeOnlyScenario_ThrowsInvalidOperationException(string nativeType)
+    {
+        var materializer = new FakeMaterializer();
+        var request = CreateRequest(count: 1, fileType: nativeType, outputPath: Path.GetTempPath());
+        request.Chaos = request.Chaos with { ChaosMode = true, ChaosScenario = "structured-import-failures" };
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer()));
+
+        Assert.Equal(ChaosScenarios.NativeScenarioRequirement, exception.Message);
+        Assert.Empty(materializer.CreatedDirectories);
+    }
+
+    [Theory]
+    [InlineData("eml", "cross-format-desync")]
+    [InlineData("tiff", "broken-families")]
+    public async Task GenerateAsync_WithNativeTypeAndCrossFormatScenario_DoesNotThrow(string nativeType, string scenario)
+    {
+        var materializer = new FakeMaterializer();
+        var request = CreateRequest(count: 1, fileType: nativeType, outputPath: Path.GetTempPath());
+        request.Chaos = request.Chaos with { ChaosMode = true, ChaosScenario = scenario };
+
+        var result = await ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer());
+
+        Assert.NotNull(result);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithNativeTypeAndScenarioButChaosModeOff_DoesNotThrow()
+    {
+        var materializer = new FakeMaterializer();
+        var request = CreateRequest(count: 1, fileType: "tiff", outputPath: Path.GetTempPath());
+        request.Chaos = request.Chaos with { ChaosMode = false, ChaosScenario = "structured-import-failures" };
+
+        var result = await ProductionSetOrchestrator.GenerateAsync(request, materializer, new HashComputer());
+
+        Assert.NotNull(result);
+    }
+
+    [Theory]
     [InlineData(null)]
     [InlineData("structured-import-failures")]
     public async Task GenerateAsync_WithChaosModeAndNoEmailsTiffsOrCrossFormatScenario_ThrowsInvalidOperationException(string? scenario)
