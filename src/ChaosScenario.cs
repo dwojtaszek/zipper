@@ -133,6 +133,10 @@ internal static class ChaosScenarios
     internal static bool IsCrossFormat(string? name) =>
         name is not null && GetByName(name)?.IsCrossFormat == true;
 
+    /// <summary>Cross-format chaos applies only when Chaos Mode is enabled.</summary>
+    internal static bool IsCrossFormatChaos(bool chaosMode, string? scenario) =>
+        chaosMode && IsCrossFormat(scenario);
+
     /// <summary>
     /// REQ-094 eligibility rule shared by the CLI and every runtime generation gate.
     /// Loadfile-Only allows Load File chaos, including coordinated cross-format scenarios;

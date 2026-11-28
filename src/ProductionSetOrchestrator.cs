@@ -664,7 +664,7 @@ internal static class ProductionSetOrchestrator
         var datPath = Path.Combine(dataDir, "loadfile.dat");
         var optPath = Path.Combine(dataDir, "loadfile.opt");
 
-        if (request.Chaos.ChaosMode && ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario))
+        if (ChaosScenarios.IsCrossFormatChaos(request.Chaos.ChaosMode, request.Chaos.ChaosScenario))
         {
             await LoadFiles.LoadFileOrchestrator.EmitCrossFormatAsync(
                 request, request, fileDataList, LoadFiles.WriterMode.ProductionSet,
@@ -750,7 +750,7 @@ internal static class ProductionSetOrchestrator
                 Request = request,
                 // Cross-format chaos deliberately breaks DAT↔OPT structure, so its report
                 // findings are expected; Native File chaos keeps the structural contract.
-                IsChaosMode = request.Chaos.ChaosMode && ChaosScenarios.IsCrossFormat(request.Chaos.ChaosScenario),
+                IsChaosMode = ChaosScenarios.IsCrossFormatChaos(request.Chaos.ChaosMode, request.Chaos.ChaosScenario),
                 ValidateChaosExpectations = request.Chaos.ChaosMode,
             };
             try

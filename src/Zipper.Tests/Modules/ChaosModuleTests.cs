@@ -7,7 +7,13 @@ namespace Zipper.Tests;
 [Collection("ConsoleTests")]
 public class ChaosModuleTests
 {
-    private static bool TryBuildWithValues(ChaosConfigSpec spec, out ChaosConfig config, bool loadfileOnly = true, IReadOnlyList<LoadFileFormat>? formats = null)
+    private static bool TryBuildWithValues(
+        ChaosConfigSpec spec,
+        out ChaosConfig config,
+        bool loadfileOnly = true,
+        IReadOnlyList<LoadFileFormat>? formats = null,
+        bool hasEml = false,
+        bool hasTiff = false)
     {
         var module = new ChaosModule();
         if (spec.Mode)
@@ -26,7 +32,12 @@ public class ChaosModuleTests
         {
             Assert.True(module.TryApply("--chaos-scenario", spec.Scenario));
         }
-        return module.TryBuild(loadfileOnly, formats ?? new List<LoadFileFormat> { LoadFileFormat.Dat }, out config);
+        return module.TryBuild(
+            loadfileOnly,
+            formats ?? new List<LoadFileFormat> { LoadFileFormat.Dat },
+            out config,
+            hasEml: hasEml,
+            hasTiff: hasTiff);
     }
 
     private sealed record ChaosConfigSpec(string? Amount, string? Types, string? Scenario)
@@ -207,6 +218,20 @@ public class ChaosModuleTests
     {
         var spec = new ChaosConfigSpec(Amount: null, Types: null, Scenario: "broken-boundaries") { Mode = true };
         Assert.True(TryBuildWithValues(spec, out var config, formats: new List<LoadFileFormat> { LoadFileFormat.Opt }));
+
+        Assert.Equal("broken-boundaries", config.ChaosScenario);
+    }
+
+    [Fact]
+    public void TryBuild_LoadfileOnlyTiffWithOptScenario_BuildsConfig()
+    {
+        var spec = new ChaosConfigSpec(Amount: null, Types: null, Scenario: "broken-boundaries") { Mode = true };
+
+        Assert.True(TryBuildWithValues(
+            spec,
+            out var config,
+            formats: new List<LoadFileFormat> { LoadFileFormat.Opt },
+            hasTiff: true));
 
         Assert.Equal("broken-boundaries", config.ChaosScenario);
     }

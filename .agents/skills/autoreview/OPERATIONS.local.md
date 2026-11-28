@@ -513,3 +513,11 @@
 - **telemetry**: host=opencode mode=local specialists=1 bundle=~1700c
 - **lessons**: `ChaosModule` already masks native flags with `!loadfileOnly`; helper truth-table and CLI test refute the raw-flag concern
 - **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-gate-closeout
+
+- **findings**: 0 (manual fast pass; specialist subagent unavailable on free usage limit)
+- **outcome**: clean review — Loadfile-Only TIFF scenario regression locked by truth-table and `ChaosModule.TryBuild` tests; Sonar complexity reduced via shared cross-format-chaos helper
+- **telemetry**: host=opencode mode=local specialists=0 bundle=~4500c
+- **lessons**: `IsNativeScenarioAllowed` takes raw `loadfileOnly`; moving boolean sequences out of `ValidateProductionSetAsync` clears Sonar cognitive-complexity threshold without behavior change
+- **suppressions**: none

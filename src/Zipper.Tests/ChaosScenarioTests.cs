@@ -54,6 +54,7 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
     [InlineData("Cross-Format-Desync", true, false, true, true, true, true)]
     [InlineData("structured-import-failures", true, false, true, true, true, false)]
     [InlineData("structured-import-failures", true, true, true, true, false, true)]
+    [InlineData("broken-boundaries", true, true, false, true, false, true)]
     [InlineData("structured-import-failures", true, true, false, false, false, true)]
     [InlineData("structured-import-failures", true, false, false, false, false, true)]
     [InlineData("structured-import-failures", false, false, true, true, false, true)]
@@ -69,6 +70,20 @@ public class ChaosScenarioTests : WorkingDirectoryTestBase
         bool expected)
     {
         Assert.Equal(expected, ChaosScenarios.IsNativeScenarioAllowed(scenario, chaosMode, loadfileOnly, hasEml, hasTiff, productionSetMode));
+    }
+
+    [Theory]
+    [InlineData(false, "cross-format-desync", false)]
+    [InlineData(true, "Cross-Format-Desync", true)]
+    [InlineData(true, "broken-families", true)]
+    [InlineData(true, "structured-import-failures", false)]
+    [InlineData(true, null, false)]
+    public void IsCrossFormatChaos_RequiresChaosModeAndCrossFormatScenario(
+        bool chaosMode,
+        string? scenario,
+        bool expected)
+    {
+        Assert.Equal(expected, ChaosScenarios.IsCrossFormatChaos(chaosMode, scenario));
     }
 
     [Fact]
