@@ -625,3 +625,11 @@
 - **telemetry**: host=opencode mode=local specialists=0 bundle=~2000c
 - **lessons**: check the cognitive-complexity guard immediately after adding branches to runner gates, not only unit tests
 - **suppressions**: none
+
+### 2026-11-28 factory:local:issue-1486-review-closeout
+
+- **findings**: 2 local CodeRabbit — malformed Sonar issue entries were silently dropped (valid); TIFF alias assertion questioned (refuted)
+- **outcome**: reject non-dictionary issue entries before status filtering; kept `tiff-truncated-ifd` assertion because `CanonicalEmailType` rewrites only `rfc822-depth`, and TIFF names pass through unchanged; retuned the Droid timeout survivor fixture
+- **telemetry**: host=factory mode=local specialists=0 bundle=~2800c
+- **lessons**: verify a questioned alias against the canonicalizer itself; a TIFF type is unaffected by an email-only alias map
+- **suppressions**: refuted TIFF alias finding — no code change needed
