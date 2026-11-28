@@ -3,6 +3,7 @@ using Xunit;
 using Zipper.Config;
 using Zipper.Emails;
 using Zipper.LoadFiles;
+using Zipper.Validation;
 
 namespace Zipper.Tests;
 
@@ -327,6 +328,39 @@ public class DatComposingWriterTests : TempDirectoryTestBase
         var output = await WriteAndCaptureOutput(request, files);
         Assert.Contains("GRP", output, StringComparison.Ordinal);
         Assert.Contains("2024-", output, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CollectionMetadataValues_WithReq182Contract_MatchesExactCatalogs()
+    {
+        Assert.Equal(
+            ["Email Server", "Network Share", "Cloud Storage", "Mobile Device", "Laptop", "Desktop", "Server", "External Media"],
+            CollectionMetadataValues.DataSources);
+        Assert.Equal(
+            ["Processed", "Pending Review", "Approved", "Privileged", "Redacted", "Produced"],
+            CollectionMetadataValues.ProcessingStatuses);
+    }
+
+    [Fact]
+    public async Task WriteAsync_WithCollectionMetadata_DrawsValuesFromReq182Catalog()
+    {
+        var request = DefaultRequest();
+        request.Metadata = request.Metadata with { WithCollectionMetadata = true, Seed = 42 };
+        var files = Enumerable.Range(1, 64).Select(index => MakeFileData(index)).ToList();
+
+        var (_, lines) = await WriteAndCapture(request, files);
+        Assert.Equal(files.Count + 1, lines.Length);
+        var header = DatLineParser.Parse(lines[0], '\u0014', '\u00fe');
+        int sourceIndex = header.IndexOf("Data Source");
+        int statusIndex = header.IndexOf("Processing Status");
+        Assert.True(sourceIndex >= 0);
+        Assert.True(statusIndex >= 0);
+        Assert.All(lines.Skip(1), line =>
+        {
+            var row = DatLineParser.Parse(line, '\u0014', '\u00fe');
+            Assert.Contains(row[sourceIndex], CollectionMetadataValues.DataSources);
+            Assert.Contains(row[statusIndex], CollectionMetadataValues.ProcessingStatuses);
+        });
     }
 
     [Fact]
