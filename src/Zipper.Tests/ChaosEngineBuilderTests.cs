@@ -870,7 +870,7 @@ public class ChaosEngineBuilderTests
         for (long index = 1; index <= request.Output.FileCount; index++)
         {
             string fileType = request.Output.ResolveFileType(index);
-            var input = fileType == "eml" ? EmlContent() : TiffContent();
+            var input = fileType == "eml" ? MultipartEmlContent() : TiffContent();
             var item = new FileWorkItem { Index = index, FileType = fileType, FileName = $"{index:D8}.{fileType}" };
 
             var afterEmail = emailEngine!.ApplyEmailChaos(item, input);
@@ -929,7 +929,7 @@ public class ChaosEngineBuilderTests
 
         foreach (var plan in plans)
         {
-            var input = plan.FileType == "eml" ? EmlContent() : TiffContent();
+            var input = plan.FileType == "eml" ? MultipartEmlContent() : TiffContent();
             // Production plans are 0-based; work item indexes are 1-based.
             var item = new FileWorkItem { Index = plan.Index + 1, FileType = plan.FileType, FileName = $"{plan.Index + 1:D8}.{plan.FileType}" };
 
@@ -975,5 +975,22 @@ public class ChaosEngineBuilderTests
             "Content-Type: text/plain; charset=us-ascii\r\n" +
             "\r\n" +
             "Body\r\n"),
+    };
+
+    // mime-boundary rewrites an existing multipart delimiter, so this fixture gives it a real boundary to mutate.
+    private static GeneratedFileContent MultipartEmlContent() => new()
+    {
+        Content = Encoding.ASCII.GetBytes(
+            "From: sender@example.com\r\n" +
+            "To: recipient@example.com\r\n" +
+            "Subject: Hello\r\n" +
+            "MIME-Version: 1.0\r\n" +
+            "Content-Type: multipart/mixed; boundary=\"----=_Boundary\"\r\n" +
+            "\r\n" +
+            "------=_Boundary\r\n" +
+            "Content-Type: text/plain; charset=us-ascii\r\n" +
+            "\r\n" +
+            "Body\r\n" +
+            "------=_Boundary--\r\n"),
     };
 }
