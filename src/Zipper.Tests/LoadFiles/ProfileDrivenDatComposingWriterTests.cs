@@ -87,6 +87,20 @@ public class ProfileDrivenDatComposingWriterTests
     }
 
     [Fact]
+    public async Task WriteAsync_WithFiftyOneProfileRows_CyclesNativeFoldersAfterFifty()
+    {
+        var request = MakeRequest(MakeMinimalProfile(), fileCount: 51);
+        request.LoadfileOnly = true;
+        var content = await CaptureOutputAsync(request);
+        var lines = content.Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(52, lines.Length);
+        Assert.Contains("\u00feNATIVES/001/DOC00000001.pdf\u00fe", lines[1], StringComparison.Ordinal);
+        Assert.Contains("\u00feNATIVES/050/DOC00000050.pdf\u00fe", lines[50], StringComparison.Ordinal);
+        Assert.Contains("\u00feNATIVES/001/DOC00000051.pdf\u00fe", lines[51], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task WriteAsync_DataRows_WrappedInQuoteDelimiter()
     {
         var profile = MakeMinimalProfile();

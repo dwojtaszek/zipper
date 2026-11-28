@@ -348,23 +348,26 @@ public class ThreadMetadataColumnTests
         Assert.Contains(records[0].Values[inclusiveIdx], new[] { "Y", "N" });
     }
 
-    [Fact]
-    public void DatProductionComposer_WithPartialThreadMetadataMatchingPlan_FillsMissingFieldsFromPlan()
+    [Theory]
+    [InlineData(1, "")]
+    [InlineData(2, "DOC00000001")]
+    public void DatProductionComposer_WithPartialThreadMetadataMatchingPlan_FillsMissingFieldsFromPlan(
+        int index, string expectedParent)
     {
         var request = new FileGenerationRequest
         {
-            Output = new OutputConfig { FileType = "eml", FileCount = 1 },
+            Output = new OutputConfig { FileType = "eml", FileCount = 2 },
             Metadata = new MetadataConfig { Seed = 42, WithThreading = true },
             Production = new ProductionConfig { ProductionSet = true },
         };
 
-        var planNode = EmailThreadPlan.GetOrCreate(request).GetNode(1);
+        var planNode = EmailThreadPlan.GetOrCreate(request).GetNode(index);
         var composer = new DatComposer(request, WriterMode.ProductionSet);
         var files = new[]
         {
             new FileData
             {
-                WorkItem = new FileWorkItem { Index = 1, FileName = "00000001.eml" },
+                WorkItem = new FileWorkItem { Index = index, FileName = $"{index:D8}.eml" },
                 Email = new Email
                 {
                     To = "to@example.com",
@@ -386,11 +389,13 @@ public class ThreadMetadataColumnTests
 
         Assert.Equal(planNode.ThreadDocId, records[0].Values[threadIdIdx]);
         Assert.Equal(planNode.IsInclusive ? "Y" : "N", records[0].Values[inclusiveIdx]);
-        Assert.Equal(planNode.ThreadParentDocId, records[0].Values[parentIdx]);
+        Assert.Equal(expectedParent, records[0].Values[parentIdx]);
     }
 
-    [Fact]
-    public void DatProductionComposer_WithPartialThreadMetadataMismatchedPlan_DoesNotUseMismatchedNode()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("EXPLICIT_PARENT")]
+    public void DatProductionComposer_WithPartialThreadMetadataMismatchedPlan_DoesNotUseMismatchedNode(string? explicitParent)
     {
         var request = new FileGenerationRequest
         {
@@ -413,7 +418,7 @@ public class ThreadMetadataColumnTests
                     SentDate = DateTime.UtcNow,
                     ThreadId = "MISMATCHED_THREAD_ID", // Does NOT match plan
                     IsInclusive = null,
-                    ThreadParentId = null,
+                    ThreadParentId = explicitParent,
                 },
             },
         };
@@ -426,7 +431,7 @@ public class ThreadMetadataColumnTests
 
         Assert.Equal("MISMATCHED_THREAD_ID", records[0].Values[threadIdIdx]);
         Assert.Equal(string.Empty, records[0].Values[inclusiveIdx]);
-        Assert.Equal(string.Empty, records[0].Values[parentIdx]);
+        Assert.Equal(explicitParent ?? string.Empty, records[0].Values[parentIdx]);
     }
 
     [Fact]
