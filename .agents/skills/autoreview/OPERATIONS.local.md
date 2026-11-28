@@ -601,3 +601,11 @@
 - **telemetry**: host=factory mode=local specialists=4+1 bundle=~12000c
 - **lessons**: on the `pullRequest` issue-search path the server-side `statuses` filter both drops real issues and returns CLOSED rows, so never rely on it; `total` is safe only when compared against the same raw rows the query returns
 - **suppressions**: none
+
+### 2026-11-28 opencode:local:issue-1486-final-review-followups
+
+- **findings**: 2 CodeRabbit local, both valid — native `--chaos-types` clauses lacked the `--loadfile-only` qualifier; a short empty Sonar issue page could be accepted before `total` was reached
+- **outcome**: scoped README/REQ-237/REQ-241 type restrictions to native runs; made the runner and `check-sonar.py` treat an empty short page with unmet `total` as environmental; added regression tests
+- **telemetry**: host=opencode mode=local specialists=0 bundle=~3000c
+- **lessons**: document CLI validation against the mode flags it actually uses; pagination must distinguish exhausted results from truncated results
+- **suppressions**: none

@@ -2850,6 +2850,12 @@ def _check_sonarcloud_pr_gate(pr_number: int, rollup: list | None = None) -> Rev
             if total is not None and not isinstance(total, int):
                 return ReviewGate(False, True, f"Unexpected SonarCloud API payload for PR #{pr_number}.")
             if not batch:
+                if isinstance(total, int) and len(issues) < total:
+                    return ReviewGate(
+                        False,
+                        True,
+                        f"Incomplete SonarCloud issue listing for PR #{pr_number}: got {len(issues)} of {total} issues.",
+                    )
                 break
             # `total` is the reliable stop when the payload carries it. Without it,
             # only a short page proves the listing is exhausted; treating a missing

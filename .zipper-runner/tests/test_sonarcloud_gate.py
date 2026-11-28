@@ -171,22 +171,36 @@ class SonarCloudGateTests(unittest.TestCase):
         self.assertFalse(result.environmental)
         self.assertIn("BLOCKER S999", result.detail)
 
-    def test_empty_later_page_ends_pagination(self):
-        # A total larger than the issues served is the shape that would spin forever
-        # without the empty-batch terminator.
+    def test_empty_later_page_with_unmet_total_is_environmental(self):
+        # An empty page before `total` is a truncated listing, not a clean result.
         with patch.object(
             runner,
             "_sonarcloud_get_json",
             side_effect=[
                 {"issues": [{"severity": "MAJOR", "status": "CLOSED", "rule": "r1"}], "total": 2},
                 {"issues": [], "total": 2},
-                {"projectStatus": {"status": "OK", "conditions": []}},
             ],
         ) as mock_get:
             result = runner._check_sonarcloud_pr_gate(1438)
 
+        self.assertFalse(result.ok)
+        self.assertTrue(result.environmental)
+        self.assertIn("Incomplete SonarCloud issue listing", result.detail)
+        self.assertEqual(mock_get.call_count, 2)
+
+    def test_empty_page_with_satisfied_total_ends_pagination(self):
+        with patch.object(
+            runner,
+            "_sonarcloud_get_json",
+            side_effect=[
+                {"issues": [], "total": 0},
+                {"projectStatus": {"status": "OK", "conditions": []}},
+            ],
+        ):
+            result = runner._check_sonarcloud_pr_gate(1438)
+
         self.assertTrue(result.ok)
-        self.assertEqual(mock_get.call_count, 3)
+        self.assertFalse(result.environmental)
 
     def test_malformed_later_issue_page_is_environmental(self):
         for bad_page in ({"unexpected": []}, {"issues": "nope", "total": 2}, {"issues": [], "total": "2"}):

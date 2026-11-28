@@ -60,6 +60,10 @@ def _fetch_all_issues(project: str, pr_number: int) -> list[dict]:
         if isinstance(total, int) and raw_fetched >= total:
             break
         if len(batch) < page_size:
+            if isinstance(total, int) and raw_fetched < total:
+                raise ValueError(
+                    f"Incomplete SonarCloud issue listing: got {raw_fetched} of {total} issues"
+                )
             break
         page += 1
     return issues
