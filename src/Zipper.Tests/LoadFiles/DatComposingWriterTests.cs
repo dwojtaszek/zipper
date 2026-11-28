@@ -331,7 +331,7 @@ public class DatComposingWriterTests : TempDirectoryTestBase
     }
 
     [Fact]
-    public void CollectionMetadataCatalog_MatchesReq182()
+    public void CollectionMetadataValues_WithReq182Contract_MatchesExactCatalogs()
     {
         Assert.Equal(
             ["Email Server", "Network Share", "Cloud Storage", "Mobile Device", "Laptop", "Desktop", "Server", "External Media"],

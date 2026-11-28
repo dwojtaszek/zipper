@@ -10,7 +10,7 @@ public sealed class DerivedPathTests
     [InlineData("REPORT.PDF", "REPORT.txt")]
     [InlineData("report", "report.txt")]
     [InlineData("report.txt", "report.txt")]
-    public void GetTextPath_UsesLastExtension(string nativePath, string expected)
+    public void GetTextPath_WithNativeFileName_ReplacesOnlyLastExtension(string nativePath, string expected)
     {
         Assert.Equal(expected, TextPathHelper.GetTextPath(nativePath));
     }
@@ -20,7 +20,7 @@ public sealed class DerivedPathTests
     [InlineData("report.eml.eml", "report.eml.tif")]
     [InlineData("scan", "scan.tif")]
     [InlineData("scan.tif", "scan.tif")]
-    public void GetImagePath_UsesLastExtension(string nativePath, string expected)
+    public void GetImagePath_WithNativeFileName_ReplacesOnlyLastExtension(string nativePath, string expected)
     {
         Assert.Equal(expected, ImagePathHelper.GetImagePath(nativePath));
     }
