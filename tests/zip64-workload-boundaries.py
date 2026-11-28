@@ -8,9 +8,10 @@ import shutil
 import struct
 import sys
 import tempfile
-import time
 import zipfile
 from pathlib import Path
+
+from zip_workload_metrics import measure_process
 
 SEED = "42"
 ZIP32_SIZE_LIMIT = 1 << 32
@@ -185,11 +186,8 @@ def verify_size(path, case):
 
 
 def timed_run(phase, command):
-    started = time.monotonic()
-    child = os.posix_spawnp(command[0], command, os.environ)
-    _, status, usage = os.wait4(child, 0)
-    require(os.waitstatus_to_exitcode(status) == 0, f"{phase} failed")
-    print(f"{phase} seconds={time.monotonic() - started:.3f} peak_rss_kib={usage.ru_maxrss}", flush=True)
+    metrics = measure_process(command)
+    print(f"{phase} seconds={metrics['seconds']:.3f} peak_rss_kib={metrics['peak_rss_kib']}", flush=True)
 
 
 def run_cases(executable, mode):

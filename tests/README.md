@@ -25,6 +25,23 @@ offset cases, with at least 4 GiB plus 1 MiB free in the temporary directory.
 Each recipe reports generation and verification time, peak memory, Archive
 size, and sampled member hashes.
 
+For matched Store and Deflate measurements, run the manual compression benchmark.
+It reports one JSON Lines record per Archive, with separate generation and
+verification time and peak memory.
+
+```bash
+python3 tests/zip-compression-workloads.py src/bin/Release/net10.0/Zipper > compression.jsonl
+```
+
+The benchmark uses the same seed and 16 MiB of expanded binary data for one large
+member, 256 evenly sized members, and one large member plus 50,000 one-byte
+members. Pass `--with-dat` to also generate a roughly 200 MiB Concordance DAT and
+an exactly equal-sized seeded binary input. The optional pair uses the same
+Python ZIP writer for both inputs, reads their payloads with `unzip`, and
+records the actual expanded byte count.
+Every Archive is read back independently and checked against its expected
+member sizes and expanded SHA-256.
+
 ## Platform-only runner checks
 
 - `run-tests.sh` runs `test-mutation-smoke-operators.sh`, `test-perf-measure.sh`, and `test-stress-harness.sh`. It also runs the coverage-gate self-test, `test_perf_compare.py`, the golden helper and runner unit tests, and the `FileGenerationRequest` flat-property guard.
